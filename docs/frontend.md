@@ -4,15 +4,20 @@
 
 The React application is organized around a world, not around the underlying
 rules-engine resources. A signed-in development identity sees only worlds it
-owns or has joined. Authors configure two user-authored lists:
+owns or has joined. Authors configure three user-authored lists:
 
 - **capacities**: numeric scores or pools carried by every entity;
-- **capabilities**: binary or rated skills carried by every entity.
+- **capabilities**: binary or rated skills carried by every entity;
+- **character fields**: ordered text prompts required for each player-controlled
+  entity before it can enter play.
 
-Entity sheets are generated from those active definitions. Problems are not a
-configuration resource in this UI. A facilitator describes each problem at the
-table, players offer free-form actions, and the facilitator resolves the moment
-with public narration and optional typed state effects.
+Entity sheets are generated from active mechanics. An entity controlled by an
+active player is presented as that player's character, with a separately loaded
+profile generated from the world's active character fields. Those values never
+become engine state.
+Problems are not a configuration resource in this UI. A facilitator describes
+each problem at the table, players offer free-form actions, and the facilitator
+resolves the moment with public narration and optional typed state effects.
 
 The older generic ruleset/condition/configured-problem HTTP surface remains an
 engine compatibility layer, but it is not linked or loaded by the frontend.
@@ -34,9 +39,11 @@ component framework, or service worker.
 | `src/features/WorldLibrary.tsx`   | Membership-filtered world library and world creation.                 |
 | `src/features/WorldWorkspace.tsx` | Role-aware configuration/play shell.                                  |
 | `src/features/MechanicsWorkspace.tsx` | Capacity/capability master-detail editor.                         |
+| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                 |
 | `src/features/PeopleWorkspace.tsx` | Members, invite creation, one-time token display, and revocation.    |
 | `src/features/SettingsWorkspace.tsx` | World details and owner-only archive command.                       |
 | `src/features/WorldPlay.tsx`      | Roster, generated sheets, ad-hoc problem lifecycle, history/receipts. |
+| `src/features/EntityProfilePanel.tsx` | Configured-field reader/editor with completion and visibility.    |
 | `src/hooks/`                      | Collection/resource loading, dirty guards, and SSE refresh.           |
 | `src/styles/tokens.css`           | The only file allowed to contain literal design colors.               |
 | `src/styles/app.css`              | Responsive library, editor, invitation, and dark play-table layouts.  |
@@ -55,6 +62,7 @@ Routes are parsed without an external router:
 | `/invite/{opaque-token}`                              | Public invite preview/redeem.   |
 | `/worlds/{world-id}/capacities/{mechanic-id?}`        | Capacity catalog/editor.        |
 | `/worlds/{world-id}/capabilities/{mechanic-id?}`      | Capability catalog/editor.      |
+| `/worlds/{world-id}/character-fields`                 | Required character-field editor. |
 | `/worlds/{world-id}/people`                           | Members and invite links.       |
 | `/worlds/{world-id}/settings`                         | World details/lifecycle.        |
 | `/worlds/{world-id}/play`                             | Live table.                     |
@@ -82,6 +90,7 @@ The workspace sidebar contains exactly:
 
 - Capacities;
 - Capabilities;
+- Character fields;
 - People & invites;
 - Settings;
 - Enter play.
@@ -96,6 +105,13 @@ user-facing ontology.
 The editor uses explicit save, a dirty/unload guard, archive rather than delete,
 and a generated-sheet preview. Archiving removes a mechanic from new/current
 sheet presentation while preserving stored values and historical receipts.
+
+The character-field screen edits the whole ordered requirement set as one
+draft. Each field has a user-authored label, optional guidance, and either
+table or controller/DM visibility. Every published field is required; there is
+no per-field required toggle. Publishing uses the current schema revision,
+preserves durable IDs, and warns when adding/removing requirements can change
+existing character readiness.
 
 ## People and invite links
 
@@ -115,16 +131,36 @@ The live table has three regions on wide screens: roster, current problem and
 history, and selected entity sheet. It collapses to a single-column flow on
 narrow screens.
 
-An editor/facilitator can create a generic entity. Every active capacity and
-capability appears automatically on its sheet, with configured defaults.
-Facilitators may make direct setup edits. During a ruling they can apply effects
-only to active definitions whose `mutable_during_play` flag permits it.
+An editor/facilitator can create a generic entity and optionally assign one or
+more active players as controllers. Every active capacity and capability
+appears automatically on its sheet, with configured defaults. Facilitators may
+replace controller sets and make direct setup edits. During a ruling they can
+apply effects only to active definitions whose `mutable_during_play` flag
+permits it.
+
+The roster labels entities controlled by the current membership as “Your
+character” and otherwise names active controllers. The selected entity panel
+has Character and Sheet tabs. Active controllers and facilitators fill the
+configured fields and may save partial drafts; other members see only completed
+table-visible prose. Mechanical sheet inputs remain disabled for players.
+Profile values are fetched only for the selected entity rather than embedded in
+the roster collection.
+
+A player who has no controlled entity sees a waiting screen. A player whose
+controlled entities are all incomplete sees only the onboarding profile UI,
+including completion counts and every field they are authorized to fill. The
+client does not request game, mechanics, interactions, or the event stream
+until `play_status` becomes `ready`; it polls the world/entity summaries so a
+DM assignment or profile save transitions into the live table. If requirements
+later make the player incomplete, a stream close/reconnect also triggers the
+same authoritative reload.
 
 The interaction lifecycle is:
 
 1. facilitator clicks **New problem** and writes the moment in free text;
-2. optional context entities and eligible player responders are selected;
-3. players offer or withdraw one free-form action while the problem is open;
+2. optional ready context entities and play-ready player responders are selected;
+3. players offer or withdraw one free-form action while the problem is open,
+   optionally attributing it to one of their ready controlled entities;
 4. facilitator closes submissions and enters private adjudication;
 5. facilitator optionally selects an action, writes the public outcome, and
    adds typed effects;

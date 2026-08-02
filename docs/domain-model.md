@@ -18,6 +18,8 @@ erDiagram
     OWNER_SCHEMA }o--o{ ENTITY : implemented_by
     OWNER_SCHEMA }o--o{ STATE_VARIABLE : permits_ownership
     ENTITY ||--|| STATE_RECORD : owns
+    ENTITY ||--o| ENTITY_PROFILE : describes
+    ENTITY_PROFILE ||--o{ PROFILE_FIELD_VALUE : contains
     CONDITION_SET ||--|{ CONDITION_PARAMETER : declares
     PROBLEM_DEFINITION ||--o{ PROBLEM_TARGET : declares
     PROBLEM_DEFINITION ||--|{ CHOICE : offers
@@ -28,9 +30,13 @@ erDiagram
     WORLD_PROFILE ||--|{ WORLD_MEMBERSHIP : admits
     WORLD_PROFILE ||--o{ WORLD_INVITE : offers
     WORLD_PROFILE ||--o{ WORLD_MECHANIC : classifies
+    WORLD_PROFILE ||--|| CHARACTER_FIELD_SET : configures
+    CHARACTER_FIELD_SET ||--o{ CHARACTER_FIELD : contains
+    CHARACTER_FIELD ||--o{ PROFILE_FIELD_VALUE : receives
     STATE_VARIABLE ||--o| WORLD_MECHANIC : represented_by
     GAME }o--o{ ENTITY : assigns
     GAME ||--|{ MEMBERSHIP : has
+    MEMBERSHIP }o--o{ ENTITY : controls
     GAME ||--o{ INTERACTION : hosts
     INTERACTION ||--o{ ACTION : receives
     INTERACTION ||--o| RESOLUTION : concludes
@@ -57,6 +63,13 @@ World problems are `interactions`: prompt-first, free-form moments created by a
 facilitator during play. They do not reference a problem definition. Their
 audience, responders, context entities, player actions, ruling, requested
 effects, and before/after receipt are captured relationally.
+
+A character is a product projection over the generic model: an entity assigned
+to the primary game with at least one active player-control relationship. The
+relationship does not add an owner schema, entity kind, mechanical
+capability, or privileged key. An uncontrolled entity remains an ordinary
+world subject, and the many-to-many relation permits troupe play and shared
+characters without making either cardinality canonical.
 
 ## Rulesets and authored identity
 
@@ -110,6 +123,53 @@ The main eligibility rules are intentionally explicit:
 
 Archiving preserves the entity or schema and its history. It prevents selected
 new uses but does not invalidate already-authored references.
+
+## World character fields and entity profiles
+
+Each world owns one independently revisioned, ordered set of active character
+fields. A field has a durable UUID, user-authored label, optional guidance,
+position, provenance, and visibility:
+
+- `table` is readable by every active world member;
+- `controllers-and-facilitators` is readable only by the entity's active player
+  controllers and world owners/editors.
+
+Every active field is required for every controlled entity. Requiredness is a
+property of membership in the active field set, not a separately configurable
+flag. Labels such as “Backstory,” “Appearance,” or “Goals” are entirely
+user-authored. The database seeds no field vocabulary and stores no canonical
+JSON profile. Replacing the field set is atomic and omission archives a field;
+old definitions and values remain relationally retained.
+
+Any world entity may have one profile root with its own optimistic revision.
+Its value rows connect that entity to configured fields and contain non-empty
+plain text plus provenance. A full-value replacement may omit fields, allowing
+an incomplete draft to be saved. It must match both the profile revision and
+the world field-set revision so a draft cannot silently ignore a concurrent
+schema change.
+
+Owners/editors may edit any active entity profile. An active player may edit a
+profile only while their paired game membership controls that entity. Control
+removal, leaving, or a role change revokes edit authority without deleting the
+profile. Archived worlds/entities retain readable profiles but reject edits.
+Ordinary admitted members receive only completed table-visible values; field
+visibility is fixed by the world configuration rather than chosen per entity.
+
+Completion and live-play admission are derived, never stored. An uncontrolled
+entity is `not-controlled`. A controlled entity is `setup-required` while any
+active field lacks a non-empty value and `ready` otherwise; with zero fields it
+is immediately ready. An active world player is `waiting-for-character` with no
+control, `setup-required` when every controlled entity is incomplete, and
+`ready` once at least one controlled entity is ready. Thus a player with
+multiple characters may enter through a complete one, but an incomplete one
+cannot be used as interaction context, acting-character attribution, or a live
+effect target.
+
+Profile loaders and readiness remain in the world application layer. The rules
+engine's `Entity`, state snapshot, ownership checks, conditions, and effects
+never receive profile prose. Profile changes do not advance entity-state
+revisions and are not immutable resolution history. Free-form profile sections
+from the superseded format are retained and exposed read-only.
 
 ## State-variable definitions
 
@@ -365,11 +425,22 @@ entities. Membership roles are:
 | `player`      | View addressed interactions and submit/withdraw eligible actions.                      |
 | `spectator`   | View addressed interactions without submitting actions.                                |
 
-Membership status is `invited`, `active`, or `left`. Only active memberships
-may read a game or connect to its event stream. The current API exposes the
-membership-to-entity-controls table in the database only as reserved schema;
-the active HTTP behavior is driven by role, audience, and eligible-responder
-membership lists rather than per-entity control assignments.
+Membership status is `invited`, `active`, or `left`. Active non-player
+memberships may enter a game immediately. An active player in a world-backed
+game must additionally be play-ready; before then they remain a world member
+with access to controlled-character onboarding but cannot read game,
+interaction, or event-stream resources. Compatibility games without a world
+profile keep active-membership behavior.
+
+Player memberships may control zero or more assigned entities, and an entity
+may be co-controlled. The world API lets owners/editors replace an entity's
+complete controller set. Grants may name only paired active player memberships
+in that world/game. A membership that stops being an active player loses its
+control rows.
+
+Controls authorize configured-profile editing and optional action attribution;
+they do not grant direct state writes, change state-variable eligibility, or
+participate in rules-engine transitions.
 
 ### Game entity mapping
 
@@ -422,6 +493,13 @@ submit another. Action status is `submitted`, `withdrawn`, `selected`, or
 `declined`. Resolving with a selected action marks it selected and declines
 other still-submitted actions.
 
+An action may optionally identify one ready assigned entity controlled by its
+submitting player. The server validates the live control relationship and
+completion, then snapshots the entity display name when accepting the action.
+Later controller or name changes therefore do not erase historical
+attribution. Membership eligibility remains authoritative, so an action
+without an acting entity is still valid.
+
 ### Live rulings
 
 A ruling contains public narrative, optional action summary, optional private
@@ -435,6 +513,13 @@ Resolve additionally requires a non-empty idempotency key. It locks the mutable
 roots, rechecks the expected interaction revision, applies the transition,
 persists changed state, records the complete receipt, finalizes statuses, and
 appends an event in one transaction.
+
+New interaction validation excludes players who are still onboarding from
+default audiences and eligible responders, and rejects incomplete controlled
+entities as context. Preview and resolve also reject effects targeting an
+incomplete controlled entity. Changing the active field-ID set is blocked
+while any interaction is draft, open, or adjudicating, preventing requirements
+from changing underneath a live problem.
 
 Applied receipts store both requested effects and per-entity applications with
 before/after typed values. Database triggers prevent updates/deletes of an
@@ -454,10 +539,12 @@ game.
 | ------------------------ | ---------------------------------------------------------------------- |
 | State record             | Stored state or owner-schema memberships change its materialized view. |
 | Problem-instance binding | Target bindings are replaced.                                          |
-| Game                     | Membership or entity assignment changes, or the game is archived.      |
+| Game                     | Membership, entity assignment, or entity control changes; or archive.  |
+| Character-field set      | Ordered definitions, prose, visibility, or active field IDs change.    |
 | Membership               | Its role or status changes.                                            |
 | Interaction              | Draft/lifecycle data changes or an action is submitted/withdrawn.      |
 | Action                   | The action is withdrawn or finalized by resolution.                    |
+| Entity profile           | Its non-empty configured field values change.                          |
 
 No-op replacements generally return current state without manufacturing a new
 revision. Clients should use the latest response as the source for the next
@@ -468,6 +555,9 @@ fact changed and carry related interaction/submission/resolution IDs when
 applicable. They do not embed full new state; clients reload authoritative
 resources after receiving them. Only game-scoped Play commands append these
 events; trusted authoring changes to mapped entities or state do not.
+Character-field, controller, and profile mutations are world-authorized
+game-scoped commands and append `character-fields-updated`,
+`entity-control-updated`, or `entity-profile-updated` invalidations.
 
 ## Archive semantics
 

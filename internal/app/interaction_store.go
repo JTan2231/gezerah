@@ -97,7 +97,8 @@ func loadInteractionActions(ctx context.Context, db queryer, gameID, interaction
 	rows, err := db.Query(ctx, `
 		select action.id::text, action.interaction_id::text,
 			action.submitted_by_membership_id::text, membership.user_id::text,
-			app_user.display_name, action.text, action.status, action.revision,
+			app_user.display_name, action.acting_entity_id::text, action.acting_entity_name,
+			action.text, action.status, action.revision,
 			action.created_at, action.updated_at
 		from interaction_action_submissions action
 		join game_memberships membership
@@ -114,7 +115,8 @@ func loadInteractionActions(ctx context.Context, db queryer, gameID, interaction
 		var item interactionActionResponse
 		if err := rows.Scan(
 			&item.ID, &item.InteractionID, &item.SubmittedByMembershipID,
-			&item.SubmittedByUserID, &item.SubmittedByName, &item.Text,
+			&item.SubmittedByUserID, &item.SubmittedByName,
+			&item.ActingEntityID, &item.ActingEntityName, &item.Text,
 			&item.Status, &item.Revision, &item.CreatedAt, &item.UpdatedAt,
 		); err != nil {
 			return nil, err
@@ -129,7 +131,8 @@ func loadInteractionAction(ctx context.Context, db queryer, gameID, interactionI
 	err := db.QueryRow(ctx, `
 		select action.id::text, action.interaction_id::text,
 			action.submitted_by_membership_id::text, membership.user_id::text,
-			app_user.display_name, action.text, action.status, action.revision,
+			app_user.display_name, action.acting_entity_id::text, action.acting_entity_name,
+			action.text, action.status, action.revision,
 			action.created_at, action.updated_at
 		from interaction_action_submissions action
 		join game_memberships membership
@@ -139,7 +142,8 @@ func loadInteractionAction(ctx context.Context, db queryer, gameID, interactionI
 		gameID, interactionID, actionID,
 	).Scan(
 		&item.ID, &item.InteractionID, &item.SubmittedByMembershipID,
-		&item.SubmittedByUserID, &item.SubmittedByName, &item.Text,
+		&item.SubmittedByUserID, &item.SubmittedByName,
+		&item.ActingEntityID, &item.ActingEntityName, &item.Text,
 		&item.Status, &item.Revision, &item.CreatedAt, &item.UpdatedAt,
 	)
 	return item, err
@@ -203,6 +207,20 @@ func validateInteractionRequest(ctx context.Context, tx pgx.Tx, gameID, ruleSetI
 		return interactionAudience{}, nil, err
 	}
 	rows.Close()
+	for membershipID, role := range memberRoles {
+		if role != "player" {
+			continue
+		}
+		playStatus, err := loadGameMembershipPlayStatus(
+			ctx, tx, gameID, membershipID, role, "active",
+		)
+		if err != nil {
+			return interactionAudience{}, nil, err
+		}
+		if playStatus != playStatusReady {
+			delete(memberRoles, membershipID)
+		}
+	}
 	if len(request.AudienceMembershipIDs) == 0 {
 		request.AudienceMembershipIDs = make([]string, 0, len(memberRoles))
 		for membershipID := range memberRoles {
@@ -220,7 +238,7 @@ func validateInteractionRequest(ctx context.Context, tx pgx.Tx, gameID, ruleSetI
 	for index, membershipID := range request.EligibleResponderMembershipIDs {
 		role, exists := memberRoles[membershipID]
 		if !exists || role != "player" {
-			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "active player membership is required"
+			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "play-ready active player membership is required"
 			continue
 		}
 		if _, visible := audience[membershipID]; !visible {
@@ -244,6 +262,14 @@ func validateInteractionRequest(ctx context.Context, tx pgx.Tx, gameID, ruleSetI
 		}
 		if archived {
 			fields[fmt.Sprintf("entity_ids[%d]", index)] = "archived entity cannot be added to a new interaction"
+			continue
+		}
+		readiness, err := loadEntityCharacterReadiness(ctx, tx, gameID, entityID)
+		if err != nil {
+			return interactionAudience{}, nil, err
+		}
+		if readiness.Status == characterStatusSetupRequired {
+			fields[fmt.Sprintf("entity_ids[%d]", index)] = "controlled character setup must be complete"
 		}
 	}
 	return interactionAudience{

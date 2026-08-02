@@ -40,6 +40,8 @@ func (s *Server) registerWorldRoutes() {
 	s.api.HandleFunc("POST /api/worlds/{world_id}/invites/{invite_id}/revoke", s.handleRevokeWorldInvite)
 	s.api.HandleFunc("GET /api/world-invites/{token}", s.handlePreviewWorldInvite)
 	s.api.HandleFunc("POST /api/world-invites/{token}/redeem", s.handleRedeemWorldInvite)
+	s.api.HandleFunc("GET /api/worlds/{world_id}/character-fields", s.handleGetWorldCharacterFields)
+	s.api.HandleFunc("PUT /api/worlds/{world_id}/character-fields", s.handlePutWorldCharacterFields)
 	s.registerWorldMechanicRoutes()
 	s.registerWorldEntityRoutes()
 }
@@ -219,6 +221,11 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 	if _, err := tx.Exec(r.Context(), `
 		insert into world_profiles (rule_set_id, primary_game_id)
 		values ($1, $2)`, worldID, gameID); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if _, err := tx.Exec(r.Context(), `
+		insert into world_character_field_sets (rule_set_id) values ($1)`, worldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -411,7 +418,8 @@ func (s *Server) handleArchiveWorld(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) {
 	worldID := r.PathValue("world_id")
-	if _, err := requireActiveWorldMember(r.Context(), s.db, r, worldID); err != nil {
+	actor, err := requireActiveWorldMember(r.Context(), s.db, r, worldID)
+	if err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -428,7 +436,6 @@ func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	defer rows.Close()
 	items := make([]worldMemberResponse, 0)
 	for rows.Next() {
 		var item worldMemberResponse
@@ -442,8 +449,20 @@ func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) 
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		handleAppError(w, err)
 		return
+	}
+	rows.Close()
+	for index := range items {
+		item := &items[index]
+		item.PlayStatus, err = loadWorldMemberPlayStatus(
+			r.Context(), s.db, actor.PrimaryGameID, item.UserID, item.Role, item.Status,
+		)
+		if err != nil {
+			handleAppError(w, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, items)
 }
@@ -688,6 +707,14 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
+	if gameRole != "player" {
+		if _, err := tx.Exec(r.Context(), `
+			delete from game_membership_entity_controls
+			where game_id = $1 and membership_id = $2`, gameID, gameMembershipID); err != nil {
+			handleAppError(w, err)
+			return
+		}
+	}
 	command, err := tx.Exec(r.Context(), `
 		insert into world_invite_redemptions (invite_id, rule_set_id, user_id, world_membership_id)
 		values ($1, $2, $3, $4) on conflict (invite_id, user_id) do nothing`, inviteID, worldID, userID, worldMembershipID)
@@ -731,6 +758,8 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 			(select count(*)::integer from world_mechanics mechanic
 				join state_variable_definitions definition on definition.id = mechanic.state_variable_id
 				where mechanic.rule_set_id = ruleset.id and mechanic.kind = 'capability' and not definition.archived),
+			(select count(*)::integer from world_character_fields field
+				where field.rule_set_id = ruleset.id and not field.archived),
 			ruleset.created_at, greatest(ruleset.updated_at, profile.updated_at),
 			(select max(interaction.updated_at) from interactions interaction
 				where interaction.game_id = profile.primary_game_id)
@@ -741,8 +770,15 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	).Scan(
 		&item.ID, &item.Name, &item.Description, &item.Status, &item.Revision,
 		&item.Role, &item.MembershipID, &item.PrimaryGameID, &item.MemberCount,
-		&item.CapacityCount, &item.CapabilityCount, &item.CreatedAt, &item.UpdatedAt,
+		&item.CapacityCount, &item.CapabilityCount, &item.CharacterFieldCount,
+		&item.CreatedAt, &item.UpdatedAt,
 		&item.LastInteractionAt,
+	)
+	if err != nil {
+		return item, err
+	}
+	item.PlayStatus, err = loadWorldMemberPlayStatus(
+		ctx, db, item.PrimaryGameID, userID, item.Role, "active",
 	)
 	return item, err
 }

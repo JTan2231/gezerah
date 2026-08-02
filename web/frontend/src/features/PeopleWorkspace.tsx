@@ -194,6 +194,9 @@ export function PeopleWorkspace({ world }: { world: World }) {
                   <small>
                     Joined{" "}
                     {formatRelativeDate(member.joined_at ?? member.created_at)}
+                    {member.role === "player"
+                      ? ` · ${humanize(member.play_status)}`
+                      : ""}
                   </small>
                 </div>
                 <RolePill role={member.role} />

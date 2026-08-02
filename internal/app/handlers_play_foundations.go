@@ -17,10 +17,11 @@ import (
 const playUserHeader = "X-DND-User-ID"
 
 type authorizedGameMember struct {
-	ID     string
-	UserID string
-	Role   string
-	Status string
+	ID         string
+	UserID     string
+	Role       string
+	Status     string
+	PlayStatus string
 }
 
 func (s *Server) registerPlayFoundationRoutes() {
@@ -200,6 +201,7 @@ func loadGameResponse(ctx context.Context, db queryer, gameID string) (gameRespo
 			ID: item.UserID, DisplayName: item.DisplayName,
 			CreatedAt: userCreatedAt, UpdatedAt: userUpdatedAt,
 		}
+		item.ControlledEntityIDs = make([]string, 0)
 		result.Memberships = append(result.Memberships, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -207,6 +209,45 @@ func loadGameResponse(ctx context.Context, db queryer, gameID string) (gameRespo
 		return result, err
 	}
 	rows.Close()
+	membershipIndexes := make(map[string]int, len(result.Memberships))
+	for index := range result.Memberships {
+		membershipIndexes[result.Memberships[index].ID] = index
+	}
+	rows, err = db.Query(ctx, `
+		select membership_id::text, entity_id::text
+		from game_membership_entity_controls
+		where game_id = $1
+		order by membership_id, entity_id`, gameID)
+	if err != nil {
+		return result, err
+	}
+	for rows.Next() {
+		var membershipID, entityID string
+		if err := rows.Scan(&membershipID, &entityID); err != nil {
+			rows.Close()
+			return result, err
+		}
+		if index, exists := membershipIndexes[membershipID]; exists {
+			result.Memberships[index].ControlledEntityIDs = append(
+				result.Memberships[index].ControlledEntityIDs,
+				entityID,
+			)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return result, err
+	}
+	rows.Close()
+	for index := range result.Memberships {
+		item := &result.Memberships[index]
+		item.PlayStatus, err = loadGameMembershipPlayStatus(
+			ctx, db, gameID, item.ID, item.Role, item.Status,
+		)
+		if err != nil {
+			return result, err
+		}
+	}
 	result.EntityIDs = make([]string, 0)
 	rows, err = db.Query(ctx, `
 		select entity_id::text from game_entities
@@ -281,6 +322,23 @@ func (s *Server) handleListGames(w http.ResponseWriter, r *http.Request) {
 	rows.Close()
 	items := make([]gameResponse, 0, len(gameIDs))
 	for _, gameID := range gameIDs {
+		member, err := requireActiveGameMember(r.Context(), tx, gameID, userID)
+		if err != nil {
+			handleAppError(w, err)
+			return
+		}
+		if member.Role == "player" {
+			playStatus, err := loadGameMembershipPlayStatus(
+				r.Context(), tx, gameID, member.ID, member.Role, member.Status,
+			)
+			if err != nil {
+				handleAppError(w, err)
+				return
+			}
+			if playStatus != playStatusReady {
+				continue
+			}
+		}
 		item, err := loadGameResponse(r.Context(), tx, gameID)
 		if err != nil {
 			handleAppError(w, err)
@@ -406,7 +464,7 @@ func (s *Server) handleGetGame(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	if _, err := requireActiveGameMember(r.Context(), tx, gameID, userID); err != nil {
+	if _, err := requirePlayReadyGameMember(r.Context(), tx, gameID, userID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -526,7 +584,7 @@ func (s *Server) handleListPlayEntities(w http.ResponseWriter, r *http.Request, 
 			handleAppError(w, err)
 			return
 		}
-	} else if _, err = requireActiveGameMember(r.Context(), tx, gameID, userID); err != nil {
+	} else if _, err = requirePlayReadyGameMember(r.Context(), tx, gameID, userID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -593,7 +651,7 @@ func (s *Server) handleListGameStateVariables(w http.ResponseWriter, r *http.Req
 		handleAppError(w, err)
 		return
 	}
-	if _, err = requireActiveGameMember(r.Context(), tx, gameID, userID); err != nil {
+	if _, err = requirePlayReadyGameMember(r.Context(), tx, gameID, userID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -925,6 +983,14 @@ func (s *Server) handleUpdateGameMembership(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
+	if nextRole != "player" || nextStatus != "active" {
+		if _, err := tx.Exec(r.Context(), `
+			delete from game_membership_entity_controls
+			where game_id = $1 and membership_id = $2`, gameID, membershipID); err != nil {
+			handleAppError(w, err)
+			return
+		}
+	}
 	if _, err := tx.Exec(r.Context(), `update games set revision = revision + 1 where id = $1`, gameID); err != nil {
 		handleAppError(w, err)
 		return
@@ -1113,6 +1179,7 @@ func gameEntityHasPlayUsage(ctx context.Context, db queryer, gameID, entityID st
 	err := db.QueryRow(ctx, `
 		select
 			exists(select 1 from interaction_context_entities where game_id = $1 and entity_id = $2)
+			or exists(select 1 from interaction_action_submissions where game_id = $1 and acting_entity_id = $2)
 			or exists(select 1 from interaction_resolution_effect_targets where game_id = $1 and entity_id = $2)
 			or exists(select 1 from interaction_resolution_effect_operands where game_id = $1 and referenced_entity_id = $2)
 			or exists(select 1 from interaction_resolution_effect_applications where game_id = $1 and entity_id = $2)

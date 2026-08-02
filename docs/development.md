@@ -53,6 +53,29 @@ postgres://localhost:5432/dnd?sslmode=disable
 Migrations run automatically when the backend starts. The repository has no
 seed step; create all ruleset vocabulary through the application/API.
 
+## Resetting local data
+
+Reset the development application to an empty state with:
+
+```sh
+./reset-db.sh
+```
+
+The script uses `DND_DATABASE_URL`, then `DATABASE_URL`, then the same default
+URL as the application. It refuses PostgreSQL system databases, non-loopback
+servers, and databases that do not contain the Worldwright migration ledger
+and foundation tables. After displaying the resolved database name and server,
+it requires that database name to be typed exactly. `--yes` skips only this
+confirmation; it does not bypass the target safety checks.
+
+The reset truncates every table in the `public` schema except
+`schema_migrations`, restarting owned sequences. The relational schema,
+extensions, constraints, and applied-migration history remain in place. A
+managed backend is stopped before the transaction and restarted afterward if
+it was running. If a backend on port 8080 is reachable without managed PID
+state, the script leaves it alone and refuses the reset; stop that process
+explicitly first.
+
 ## Environment configuration
 
 The Go application and root shell scripts do not source `.env` files, and the

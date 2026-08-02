@@ -13,6 +13,8 @@ export interface World {
   member_count: number;
   capacity_count: number;
   capability_count: number;
+  character_field_count: number;
+  play_status: PlayStatus;
   created_at: string;
   updated_at: string;
   last_interaction_at?: string | undefined;
@@ -24,6 +26,7 @@ export interface WorldMember {
   display_name: string;
   role: WorldRole;
   status: "active" | "left";
+  play_status: PlayStatus;
   revision: number;
   joined_at?: string | undefined;
   created_at: string;
@@ -77,6 +80,9 @@ export interface WorldEntity {
   archived: boolean;
   state_revision: number;
   state: StateRecordResponse;
+  character_status: CharacterStatus;
+  required_field_count: number;
+  completed_field_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -92,13 +98,20 @@ type GameRole = "facilitator" | "player" | "spectator";
 type GameMembershipStatus = "invited" | "active" | "left";
 type GameStatus = "active" | "archived";
 
+export type PlayStatus =
+  "waiting-for-character" | "setup-required" | "ready" | "unavailable";
+
+export type CharacterStatus = "not-controlled" | "setup-required" | "ready";
+
 export interface GameMembership {
   id: string;
   game_id?: string | undefined;
   user_id: string;
   role: GameRole;
   status: GameMembershipStatus;
+  play_status: PlayStatus;
   revision: number;
+  controlled_entity_ids: string[];
   display_name?: string | undefined;
   user?: User | undefined;
   joined_at?: string | undefined;
@@ -173,10 +186,69 @@ export interface InteractionAction {
   submitted_by_membership_id: string;
   submitted_by_user_id?: string | undefined;
   submitted_by_name?: string | undefined;
+  acting_entity_id?: string | undefined;
+  acting_entity_name?: string | undefined;
   text: string;
   status: InteractionActionStatus;
   revision: number;
   created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export type EntityProfileVisibility = "table" | "controllers-and-facilitators";
+
+export interface WorldCharacterField {
+  id: string;
+  label: string;
+  help_text?: string | undefined;
+  visibility: EntityProfileVisibility;
+  created_by_user_id: string;
+  updated_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WorldCharacterFieldSet {
+  revision: number;
+  fields: WorldCharacterField[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EntityProfileSection {
+  id: string;
+  title: string;
+  body: string;
+  visibility: EntityProfileVisibility;
+  created_by_user_id: string;
+  updated_by_user_id: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EntityProfile {
+  entity_id: string;
+  revision: number;
+  character_fields_revision: number;
+  character_status: CharacterStatus;
+  required_field_count: number;
+  completed_field_count: number;
+  missing_field_ids?: string[] | undefined;
+  can_edit: boolean;
+  fields: EntityProfileField[];
+  legacy_sections?: EntityProfileSection[] | undefined;
+  updated_by_user_id?: string | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export interface EntityProfileField {
+  id: string;
+  label: string;
+  help_text?: string | undefined;
+  visibility: EntityProfileVisibility;
+  value?: string | undefined;
+  updated_by_user_id?: string | undefined;
   updated_at?: string | undefined;
 }
 

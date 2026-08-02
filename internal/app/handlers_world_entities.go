@@ -17,6 +17,9 @@ func (s *Server) registerWorldEntityRoutes() {
 	s.api.HandleFunc("POST /api/worlds/{world_id}/entities/{entity_id}/archive", s.handleArchiveWorldEntity)
 	s.api.HandleFunc("GET /api/worlds/{world_id}/entities/{entity_id}/state", s.handleGetWorldEntityState)
 	s.api.HandleFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/state", s.handlePutWorldEntityState)
+	s.api.HandleFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/controllers", s.handleReplaceWorldEntityControllers)
+	s.api.HandleFunc("GET /api/worlds/{world_id}/entities/{entity_id}/profile", s.handleGetWorldEntityProfile)
+	s.api.HandleFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/profile", s.handlePutWorldEntityProfile)
 }
 
 func (s *Server) handleListWorldEntities(w http.ResponseWriter, r *http.Request) {
@@ -26,12 +29,36 @@ func (s *Server) handleListWorldEntities(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
+	playStatus, err := loadWorldMemberPlayStatus(
+		r.Context(), s.db, member.PrimaryGameID, member.UserID, member.Role, member.Status,
+	)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	showAll := member.Role != "player" || playStatus == playStatusReady
 	rows, err := s.db.Query(r.Context(), `
 		select entity.id::text
 		from game_entities assignment
 		join entities entity on entity.id = assignment.entity_id
 		where assignment.game_id = $1
-		order by entity.archived, lower(entity.display_name), entity.id`, member.PrimaryGameID)
+			and (
+				$2
+				or exists(
+					select 1
+					from game_memberships membership
+					join game_membership_entity_controls control
+						on control.game_id = membership.game_id
+						and control.membership_id = membership.id
+					where membership.game_id = assignment.game_id
+						and membership.user_id = $3
+						and membership.role = 'player'
+						and membership.status = 'active'
+						and control.entity_id = assignment.entity_id
+				)
+			)
+		order by entity.archived, lower(entity.display_name), entity.id`,
+		member.PrimaryGameID, showAll, member.UserID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -85,6 +112,12 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 	if request.Key != nil && !keyPattern.MatchString(*request.Key) {
 		fields["key"] = "must start with a letter and use lowercase letters, numbers, dots, dashes, or underscores"
 	}
+	request.ControllerWorldMembershipIDs = uniqueSorted(request.ControllerWorldMembershipIDs)
+	for index, membershipID := range request.ControllerWorldMembershipIDs {
+		if !validID(membershipID) {
+			fields[fmt.Sprintf("controller_world_membership_ids[%d]", index)] = "must be a UUID"
+		}
+	}
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "entity is invalid", fields)
 		return
@@ -137,6 +170,22 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
+	controllerMembershipIDs, err := resolveWorldControllerMembershipIDs(
+		r.Context(), tx, worldID, member.PrimaryGameID,
+		request.ControllerWorldMembershipIDs, "controller_world_membership_ids",
+	)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	for _, controllerMembershipID := range controllerMembershipIDs {
+		if _, err := tx.Exec(r.Context(), `
+			insert into game_membership_entity_controls (game_id, membership_id, entity_id)
+			values ($1, $2, $3)`, member.PrimaryGameID, controllerMembershipID, entityID); err != nil {
+			handleAppError(w, err)
+			return
+		}
+	}
 	if _, err := tx.Exec(r.Context(), `
 		update games set revision = $2 + 1 where id = $1`, member.PrimaryGameID, gameRevision); err != nil {
 		handleAppError(w, err)
@@ -177,6 +226,10 @@ func (s *Server) handleGetWorldEntity(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
+	if err := requireWorldEntityReadAccess(r.Context(), s.db, member, entityID); err != nil {
+		handleAppError(w, err)
+		return
+	}
 	item, err := loadWorldEntityResponse(r.Context(), s.db, worldID, member.PrimaryGameID, entityID)
 	if err != nil {
 		handleAppError(w, err)
@@ -200,6 +253,10 @@ func (s *Server) handlePutWorldEntity(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
+	if err := requireWorldEntityReadAccess(r.Context(), s.db, member, entityID); err != nil {
+		handleAppError(w, err)
+		return
+	}
 	var request createWorldEntityRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
@@ -207,6 +264,12 @@ func (s *Server) handlePutWorldEntity(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.ID != "" && request.ID != entityID {
 		writeError(w, http.StatusBadRequest, "id_mismatch", "path and body IDs do not match", nil)
+		return
+	}
+	if len(request.ControllerWorldMembershipIDs) > 0 {
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "entity is invalid", map[string]string{
+			"controller_world_membership_ids": "use the controllers endpoint to change character control",
+		})
 		return
 	}
 	current, err := s.loadEntity(r.Context(), worldID, entityID)
@@ -274,6 +337,10 @@ func (s *Server) handleGetWorldEntityState(w http.ResponseWriter, r *http.Reques
 		handleAppError(w, err)
 		return
 	}
+	if err := requireWorldEntityReadAccess(r.Context(), s.db, member, entityID); err != nil {
+		handleAppError(w, err)
+		return
+	}
 	r.SetPathValue("rule_set_id", worldID)
 	s.handleGetState(w, r)
 }
@@ -319,6 +386,13 @@ func loadWorldEntityResponse(ctx context.Context, db queryer, worldID, gameID, e
 	}
 	item.StateRevision = stateRevision
 	item.State = state
+	readiness, err := loadEntityCharacterReadiness(ctx, db, gameID, entityID)
+	if err != nil {
+		return item, err
+	}
+	item.CharacterStatus = readiness.Status
+	item.RequiredFieldCount = readiness.RequiredFieldCount
+	item.CompletedFieldCount = readiness.CompletedFieldCount
 	return item, nil
 }
 

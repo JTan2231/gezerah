@@ -147,6 +147,30 @@ func (s *Server) runInteractionAdjudication(
 			Fields: map[string]string{"effects": err.Error()},
 		}
 	}
+	gameEntitySet := make(map[string]struct{}, len(gameEntityIDs))
+	for _, entityID := range gameEntityIDs {
+		gameEntitySet[entityID] = struct{}{}
+	}
+	for effectIndex, effect := range request.Effects {
+		for entityIndex, entityID := range effect.EntityIDs {
+			if _, belongsToGame := gameEntitySet[entityID]; !belongsToGame {
+				continue
+			}
+			readiness, err := loadEntityCharacterReadiness(ctx, tx, gameID, entityID)
+			if err != nil {
+				return interactionResolutionResultResponse{}, err
+			}
+			if readiness.Status == characterStatusSetupRequired {
+				return interactionResolutionResultResponse{}, &statusError{
+					Status: http.StatusConflict, Code: "character_setup_required",
+					Message: "ruling effects cannot target a controlled character with incomplete setup",
+					Fields: map[string]string{
+						fmt.Sprintf("effects[%d].entity_ids[%d]", effectIndex, entityIndex): "character setup is incomplete",
+					},
+				}
+			}
+		}
+	}
 	plan := rules.TransitionPlan{Effects: planEffects}
 	entities, err := loadGameEntitiesDomain(ctx, tx, ruleSetID, gameEntityIDs)
 	if err != nil {

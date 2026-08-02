@@ -26,12 +26,15 @@ turn a forgeable identity into authentication.
 | `POST /api/world-invites/{token}/redeem` | Known UUID header + bearer token | Creates matching world/game membership.                                           |
 | World list/read          | Known UUID + active world membership           | Returns only worlds the resolved user owns or joined.                              |
 | World configuration     | Active owner/editor membership                 | Capacity/capability/entity/invite mutation; active-world lifecycle required.       |
+| Character-field schema | Active member read; owner/editor write           | Spectators omit restricted definitions; actor identity remains forgeable.          |
+| Character profiles      | Owner/editor or active controlling player        | Values are filtered by configured visibility; identity remains forgeable.          |
+| Character control       | Active owner/editor membership                  | Same-game active-player grants; correct only within trusted identity assumption.   |
 | World archive           | Active owner membership                        | Requires no unfinished interaction.                                                |
 | `/api/rule-sets/**`      | None                                           | Any reachable client can read/change all authored configuration and generic state. |
 | `POST /api/games`        | Known UUID header                              | Any known user can create a game for any ruleset and claim unassigned entities.    |
 | `GET /api/games`         | Known UUID header                              | Returns games in which that user has an active membership.                         |
 | `/api/play/rule-sets/**` | Known UUID header                              | Any known user can enumerate unassigned entities in an arbitrary ruleset.          |
-| Game reads               | Active membership after header lookup          | Sound authorization only if identity were trustworthy.                             |
+| Game reads               | Active membership; world players also play-ready | Onboarding players are denied live resources, subject to forgeable identity.      |
 | Facilitator commands     | Active facilitator role                        | Sound role check only if identity were trustworthy.                                |
 | Player actions           | Active player + eligible responder + ownership | Server-enforced, but actor identity is forgeable.                                  |
 
@@ -47,18 +50,32 @@ Within the trusted identity assumption, the server enforces:
   membership;
 - world configuration/invite creation requires owner/editor and archive
   requires owner;
+- only owners/editors may replace character controllers, and every grant must
+  resolve to paired active player memberships in the same world/game;
+- only owners/editors may replace the ordered character-field set; changes use
+  a schema revision and active field-ID changes are blocked during an
+  unfinished interaction;
+- profile writes require owner/editor authority or the acting player's current
+  entity-control row; profile and schema revisions prevent stale replacement;
+- restricted field definitions/values are omitted server-side for unauthorized
+  readers, and ordinary members never receive missing values;
 - invite tokens are stored only as SHA-256 digests, expire, can be revoked, and
   count one redemption per invite/user pair;
 - invite redemption updates world and primary-game memberships in one
   transaction and does not escalate an already-active member's role;
-- active membership is required to read a game/connect its event stream;
+- active membership is required to read a game/connect its event stream, and a
+  world-backed player must have at least one complete controlled character;
 - facilitator role is required for game management and interaction rulings;
 - only eligible active players can submit, at most one current action each;
+- an attributed action may name only a ready active game entity controlled by
+  the submitting player; its display name is captured server-side;
 - a player can withdraw only their own action;
 - game status and interaction lifecycle gate live-game API mutations;
 - expected revisions prevent stale overwrites;
 - live receipt effect targets and reference values remain inside the game
   mapping;
+- incomplete controlled entities are rejected as new interaction context and
+  live effect targets;
 - an entity belongs to at most one game;
 - a game retains at least one active facilitator;
 - non-facilitator interaction visibility requires audience membership and an
@@ -117,12 +134,23 @@ fictional/generic state owners. No configured schema/key grants real-world
 authority. The UI label “Dungeon Master” maps only to membership role
 `facilitator`.
 
+`game_membership_entity_controls` is the only character-authority edge. It is a
+game relationship, not an engine entity class. Profile content does not grant
+control or state-writing authority and is not mechanical input. Completing all
+active fields is, however, an explicit product admission gate for player live
+access and that character's interaction/effect eligibility.
+
 ### Private data
 
 Facilitator-private fields include interaction/ruling private notes and
 facilitator-only event/context details. Filtering happens in server query/mapping
 paths; frontend hiding is secondary. When extending payloads, explicitly decide
 which fields non-facilitators may receive and test JSON absence.
+
+Character fields marked `controllers-and-facilitators` are similarly sensitive.
+Spectators receive neither those definitions nor their values; other
+non-controller members receive no value row. Game events contain only generic
+schema/profile invalidations and do not include field or profile text.
 
 ## Existing defensive controls
 

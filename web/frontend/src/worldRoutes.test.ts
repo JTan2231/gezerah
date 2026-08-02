@@ -28,4 +28,15 @@ describe("world routes", () => {
       resourceId: "skill 1",
     });
   });
+
+  test("routes to world-authored character fields", () => {
+    const path = worldURL("world-1", "character-fields");
+    expect(path).toBe("/worlds/world-1/character-fields");
+    expect(readLocation(path)).toEqual({
+      type: "world",
+      worldId: "world-1",
+      section: "character-fields",
+      resourceId: undefined,
+    });
+  });
 });

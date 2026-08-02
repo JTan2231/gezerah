@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiError, gamePath, jsonBody, worldPath } from "../api/client";
 import type {
@@ -13,6 +13,7 @@ import type {
   User,
   World,
   WorldEntity,
+  WorldMember,
   WorldMechanic,
 } from "../api/types";
 import {
@@ -27,39 +28,97 @@ import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { useGameEvents } from "../hooks/useGameEvents";
 import { useResource } from "../hooks/useResource";
+import { EntityProfilePanel } from "./EntityProfilePanel";
 
-export function WorldPlay({ world, user }: { world: World; user: User }) {
-  const game = useResource<Game>(gamePath(world.primary_game_id));
+export function WorldPlay({
+  world,
+  user,
+  onWorldChanged,
+}: {
+  world: World;
+  user: User;
+  onWorldChanged: () => void;
+}) {
+  const playReady = world.role !== "player" || world.play_status === "ready";
+  const game = useResource<Game>(
+    playReady ? gamePath(world.primary_game_id) : null,
+  );
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
   const mechanics = useCollection<WorldMechanic>(
-    worldPath(world.id, "mechanics"),
+    playReady ? worldPath(world.id, "mechanics") : null,
+  );
+  const members = useCollection<WorldMember>(
+    world.role === "owner" || world.role === "editor"
+      ? worldPath(world.id, "members")
+      : null,
   );
   const interactions = useCollection<Interaction>(
-    gamePath(world.primary_game_id, "interactions"),
+    playReady ? gamePath(world.primary_game_id, "interactions") : null,
   );
   const [creatingProblem, setCreatingProblem] = useState(false);
   const [addingEntity, setAddingEntity] = useState(false);
+  const [managingControllersFor, setManagingControllersFor] = useState<
+    string | undefined
+  >();
+  const [profileRefreshToken, setProfileRefreshToken] = useState(0);
   const [selectedEntityId, setSelectedEntityId] = useState<
     string | undefined
   >();
   const reloadGame = game.reload;
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
+  const reloadMembers = members.reload;
 
   const refresh = useCallback(() => {
     reloadGame();
     reloadEntities();
     reloadInteractions();
-  }, [reloadEntities, reloadGame, reloadInteractions]);
-  useGameEvents(world.primary_game_id, refresh);
+    reloadMembers();
+    onWorldChanged();
+    setProfileRefreshToken((value) => value + 1);
+  }, [
+    onWorldChanged,
+    reloadEntities,
+    reloadGame,
+    reloadInteractions,
+    reloadMembers,
+  ]);
+  useGameEvents(playReady ? world.primary_game_id : undefined, refresh);
+
+  useEffect(() => {
+    if (playReady) return undefined;
+    const timer = window.setInterval(() => {
+      reloadEntities();
+      onWorldChanged();
+    }, 3000);
+    return () => window.clearInterval(timer);
+  }, [onWorldChanged, playReady, reloadEntities]);
+
+  if (!playReady)
+    return (
+      <CharacterOnboarding
+        world={world}
+        user={user}
+        entities={entities.items}
+        loading={entities.loading}
+        error={entities.error}
+        onRetry={entities.reload}
+        refreshToken={profileRefreshToken}
+        onChanged={() => {
+          entities.reload();
+          onWorldChanged();
+        }}
+      />
+    );
 
   if (game.loading && game.value === null)
     return <LoadingState label="Setting the table" />;
   if (game.error !== null)
     return <ErrorMessage error={game.error} onRetry={game.reload} />;
   if (game.value === null) return null;
+  const gameMemberships = game.value.memberships;
 
-  const membership = game.value.memberships.find(
+  const membership = gameMemberships.find(
     (item) => item.user_id === user.id && item.status === "active",
   );
   if (membership === undefined)
@@ -70,6 +129,8 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
       />
     );
   const facilitator = membership.role === "facilitator";
+  const controlledEntityIDs =
+    membership.role === "player" ? membership.controlled_entity_ids : [];
   const active = interactions.items.find(
     (item) =>
       item.status === "open" ||
@@ -79,8 +140,12 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
   const history = interactions.items.filter(
     (item) => item.status === "resolved" || item.status === "cancelled",
   );
+  const firstControlledEntity = controlledEntityIDs
+    .map((id) => entities.items.find((entity) => entity.id === id))
+    .find((entity) => entity !== undefined && !entity.archived);
   const selectedEntity =
     entities.items.find((item) => item.id === selectedEntityId) ??
+    firstControlledEntity ??
     entities.items[0];
 
   return (
@@ -151,11 +216,18 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
               .filter((entity) => !entity.archived)
               .map((entity) => (
                 <button
-                  className={
-                    selectedEntity?.id === entity.id
-                      ? "roster-item active"
-                      : "roster-item"
-                  }
+                  className={[
+                    "roster-item",
+                    selectedEntity?.id === entity.id ? "active" : "",
+                    controlledEntityIDs.includes(entity.id)
+                      ? "roster-item-character"
+                      : "",
+                    entity.character_status === "setup-required"
+                      ? "roster-item-setup"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                   type="button"
                   key={entity.id}
                   onClick={() => setSelectedEntityId(entity.id)}
@@ -165,7 +237,14 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
                   </span>
                   <span>
                     <strong>{entity.display_name}</strong>
-                    <small>{entitySubtitle(entity, mechanics.items)}</small>
+                    <small>
+                      {entitySubtitle(
+                        entity,
+                        mechanics.items,
+                        gameMemberships,
+                        membership.id,
+                      )}
+                    </small>
                   </span>
                   <b aria-hidden="true">›</b>
                 </button>
@@ -194,14 +273,18 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
             <p>
               {
                 game.value.memberships.filter(
-                  (item) => item.status === "active",
+                  (item) =>
+                    item.status === "active" && item.play_status === "ready",
                 ).length
               }{" "}
               people at the table
             </p>
             <div>
               {game.value.memberships
-                .filter((item) => item.status === "active")
+                .filter(
+                  (item) =>
+                    item.status === "active" && item.play_status === "ready",
+                )
                 .slice(0, 6)
                 .map((item) => (
                   <Avatar
@@ -268,12 +351,21 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
               description="Choose someone from the roster to open their generated sheet."
             />
           ) : (
-            <EntitySheet
+            <EntityDetail
               key={`${selectedEntity.id}:${selectedEntity.state.revision}:${mechanics.items.map((mechanic) => mechanic.id).join(":")}`}
               entity={selectedEntity}
               mechanics={mechanics.items}
-              editable={facilitator && world.status === "active"}
+              mechanicsEditable={facilitator && world.status === "active"}
+              controlledByCurrentMember={controlledEntityIDs.includes(
+                selectedEntity.id,
+              )}
+              facilitator={facilitator}
               world={world}
+              profileRefreshToken={profileRefreshToken}
+              onManageControllers={() =>
+                setManagingControllersFor(selectedEntity.id)
+              }
+              onProfileChanged={refresh}
               onSaved={entities.reload}
             />
           )}
@@ -294,14 +386,130 @@ export function WorldPlay({ world, user }: { world: World; user: User }) {
       {addingEntity ? (
         <NewEntityModal
           world={world}
+          members={members.items}
           onClose={() => setAddingEntity(false)}
           onCreated={(entity) => {
             entities.replaceItem(entity, (item) => item.id);
+            game.reload();
+            onWorldChanged();
             setSelectedEntityId(entity.id);
             setAddingEntity(false);
           }}
         />
       ) : null}
+      {managingControllersFor === undefined ? null : (
+        <ManageControllersModal
+          world={world}
+          game={game.value}
+          entity={entities.items.find(
+            (item) => item.id === managingControllersFor,
+          )}
+          members={members.items}
+          onClose={() => setManagingControllersFor(undefined)}
+          onSaved={() => {
+            setManagingControllersFor(undefined);
+            refresh();
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+function CharacterOnboarding({
+  world,
+  user,
+  entities,
+  loading,
+  error,
+  onRetry,
+  refreshToken,
+  onChanged,
+}: {
+  world: World;
+  user: User;
+  entities: WorldEntity[];
+  loading: boolean;
+  error: ApiError | null;
+  onRetry: () => void;
+  refreshToken: number;
+  onChanged: () => void;
+}) {
+  const available = entities.filter(
+    (entity) =>
+      !entity.archived && entity.character_status !== "not-controlled",
+  );
+  const [selectedID, setSelectedID] = useState<string | undefined>();
+  const selected =
+    available.find((entity) => entity.id === selectedID) ?? available[0];
+
+  return (
+    <section className="character-onboarding-page">
+      <header className="play-header onboarding-header">
+        <div>
+          <p className="eyebrow">Character onboarding</p>
+          <h1>{world.name}</h1>
+          <p>
+            Welcome, {user.display_name}. Complete every field prescribed for a
+            controlled character before entering the live table.
+          </p>
+        </div>
+        <span className="character-status status-setup">
+          {world.play_status === "waiting-for-character"
+            ? "Waiting for a character"
+            : "Setup required"}
+        </span>
+      </header>
+
+      {loading && available.length === 0 ? (
+        <LoadingState label="Looking for your character" />
+      ) : null}
+      {error === null ? null : <ErrorMessage error={error} onRetry={onRetry} />}
+      {!loading && available.length === 0 ? (
+        <div className="onboarding-waiting panel">
+          <EmptyState
+            title="Your character has not been assigned yet"
+            description="You have joined the world, but you are not at the live table. A Dungeon Master needs to create an entity and assign you as a controller."
+          />
+        </div>
+      ) : null}
+
+      {selected === undefined ? null : (
+        <div className="onboarding-layout">
+          {available.length > 1 ? (
+            <aside className="panel onboarding-characters">
+              <p className="eyebrow">Your characters</p>
+              {available.map((entity) => (
+                <button
+                  className={entity.id === selected.id ? "active" : ""}
+                  type="button"
+                  key={entity.id}
+                  onClick={() => setSelectedID(entity.id)}
+                >
+                  <span className="entity-token" aria-hidden="true">
+                    {entity.display_name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <span>
+                    <strong>{entity.display_name}</strong>
+                    <small>
+                      {entity.completed_field_count} of{" "}
+                      {entity.required_field_count} complete
+                    </small>
+                  </span>
+                </button>
+              ))}
+            </aside>
+          ) : null}
+          <div className="panel onboarding-profile">
+            <EntityProfilePanel
+              world={world}
+              entity={selected}
+              refreshToken={refreshToken}
+              onChanged={onChanged}
+            />
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -350,18 +558,40 @@ function NewProblemModal({
   onClose: () => void;
   onCreated: () => void;
 }) {
-  const activeMembers = game.memberships.filter(
-    (member) => member.status === "active",
+  const activeMembers = useMemo(
+    () =>
+      game.memberships.filter(
+        (member) =>
+          member.status === "active" && member.play_status === "ready",
+      ),
+    [game.memberships],
   );
-  const responders = activeMembers.filter((member) => member.role === "player");
+  const responders = useMemo(
+    () => activeMembers.filter((member) => member.role === "player"),
+    [activeMembers],
+  );
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
   const [entityIds, setEntityIds] = useState<string[]>([]);
   const [responderIds, setResponderIds] = useState(
     responders.map((member) => member.id),
   );
+  const previousResponderIds = useRef(
+    new Set(responders.map((member) => member.id)),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+
+  useEffect(() => {
+    const available = new Set(responders.map((member) => member.id));
+    setResponderIds((current) => [
+      ...current.filter((id) => available.has(id)),
+      ...responders
+        .map((member) => member.id)
+        .filter((id) => !previousResponderIds.current.has(id)),
+    ]);
+    previousResponderIds.current = available;
+  }, [responders]);
 
   function toggle(
     values: string[],
@@ -440,7 +670,11 @@ function NewProblemModal({
             </legend>
             <div className="chip-picker">
               {entities
-                .filter((entity) => !entity.archived)
+                .filter(
+                  (entity) =>
+                    !entity.archived &&
+                    entity.character_status !== "setup-required",
+                )
                 .map((entity) => (
                   <label
                     key={entity.id}
@@ -517,16 +751,22 @@ function NewProblemModal({
 
 function NewEntityModal({
   world,
+  members,
   onClose,
   onCreated,
 }: {
   world: World;
+  members: WorldMember[];
   onClose: () => void;
   onCreated: (entity: WorldEntity) => void;
 }) {
   const [name, setName] = useState("");
+  const [controllerIDs, setControllerIDs] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const players = members.filter(
+    (member) => member.status === "active" && member.role === "player",
+  );
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     setSaving(true);
@@ -534,7 +774,10 @@ function NewEntityModal({
     try {
       const entity = await api<WorldEntity>(worldPath(world.id, "entities"), {
         method: "POST",
-        ...jsonBody({ display_name: name.trim() }),
+        ...jsonBody({
+          display_name: name.trim(),
+          controller_world_membership_ids: controllerIDs,
+        }),
       });
       onCreated(entity);
     } catch (reason) {
@@ -561,6 +804,32 @@ function NewEntityModal({
             placeholder="Aria Vale"
           />
         </Field>
+        {players.length === 0 ? null : (
+          <fieldset className="choice-fieldset controller-picker">
+            <legend>
+              Controlled by <small>Optional</small>
+            </legend>
+            <div className="responder-picker">
+              {players.map((member) => (
+                <label key={member.id}>
+                  <input
+                    type="checkbox"
+                    checked={controllerIDs.includes(member.id)}
+                    onChange={() =>
+                      setControllerIDs((current) =>
+                        current.includes(member.id)
+                          ? current.filter((id) => id !== member.id)
+                          : [...current, member.id],
+                      )
+                    }
+                  />
+                  <Avatar name={member.display_name} size="small" />
+                  <span>{member.display_name}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
         {error === null ? null : <ErrorMessage error={error} />}
         <footer className="modal-actions">
           <button
@@ -576,6 +845,124 @@ function NewEntityModal({
             disabled={saving || name.trim() === ""}
           >
             {saving ? "Creating…" : "Create entity"}
+          </button>
+        </footer>
+      </form>
+    </Modal>
+  );
+}
+
+function ManageControllersModal({
+  world,
+  game,
+  entity,
+  members,
+  onClose,
+  onSaved,
+}: {
+  world: World;
+  game: Game;
+  entity: WorldEntity | undefined;
+  members: WorldMember[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const players = members.filter(
+    (member) => member.status === "active" && member.role === "player",
+  );
+  const initialControllerIDs =
+    entity === undefined
+      ? []
+      : players
+          .filter((member) =>
+            game.memberships.some(
+              (gameMember) =>
+                gameMember.user_id === member.user_id &&
+                gameMember.controlled_entity_ids.includes(entity.id),
+            ),
+          )
+          .map((member) => member.id);
+  const [controllerIDs, setControllerIDs] = useState(initialControllerIDs);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  if (entity === undefined) return null;
+  const entityID = entity.id;
+
+  async function save(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError(null);
+    try {
+      await api(worldPath(world.id, `entities/${entityID}/controllers`), {
+        method: "PUT",
+        ...jsonBody({
+          expected_game_revision: game.revision,
+          controller_world_membership_ids: controllerIDs,
+        }),
+      });
+      onSaved();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(0, "unknown", "Could not update character control."),
+      );
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Manage character control"
+      description={`Choose which players may author ${entity.display_name}’s story and act as this entity.`}
+      onClose={onClose}
+    >
+      <form className="modal-form" onSubmit={(event) => void save(event)}>
+        {players.length === 0 ? (
+          <p className="modal-note">
+            Invite a player before assigning control. Saving now will leave this
+            as an uncontrolled world entity.
+          </p>
+        ) : (
+          <fieldset className="choice-fieldset controller-picker">
+            <legend>Player controllers</legend>
+            <div className="responder-picker">
+              {players.map((member) => (
+                <label key={member.id}>
+                  <input
+                    type="checkbox"
+                    checked={controllerIDs.includes(member.id)}
+                    onChange={() =>
+                      setControllerIDs((current) =>
+                        current.includes(member.id)
+                          ? current.filter((id) => id !== member.id)
+                          : [...current, member.id],
+                      )
+                    }
+                  />
+                  <Avatar name={member.display_name} size="small" />
+                  <span>{member.display_name}</span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+        )}
+        {error === null ? null : <ErrorMessage error={error} />}
+        <footer className="modal-actions">
+          <button
+            className="button button-quiet"
+            type="button"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            className="button button-primary"
+            type="submit"
+            disabled={saving}
+          >
+            {saving ? "Saving…" : "Save controllers"}
           </button>
         </footer>
       </form>
@@ -681,6 +1068,7 @@ function LiveInteraction({
           interaction={interaction}
           game={game}
           membership={membership}
+          entities={entities}
           facilitator={facilitator}
           working={working}
           onAdjudicate={() => void command("adjudicate")}
@@ -705,6 +1093,7 @@ function OpenProblem({
   interaction,
   game,
   membership,
+  entities,
   facilitator,
   working,
   onAdjudicate,
@@ -713,6 +1102,7 @@ function OpenProblem({
   interaction: Interaction;
   game: Game;
   membership: GameMembership;
+  entities: WorldEntity[];
   facilitator: boolean;
   working: boolean;
   onAdjudicate: () => void;
@@ -727,6 +1117,17 @@ function OpenProblem({
       action.status === "submitted",
   );
   const [text, setText] = useState("");
+  const controlledEntities = membership.controlled_entity_ids
+    .map((id) => entities.find((entity) => entity.id === id))
+    .filter(
+      (entity): entity is WorldEntity =>
+        entity !== undefined &&
+        !entity.archived &&
+        entity.character_status === "ready",
+    );
+  const [actingEntityID, setActingEntityID] = useState(
+    controlledEntities.length === 1 ? (controlledEntities[0]?.id ?? "") : "",
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -741,6 +1142,7 @@ function OpenProblem({
           method: "POST",
           ...jsonBody({
             text: text.trim(),
+            acting_entity_id: actingEntityID || undefined,
             expected_revision: interaction.revision,
           }),
         },
@@ -801,11 +1203,24 @@ function OpenProblem({
           {submitted.map((action) => (
             <blockquote key={action.id}>
               <Avatar
-                name={action.submitted_by_name ?? "Player"}
+                name={
+                  action.acting_entity_name ??
+                  action.submitted_by_name ??
+                  "Player"
+                }
                 size="small"
               />
               <div>
-                <strong>{action.submitted_by_name ?? "Player"}</strong>
+                <strong>
+                  {action.acting_entity_name ??
+                    action.submitted_by_name ??
+                    "Player"}
+                </strong>
+                {action.acting_entity_name === undefined ? null : (
+                  <small>
+                    played by {action.submitted_by_name ?? "Player"}
+                  </small>
+                )}
                 <p>{action.text}</p>
               </div>
             </blockquote>
@@ -818,6 +1233,23 @@ function OpenProblem({
             className="action-composer"
             onSubmit={(event) => void submit(event)}
           >
+            {controlledEntities.length === 0 ? null : (
+              <Field label="Acting character">
+                <select
+                  value={actingEntityID}
+                  onChange={(event) =>
+                    setActingEntityID(event.currentTarget.value)
+                  }
+                >
+                  <option value="">No character attribution</option>
+                  {controlledEntities.map((entity) => (
+                    <option key={entity.id} value={entity.id}>
+                      {entity.display_name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
             <Field label="What do you do?">
               <textarea
                 value={text}
@@ -985,7 +1417,12 @@ function RulingEditor({
                 onChange={() => setSelectedActionId(action.id)}
               />
               <span>
-                <strong>{action.submitted_by_name}</strong>
+                <strong>
+                  {action.acting_entity_name ?? action.submitted_by_name}
+                </strong>
+                {action.acting_entity_name === undefined
+                  ? null
+                  : ` (${action.submitted_by_name})`}{" "}
                 {action.text}
               </span>
             </label>
@@ -1048,8 +1485,12 @@ function EffectBuilder({
   effects: EffectDraft[];
   onChange: (effects: EffectDraft[]) => void;
 }) {
+  const eligibleEntities = entities.filter(
+    (entity) =>
+      !entity.archived && entity.character_status !== "setup-required",
+  );
   const firstMechanic = mechanics[0];
-  const [entityId, setEntityId] = useState(entities[0]?.id ?? "");
+  const [entityId, setEntityId] = useState(eligibleEntities[0]?.id ?? "");
   const [mechanicId, setMechanicId] = useState(firstMechanic?.id ?? "");
   const [operation, setOperation] = useState<"adjust-number" | "set">(
     firstMechanic?.mode === "binary" ? "set" : "adjust-number",
@@ -1057,9 +1498,7 @@ function EffectBuilder({
   const [amount, setAmount] = useState(0);
   const [booleanValue, setBooleanValue] = useState(true);
   const effectiveEntityId =
-    entityId !== ""
-      ? entityId
-      : (entities.find((entity) => !entity.archived)?.id ?? "");
+    entityId !== "" ? entityId : (eligibleEntities[0]?.id ?? "");
   const effectiveMechanicId =
     mechanicId !== "" ? mechanicId : (firstMechanic?.id ?? "");
   const mechanic = mechanics.find((item) => item.id === effectiveMechanicId);
@@ -1098,7 +1537,7 @@ function EffectBuilder({
           {effects.length} {effects.length === 1 ? "effect" : "effects"}
         </span>
       </header>
-      {mechanics.length === 0 || entities.length === 0 ? (
+      {mechanics.length === 0 || eligibleEntities.length === 0 ? (
         <p className="effect-empty">
           Create a mutable mechanic and at least one entity to apply mechanical
           effects. Narrative-only rulings are always valid.
@@ -1110,13 +1549,11 @@ function EffectBuilder({
             onChange={(event) => setEntityId(event.currentTarget.value)}
             aria-label="Effect entity"
           >
-            {entities
-              .filter((entity) => !entity.archived)
-              .map((entity) => (
-                <option key={entity.id} value={entity.id}>
-                  {entity.display_name}
-                </option>
-              ))}
+            {eligibleEntities.map((entity) => (
+              <option key={entity.id} value={entity.id}>
+                {entity.display_name}
+              </option>
+            ))}
           </select>
           <select
             value={effectiveMechanicId}
@@ -1252,6 +1689,89 @@ function RulingPreview({
           ))}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function EntityDetail({
+  entity,
+  mechanics,
+  mechanicsEditable,
+  controlledByCurrentMember,
+  facilitator,
+  world,
+  profileRefreshToken,
+  onManageControllers,
+  onProfileChanged,
+  onSaved,
+}: {
+  entity: WorldEntity;
+  mechanics: WorldMechanic[];
+  mechanicsEditable: boolean;
+  controlledByCurrentMember: boolean;
+  facilitator: boolean;
+  world: World;
+  profileRefreshToken: number;
+  onManageControllers: () => void;
+  onProfileChanged: () => void;
+  onSaved: () => void;
+}) {
+  const [tab, setTab] = useState<"story" | "sheet">(
+    controlledByCurrentMember && !facilitator ? "story" : "sheet",
+  );
+  return (
+    <div className="entity-detail">
+      <div className="entity-detail-toolbar">
+        <div
+          className="entity-detail-tabs"
+          role="tablist"
+          aria-label="Entity detail"
+        >
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "story"}
+            className={tab === "story" ? "active" : ""}
+            onClick={() => setTab("story")}
+          >
+            Character
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === "sheet"}
+            className={tab === "sheet" ? "active" : ""}
+            onClick={() => setTab("sheet")}
+          >
+            Sheet
+          </button>
+        </div>
+        {facilitator && world.status === "active" ? (
+          <button
+            className="text-button"
+            type="button"
+            onClick={onManageControllers}
+          >
+            Controllers
+          </button>
+        ) : null}
+      </div>
+      {tab === "story" ? (
+        <EntityProfilePanel
+          world={world}
+          entity={entity}
+          refreshToken={profileRefreshToken}
+          onChanged={onProfileChanged}
+        />
+      ) : (
+        <EntitySheet
+          entity={entity}
+          mechanics={mechanics}
+          editable={mechanicsEditable}
+          world={world}
+          onSaved={onSaved}
+        />
+      )}
     </div>
   );
 }
@@ -1546,7 +2066,33 @@ function displayScalar(value: StateScalarValue): string {
 function entitySubtitle(
   entity: WorldEntity,
   mechanics: WorldMechanic[],
+  memberships: GameMembership[],
+  currentMembershipID: string,
 ): string {
+  if (
+    memberships.some(
+      (membership) =>
+        membership.id === currentMembershipID &&
+        membership.role === "player" &&
+        membership.status === "active" &&
+        membership.controlled_entity_ids.includes(entity.id),
+    )
+  ) {
+    return entity.character_status === "ready"
+      ? "Your character"
+      : `Your character · Setup ${entity.completed_field_count}/${entity.required_field_count}`;
+  }
+  const controllers = memberships.filter(
+    (membership) =>
+      membership.status === "active" &&
+      membership.role === "player" &&
+      membership.controlled_entity_ids.includes(entity.id),
+  );
+  if (controllers.length > 0) {
+    const label =
+      entity.character_status === "ready" ? "Character" : "Character setup";
+    return `${label} · ${controllers.map((membership) => membership.display_name).join(", ")}`;
+  }
   const capacity = mechanics.find(
     (mechanic) => mechanic.kind === "capacity" && !mechanic.archived,
   );

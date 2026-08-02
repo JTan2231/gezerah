@@ -1,5 +1,10 @@
 export type WorldSection =
-  "capacities" | "capabilities" | "people" | "settings" | "play";
+  | "capacities"
+  | "capabilities"
+  | "character-fields"
+  | "people"
+  | "settings"
+  | "play";
 
 type AppLocation =
   | { type: "worlds" }
@@ -20,6 +25,7 @@ export function readLocation(pathname = window.location.pathname): AppLocation {
     if (
       section === "capacities" ||
       section === "capabilities" ||
+      section === "character-fields" ||
       section === "people" ||
       section === "settings" ||
       section === "play"

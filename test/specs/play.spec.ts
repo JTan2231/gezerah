@@ -17,7 +17,9 @@ interface IdentifiedResource {
 interface WorldResponse extends IdentifiedResource {
   name: string;
   role: "owner" | "editor" | "player" | "spectator";
+  membership_id: string;
   primary_game_id: string;
+  play_status: "waiting-for-character" | "setup-required" | "ready";
 }
 
 interface InviteResponse extends IdentifiedResource {
@@ -38,6 +40,36 @@ interface EntityResponse extends IdentifiedResource {
     revision: number;
     values: Record<string, unknown>;
   };
+}
+
+interface EntityProfileResponse {
+  entity_id: string;
+  revision: number;
+  character_fields_revision: number;
+  character_status: "not-controlled" | "setup-required" | "ready";
+  required_field_count: number;
+  completed_field_count: number;
+  can_edit: boolean;
+  fields: Array<{
+    id: string;
+    label: string;
+    value?: string;
+    visibility: "table" | "controllers-and-facilitators";
+  }>;
+}
+
+interface CharacterFieldSetResponse {
+  revision: number;
+  fields: Array<{
+    id: string;
+    label: string;
+    help_text?: string;
+    visibility: "table" | "controllers-and-facilitators";
+  }>;
+}
+
+interface InteractionResponse extends IdentifiedResource {
+  revision: number;
 }
 
 test("worlds stay private until an invite link is redeemed", async ({
@@ -110,7 +142,11 @@ test("worlds stay private until an invite link is redeemed", async ({
     undefined,
     player.id,
   );
-  expect(joined).toMatchObject({ id: world.id, role: "player" });
+  expect(joined).toMatchObject({
+    id: world.id,
+    role: "player",
+    play_status: "waiting-for-character",
+  });
   expect(
     (
       await getJSON<WorldResponse[]>(
@@ -120,6 +156,22 @@ test("worlds stay private until an invite link is redeemed", async ({
       )
     ).map((item) => item.id),
   ).toEqual([world.id]);
+
+  await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    {
+      display_name: `Unconfigured Character ${unique}`,
+      controller_world_membership_ids: [joined.membership_id],
+    },
+    owner.id,
+  );
+  const readyWithoutFields = await getJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}`,
+    player.id,
+  );
+  expect(readyWithoutFields.play_status).toBe("ready");
 
   const playerCannotInvite = await request.post(
     `${baseURL}/api/worlds/${world.id}/invites`,
@@ -166,6 +218,11 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     `${baseURL}/api/users`,
     { display_name: playerName },
   );
+  const spectator = await postJSON<IdentifiedResource>(
+    request,
+    `${baseURL}/api/users`,
+    { display_name: `Table Spectator ${unique}` },
+  );
   const world = await postJSON<WorldResponse>(
     request,
     `${baseURL}/api/worlds`,
@@ -175,6 +232,44 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     },
     owner.id,
   );
+  const emptyCharacterFields = await getJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    owner.id,
+  );
+  const characterFields = await putJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    {
+      expected_revision: emptyCharacterFields.revision,
+      fields: [
+        {
+          label: "Backstory",
+          help_text: "Where did this character come from?",
+          visibility: "table",
+        },
+        {
+          label: "Hidden oath",
+          help_text: "What does this character keep from the table?",
+          visibility: "controllers-and-facilitators",
+        },
+      ],
+    },
+    owner.id,
+  );
+  const characterFieldsWithBond = [
+    ...characterFields.fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      help_text: field.help_text,
+      visibility: field.visibility,
+    })),
+    {
+      label: "Bond",
+      help_text: "Who or what keeps this character in the world?",
+      visibility: "table",
+    },
+  ];
   const resolve = await postJSON<MechanicResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/mechanics`,
@@ -197,6 +292,12 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     owner.id,
   );
   expect(entity.state.values[resolve.id]).toEqual({ kind: "number", value: 8 });
+  const uncontrolledEntity = await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    { display_name: "The Glass Sentinel" },
+    owner.id,
+  );
 
   const invite = await postJSON<InviteResponse>(
     request,
@@ -210,6 +311,22 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     `${baseURL}/api/world-invites/${token}/redeem`,
     undefined,
     player.id,
+  );
+  const spectatorInvite = await postJSON<InviteResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/invites`,
+    { role: "spectator", expires_in_days: 7 },
+    owner.id,
+  );
+  const spectatorToken = required(
+    spectatorInvite.join_path?.split("/").at(-1),
+    "spectator invite token",
+  );
+  await postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/world-invites/${spectatorToken}/redeem`,
+    undefined,
+    spectator.id,
   );
 
   expect(
@@ -237,6 +354,107 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     await expect(
       playerPage.getByRole("button", { name: "New problem" }),
     ).toHaveCount(0);
+    await expect(playerPage.getByText("Waiting for a character")).toBeVisible();
+    const gameBeforeSetup = await request.get(
+      `${baseURL}/api/games/${world.primary_game_id}`,
+      { headers: identityHeaders(player.id) },
+    );
+    expect(gameBeforeSetup.status()).toBe(403);
+
+    await ownerPage.getByRole("button", { name: "Controllers" }).click();
+    await ownerPage.getByRole("checkbox", { name: playerName }).check();
+    await ownerPage
+      .getByRole("dialog")
+      .getByRole("button", { name: "Save controllers" })
+      .click();
+    await expect(playerPage.getByText("Setup required").first()).toBeVisible();
+
+    const publicStory = `Raised beside the glass sea ${unique}.`;
+    await playerPage.getByLabel("Backstory").fill(publicStory);
+    await playerPage.getByRole("button", { name: "Save character" }).click();
+    await expect(playerPage.getByText("profile r1")).toBeVisible();
+    await expect(playerPage.getByText("Setup required").first()).toBeVisible();
+    const gameAfterPartialSetup = await request.get(
+      `${baseURL}/api/games/${world.primary_game_id}`,
+      { headers: identityHeaders(player.id) },
+    );
+    expect(gameAfterPartialSetup.status()).toBe(403);
+    const controlledStateDuringSetup = await request.get(
+      `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+      { headers: identityHeaders(player.id) },
+    );
+    expect(controlledStateDuringSetup.status()).toBe(200);
+    const otherStateDuringSetup = await request.get(
+      `${baseURL}/api/worlds/${world.id}/entities/${uncontrolledEntity.id}/state`,
+      { headers: identityHeaders(player.id) },
+    );
+    expect(otherStateDuringSetup.status()).toBe(403);
+
+    const privateStory = `The signet was stolen ${unique}.`;
+    await playerPage.getByLabel("Hidden oath").fill(privateStory);
+    await playerPage.getByRole("button", { name: "Save character" }).click();
+    await expect(playerPage.getByText("Your character")).toBeVisible();
+    await expect(playerPage.getByText("profile r2")).toBeVisible();
+
+    await ownerPage.getByRole("tab", { name: "Character" }).click();
+    await expect(ownerPage.getByLabel("Backstory")).toHaveValue(publicStory);
+    await expect(ownerPage.getByLabel("Hidden oath")).toHaveValue(privateStory);
+
+    const spectatorProfile = await getJSON<EntityProfileResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/profile`,
+      spectator.id,
+    );
+    expect(spectatorProfile).toMatchObject({
+      entity_id: entity.id,
+      revision: 2,
+      character_status: "ready",
+      required_field_count: 2,
+      completed_field_count: 2,
+      can_edit: false,
+    });
+    expect(spectatorProfile.fields).toHaveLength(1);
+    expect(spectatorProfile.fields[0]).toMatchObject({
+      label: "Backstory",
+      value: publicStory,
+      visibility: "table",
+    });
+    const spectatorWrite = await request.put(
+      `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/profile`,
+      {
+        headers: identityHeaders(spectator.id),
+        data: {
+          expected_revision: 2,
+          expected_character_fields_revision: characterFields.revision,
+          values: [],
+        },
+      },
+    );
+    expect(spectatorWrite.status()).toBe(403);
+    const staleProfileWrite = await request.put(
+      `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/profile`,
+      {
+        headers: identityHeaders(player.id),
+        data: {
+          expected_revision: 0,
+          expected_character_fields_revision: characterFields.revision,
+          values: characterFields.fields.map((field) => ({
+            field_id: field.id,
+            value: field.label === "Backstory" ? publicStory : privateStory,
+          })),
+        },
+      },
+    );
+    expect(staleProfileWrite.status()).toBe(409);
+    const entitiesAfterProfile = await getJSON<EntityResponse[]>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/entities`,
+      player.id,
+    );
+    expect(
+      entitiesAfterProfile.find((candidate) => candidate.id === entity.id)
+        ?.state.revision,
+    ).toBe(0);
 
     const title = `The bridge gives way ${unique}`;
     const prompt = `Floodwater tears the center span loose ${unique}. What do you do?`;
@@ -253,10 +471,51 @@ test("a problem is improvised at the table, answered, and resolved with a state 
       .click();
 
     await expect(playerPage.getByText(prompt)).toBeVisible();
+    const openInteractions = await getJSON<InteractionResponse[]>(
+      request,
+      `${baseURL}/api/games/${world.primary_game_id}/interactions`,
+      player.id,
+    );
+    const openInteraction = required(
+      openInteractions.find((interaction) => interaction.revision >= 0),
+      "open interaction",
+    );
+    const schemaChangeDuringProblem = await request.put(
+      `${baseURL}/api/worlds/${world.id}/character-fields`,
+      {
+        headers: identityHeaders(owner.id),
+        data: {
+          expected_revision: characterFields.revision,
+          fields: characterFieldsWithBond,
+        },
+      },
+    );
+    expect(schemaChangeDuringProblem.status()).toBe(409);
+    const uncontrolledAction = await request.post(
+      `${baseURL}/api/games/${world.primary_game_id}/interactions/${openInteraction.id}/actions`,
+      {
+        headers: identityHeaders(player.id),
+        data: {
+          text: "The sentinel acts for me.",
+          acting_entity_id: uncontrolledEntity.id,
+          expected_revision: openInteraction.revision,
+        },
+      },
+    );
+    expect(uncontrolledAction.status()).toBe(403);
     const action = `I anchor a rope and leap for the far post ${unique}.`;
+    await expect(playerPage.getByLabel("Acting character")).toHaveValue(
+      entity.id,
+    );
     await playerPage.getByLabel("What do you do?").fill(action);
     await playerPage.getByRole("button", { name: "Offer action" }).click();
     await expect(ownerPage.getByText(action)).toBeVisible();
+    await expect(
+      ownerPage.locator(".action-list").getByText("Aria Vale", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      ownerPage.locator(".action-list").getByText(`played by ${playerName}`),
+    ).toBeVisible();
 
     await ownerPage.getByRole("button", { name: "Begin ruling" }).click();
     await ownerPage.getByRole("radio", { name: new RegExp(unique) }).check();
@@ -277,10 +536,29 @@ test("a problem is improvised at the table, answered, and resolved with a state 
       `${baseURL}/api/worlds/${world.id}/entities`,
       player.id,
     );
-    expect(savedEntities[0]?.state).toMatchObject({
+    expect(
+      savedEntities.find((candidate) => candidate.id === entity.id)?.state,
+    ).toMatchObject({
       revision: 1,
       values: { [resolve.id]: { kind: "number", value: 6 } },
     });
+
+    const expandedCharacterFields = await putJSON<CharacterFieldSetResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/character-fields`,
+      {
+        expected_revision: characterFields.revision,
+        fields: characterFieldsWithBond,
+      },
+      owner.id,
+    );
+    expect(expandedCharacterFields.revision).toBe(2);
+    await expect(playerPage.getByText("Setup required").first()).toBeVisible();
+    const gameAfterRequirementChange = await request.get(
+      `${baseURL}/api/games/${world.primary_game_id}`,
+      { headers: identityHeaders(player.id) },
+    );
+    expect(gameAfterRequirementChange.status()).toBe(403);
   } finally {
     await Promise.all([ownerContext.close(), playerContext.close()]);
   }
@@ -322,6 +600,21 @@ async function postJSON<T>(
 ): Promise<T> {
   const response = await request.post(url, {
     ...(data === undefined ? {} : { data }),
+    ...(userId === undefined ? {} : { headers: identityHeaders(userId) }),
+  });
+  const body = await response.text();
+  expect(response.ok(), `${response.status()} ${url}: ${body}`).toBe(true);
+  return JSON.parse(body) as T;
+}
+
+async function putJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  userId?: string,
+): Promise<T> {
+  const response = await request.put(url, {
+    data,
     ...(userId === undefined ? {} : { headers: identityHeaders(userId) }),
   });
   const body = await response.text();

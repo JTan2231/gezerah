@@ -22,8 +22,9 @@ type interactionLifecycleRequest struct {
 }
 
 type createInteractionActionRequest struct {
-	Text             string `json:"text"`
-	ExpectedRevision *int64 `json:"expected_revision"`
+	Text             string  `json:"text"`
+	ActingEntityID   *string `json:"acting_entity_id,omitempty"`
+	ExpectedRevision *int64  `json:"expected_revision"`
 }
 
 type withdrawInteractionActionRequest struct {
@@ -55,6 +56,8 @@ type interactionActionResponse struct {
 	SubmittedByMembershipID string    `json:"submitted_by_membership_id"`
 	SubmittedByUserID       string    `json:"submitted_by_user_id"`
 	SubmittedByName         string    `json:"submitted_by_name"`
+	ActingEntityID          *string   `json:"acting_entity_id,omitempty"`
+	ActingEntityName        *string   `json:"acting_entity_name,omitempty"`
 	Text                    string    `json:"text"`
 	Status                  string    `json:"status"`
 	Revision                int64     `json:"revision"`

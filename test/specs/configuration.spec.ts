@@ -16,6 +16,7 @@ interface WorldResponse {
   role: "owner" | "editor" | "player" | "spectator";
   capacity_count: number;
   capability_count: number;
+  character_field_count: number;
 }
 
 interface WorldMechanicResponse {
@@ -138,6 +139,16 @@ test("an author creates a world whose entity sheets stem from capacities and cap
   await page.getByRole("button", { name: "Create capability" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
+  await page.getByRole("button", { name: /Character fields/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Character fields", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Add required field" }).click();
+  await page.getByLabel("Field label").fill("Backstory");
+  await page.getByLabel("Guidance").fill("Where did this character come from?");
+  await page.getByRole("button", { name: "Publish requirements" }).click();
+  await expect(page.getByText("schema r1")).toBeVisible();
+
   await page.getByRole("button", { name: /Enter play/ }).click();
   await expect(page.getByText("The table is listening")).toBeVisible();
   await page.getByRole("button", { name: "Create entity" }).first().click();
@@ -166,6 +177,7 @@ test("an author creates a world whose entity sheets stem from capacities and cap
     role: "owner",
     capacity_count: 1,
     capability_count: 1,
+    character_field_count: 1,
   });
   const world = worlds[0];
   expect(world).toBeDefined();

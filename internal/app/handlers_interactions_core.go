@@ -43,7 +43,7 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	member, err := requireActiveGameMember(r.Context(), tx, gameID, userID)
+	member, err := requirePlayReadyGameMember(r.Context(), tx, gameID, userID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -120,7 +120,7 @@ func (s *Server) handleGetInteraction(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	member, err := requireActiveGameMember(r.Context(), tx, gameID, userID)
+	member, err := requirePlayReadyGameMember(r.Context(), tx, gameID, userID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -463,8 +463,12 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		return
 	}
 	request.Text = strings.TrimSpace(request.Text)
+	request.ActingEntityID = cleanOptional(request.ActingEntityID)
 	fields := map[string]string{}
 	validateRequired(fields, "text", request.Text, 10000)
+	if request.ActingEntityID != nil && !validID(*request.ActingEntityID) {
+		fields["acting_entity_id"] = "must be a UUID"
+	}
 	if request.ExpectedRevision == nil || *request.ExpectedRevision < 0 {
 		fields["expected_revision"] = "a non-negative expected revision is required"
 	}
@@ -492,7 +496,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "game_archived", Message: "archived games cannot receive actions"})
 		return
 	}
-	member, err := requireActiveGameMember(r.Context(), tx, gameID, userID)
+	member, err := requirePlayReadyGameMember(r.Context(), tx, gameID, userID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -530,6 +534,54 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		handleAppError(w, &statusError{Status: http.StatusForbidden, Code: "responder_required", Message: "this player is not eligible to respond to the interaction"})
 		return
 	}
+	var actingEntityName *string
+	if request.ActingEntityID != nil {
+		var name string
+		var archived bool
+		err := tx.QueryRow(r.Context(), `
+			select entity.display_name, entity.archived
+			from game_membership_entity_controls control
+			join game_entities assignment
+				on assignment.game_id = control.game_id and assignment.entity_id = control.entity_id
+			join entities entity
+				on entity.id = assignment.entity_id and entity.rule_set_id = assignment.rule_set_id
+			where control.game_id = $1 and control.membership_id = $2 and control.entity_id = $3
+			for share of entity`, gameID, member.ID, *request.ActingEntityID,
+		).Scan(&name, &archived)
+		if errors.Is(err, pgx.ErrNoRows) {
+			handleAppError(w, &statusError{
+				Status: http.StatusForbidden, Code: "entity_control_required",
+				Message: "the acting entity must be controlled by the submitting player",
+				Fields:  map[string]string{"acting_entity_id": "player does not control this entity"},
+			})
+			return
+		}
+		if err != nil {
+			handleAppError(w, err)
+			return
+		}
+		if archived {
+			handleAppError(w, &statusError{
+				Status: http.StatusConflict, Code: "entity_archived",
+				Message: "archived entities cannot act in a new interaction",
+			})
+			return
+		}
+		readiness, err := loadEntityCharacterReadiness(r.Context(), tx, gameID, *request.ActingEntityID)
+		if err != nil {
+			handleAppError(w, err)
+			return
+		}
+		if readiness.Status != characterStatusReady {
+			handleAppError(w, &statusError{
+				Status: http.StatusConflict, Code: "character_setup_required",
+				Message: "the acting character must have every required field completed",
+				Fields:  map[string]string{"acting_entity_id": "character setup is incomplete"},
+			})
+			return
+		}
+		actingEntityName = &name
+	}
 	var alreadySubmitted bool
 	if err := tx.QueryRow(r.Context(), `
 		select exists(
@@ -545,8 +597,12 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 	}
 	if _, err := tx.Exec(r.Context(), `
 		insert into interaction_action_submissions (
-			id, interaction_id, game_id, submitted_by_membership_id, text, status
-		) values ($1, $2, $3, $4, $5, 'submitted')`, actionID, interactionID, gameID, member.ID, request.Text); err != nil {
+			id, interaction_id, game_id, submitted_by_membership_id,
+			acting_entity_id, acting_entity_name, text, status
+		) values ($1, $2, $3, $4, $5, $6, $7, 'submitted')`,
+		actionID, interactionID, gameID, member.ID,
+		request.ActingEntityID, actingEntityName, request.Text,
+	); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -688,7 +744,7 @@ func (s *Server) handleGameEvents(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	member, err := requireActiveGameMember(r.Context(), s.db, gameID, userID)
+	member, err := requirePlayReadyGameMember(r.Context(), s.db, gameID, userID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -714,7 +770,7 @@ func (s *Server) handleGameEvents(w http.ResponseWriter, r *http.Request) {
 		// Membership status and role can change while a long-lived stream is
 		// connected. Re-authorize every batch so revocation closes the stream and
 		// role changes immediately alter event visibility.
-		member, err = requireActiveGameMember(r.Context(), s.db, gameID, userID)
+		member, err = requirePlayReadyGameMember(r.Context(), s.db, gameID, userID)
 		if err != nil {
 			return
 		}

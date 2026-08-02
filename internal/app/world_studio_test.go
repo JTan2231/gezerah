@@ -19,6 +19,114 @@ func TestGeneratedWorldAndMechanicKeysAreInternalAndStable(t *testing.T) {
 	}
 }
 
+func TestWorldCharacterFieldValidationKeepsVocabularyUserAuthored(t *testing.T) {
+	t.Parallel()
+	revision := int64(2)
+	request := replaceWorldCharacterFieldsRequest{
+		ExpectedRevision: &revision,
+		Fields: []saveWorldCharacterFieldRequest{
+			{Label: "  Backstory  "},
+			{
+				ID: "12345678-1234-4234-8234-1234567890ab", Label: "Secret",
+				HelpText:   pointerTo("  What no one else knows.  "),
+				Visibility: "controllers-and-facilitators",
+			},
+		},
+	}
+	if fields := validateWorldCharacterFieldsRequest(&request); len(fields) > 0 {
+		t.Fatalf("valid character fields rejected: %v", fields)
+	}
+	if request.Fields[0].Label != "Backstory" || request.Fields[1].HelpText == nil || *request.Fields[1].HelpText != "What no one else knows." {
+		t.Fatalf("character field prose was not normalized: %#v", request.Fields)
+	}
+	if request.Fields[0].Visibility != "table" {
+		t.Fatalf("default visibility = %q, want table", request.Fields[0].Visibility)
+	}
+}
+
+func TestWorldCharacterFieldValidationRejectsInvalidDefinitions(t *testing.T) {
+	t.Parallel()
+	revision := int64(0)
+	id := "12345678-1234-4234-8234-1234567890ab"
+	request := replaceWorldCharacterFieldsRequest{
+		ExpectedRevision: &revision,
+		Fields: []saveWorldCharacterFieldRequest{
+			{ID: id, Label: "", Visibility: "table"},
+			{ID: id, Label: "Secret", Visibility: "engine-visible"},
+		},
+	}
+	fields := validateWorldCharacterFieldsRequest(&request)
+	for _, path := range []string{
+		"fields[0].label", "fields[1].id", "fields[1].visibility",
+	} {
+		if _, exists := fields[path]; !exists {
+			t.Errorf("missing validation error for %s: %v", path, fields)
+		}
+	}
+}
+
+func TestWorldCharacterFieldMatchIncludesAuthoredOrder(t *testing.T) {
+	t.Parallel()
+	current := []worldCharacterFieldResponse{
+		{ID: "first", Label: "Past", Visibility: "table"},
+		{ID: "second", Label: "Goal", Visibility: "controllers-and-facilitators"},
+	}
+	desired := []saveWorldCharacterFieldRequest{
+		{ID: "first", Label: "Past", Visibility: "table"},
+		{ID: "second", Label: "Goal", Visibility: "controllers-and-facilitators"},
+	}
+	if !worldCharacterFieldsMatch(current, desired) {
+		t.Fatal("identical character fields were treated as changed")
+	}
+	desired[0], desired[1] = desired[1], desired[0]
+	if worldCharacterFieldsMatch(current, desired) {
+		t.Fatal("authored field order was treated as a no-op")
+	}
+}
+
+func TestEntityProfileValidationAllowsPartialDrafts(t *testing.T) {
+	t.Parallel()
+	profileRevision, fieldsRevision := int64(2), int64(4)
+	request := replaceEntityProfileRequest{
+		ExpectedRevision:                &profileRevision,
+		ExpectedCharacterFieldsRevision: &fieldsRevision,
+		Values: []saveEntityProfileFieldValueRequest{
+			{FieldID: "12345678-1234-4234-8234-1234567890ab", Value: "  Raised beside the glass sea.  "},
+			{FieldID: "22345678-1234-4234-8234-1234567890ab", Value: "   "},
+		},
+	}
+	if fields := validateEntityProfileRequest(&request); len(fields) > 0 {
+		t.Fatalf("valid partial profile rejected: %v", fields)
+	}
+	if len(request.Values) != 1 || request.Values[0].Value != "Raised beside the glass sea." {
+		t.Fatalf("profile values were not normalized: %#v", request.Values)
+	}
+}
+
+func TestEntityProfileMatchIgnoresValueOrder(t *testing.T) {
+	t.Parallel()
+	first, second := "One", "Two"
+	current := []entityProfileFieldResponse{
+		{ID: "first", Value: &first},
+		{ID: "second", Value: &second},
+	}
+	desired := []saveEntityProfileFieldValueRequest{
+		{FieldID: "second", Value: "Two"},
+		{FieldID: "first", Value: "One"},
+	}
+	if !entityProfileMatches(current, desired) {
+		t.Fatal("identical profile values were treated as changed")
+	}
+	desired[0].Value = "Changed"
+	if entityProfileMatches(current, desired) {
+		t.Fatal("changed profile value was treated as a no-op")
+	}
+}
+
+func pointerTo(value string) *string {
+	return &value
+}
+
 func TestWorldInviteTokensAreOpaqueAndHashed(t *testing.T) {
 	t.Parallel()
 	token, digest, err := newWorldInviteToken()

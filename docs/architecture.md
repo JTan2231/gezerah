@@ -16,6 +16,8 @@ The system owns:
 - ruleset-scoped configuration and generic entities;
 - authorized world profiles, memberships, and expiring bearer invitations;
 - universal capacity/capability definitions over normalized typed state;
+- world-authored character-field requirements, player controls, and derived
+  live-play admission;
 - typed entity state and optimistic revisions;
 - reusable conditions and configured problem definitions;
 - configured problem instances and choice resolution;
@@ -104,24 +106,38 @@ flowchart TD
 The browser layer has three top-level states: development identity selection,
 the membership-filtered world library, and one role-aware world workspace.
 World configuration is a master-detail editor for capacities/capabilities plus
-people/settings. Play reuses the existing authorized game/interaction handlers
-and treats SSE rows as reload signals.
+character fields, people, and settings. Play adds game-scoped player-control
+relationships and separately loaded configured character profiles to generated
+sheets, reuses the authorized game/interaction handlers, and treats SSE rows as
+reload signals. A player who is not play-ready sees only controlled-character
+onboarding; live game resources are not requested until readiness changes.
 
 Routing is implemented with the History API and preserves invite tokens through
 the identity gate. There is no frontend route that authors a reusable problem.
 
 ### World application layer
 
-`internal/app/handlers_worlds.go`, `handlers_world_mechanics.go`, and
-`handlers_world_entities.go` adapt the world product model to existing
-normalized resources. World creation establishes its ruleset, primary game,
-owner world membership, and facilitator game membership in one transaction.
-Invite redemption establishes paired memberships in one transaction.
+`internal/app/handlers_worlds.go`, `handlers_world_mechanics.go`,
+`handlers_world_entities.go`, `handlers_world_character_fields.go`, and
+`handlers_world_entity_profiles.go` adapt the world product model to normalized
+resources. World creation establishes its ruleset, character-field revision
+root, primary game, owner world membership, and facilitator game membership in
+one transaction. Invite redemption establishes paired memberships in one
+transaction. Character control is a many-to-many game-membership/entity edge;
+field definitions and per-entity text values are distinct ruleset-scoped
+relational aggregates.
 
 World mechanics are ordinary normalized state-variable definitions with an
 explicit empty/universal owner-schema set. `world_mechanics` stores only the
 author-facing kind, mode, and live-mutation flag; values/defaults/effect
 allowlists remain in the existing typed tables.
+
+Character-field, profile, control, and readiness data stop at the application
+boundary. Domain snapshots continue to construct `rules.Entity` exclusively
+from generic entity identity, owner-schema membership, and typed state. Profile
+prose can therefore neither change applicability nor be targeted as mechanical
+state. The application separately prevents an incomplete controlled entity
+from entering a new interaction context or live effect plan.
 
 The React application is a client-rendered SPA with a small history-based route
 helper rather than an external router. Feature screens own server collections

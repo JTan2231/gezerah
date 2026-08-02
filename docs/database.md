@@ -69,6 +69,8 @@ or data repair framework.
 | `006_problem_instances.sql`   | Configured instances | Instance/entity link, binding revision, ordered concrete target bindings.                                        |
 | `007_live_play.sql`           | Multiplayer Play     | Users, games, memberships, game entity scope, interactions/actions, applied-receipt protection, event cursor.    |
 | `008_world_studio.sql`        | World product model  | World/game pairing, world roles, hashed invite links/redemptions, capacity/capability classification.             |
+| `009_player_controlled_entities.sql` | Character controls | Profile roots/legacy free-form sections, control events, and optional action attribution.               |
+| `010_world_character_fields.sql` | Character onboarding | Revisioned world field definitions, per-entity values, and schema-change events.                         |
 
 ## Logical schema
 
@@ -81,6 +83,9 @@ or data repair framework.
 | `entities`             | Generic state owners with optional ruleset-unique key.           |
 | `entity_owner_schemas` | Many-to-many entity capability membership.                       |
 | `state_records`        | At most one revision/timestamp root per entity.                  |
+| `entity_profiles`      | Optional independently revisioned character-profile root per world entity. |
+| `entity_profile_sections` | Retained legacy free-form profile rows, now read-only through HTTP.   |
+| `entity_profile_field_values` | Non-empty entity text values keyed by world character-field UUID. |
 
 `state_owner_schemas` is the persisted table name for the domain/API concept
 “owner schema.”
@@ -89,6 +94,14 @@ Public creation handlers insert a `state_records` row for every entity, includin
 one with no scalar overrides, and loaders rely on that application invariant.
 The foreign key and primary key do not require the row to exist: direct SQL can
 create an entity without a state root, and inner-join loaders will omit it.
+
+Profiles are created lazily on the first authorized replacement. An absent row
+is the logical empty profile at revision zero. Active values use plain
+relational text columns and durable configured-field IDs; there is no JSON
+metadata document or seeded field vocabulary. Values for archived definitions
+remain retained. `entity_profile_sections` preserves prose written through the
+superseded free-form API and is exposed read-only rather than migrated into
+invented field mappings.
 
 ### State definitions and values
 
@@ -167,10 +180,16 @@ structurally also a generic entity/state owner.
 | `games`                           | One ruleset's live game, status, revision, and creator.                                                           |
 | `game_memberships`                | User role/status/revision in a game.                                                                              |
 | `game_entities`                   | Exclusive game assignment for ruleset entities.                                                                   |
-| `game_membership_entity_controls` | Reserved relational mapping from membership to controlled game entity; not populated/exposed by current handlers. |
+| `game_membership_entity_controls` | Many-to-many player-control mapping used for completion, profile authoring, and optional action attribution.       |
 
 `game_entities.entity_id` is the primary key, enforcing assignment to at most
 one game. Composite foreign keys prove that game and entity share a ruleset.
+Control rows carry `game_id` through foreign keys to both membership and entity,
+making cross-game grants structurally impossible. The primary key permits
+multiple controlled entities per membership and multiple controllers per
+entity. Active-player role/status is mutable membership state and is therefore
+validated by commands; membership transitions away from active player remove
+their control rows.
 
 ### World studio
 
@@ -181,6 +200,8 @@ one game. Composite foreign keys prove that game and entity share a ruleset.
 | `world_invites`             | Expiring/revocable role offer with unique SHA-256 token digest and use count.                 |
 | `world_invite_redemptions`  | One durable redemption per invite/user linked to the resulting world membership.             |
 | `world_mechanics`           | Capacity/capability kind, author-facing mode, and live-mutation flag for a state definition.  |
+| `world_character_field_sets` | One optimistic revision root for a world's ordered active character requirements.            |
+| `world_character_fields`    | Durable label/guidance/visibility/position definitions with soft archive.                     |
 
 `world_profiles.primary_game_id` has a composite foreign key proving that the
 game belongs to the same ruleset. World and game memberships remain separate
@@ -197,6 +218,14 @@ duplicate defaults, bounds, values, or effect operations. World mechanic
 definitions intentionally have no rows in `state_variable_owner_schemas`; an
 empty definition owner set is the engine's explicit universal case.
 
+Every world has one `world_character_field_sets` row, including worlds that
+predate migration 010. Field definitions are relational, ruleset-scoped, and
+carry no privileged key. All non-archived rows are required for controlled
+characters. The active ordering is `(position, id)`; application-level
+replacement serializes through the root revision and supplies case-insensitive
+label uniqueness. Profile values have composite foreign keys proving that the
+entity/profile and field belong to the same world.
+
 ### Interactions and actions
 
 | Table                             | Purpose                                                                                                |
@@ -205,11 +234,17 @@ empty definition owner set is the engine's explicit universal case.
 | `interaction_audience_members`    | Memberships allowed to see a presented interaction.                                                    |
 | `interaction_eligible_responders` | Audience player memberships allowed to submit.                                                         |
 | `interaction_context_entities`    | Ordered game entity context, with label/visibility columns reserved beyond current public-only writer. |
-| `interaction_action_submissions`  | Free-form player actions, status, and revision.                                                        |
+| `interaction_action_submissions`  | Free-form actions, optional controlled acting entity/name snapshot, status, and revision.              |
 
 Database lifecycle checks constrain timestamp/status combinations for draft,
 open, adjudicating, resolved, and cancelled interactions. A partial unique index
 allows at most one selected action per interaction.
+
+Action attribution has a nullable `(acting_entity_id, acting_entity_name)`
+pair. The entity is constrained to the same game, while the name is captured
+at submission time for stable history. The mutable control relationship is
+validated by the application when accepting the action rather than retained as
+a historical foreign key.
 
 ### Live resolution receipts
 
@@ -240,9 +275,10 @@ are unique by effect/entity, and before/after phases are exactly enumerated.
 
 Event IDs are generated `bigint` identities and indexed by `(game_id, id)`.
 The payload is intentionally not a JSON state snapshot. Current event types
-cover game, membership, entity assignment, interaction lifecycle, submission,
-and resolution changes. `resolution-updated` is allowed by the schema but no
-current handler emits it.
+cover game, membership, entity assignment/control/profile changes,
+character-field schema changes, interaction lifecycle, submission, and
+resolution changes.
+`resolution-updated` is allowed by the schema but no current handler emits it.
 
 The schema validates the event type and game scope of any populated resource
 IDs, but it does not require the actor/resource ID combination appropriate to

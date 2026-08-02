@@ -51,8 +51,10 @@ export function useGameEvents(
       } catch {
         // The polling interval below remains the compatibility fallback.
       }
-      if (!controller.signal.aborted)
+      if (!controller.signal.aborted) {
+        onRefresh();
         reconnectTimer = window.setTimeout(() => void connect(), 1500);
+      }
     }
 
     void connect();

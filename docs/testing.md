@@ -127,7 +127,8 @@ PostgreSQL integration fixture. They cover:
 - event cursor parsing and matching;
 - development identity vocabulary and live effect validation;
 - universal owner-set mechanics, world key generation, invite token hashing,
-  and capacity/capability definition mapping.
+  capacity/capability definition mapping, character-field/profile validation,
+  and semantic no-op comparison.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -147,7 +148,8 @@ There are no current component-rendering unit tests.
 `test/specs/configuration.spec.ts` exercises:
 
 - development identity, world creation, capacity/capability authoring, generated
-  entity sheets, direct setup state, world-list isolation, and role denial;
+  entity sheets, character-field publishing, direct setup state, world-list
+  isolation, and role denial;
 - advisory configured preview versus atomic resolve;
 - stale state revision conflict and default normalization;
 - condition unknown/unmet/met behavior;
@@ -160,6 +162,14 @@ There are no current component-rendering unit tests.
   creation, revocation, and closed-link rejection;
 - confirmation that a new world has no configured problem definitions;
 - separate facilitator/player browser contexts receiving an improvised prompt;
+- facilitator character-control assignment, waiting/setup admission states,
+  zero-field readiness, partial profile drafts, live-route denial during
+  onboarding, and transition into play after every configured field is complete;
+- public/restricted configured values, server-side spectator filtering, stale
+  profile conflict, denied spectator writes, and isolation from state revision;
+- rejection of requirement-set changes during an open problem and return to
+  onboarding when a new requirement is published after resolution;
+- controlled acting-entity attribution with a server-captured display name;
 - player action submission, private adjudication, action selection, effect
   construction, advisory preview, atomic resolve, receipt/history display, and
   generated-sheet state refresh.

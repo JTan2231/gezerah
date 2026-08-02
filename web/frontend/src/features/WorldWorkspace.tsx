@@ -12,6 +12,7 @@ import { useResource } from "../hooks/useResource";
 import type { WorldSection } from "../worldRoutes";
 import { worldURL } from "../worldRoutes";
 import { MechanicsWorkspace } from "./MechanicsWorkspace";
+import { CharacterFieldsWorkspace } from "./CharacterFieldsWorkspace";
 import { PeopleWorkspace } from "./PeopleWorkspace";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 import { WorldPlay } from "./WorldPlay";
@@ -118,6 +119,22 @@ export function WorldWorkspace({
             </button>
             <p>World</p>
             <button
+              className={
+                effectiveSection === "character-fields" ? "active" : ""
+              }
+              type="button"
+              onClick={() => go("character-fields")}
+            >
+              <span className="nav-symbol" aria-hidden="true">
+                ◫
+              </span>
+              <span>
+                <strong>Character fields</strong>
+                <small>Player onboarding</small>
+              </span>
+              <em>{world.character_field_count}</em>
+            </button>
+            <button
               className={effectiveSection === "people" ? "active" : ""}
               type="button"
               onClick={() => go("people")}
@@ -191,6 +208,9 @@ export function WorldWorkspace({
         >
           {canEdit ? <option value="capacities">Capacities</option> : null}
           {canEdit ? <option value="capabilities">Capabilities</option> : null}
+          {canEdit ? (
+            <option value="character-fields">Character fields</option>
+          ) : null}
           {canEdit ? <option value="people">People</option> : null}
           {canEdit ? <option value="settings">Settings</option> : null}
           <option value="play">Play</option>
@@ -216,6 +236,12 @@ export function WorldWorkspace({
             onWorldChanged={resource.reload}
           />
         ) : null}
+        {effectiveSection === "character-fields" ? (
+          <CharacterFieldsWorkspace
+            world={world}
+            onWorldChanged={resource.reload}
+          />
+        ) : null}
         {effectiveSection === "people" ? (
           <PeopleWorkspace world={world} />
         ) : null}
@@ -227,7 +253,11 @@ export function WorldWorkspace({
           />
         ) : null}
         {effectiveSection === "play" ? (
-          <WorldPlay world={world} user={user} />
+          <WorldPlay
+            world={world}
+            user={user}
+            onWorldChanged={resource.reload}
+          />
         ) : null}
       </main>
     </div>

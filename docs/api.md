@@ -71,7 +71,7 @@ Common status/code pairs are:
 | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                        | The transport, path ID, or query syntax is malformed.                     |
 | 401    | `authentication_required`, `invalid_identity`                                                         | The development identity header is absent, malformed, or unknown.         |
-| 403    | `world_forbidden`, `world_editor_required`, `world_owner_required`, `game_forbidden`, `facilitator_required`, `player_required`, `responder_required`, `action_forbidden` | The known actor lacks membership, role, audience, or ownership authority. |
+| 403    | `world_forbidden`, `game_forbidden`, role/ownership codes, `character_setup_required`, `entity_profile_forbidden` | The actor lacks authority or has not completed live-play onboarding.       |
 | 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                                  | The resource/invite/endpoint is absent, expired, revoked, or hidden.       |
 | 409    | `revision_conflict`, `duplicate_key`, `configuration_changed`, lifecycle and in-use codes             | Current state conflicts with the command.                                 |
 | 422    | `validation_failed`, `invalid_reference`, `archived_reference`                                        | JSON is structurally readable but violates a domain or database rule.     |
@@ -91,6 +91,9 @@ or interaction revision.
 | Request field                                                | Protects                                                |
 | ------------------------------------------------------------ | ------------------------------------------------------- |
 | `expected_revision` on state replacement                     | Entity state record.                                    |
+| `expected_revision` on character-field replacement           | World character-field set.                              |
+| `expected_revision` on entity-profile replacement            | Entity profile values.                                  |
+| `expected_character_fields_revision` on profile replacement  | Field schema used to build the profile draft.           |
 | `expected_binding_revision`                                  | Problem-instance bindings.                              |
 | `expected_state_revisions`                                   | Configured-resolution state records named by entity ID. |
 | `expected_revision` on membership update                     | Membership.                                             |
@@ -132,22 +135,109 @@ the generic definition aggregate.
 
 | Method and path                                  | Authority                    | Request/response                                                                                 |
 | ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET /api/worlds`                                | Known user                   | Active memberships only; returns the user's worlds with role/count/activity summary.             |
+| `GET /api/worlds`                                | Known user                   | Active memberships only; returns role/count/activity summary plus derived `play_status`.          |
 | `POST /api/worlds`                               | Known user                   | Name/optional description; creates ruleset, primary game, owner and facilitator memberships.     |
 | `GET /api/worlds/{world_id}`                     | Active world member          | World summary for the current user.                                                              |
 | `PATCH /api/worlds/{world_id}`                   | Owner/editor, active world   | Name, nullable description, and `expected_revision`.                                              |
 | `POST /api/worlds/{world_id}/archive`            | Owner                        | `expected_revision`; rejects unfinished interactions, archives world and primary game.            |
-| `GET /api/worlds/{world_id}/members`             | Active world member          | World membership list.                                                                           |
-| `GET /api/worlds/{world_id}/entities`            | Active world member          | Primary-game roster with logical generated state.                                                 |
-| `POST /api/worlds/{world_id}/entities`           | Owner/editor, active world   | Display name and optional internal key; creates/assigns entity and state root.                     |
-| `GET /api/worlds/{world_id}/entities/{entity_id}` | Active world member         | One assigned entity and logical state.                                                            |
+| `GET /api/worlds/{world_id}/members`             | Active world member          | World membership list with each member's derived `play_status`.                                   |
+| `GET /api/worlds/{world_id}/character-fields`    | Active world member          | Active ordered requirements and schema revision; spectator view omits restricted definitions.     |
+| `PUT /api/worlds/{world_id}/character-fields`    | Owner/editor, active world   | Atomically replaces active requirements using `expected_revision`.                                |
+| `GET /api/worlds/{world_id}/entities`            | Active world member          | Primary-game roster with logical state and character completion; onboarding players see controls only. |
+| `POST /api/worlds/{world_id}/entities`           | Owner/editor, active world   | Display name, optional key/controllers; creates and assigns entity and state root.                 |
+| `GET /api/worlds/{world_id}/entities/{entity_id}` | Active world member         | One assigned entity; onboarding players may read only a controlled entity.                        |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}` | Owner/editor, active world  | Replaces entity display metadata.                                                                 |
 | `POST /api/worlds/{world_id}/entities/{entity_id}/archive` | Owner/editor, active world | Archives the entity.                                                              |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/state` | Active world member     | Logical state, defaults, unknowns, and revision.                                                   |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/state` | Active world member     | Logical state; onboarding players may read only a controlled entity.                              |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/state` | Owner/editor, active world | Full logical values plus `expected_revision`; defaults normalize out of storage.                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world | Replaces active player controllers using `expected_game_revision`.                         |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/profile` | Active world member | Configured fields, visibility-filtered values, completion, and derived `can_edit`.                 |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile` | Owner/editor or active controller | Replaces non-empty field values using profile and field-schema revisions.              |
 
 World creation is transactional. The response role is always `owner`; the
 primary game's corresponding role is `facilitator`.
+
+Entity creation optionally accepts
+`controller_world_membership_ids`. Every ID must name an active player world
+membership whose paired primary-game membership is also active/player. The
+entity, state root, game assignment, control rows, game revision, and event are
+created in one transaction.
+
+Controller replacement payload:
+
+```json
+{
+  "expected_game_revision": 4,
+  "controller_world_membership_ids": ["world membership UUID"]
+}
+```
+
+The response returns `entity_id`, the normalized controller membership IDs,
+and `game_revision`. The relation is many-to-many. Clearing it does not delete
+the entity or its profile. Game membership responses expose
+`controlled_entity_ids`; only active player rows are effective authority.
+
+Character requirements are an ordered, world-authored field set. Every active
+field is required for every entity that has an active player controller; there
+is no per-field `required` flag and no built-in vocabulary. An empty set makes
+controlled characters immediately ready. Field-set replacement is atomic:
+
+```json
+{
+  "expected_revision": 3,
+  "fields": [
+    {
+      "id": "existing field UUID; omit for a new field",
+      "label": "Backstory",
+      "help_text": "Where did this character come from?",
+      "visibility": "table"
+    },
+    {
+      "label": "Hidden oath",
+      "visibility": "controllers-and-facilitators"
+    }
+  ]
+}
+```
+
+Omitted active fields are archived and retained with their old values. At most
+50 fields may be active; labels are limited to 200 characters, guidance to
+2,000, and labels must be case-insensitively unique. Reordering or editing
+prose/visibility advances the schema revision. Adding or removing requirements
+is rejected while the primary game has a draft, open, or adjudicating
+interaction, because it could change admission or legal effect targets during
+that problem.
+
+Entity-profile replacement payload:
+
+```json
+{
+  "expected_revision": 2,
+  "expected_character_fields_revision": 3,
+  "values": [
+    {
+      "field_id": "Backstory field UUID",
+      "value": "Aria grew up beside the glass sea."
+    }
+  ]
+}
+```
+
+The request is a complete replacement of non-empty values for active fields,
+but it may be incomplete: an omitted or blank value remains missing so players
+can save drafts. Each value is limited to 20,000 characters. Both revisions
+must match, preventing a draft made against an old world schema from silently
+overwriting newer requirements. Empty/missing profiles read as profile revision
+zero.
+
+The profile response includes `character_fields_revision`,
+`character_status`, required/completed counts, and missing IDs for privileged
+readers. Owners/editors and active controllers receive every active field;
+other admitted members receive only completed `table` values. Visibility is
+configured on the world field, not chosen per character. `can_edit` is a
+derived affordance, not the authorization boundary. Profile changes never
+mutate entity state. Rows from the superseded free-form profile format, if any,
+are returned as read-only `legacy_sections`.
 
 ### Capacities and capabilities
 
@@ -276,9 +366,9 @@ game event. Its durable output is the changed state.
 | ----------------------------------- | -------------- | --------------------- | ------------------------------------------------------- |
 | `GET /api/users`                    | Public/trusted | None                  | Up to 1000 local users.                                 |
 | `POST /api/users`                   | Public/trusted | `{id?,display_name}`  | Creates local user.                                     |
-| `GET /api/games`                    | Known user     | None                  | Games where actor has active membership.                |
+| `GET /api/games`                    | Known user     | None                  | Active memberships; world players still onboarding are omitted. |
 | `POST /api/games`                   | Known user     | `GameCreate`          | Creates active game and actor's facilitator membership. |
-| `GET /api/games/{game_id}`          | Active member  | None                  | Complete game/membership/entity-ID summary.             |
+| `GET /api/games/{game_id}`          | Play-ready member | None               | Complete game/membership/entity-ID summary.             |
 | `POST /api/games/{game_id}/archive` | Facilitator    | `{expected_revision}` | Archives only when every interaction is final.          |
 
 Archiving blocks game-scoped Play mutation routes. It does not make the
@@ -289,27 +379,41 @@ API, whose endpoints do not consult game status.
 
 | Method and path                                            | Authority     | Request                          | Response/notes                                                                                                                  |
 | ---------------------------------------------------------- | ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/games/{game_id}/entities`                        | Active member | None                             | Entities assigned to this game.                                                                                                 |
+| `GET /api/games/{game_id}/entities`                        | Play-ready member | None                         | Entities assigned to this game.                                                                                                 |
 | `GET /api/games/{game_id}/available-entities`              | Facilitator   | None                             | Current/available candidates used by game management.                                                                           |
 | `GET /api/play/rule-sets/{rule_set_id}/available-entities` | Known user    | None                             | Active entities in ruleset not assigned to any game.                                                                            |
-| `GET /api/games/{game_id}/state-variable-definitions`      | Active member | None                             | Definitions eligible for at least one mapped entity, including archived definitions needed to interpret retained state/history. |
+| `GET /api/games/{game_id}/state-variable-definitions`      | Play-ready member | None                         | Definitions eligible for at least one mapped entity, including archived definitions needed to interpret retained state/history. |
 | `PUT /api/games/{game_id}/entities`                        | Facilitator   | `{entity_ids,expected_revision}` | Replaces mapping; referenced historical entities cannot be released.                                                            |
 | `POST /api/games/{game_id}/memberships`                    | Facilitator   | `MembershipCreate`               | Adds invited or active membership; returns updated game.                                                                        |
 | `PUT /api/games/{game_id}/memberships/{membership_id}`     | Facilitator   | `MembershipUpdate`               | Updates role/status; returns updated game.                                                                                      |
 | `PATCH /api/games/{game_id}/memberships/{membership_id}`   | Facilitator   | `MembershipUpdate`               | Alias of PUT used by the current UI.                                                                                            |
 
+World-backed membership responses include `play_status` and
+`controlled_entity_ids`. Non-player roles are ready while active. An active
+world player is `waiting-for-character` with no controlled entity,
+`setup-required` when all controlled entities are incomplete, and `ready` once
+at least one controlled entity has every active world field. Readiness is
+derived on every read; it is not stored. Non-world compatibility games retain
+their existing active-membership behavior.
+
+Until ready, a player remains an active world member so onboarding endpoints
+work, but the game summary, entity list, definition list, interaction feed, and
+event stream return `403 character_setup_required`. An incomplete controlled
+entity also cannot be selected as new interaction context, acting-character
+attribution, or a live ruling effect target.
+
 ### Interactions and actions
 
 | Method and path                                                                        | Authority       | Request                                       | Response/notes                                                                            |
 | -------------------------------------------------------------------------------------- | --------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /api/games/{game_id}/interactions`                                                | Active member   | None                                          | Visibility-filtered feed. Facilitator sees all; others see addressed open/resolved items. |
+| `GET /api/games/{game_id}/interactions`                                                | Play-ready member | None                                        | Visibility-filtered feed. Facilitator sees all; others see addressed open/resolved items. |
 | `POST /api/games/{game_id}/interactions`                                               | Facilitator     | `InteractionSave`                             | Creates draft or creates/presents with `present:true`.                                    |
-| `GET /api/games/{game_id}/interactions/{interaction_id}`                               | Visible member  | None                                          | One filtered interaction; private data omitted for non-facilitators.                      |
+| `GET /api/games/{game_id}/interactions/{interaction_id}`                               | Visible play-ready member | None                               | One filtered interaction; private data omitted for non-facilitators.                      |
 | `PUT /api/games/{game_id}/interactions/{interaction_id}`                               | Facilitator     | `InteractionSave`                             | Replaces editable draft using expected revision.                                          |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/present`                      | Facilitator     | `{expected_revision}`                         | `draft → open`.                                                                           |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/adjudicate`                   | Facilitator     | `{expected_revision}`                         | `open → adjudicating`.                                                                    |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/cancel`                       | Facilitator     | `{expected_revision}`                         | Any non-final state → cancelled.                                                          |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/actions`                      | Eligible player | `{text,expected_revision}`                    | Creates submitted action; guard is interaction revision.                                  |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/actions`                      | Eligible player | `{text,acting_entity_id?,expected_revision}`  | Creates action; acting entity must be controlled; guard is interaction revision.           |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player   | `{expected_revision}`                         | Withdraws submitted action; guard is action revision.                                     |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/preview`                      | Facilitator     | `LiveRuling` without required idempotency key | Advisory state; interaction must be adjudicating.                                         |
 | `POST /api/games/{game_id}/interactions/{interaction_id}/resolve`                      | Facilitator     | `LiveRuling` with idempotency key             | Atomic state + receipt + lifecycle + event.                                               |
@@ -318,7 +422,7 @@ API, whose endpoints do not consult game status.
 
 | Method and path                   | Authority     | Request                                                      | Response/notes                     |
 | --------------------------------- | ------------- | ------------------------------------------------------------ | ---------------------------------- |
-| `GET /api/games/{game_id}/events` | Active member | Optional `?after=<non-negative event ID>` or `Last-Event-ID` | Reconnectable `text/event-stream`. |
+| `GET /api/games/{game_id}/events` | Play-ready member | Optional `?after=<non-negative event ID>` or `Last-Event-ID` | Reconnectable `text/event-stream`. |
 
 The server sends an initial `retry: 1500`, then events such as:
 
@@ -766,14 +870,21 @@ defaults it to `active`. The `left` status is update-only.
 `expected_revision` is used for PUT; create does not need it. An omitted/empty
 audience on either create or draft replacement is expanded to all active game
 members, so the API cannot persist a deliberately empty audience. Eligible
-responders must be active player memberships in the audience. The current API
-writes context entities as public and does not expose context labels/visibility
-fields even though relational support exists.
+responders must be play-ready active player memberships in the audience.
+Default audience/responder expansion excludes players still in onboarding. The
+current API writes context entities as public and does not expose context
+labels/visibility fields even though relational support exists.
 
 Interaction responses include revision/status, related membership/entity IDs,
 actions, optional applied resolution, and lifecycle timestamps. Non-facilitator
 responses omit interaction and resolution private notes plus any non-public
 context entities.
+
+An action submission may include `acting_entity_id`. When present, it must be
+an active, game-assigned, ready entity controlled by the submitting player. Action
+responses add `acting_entity_id` and the server-captured
+`acting_entity_name`; both are omitted for unattributed actions. Responder
+eligibility remains membership-based, so attribution is optional.
 
 ### Concrete live effects and ruling
 
@@ -833,6 +944,8 @@ game.
 | Interaction title                              | 200 characters                       |
 | Interaction prompt/action text                 | 10,000 characters                    |
 | Interaction/ruling private notes and narrative | 20,000 characters                    |
+| Character fields                               | 50 active; label 200/guidance 2,000 |
+| Character-field value                          | 20,000 characters                    |
 | Live ruling effects                            | 100                                  |
 | Condition tree                                 | 10 levels, 250 nodes                 |
 | Ruleset list                                   | 500                                  |

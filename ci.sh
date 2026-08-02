@@ -222,7 +222,7 @@ run_backend() {
 	go build -trimpath -o "$tmp_dir/dnd" ./cmd/dnd || return 1
 
 	section "Developer tooling: checking shell syntax"
-	sh -n ci.sh run.sh || return 1
+	sh -n ci.sh run.sh reset-db.sh || return 1
 
 	run_database_smoke || return 1
 }

@@ -2,7 +2,8 @@
 
 This directory is the canonical guide to Worldwright. It describes the system
 implemented in this repository: a membership-scoped world library, a static
-capacity/capability editor, generated entity sheets, and a multiplayer table
+capacity/capability editor, generated entity sheets, player-controlled
+characters with world-authored onboarding fields, and a multiplayer table
 where facilitators create every problem ad hoc.
 
 The application intentionally has no built-in entity classes, privileged
@@ -73,6 +74,14 @@ effect ordering, default handling, and atomic failure semantics aligned.
 - Durable identities are UUIDs at the HTTP and database boundaries.
 - Owner schemas are capabilities/tags, not built-in classes. An entity may
   implement zero or more of them.
+- A character is an ordinary game entity with one or more active player-control
+  relationships, never an engine class or privileged configured key.
+- Every active character field is authored by the world owner/editor and is
+  required for every controlled character; there is no built-in field list.
+- Character-field values are relational presentation data and are never loaded
+  by the rules engine or exposed as mechanical state.
+- Player admission to live play is derived from control and character-field
+  completion rather than persisted as a second membership lifecycle.
 - A state variable with declared owner schemas can be owned when those sets
   intersect; an empty owner-schema set is explicitly universal.
 - Typed state is stored relationally; the database does not use a canonical
@@ -103,6 +112,9 @@ effect ordering, default handling, and atomic failure semantics aligned.
 | Ruleset            | Internal isolation boundary and container for a world's authored mechanical vocabulary.                     |
 | Owner schema       | User-authored generic capability/tag retained by the underlying engine; never a built-in class.              |
 | Entity             | Generic durable state owner represented to authors as a person or other world subject.                       |
+| Character          | Product view of a game entity controlled by one or more active player memberships.                           |
+| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                           |
+| Entity profile     | One entity's values for the world's active character fields, separate from typed engine state.               |
 | State definition   | Normalized typed schema underlying a capacity or capability.                                                  |
 | Logical state      | Stored overrides combined with authored missing/default semantics.                                            |
 | Game               | Live-play boundary that maps an exclusive subset of one ruleset's entities.                                   |
@@ -116,7 +128,9 @@ The documentation explains behavior; these implementation areas are the final
 authority when behavior and prose diverge:
 
 - `internal/rules/` for domain validation and transition semantics.
-- `internal/app/api_*.go` and `internal/app/handlers_*.go` for HTTP contracts.
+- `internal/app/api_*.go` and `internal/app/handlers_*.go` for HTTP contracts,
+  including character-field configuration, readiness, control, and profile
+  authorization.
 - `internal/migrations/*.sql` for persisted shape and database constraints.
 - `web/frontend/src/api/types.ts` for the frontend's view of API payloads.
 - `web/frontend/src/features/` for screen behavior.

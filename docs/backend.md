@@ -91,9 +91,13 @@ HTTP and persistence adapter. Naming follows a consistent pattern:
 - `domain_loaders.go`: common ruleset-domain loading through a small `queryer`
   interface implemented by both pools and transactions;
 - `interaction_receipts.go`: immutable live ruling receipt persistence/loading;
-- `handlers_worlds.go`, `handlers_world_mechanics.go`, and
-  `handlers_world_entities.go`: the authorized world product adapter over
-  normalized ruleset, game, state-definition, and entity resources;
+- `handlers_worlds.go`, `handlers_world_mechanics.go`,
+  `handlers_world_entities.go`, `handlers_world_character_fields.go`, and
+  `handlers_world_entity_profiles.go`: the authorized world adapter over
+  normalized ruleset, game, state-definition, entity, player-control,
+  character-field, and profile-value resources;
+- `character_readiness.go`: derived entity completion and world-backed player
+  admission shared by world and live-game handlers;
 - `server.go`, `json.go`, `config.go`: cross-cutting server infrastructure.
 
 The files are organized by resource rather than by a generic repository
@@ -254,6 +258,14 @@ Resolution persistence updates only record IDs reported as changed by the pure
 engine. Every changed record is rewritten and incremented inside the enclosing
 resolution transaction.
 
+Character profiles deliberately do not use state persistence. A world-level
+revision guards atomic replacement of ordered field definitions, and each
+entity profile has an independent revision guarding complete replacement of
+its non-empty values. Definition IDs and value rows preserve provenance when a
+field is reordered, renamed, or archived. Profile queries filter restricted
+fields/values before serialization and never extend `rules.Entity` or state
+snapshot types. Legacy free-form sections are loaded read-only.
+
 ## Rules engine execution
 
 ### Conditions
@@ -331,8 +343,24 @@ would create avoidable deadlocks.
 ## Live Play authorization and filtering
 
 Play handlers derive a user from `X-DND-User-ID`, verify that it exists, and
-then load an active game membership. Facilitator commands call a stronger
-helper that verifies role and active game status while locking the game root.
+then load an active game membership. For a world-backed player, game read/live
+routes additionally derive play readiness from current controls and active
+character-field values. Facilitator commands call a stronger helper that
+verifies role and active game status while locking the game root.
+
+World profile writes authorize either an owner/editor or the paired active
+player membership named by `game_membership_entity_controls`. They lock/check
+both the profile and character-field revisions, so a stale draft cannot ignore
+new requirements. Controller replacement and field-set replacement remain
+owner/editor-only. An optional acting entity on a player action is accepted
+only when that same live control edge exists and the entity is complete; the
+accepted row stores a display-name snapshot for later history.
+
+Players remain active world members during onboarding, but world roster/state
+queries narrow to their controlled entities and game/interactions/events return
+`character_setup_required`. Interaction validation excludes non-ready players
+from audiences/responders and rejects incomplete controlled entities as new
+context or live-effect targets.
 
 Non-facilitator interaction visibility is enforced in SQL, not merely in the
 React UI. Response loading also omits private notes and facilitator-private

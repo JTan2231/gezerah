@@ -10,17 +10,19 @@ type playUserResponse struct {
 }
 
 type gameMembershipResponse struct {
-	ID          string            `json:"id"`
-	GameID      string            `json:"game_id"`
-	UserID      string            `json:"user_id"`
-	Role        string            `json:"role"`
-	Status      string            `json:"status"`
-	Revision    int64             `json:"revision"`
-	DisplayName string            `json:"display_name"`
-	User        *playUserResponse `json:"user,omitempty"`
-	JoinedAt    *time.Time        `json:"joined_at,omitempty"`
-	CreatedAt   time.Time         `json:"created_at"`
-	UpdatedAt   time.Time         `json:"updated_at"`
+	ID                  string            `json:"id"`
+	GameID              string            `json:"game_id"`
+	UserID              string            `json:"user_id"`
+	Role                string            `json:"role"`
+	Status              string            `json:"status"`
+	PlayStatus          string            `json:"play_status"`
+	Revision            int64             `json:"revision"`
+	DisplayName         string            `json:"display_name"`
+	ControlledEntityIDs []string          `json:"controlled_entity_ids"`
+	User                *playUserResponse `json:"user,omitempty"`
+	JoinedAt            *time.Time        `json:"joined_at,omitempty"`
+	CreatedAt           time.Time         `json:"created_at"`
+	UpdatedAt           time.Time         `json:"updated_at"`
 }
 
 type gameResponse struct {

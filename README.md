@@ -62,6 +62,12 @@ Useful process commands:
 ./run.sh stop
 ```
 
+To remove all locally authored data and return to an empty application while
+preserving the migrated schema, run `./reset-db.sh`. It accepts the same
+database URL variables as the application, but refuses non-local databases and
+requires the database name as confirmation. Use `./reset-db.sh --yes` only when
+the same safety checks are sufficient for automation.
+
 The production-style local path builds the frontend before starting Go:
 
 ```sh
