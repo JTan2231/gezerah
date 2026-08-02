@@ -13,6 +13,13 @@ one ruleset's generic entities into a live runtime world. Users and memberships
 are separate from those fictional entities; “Dungeon Master” is presented as
 the game-level `facilitator` role, not a privileged schema or configured key.
 
+## Documentation
+
+The comprehensive system documentation starts at
+[`docs/README.md`](docs/README.md). It covers architecture, domain semantics,
+workflows, the complete HTTP API, backend and frontend internals, the database,
+development, testing, operations, and security.
+
 ## Stack
 
 - Go 1.25, standard-library HTTP routing, and embedded static assets.
