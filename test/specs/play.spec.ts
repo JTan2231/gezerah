@@ -127,7 +127,14 @@ test("worlds stay private until an invite link is redeemed", async ({
     { role: "player", expires_in_days: 7 },
     owner.id,
   );
-  expect(invite.join_path).toMatch(/^\/invite\//);
+  expect(invite.join_path).toMatch(/^\/play\/invite\//);
+  const editorInvite = await postJSON<InviteResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/invites`,
+    { role: "editor", expires_in_days: 7 },
+    owner.id,
+  );
+  expect(editorInvite.join_path).toMatch(/^\/build\/invite\//);
   const token = required(invite.join_path?.split("/").at(-1), "invite token");
   const preview = await getJSON<{
     world_name: string;
@@ -342,8 +349,8 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     const ownerPage = await ownerContext.newPage();
     const playerPage = await playerContext.newPage();
     await Promise.all([
-      ownerPage.goto(`${baseURL}/worlds/${world.id}/play`),
-      playerPage.goto(`${baseURL}/worlds/${world.id}/play`),
+      ownerPage.goto(`${baseURL}/play/${world.id}`),
+      playerPage.goto(`${baseURL}/play/${world.id}`),
     ]);
     await expect(
       ownerPage.getByRole("heading", { name: world.name }),
@@ -361,12 +368,16 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     );
     expect(gameBeforeSetup.status()).toBe(403);
 
-    await ownerPage.getByRole("button", { name: "Controllers" }).click();
+    await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
+    await ownerPage
+      .getByRole("button", { name: "Controllers", exact: true })
+      .click();
     await ownerPage.getByRole("checkbox", { name: playerName }).check();
     await ownerPage
       .getByRole("dialog")
       .getByRole("button", { name: "Save controllers" })
       .click();
+    await ownerPage.goto(`${baseURL}/play/${world.id}`);
     await expect(playerPage.getByText("Setup required").first()).toBeVisible();
 
     const publicStory = `Raised beside the glass sea ${unique}.`;
@@ -397,8 +408,8 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     await expect(playerPage.getByText("profile r2")).toBeVisible();
 
     await ownerPage.getByRole("tab", { name: "Character" }).click();
-    await expect(ownerPage.getByLabel("Backstory")).toHaveValue(publicStory);
-    await expect(ownerPage.getByLabel("Hidden oath")).toHaveValue(privateStory);
+    await expect(ownerPage.getByText(publicStory)).toBeVisible();
+    await expect(ownerPage.getByText(privateStory)).toBeVisible();
 
     const spectatorProfile = await getJSON<EntityProfileResponse>(
       request,

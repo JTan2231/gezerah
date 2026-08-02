@@ -41,11 +41,12 @@ createdb dnd
 Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-Choose a local development profile, then create a world or open one you have
-joined. **Configure** defines capacities, capabilities, people, invitations,
-and world settings. **Play** is the live table: present an ad-hoc problem,
-collect player actions, preview a narrative ruling and its effects, then commit
-an immutable resolution receipt.
+The root page asks whether to enter **Play** or **Build**. Each area then asks
+for a local development profile when needed. **Build** defines capacities,
+capabilities, character requirements, roster setup, people, invitations, and
+world settings. **Play** is the separate live table: complete player onboarding,
+present an ad-hoc problem, collect player actions, preview a narrative ruling
+and its effects, then commit an immutable resolution receipt.
 
 The generic configured-problem API remains as an engine compatibility surface,
 but it is not part of the product UI and new worlds do not create configured
@@ -80,13 +81,13 @@ concurrent starts serialize schema upgrades.
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `DND_ADDR` | `:8080` | HTTP listen address. |
-| `PORT` | unset | Hosting fallback when `DND_ADDR` is unset. |
-| `DND_DATABASE_URL` | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL. |
-| `DATABASE_URL` | unset | Hosting fallback when `DND_DATABASE_URL` is unset. |
-| `DND_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
+| Variable           | Default                                         | Purpose                                            |
+| ------------------ | ----------------------------------------------- | -------------------------------------------------- |
+| `DND_ADDR`         | `:8080`                                         | HTTP listen address.                               |
+| `PORT`             | unset                                           | Hosting fallback when `DND_ADDR` is unset.         |
+| `DND_DATABASE_URL` | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL.                         |
+| `DATABASE_URL`     | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset. |
+| `DND_LOG_LEVEL`    | `info`                                          | `debug`, `info`, `warn`, or `error`.               |
 
 Game roles, statuses, visibility, and mutation permissions are enforced by the
 server. Authentication is not: the current development UI stores a selected

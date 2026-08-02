@@ -24,8 +24,8 @@ The system owns:
 - development users, games, memberships, entity assignment, and live
   interactions;
 - atomic application and immutable receipts for live rulings;
-- the world library, static configuration, invitation, and live-table browser
-  interface.
+- separate Play and Build libraries, static configuration, invitation, and
+  live-table browser interfaces.
 
 The system does not currently own:
 
@@ -103,17 +103,25 @@ flowchart TD
 
 ### Browser layer
 
-The browser layer has three top-level states: development identity selection,
-the membership-filtered world library, and one role-aware world workspace.
-World configuration is a master-detail editor for capacities/capabilities plus
-character fields, people, and settings. Play adds game-scoped player-control
-relationships and separately loaded configured character profiles to generated
-sheets, reuses the authorized game/interaction handlers, and treats SSE rows as
-reload signals. A player who is not play-ready sees only controlled-character
-onboarding; live game resources are not requested until readiness changes.
+The browser layer begins with a data-free choice between two sibling product
+areas. `/build` owns the owner/editor world library and the static authoring
+studio; `/play` owns the admitted-world table picker, player onboarding, and
+live table. They share identity, API, types, hooks, and primitive components but
+have independent route trees and navigation shells. Build never mounts the game
+event stream, while Play never renders configuration or direct setup controls.
 
-Routing is implemented with the History API and preserves invite tokens through
-the identity gate. There is no frontend route that authors a reusable problem.
+World configuration is a master-detail editor for capacities/capabilities plus
+character fields, roster setup, people, and settings. Builder roster setup adds
+game-scoped player-control relationships and separately loaded configured
+character profiles to generated sheets. Play reuses the authorized
+game/interaction handlers, renders direct sheet state read-only, and treats SSE
+rows as reload signals. A player who is not play-ready sees only
+controlled-character onboarding; live game resources are not requested until
+readiness changes.
+
+Routing is implemented with the History API, canonicalizes legacy `/worlds`
+links, and preserves area-scoped invite tokens through the identity gate. There
+is no frontend route that authors a reusable problem.
 
 ### World application layer
 
@@ -141,13 +149,12 @@ from entering a new interaction context or live effect plan.
 
 The React application is a client-rendered SPA with a small history-based route
 helper rather than an external router. Feature screens own server collections
-and edit drafts. Shared components provide the world shell, mechanic editor,
-generated sheets, invite modal, and ruling-effect builder. Ordinary JSON calls
-pass through one fetch adapter, which adds JSON headers, maps the error
-envelope, and attaches the selected development user when present. The
-game-event hook uses a separate streaming `fetch`, adds the identity header
-itself, reconnects with its cursor, and keeps a three-second query-polling
-fallback active.
+and edit drafts. Separate Play and Build shells compose shared mechanic,
+profile, sheet, invite, and ruling primitives. Ordinary JSON calls pass through
+one fetch adapter, which adds JSON headers, maps the error envelope, and
+attaches the selected development user when present. The game-event hook uses a
+separate streaming `fetch`, adds the identity header itself, reconnects with its
+cursor, and keeps a three-second query-polling fallback active.
 
 ### HTTP/application layer
 

@@ -497,14 +497,14 @@ frozen allowlist and fallback declarations so compiler/CSS drift fails CI.
 
 ### Workspace integration
 
-In `WorldWorkspace`:
+In `BuildWorkspace` and `PlayWorkspace`:
 
 1. resolve `world.appearance?.material_intent ?? standardWorldPaletteIntent`;
 2. compile it with `useMemo`;
 3. assert or surface an impossible-invalid-state error during development;
 4. install the complete token map through the workspace element's `style`;
-5. pass `resource.reload` to `WorldPlay` so its event invalidation refreshes the
-   parent world.
+5. pass the Play workspace's `resource.reload` to `WorldPlay` so its event
+   invalidation refreshes the parent world.
 
 Do not imperatively mutate document-root styles. A typed helper should bridge
 the custom-property record to `React.CSSProperties` in one place.
@@ -676,7 +676,7 @@ This phase must preserve world creation without inserting appearance rows.
 
 ### Phase 3: Scoped runtime application
 
-- [ ] Apply compiled variables at `WorldWorkspace` scope.
+- [ ] Apply compiled variables at the Build and Play workspace scopes.
 - [ ] Add restrained world-card identity styling.
 - [ ] Connect world reload to Play invalidation.
 - [ ] Verify standard intent remains visually unchanged.

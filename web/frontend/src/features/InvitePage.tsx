@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api, ApiError, worldInvitePath } from "../api/client";
 import type { User, World, WorldInvitePreview } from "../api/types";
@@ -10,20 +10,39 @@ import {
   RolePill,
 } from "../components/StudioUI";
 import { useResource } from "../hooks/useResource";
-import { worldURL } from "../worldRoutes";
+import {
+  buildWorldURL,
+  inviteURL,
+  playWorldURL,
+  type AppArea,
+  type Navigate,
+} from "../worldRoutes";
 
 export function InvitePage({
+  area,
   token,
   user,
   navigate,
 }: {
+  area?: AppArea | undefined;
   token: string;
   user: User;
-  navigate: (path: string) => void;
+  navigate: Navigate;
 }) {
   const invite = useResource<WorldInvitePreview>(worldInvitePath(token));
   const [joining, setJoining] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const canonicalArea: AppArea | undefined =
+    invite.value === null
+      ? undefined
+      : invite.value.role === "editor"
+        ? "build"
+        : "play";
+
+  useEffect(() => {
+    if (canonicalArea === undefined || canonicalArea === area) return;
+    navigate(inviteURL(canonicalArea, token), { replace: true });
+  }, [area, canonicalArea, navigate, token]);
 
   async function join() {
     setJoining(true);
@@ -32,11 +51,11 @@ export function InvitePage({
       const world = await api<World>(worldInvitePath(token, "redeem"), {
         method: "POST",
       });
-      const section =
+      navigate(
         world.role === "owner" || world.role === "editor"
-          ? "capacities"
-          : "play";
-      navigate(worldURL(world.id, section));
+          ? buildWorldURL(world.id, "capacities")
+          : playWorldURL(world.id),
+      );
     } catch (reason) {
       setError(
         reason instanceof ApiError
@@ -64,7 +83,7 @@ export function InvitePage({
           <button
             className="button button-ink"
             type="button"
-            onClick={() => navigate("/worlds")}
+            onClick={() => navigate(area === undefined ? "/" : `/${area}`)}
           >
             Return to your worlds
           </button>
@@ -102,7 +121,7 @@ export function InvitePage({
             <button
               className="text-button"
               type="button"
-              onClick={() => navigate("/worlds")}
+              onClick={() => navigate(`/${canonicalArea ?? area ?? "play"}`)}
             >
               Not now
             </button>

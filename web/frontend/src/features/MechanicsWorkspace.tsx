@@ -17,7 +17,7 @@ import {
 import { humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { useDraft } from "../hooks/useDraft";
-import { worldURL } from "../worldRoutes";
+import { buildWorldURL, type Navigate } from "../worldRoutes";
 
 export function MechanicsWorkspace({
   world,
@@ -29,7 +29,7 @@ export function MechanicsWorkspace({
   world: World;
   kind: MechanicKind;
   selectedId?: string | undefined;
-  navigate: (path: string) => void;
+  navigate: Navigate;
   onWorldChanged: () => void;
 }) {
   const plural = kind === "capacity" ? "capacities" : "capabilities";
@@ -53,7 +53,7 @@ export function MechanicsWorkspace({
   });
 
   function select(id?: string) {
-    navigate(worldURL(world.id, plural, id));
+    navigate(buildWorldURL(world.id, plural, id));
   }
 
   return (

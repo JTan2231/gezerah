@@ -552,7 +552,11 @@ func (s *Server) handleCreateWorldInvite(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	joinPath := "/invite/" + token
+	inviteArea := "play"
+	if request.Role == "editor" {
+		inviteArea = "build"
+	}
+	joinPath := "/" + inviteArea + "/invite/" + token
 	item.JoinPath = &joinPath
 	writeJSON(w, http.StatusCreated, item)
 }

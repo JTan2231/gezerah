@@ -16,11 +16,13 @@ export function EntityProfilePanel({
   entity,
   refreshToken,
   onChanged,
+  editable = true,
 }: {
   world: World;
   entity: WorldEntity;
   refreshToken: number;
   onChanged: () => void;
+  editable?: boolean | undefined;
 }) {
   const profile = useResource<EntityProfile>(
     worldPath(world.id, `entities/${entity.id}/profile`),
@@ -54,7 +56,7 @@ export function EntityProfilePanel({
         </div>
         <CharacterStatus profile={profile.value} />
       </header>
-      {profile.value.can_edit ? (
+      {editable && profile.value.can_edit ? (
         <EntityProfileEditor
           key={`${entity.id}:${profile.value.revision}:${profile.value.character_fields_revision}`}
           entity={entity}

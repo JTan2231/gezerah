@@ -621,6 +621,142 @@ textarea {
   gap: 1rem;
 }
 
+.access-actions {
+  display: flex;
+  gap: 0.7rem;
+}
+
+/* Application choice */
+.home-choice {
+  display: grid;
+  min-height: 100vh;
+  padding: clamp(2rem, 6vw, 6rem);
+  place-content: center;
+  gap: clamp(2.5rem, 6vw, 5rem);
+  background:
+    radial-gradient(
+      circle at 22% 18%,
+      color-mix(in srgb, var(--ember) 8%, transparent),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 78% 78%,
+      color-mix(in srgb, var(--play) 8%, transparent),
+      transparent 30rem
+    ),
+    var(--paper-deep);
+}
+
+.home-choice > header {
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.home-choice > header .eyebrow {
+  margin-top: 2.5rem;
+}
+
+.home-choice h1 {
+  margin-bottom: 0;
+  font-size: clamp(2.8rem, 6vw, 5.5rem);
+}
+
+.home-choice-grid {
+  display: grid;
+  width: min(1050px, calc(100vw - 2rem));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.home-choice-card {
+  display: grid;
+  min-height: 300px;
+  padding: clamp(1.5rem, 4vw, 2.8rem);
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-large);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  transition:
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.home-choice-card:hover {
+  border-color: var(--ember);
+  transform: translateY(-3px);
+}
+
+.home-choice-play:hover {
+  border-color: var(--play);
+}
+
+.home-choice-card > span:nth-child(2) {
+  display: grid;
+}
+
+.home-choice-card small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.home-choice-card strong {
+  margin: 0.3rem 0 0.8rem;
+  font-family: var(--font-display);
+  font-size: clamp(2.6rem, 5vw, 4.5rem);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.home-choice-card em {
+  max-width: 330px;
+  color: var(--muted);
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+.home-choice-card > b {
+  color: var(--muted);
+  font-size: 1.4rem;
+}
+
+.home-choice-symbol {
+  display: grid;
+  width: 64px;
+  height: 64px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  color: var(--ember);
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+}
+
+.home-choice-play .home-choice-symbol {
+  color: var(--play);
+}
+
+.not-found-page {
+  display: grid;
+  min-height: 100vh;
+  padding: 2rem;
+  place-content: center;
+}
+
+.not-found-page > .studio-brand {
+  margin: auto;
+}
+
 /* Identity */
 .identity-page {
   display: grid;
@@ -820,6 +956,82 @@ textarea {
   border-bottom: 1px solid var(--line);
   background: color-mix(in srgb, var(--paper-soft) 78%, transparent);
   backdrop-filter: blur(10px);
+}
+
+.library-brand-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+}
+
+.play-library-page {
+  background:
+    radial-gradient(
+      circle at 70% 12%,
+      color-mix(in srgb, var(--play) 7%, transparent),
+      transparent 34rem
+    ),
+    var(--night);
+  color: var(--night-copy);
+}
+
+.play-library-page .library-topbar {
+  border-color: var(--night-line);
+  background: color-mix(in srgb, var(--night-raised) 92%, transparent);
+}
+
+.play-library-page .studio-brand,
+.play-library-page .account-menu,
+.play-library-page .account-menu .text-button {
+  color: var(--night-copy);
+}
+
+.play-library-page .brand-copy small,
+.play-library-page .library-heading p:last-child {
+  color: var(--night-muted);
+}
+
+.play-library-page .library-heading .eyebrow {
+  color: var(--play);
+}
+
+.play-world-card {
+  border-color: var(--night-line);
+  background: var(--night-raised);
+  box-shadow: 0 22px 60px color-mix(in srgb, var(--black) 18%, transparent);
+}
+
+.play-world-card .world-card-wash {
+  border-color: color-mix(in srgb, var(--play) 16%, transparent);
+  background: color-mix(in srgb, var(--play) 4%, transparent);
+}
+
+.play-world-card .world-card-title,
+.play-world-card .world-stats dd {
+  color: var(--night-copy);
+}
+
+.play-world-card .world-card-title:hover strong {
+  color: var(--play-bright);
+}
+
+.play-world-card .world-card-title small,
+.play-world-card .world-stats dt,
+.play-world-card > footer,
+.play-world-card .world-status {
+  color: var(--night-muted);
+}
+
+.play-world-card .world-stats,
+.play-world-card .world-stats div {
+  border-color: var(--night-line);
+}
+
+.play-world-card .world-monogram {
+  border-color: var(--night-line);
+  background: var(--night-soft);
+  color: var(--play-bright);
 }
 
 .account-menu {
@@ -2060,6 +2272,98 @@ textarea {
   font-size: 0.75rem;
 }
 
+/* Roster preparation */
+.roster-builder-grid {
+  display: grid;
+  grid-template-columns: minmax(245px, 320px) minmax(0, 1fr);
+  gap: 1.2rem;
+  align-items: start;
+}
+
+.roster-builder-catalog {
+  padding: 1rem;
+}
+
+.roster-builder-catalog > header {
+  padding: 0.4rem 0.35rem 1rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.roster-builder-catalog > header h2 {
+  font-size: 1.25rem;
+}
+
+.roster-builder-catalog > header > span {
+  color: var(--muted);
+  font-family: var(--font-display);
+}
+
+.roster-builder-list {
+  display: grid;
+  padding-top: 0.55rem;
+  gap: 0.3rem;
+}
+
+.roster-builder-list > button {
+  display: grid;
+  width: 100%;
+  min-height: 62px;
+  padding: 0.55rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.65rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink-soft);
+  text-align: left;
+}
+
+.roster-builder-list > button:hover,
+.roster-builder-list > .active {
+  border-color: var(--line);
+  background: var(--paper-soft);
+}
+
+.roster-builder-list > button > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+}
+
+.roster-builder-list strong,
+.roster-builder-list small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roster-builder-list strong {
+  font-size: 0.74rem;
+}
+
+.roster-builder-list small {
+  color: var(--muted);
+  font-size: 0.59rem;
+}
+
+.roster-builder-list .entity-token {
+  border-color: var(--line);
+  background: var(--paper-deep);
+  color: var(--ember);
+}
+
+.builder-entity-detail {
+  min-width: 0;
+  padding: 1.1rem;
+  border: 1px solid var(--night-line);
+  border-radius: var(--radius-large);
+  background: var(--night);
+}
+
+.roster-builder-empty {
+  min-height: 420px;
+}
+
 /* Character field configuration */
 .character-fields-form {
   display: grid;
@@ -2115,6 +2419,106 @@ textarea {
   background: var(--night);
 }
 
+.play-app {
+  min-height: 100vh;
+  color: var(--night-copy);
+}
+
+.play-app > main {
+  background:
+    radial-gradient(
+      circle at 52% 12%,
+      color-mix(in srgb, var(--play) 6%, transparent),
+      transparent 32rem
+    ),
+    var(--night);
+}
+
+.play-app-boot {
+  display: grid;
+  place-content: center;
+}
+
+.play-app-boot .loading-state {
+  color: var(--night-muted);
+}
+
+.play-app-bar {
+  position: relative;
+  z-index: 40;
+  display: grid;
+  min-height: 68px;
+  padding: 0 clamp(1rem, 3vw, 2rem);
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 1.2rem;
+  border-bottom: 1px solid var(--night-line);
+  background: color-mix(in srgb, var(--night-raised) 94%, transparent);
+  backdrop-filter: blur(10px);
+}
+
+.play-brand-button,
+.play-world-return {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--night-copy);
+}
+
+.play-brand-button .brand-copy small {
+  color: var(--night-muted);
+}
+
+.play-world-return {
+  display: flex;
+  width: fit-content;
+  align-items: center;
+  gap: 0.65rem;
+  text-align: left;
+}
+
+.play-world-return > span:last-child {
+  display: grid;
+}
+
+.play-world-return small {
+  color: var(--night-muted);
+  font-size: 0.55rem;
+  text-transform: uppercase;
+}
+
+.play-world-return strong {
+  max-width: 380px;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.play-app-account {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.play-app-account .role-pill {
+  border-color: var(--night-line);
+  background: var(--night-soft);
+  color: var(--night-copy);
+}
+
+.play-app-account .text-button {
+  color: var(--night-muted);
+}
+
+.play-app-account .avatar {
+  border-color: var(--night-line);
+  background: var(--night-soft);
+  color: var(--play-bright);
+}
+
 .world-section-play .world-content {
   padding: 0;
   background:
@@ -2127,7 +2531,7 @@ textarea {
 }
 
 .play-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 68px);
   color: var(--night-copy);
 }
 
@@ -3496,8 +3900,13 @@ textarea {
   }
 
   .people-layout,
-  .settings-layout {
+  .settings-layout,
+  .roster-builder-grid {
     grid-template-columns: 1fr;
+  }
+
+  .roster-builder-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .onboarding-layout {
@@ -3524,6 +3933,24 @@ textarea {
 }
 
 @media (width <= 680px) {
+  .home-choice {
+    padding: 2rem 1rem;
+  }
+
+  .home-choice-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .home-choice-card {
+    min-height: 230px;
+    padding: 1.3rem;
+  }
+
+  .home-choice-symbol {
+    width: 48px;
+    height: 48px;
+  }
+
   .page-intro,
   .library-heading,
   .play-header,
@@ -3640,6 +4067,22 @@ textarea {
     padding: 1.5rem 1rem;
   }
 
+  .play-app-bar {
+    min-height: 60px;
+    padding: 0 0.75rem;
+    grid-template-columns: auto 1fr auto;
+  }
+
+  .play-brand-button .brand-copy,
+  .play-app-account .role-pill,
+  .play-app-account .text-button {
+    display: none;
+  }
+
+  .play-world-return strong {
+    max-width: 45vw;
+  }
+
   .onboarding-layout {
     margin-top: 1rem;
     padding: 0 1rem 2rem;
@@ -3657,6 +4100,10 @@ textarea {
     display: flex;
     padding-bottom: 0.3rem;
     overflow-x: auto;
+  }
+
+  .roster-builder-list {
+    grid-template-columns: 1fr;
   }
 
   .roster-item {

@@ -13,7 +13,6 @@ import type {
   User,
   World,
   WorldEntity,
-  WorldMember,
   WorldMechanic,
 } from "../api/types";
 import {
@@ -29,6 +28,7 @@ import { useCollection } from "../hooks/useCollection";
 import { useGameEvents } from "../hooks/useGameEvents";
 import { useResource } from "../hooks/useResource";
 import { EntityProfilePanel } from "./EntityProfilePanel";
+import { EntityDetail } from "./EntityDetail";
 
 export function WorldPlay({
   world,
@@ -47,19 +47,10 @@ export function WorldPlay({
   const mechanics = useCollection<WorldMechanic>(
     playReady ? worldPath(world.id, "mechanics") : null,
   );
-  const members = useCollection<WorldMember>(
-    world.role === "owner" || world.role === "editor"
-      ? worldPath(world.id, "members")
-      : null,
-  );
   const interactions = useCollection<Interaction>(
     playReady ? gamePath(world.primary_game_id, "interactions") : null,
   );
   const [creatingProblem, setCreatingProblem] = useState(false);
-  const [addingEntity, setAddingEntity] = useState(false);
-  const [managingControllersFor, setManagingControllersFor] = useState<
-    string | undefined
-  >();
   const [profileRefreshToken, setProfileRefreshToken] = useState(0);
   const [selectedEntityId, setSelectedEntityId] = useState<
     string | undefined
@@ -67,22 +58,14 @@ export function WorldPlay({
   const reloadGame = game.reload;
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
-  const reloadMembers = members.reload;
 
   const refresh = useCallback(() => {
     reloadGame();
     reloadEntities();
     reloadInteractions();
-    reloadMembers();
     onWorldChanged();
     setProfileRefreshToken((value) => value + 1);
-  }, [
-    onWorldChanged,
-    reloadEntities,
-    reloadGame,
-    reloadInteractions,
-    reloadMembers,
-  ]);
+  }, [onWorldChanged, reloadEntities, reloadGame, reloadInteractions]);
   useGameEvents(playReady ? world.primary_game_id : undefined, refresh);
 
   useEffect(() => {
@@ -194,16 +177,6 @@ export function WorldPlay({
               <p className="eyebrow">Roster</p>
               <h2>In this world</h2>
             </div>
-            {facilitator ? (
-              <button
-                className="icon-button"
-                type="button"
-                aria-label="Create entity"
-                onClick={() => setAddingEntity(true)}
-              >
-                ＋
-              </button>
-            ) : null}
           </header>
           {entities.loading && entities.items.length === 0 ? (
             <LoadingState label="Loading roster" />
@@ -255,18 +228,9 @@ export function WorldPlay({
               <span aria-hidden="true">○</span>
               <strong>No one is here yet</strong>
               <p>
-                Create an entity and its sheet will be generated from this
-                world’s mechanics.
+                The world’s authors can prepare entities and generated sheets in
+                Builder.
               </p>
-              {facilitator ? (
-                <button
-                  className="button button-quiet"
-                  type="button"
-                  onClick={() => setAddingEntity(true)}
-                >
-                  Create entity
-                </button>
-              ) : null}
             </div>
           ) : null}
           <div className="table-members">
@@ -355,16 +319,14 @@ export function WorldPlay({
               key={`${selectedEntity.id}:${selectedEntity.state.revision}:${mechanics.items.map((mechanic) => mechanic.id).join(":")}`}
               entity={selectedEntity}
               mechanics={mechanics.items}
-              mechanicsEditable={facilitator && world.status === "active"}
+              mechanicsEditable={false}
               controlledByCurrentMember={controlledEntityIDs.includes(
                 selectedEntity.id,
               )}
-              facilitator={facilitator}
+              facilitator={false}
               world={world}
               profileRefreshToken={profileRefreshToken}
-              onManageControllers={() =>
-                setManagingControllersFor(selectedEntity.id)
-              }
+              onManageControllers={() => undefined}
               onProfileChanged={refresh}
               onSaved={entities.reload}
             />
@@ -383,35 +345,6 @@ export function WorldPlay({
           }}
         />
       ) : null}
-      {addingEntity ? (
-        <NewEntityModal
-          world={world}
-          members={members.items}
-          onClose={() => setAddingEntity(false)}
-          onCreated={(entity) => {
-            entities.replaceItem(entity, (item) => item.id);
-            game.reload();
-            onWorldChanged();
-            setSelectedEntityId(entity.id);
-            setAddingEntity(false);
-          }}
-        />
-      ) : null}
-      {managingControllersFor === undefined ? null : (
-        <ManageControllersModal
-          world={world}
-          game={game.value}
-          entity={entities.items.find(
-            (item) => item.id === managingControllersFor,
-          )}
-          members={members.items}
-          onClose={() => setManagingControllersFor(undefined)}
-          onSaved={() => {
-            setManagingControllersFor(undefined);
-            refresh();
-          }}
-        />
-      )}
     </section>
   );
 }
@@ -742,227 +675,6 @@ function NewProblemModal({
             disabled={saving || prompt.trim() === ""}
           >
             {saving ? "Presenting…" : "Present to the table"}
-          </button>
-        </footer>
-      </form>
-    </Modal>
-  );
-}
-
-function NewEntityModal({
-  world,
-  members,
-  onClose,
-  onCreated,
-}: {
-  world: World;
-  members: WorldMember[];
-  onClose: () => void;
-  onCreated: (entity: WorldEntity) => void;
-}) {
-  const [name, setName] = useState("");
-  const [controllerIDs, setControllerIDs] = useState<string[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-  const players = members.filter(
-    (member) => member.status === "active" && member.role === "player",
-  );
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      const entity = await api<WorldEntity>(worldPath(world.id, "entities"), {
-        method: "POST",
-        ...jsonBody({
-          display_name: name.trim(),
-          controller_world_membership_ids: controllerIDs,
-        }),
-      });
-      onCreated(entity);
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not create this entity."),
-      );
-      setSaving(false);
-    }
-  }
-  return (
-    <Modal
-      title="Create an entity"
-      description="Its sheet is generated from every active capacity and capability."
-      onClose={onClose}
-    >
-      <form className="modal-form" onSubmit={(event) => void submit(event)}>
-        <Field label="Display name" error={error?.fields["display_name"]}>
-          <input
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-            maxLength={200}
-            placeholder="Aria Vale"
-          />
-        </Field>
-        {players.length === 0 ? null : (
-          <fieldset className="choice-fieldset controller-picker">
-            <legend>
-              Controlled by <small>Optional</small>
-            </legend>
-            <div className="responder-picker">
-              {players.map((member) => (
-                <label key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={controllerIDs.includes(member.id)}
-                    onChange={() =>
-                      setControllerIDs((current) =>
-                        current.includes(member.id)
-                          ? current.filter((id) => id !== member.id)
-                          : [...current, member.id],
-                      )
-                    }
-                  />
-                  <Avatar name={member.display_name} size="small" />
-                  <span>{member.display_name}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="modal-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={saving || name.trim() === ""}
-          >
-            {saving ? "Creating…" : "Create entity"}
-          </button>
-        </footer>
-      </form>
-    </Modal>
-  );
-}
-
-function ManageControllersModal({
-  world,
-  game,
-  entity,
-  members,
-  onClose,
-  onSaved,
-}: {
-  world: World;
-  game: Game;
-  entity: WorldEntity | undefined;
-  members: WorldMember[];
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const players = members.filter(
-    (member) => member.status === "active" && member.role === "player",
-  );
-  const initialControllerIDs =
-    entity === undefined
-      ? []
-      : players
-          .filter((member) =>
-            game.memberships.some(
-              (gameMember) =>
-                gameMember.user_id === member.user_id &&
-                gameMember.controlled_entity_ids.includes(entity.id),
-            ),
-          )
-          .map((member) => member.id);
-  const [controllerIDs, setControllerIDs] = useState(initialControllerIDs);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  if (entity === undefined) return null;
-  const entityID = entity.id;
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      await api(worldPath(world.id, `entities/${entityID}/controllers`), {
-        method: "PUT",
-        ...jsonBody({
-          expected_game_revision: game.revision,
-          controller_world_membership_ids: controllerIDs,
-        }),
-      });
-      onSaved();
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not update character control."),
-      );
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Modal
-      title="Manage character control"
-      description={`Choose which players may author ${entity.display_name}’s story and act as this entity.`}
-      onClose={onClose}
-    >
-      <form className="modal-form" onSubmit={(event) => void save(event)}>
-        {players.length === 0 ? (
-          <p className="modal-note">
-            Invite a player before assigning control. Saving now will leave this
-            as an uncontrolled world entity.
-          </p>
-        ) : (
-          <fieldset className="choice-fieldset controller-picker">
-            <legend>Player controllers</legend>
-            <div className="responder-picker">
-              {players.map((member) => (
-                <label key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={controllerIDs.includes(member.id)}
-                    onChange={() =>
-                      setControllerIDs((current) =>
-                        current.includes(member.id)
-                          ? current.filter((id) => id !== member.id)
-                          : [...current, member.id],
-                      )
-                    }
-                  />
-                  <Avatar name={member.display_name} size="small" />
-                  <span>{member.display_name}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="modal-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Save controllers"}
           </button>
         </footer>
       </form>
@@ -1693,242 +1405,6 @@ function RulingPreview({
   );
 }
 
-function EntityDetail({
-  entity,
-  mechanics,
-  mechanicsEditable,
-  controlledByCurrentMember,
-  facilitator,
-  world,
-  profileRefreshToken,
-  onManageControllers,
-  onProfileChanged,
-  onSaved,
-}: {
-  entity: WorldEntity;
-  mechanics: WorldMechanic[];
-  mechanicsEditable: boolean;
-  controlledByCurrentMember: boolean;
-  facilitator: boolean;
-  world: World;
-  profileRefreshToken: number;
-  onManageControllers: () => void;
-  onProfileChanged: () => void;
-  onSaved: () => void;
-}) {
-  const [tab, setTab] = useState<"story" | "sheet">(
-    controlledByCurrentMember && !facilitator ? "story" : "sheet",
-  );
-  return (
-    <div className="entity-detail">
-      <div className="entity-detail-toolbar">
-        <div
-          className="entity-detail-tabs"
-          role="tablist"
-          aria-label="Entity detail"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "story"}
-            className={tab === "story" ? "active" : ""}
-            onClick={() => setTab("story")}
-          >
-            Character
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "sheet"}
-            className={tab === "sheet" ? "active" : ""}
-            onClick={() => setTab("sheet")}
-          >
-            Sheet
-          </button>
-        </div>
-        {facilitator && world.status === "active" ? (
-          <button
-            className="text-button"
-            type="button"
-            onClick={onManageControllers}
-          >
-            Controllers
-          </button>
-        ) : null}
-      </div>
-      {tab === "story" ? (
-        <EntityProfilePanel
-          world={world}
-          entity={entity}
-          refreshToken={profileRefreshToken}
-          onChanged={onProfileChanged}
-        />
-      ) : (
-        <EntitySheet
-          entity={entity}
-          mechanics={mechanics}
-          editable={mechanicsEditable}
-          world={world}
-          onSaved={onSaved}
-        />
-      )}
-    </div>
-  );
-}
-
-function EntitySheet({
-  entity,
-  mechanics,
-  editable,
-  world,
-  onSaved,
-}: {
-  entity: WorldEntity;
-  mechanics: WorldMechanic[];
-  editable: boolean;
-  world: World;
-  onSaved: () => void;
-}) {
-  const activeMechanics = mechanics.filter((mechanic) => !mechanic.archived);
-  const initial = useMemo(
-    () =>
-      Object.fromEntries(
-        activeMechanics.map((mechanic) => [
-          mechanic.id,
-          mechanicValue(entity.state.values[mechanic.id], mechanic),
-        ]),
-      ),
-    [activeMechanics, entity],
-  );
-  const [values, setValues] =
-    useState<Record<string, number | boolean>>(initial);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
-
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    const stateValues = { ...entity.state.values };
-    for (const mechanic of activeMechanics) {
-      const value = values[mechanic.id];
-      stateValues[mechanic.id] =
-        mechanic.mode === "binary"
-          ? { kind: "boolean", value: Boolean(value) }
-          : { kind: "number", value: Number(value ?? 0) };
-    }
-    try {
-      await api(worldPath(world.id, `entities/${entity.id}/state`), {
-        method: "PUT",
-        ...jsonBody({
-          expected_revision: entity.state.revision,
-          values: stateValues,
-        }),
-      });
-      onSaved();
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not save this sheet."),
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <form className="entity-sheet" onSubmit={(event) => void save(event)}>
-      <header>
-        <span className="entity-portrait" aria-hidden="true">
-          {entity.display_name.slice(0, 1).toUpperCase()}
-        </span>
-        <div>
-          <p className="eyebrow">Entity sheet</p>
-          <h2>{entity.display_name}</h2>
-          <span>state r{entity.state.revision}</span>
-        </div>
-      </header>
-      {activeMechanics.length === 0 ? (
-        <p className="sheet-empty">
-          Configure a capacity or capability to generate this sheet.
-        </p>
-      ) : null}
-      {(["capacity", "capability"] as const).map((kind) => {
-        const group = activeMechanics.filter(
-          (mechanic) => mechanic.kind === kind,
-        );
-        if (group.length === 0) return null;
-        return (
-          <section className="sheet-group" key={kind}>
-            <h3>{kind === "capacity" ? "Capacities" : "Capabilities"}</h3>
-            {group.map((mechanic) => (
-              <label
-                key={mechanic.id}
-                className={`sheet-field sheet-${mechanic.mode}`}
-              >
-                <span>
-                  <strong>{mechanic.name}</strong>
-                  {mechanic.description === undefined ? null : (
-                    <small>{mechanic.description}</small>
-                  )}
-                </span>
-                {mechanic.mode === "binary" ? (
-                  <input
-                    type="checkbox"
-                    checked={Boolean(values[mechanic.id])}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked;
-                      setValues((current) => ({
-                        ...current,
-                        [mechanic.id]: checked,
-                      }));
-                    }}
-                    disabled={!editable}
-                  />
-                ) : (
-                  <span className="sheet-number">
-                    <input
-                      type="number"
-                      value={Number(values[mechanic.id] ?? 0)}
-                      min={mechanic.minimum}
-                      max={mechanic.maximum}
-                      step={mechanic.step ?? "any"}
-                      onChange={(event) => {
-                        const value = event.currentTarget.valueAsNumber || 0;
-                        setValues((current) => ({
-                          ...current,
-                          [mechanic.id]: value,
-                        }));
-                      }}
-                      disabled={!editable}
-                    />
-                    <em>
-                      {mechanic.mode === "pool" &&
-                      mechanic.maximum !== undefined
-                        ? `/ ${mechanic.maximum}`
-                        : (mechanic.unit ?? "")}
-                    </em>
-                  </span>
-                )}
-              </label>
-            ))}
-          </section>
-        );
-      })}
-      {error === null ? null : <ErrorMessage error={error} />}
-      {editable && activeMechanics.length > 0 ? (
-        <footer>
-          <span>Direct setup edit</span>
-          <button className="button button-ink" type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save sheet"}
-          </button>
-        </footer>
-      ) : null}
-    </form>
-  );
-}
-
 function HistoryCard({
   interaction,
   entities,
@@ -2027,17 +1503,6 @@ function effectDescription(
   if (mechanic.mode === "binary")
     return `${effect.booleanValue ? "Grant" : "Remove"} ${mechanic.name}`;
   return `${effect.operation === "set" ? "Set" : "Adjust"} ${mechanic.name} ${effect.operation === "adjust-number" && effect.amount >= 0 ? "+" : ""}${effect.amount}`;
-}
-
-function mechanicValue(
-  value: StateValue | undefined,
-  mechanic: WorldMechanic,
-): number | boolean {
-  if (Array.isArray(value) || value === undefined)
-    return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
-  if (value.kind === "boolean") return value.value;
-  if (value.kind === "number") return value.value;
-  return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
 }
 
 function displayValue(value?: StateValue): string {

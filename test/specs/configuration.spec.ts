@@ -96,7 +96,12 @@ test("an author creates a world whose entity sheets stem from capacities and cap
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
   const authorName = `World Author ${unique}`;
-  await page.goto(`${baseURL}/worlds`);
+  await page.goto(baseURL);
+
+  await expect(
+    page.getByRole("heading", { name: "What are you here to do?" }),
+  ).toBeVisible();
+  await page.getByRole("link", { name: /Build/ }).click();
 
   await expect(
     page.getByRole("heading", { name: "Who is opening the book?" }),
@@ -104,7 +109,7 @@ test("an author creates a world whose entity sheets stem from capacities and cap
   await page.getByLabel("Your display name").fill(authorName);
   await page.getByRole("button", { name: "Create local profile" }).click();
   await expect(
-    page.getByRole("heading", { name: "Where are we headed?" }),
+    page.getByRole("heading", { name: "Shape a world." }),
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Create world" }).click();
@@ -149,8 +154,10 @@ test("an author creates a world whose entity sheets stem from capacities and cap
   await page.getByRole("button", { name: "Publish requirements" }).click();
   await expect(page.getByText("schema r1")).toBeVisible();
 
-  await page.getByRole("button", { name: /Enter play/ }).click();
-  await expect(page.getByText("The table is listening")).toBeVisible();
+  await page.getByRole("button", { name: /Roster & sheets/ }).click();
+  await expect(
+    page.getByRole("heading", { name: "Roster & sheets" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Create entity" }).first().click();
   await page.getByLabel("Display name").fill("Aria Vale");
   await page

@@ -14,29 +14,34 @@ import {
 } from "../components/StudioUI";
 import { formatRelativeDate } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { worldURL } from "../worldRoutes";
+import { buildWorldURL, type Navigate } from "../worldRoutes";
 
-export function WorldLibrary({
+export function BuildLibrary({
   user,
   navigate,
   onSwitchProfile,
 }: {
   user: User;
-  navigate: (path: string) => void;
+  navigate: Navigate;
   onSwitchProfile: () => void;
 }) {
   const worlds = useCollection<World>("/api/worlds");
   const [creating, setCreating] = useState(false);
-
-  function openWorld(world: World, mode: "configure" | "play") {
-    const section = mode === "play" ? "play" : "capacities";
-    navigate(worldURL(world.id, section));
-  }
+  const editableWorlds = worlds.items.filter(
+    (world) => world.role === "owner" || world.role === "editor",
+  );
 
   return (
-    <div className="library-page">
+    <div className="library-page build-library-page">
       <header className="library-topbar">
-        <Brand compact />
+        <button
+          className="library-brand-button"
+          type="button"
+          onClick={() => navigate("/")}
+          aria-label="Return home"
+        >
+          <Brand compact />
+        </button>
         <div className="account-menu">
           <Avatar name={user.display_name} size="small" />
           <span>{user.display_name}</span>
@@ -56,9 +61,9 @@ export function WorldLibrary({
       <main className="library-main">
         <header className="library-heading">
           <div>
-            <p className="eyebrow">Your worlds</p>
-            <h1>Where are we headed?</h1>
-            <p>Only worlds you own or have joined appear here.</p>
+            <p className="eyebrow">Builder</p>
+            <h1>Shape a world.</h1>
+            <p>Worlds you own or edit appear in this studio.</p>
           </div>
           <button
             className="button button-primary"
@@ -75,7 +80,7 @@ export function WorldLibrary({
         )}
         {!worlds.loading &&
         worlds.error === null &&
-        worlds.items.length === 0 ? (
+        editableWorlds.length === 0 ? (
           <EmptyState
             symbol="✦"
             title="Your first world starts with two lists"
@@ -93,8 +98,7 @@ export function WorldLibrary({
         ) : null}
 
         <div className="world-grid">
-          {worlds.items.map((world, index) => {
-            const canEdit = world.role === "owner" || world.role === "editor";
+          {editableWorlds.map((world, index) => {
             return (
               <article
                 className="world-card"
@@ -118,7 +122,7 @@ export function WorldLibrary({
                   className="world-card-title"
                   type="button"
                   onClick={() =>
-                    openWorld(world, canEdit ? "configure" : "play")
+                    navigate(buildWorldURL(world.id, "capacities"))
                   }
                 >
                   <span className="world-monogram" aria-hidden="true">
@@ -151,21 +155,14 @@ export function WorldLibrary({
                     )}
                   </span>
                   <div>
-                    {canEdit ? (
-                      <button
-                        className="button button-quiet"
-                        type="button"
-                        onClick={() => openWorld(world, "configure")}
-                      >
-                        Configure
-                      </button>
-                    ) : null}
                     <button
                       className="button button-ink"
                       type="button"
-                      onClick={() => openWorld(world, "play")}
+                      onClick={() =>
+                        navigate(buildWorldURL(world.id, "capacities"))
+                      }
                     >
-                      Enter play <span aria-hidden="true">→</span>
+                      Open builder <span aria-hidden="true">→</span>
                     </button>
                   </div>
                 </footer>
@@ -180,7 +177,7 @@ export function WorldLibrary({
           onClose={() => setCreating(false)}
           onCreated={(world) => {
             worlds.replaceItem(world, (item) => item.id);
-            navigate(worldURL(world.id, "capacities"));
+            navigate(buildWorldURL(world.id, "capacities"));
           }}
         />
       ) : null}

@@ -1,58 +1,128 @@
-export type WorldSection =
+export type AppArea = "play" | "build";
+
+export interface NavigateOptions {
+  replace?: boolean;
+}
+
+export type Navigate = (path: string, options?: NavigateOptions) => void;
+
+export type BuildSection =
   | "capacities"
   | "capabilities"
   | "character-fields"
+  | "roster"
   | "people"
-  | "settings"
-  | "play";
+  | "settings";
 
 type AppLocation =
-  | { type: "worlds" }
-  | { type: "invite"; token: string }
+  | { type: "home" }
+  | { type: "play-library" }
+  | { type: "play-world"; worldId: string }
+  | { type: "build-library" }
   | {
-      type: "world";
+      type: "build-world";
       worldId: string;
-      section: WorldSection;
+      section: BuildSection;
       resourceId?: string | undefined;
-    };
+    }
+  | { type: "invite"; area?: AppArea | undefined; token: string }
+  | { type: "redirect"; path: string }
+  | { type: "not-found" };
+
+const buildSections: ReadonlySet<string> = new Set([
+  "capacities",
+  "capabilities",
+  "character-fields",
+  "roster",
+  "people",
+  "settings",
+]);
 
 export function readLocation(pathname = window.location.pathname): AppLocation {
   const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
-  if (parts[0] === "invite" && parts[1] !== undefined)
-    return { type: "invite", token: parts[1] };
-  if (parts[0] === "worlds" && parts[1] !== undefined) {
-    const section = parts[2];
-    if (
-      section === "capacities" ||
-      section === "capabilities" ||
-      section === "character-fields" ||
-      section === "people" ||
-      section === "settings" ||
-      section === "play"
-    ) {
+  if (parts.length === 0) return { type: "home" };
+
+  if (parts[0] === "play") {
+    if (parts.length === 1) return { type: "play-library" };
+    if (parts[1] === "invite" && parts[2] !== undefined && parts.length === 3)
+      return { type: "invite", area: "play", token: parts[2] };
+    if (parts[1] !== undefined && parts.length === 2)
+      return { type: "play-world", worldId: parts[1] };
+    return { type: "not-found" };
+  }
+
+  if (parts[0] === "build") {
+    if (parts.length === 1) return { type: "build-library" };
+    if (parts[1] === "invite" && parts[2] !== undefined && parts.length === 3)
+      return { type: "invite", area: "build", token: parts[2] };
+    if (parts[1] === undefined) return { type: "not-found" };
+    if (parts.length === 2)
       return {
-        type: "world",
+        type: "redirect",
+        path: buildWorldURL(parts[1], "capacities"),
+      };
+    if (parts[2] !== undefined && buildSections.has(parts[2])) {
+      const section = parts[2] as BuildSection;
+      if (
+        parts.length > 3 &&
+        section !== "capacities" &&
+        section !== "capabilities"
+      )
+        return { type: "not-found" };
+      if (parts.length > 4) return { type: "not-found" };
+      return {
+        type: "build-world",
         worldId: parts[1],
         section,
         resourceId: parts[3],
       };
     }
-    return {
-      type: "world",
-      worldId: parts[1],
-      section: "capacities",
-    };
+    return { type: "not-found" };
   }
-  return { type: "worlds" };
+
+  if (parts[0] === "invite" && parts[1] !== undefined && parts.length === 2)
+    return { type: "invite", token: parts[1] };
+
+  if (parts[0] === "worlds") return readLegacyWorldLocation(parts);
+  return { type: "not-found" };
 }
 
-export function worldURL(
+function readLegacyWorldLocation(parts: string[]): AppLocation {
+  if (parts.length === 1) return { type: "redirect", path: "/" };
+  const worldId = parts[1];
+  if (worldId === undefined) return { type: "redirect", path: "/" };
+  if (parts[2] === "play" && parts.length === 3)
+    return { type: "redirect", path: playWorldURL(worldId) };
+  if (parts[2] === undefined)
+    return {
+      type: "redirect",
+      path: buildWorldURL(worldId, "capacities"),
+    };
+  if (buildSections.has(parts[2]) && parts[2] !== "roster") {
+    const section = parts[2] as BuildSection;
+    return {
+      type: "redirect",
+      path: buildWorldURL(worldId, section, parts[3]),
+    };
+  }
+  return { type: "not-found" };
+}
+
+export function playWorldURL(worldId: string): string {
+  return `/play/${encodeURIComponent(worldId)}`;
+}
+
+export function buildWorldURL(
   worldId: string,
-  section: WorldSection,
+  section: BuildSection,
   resourceId?: string,
 ): string {
-  const base = `/worlds/${encodeURIComponent(worldId)}/${section}`;
+  const base = `/build/${encodeURIComponent(worldId)}/${section}`;
   return resourceId === undefined
     ? base
     : `${base}/${encodeURIComponent(resourceId)}`;
+}
+
+export function inviteURL(area: AppArea, token: string): string {
+  return `/${area}/invite/${encodeURIComponent(token)}`;
 }

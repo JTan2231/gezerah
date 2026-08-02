@@ -2,9 +2,11 @@
 
 ## Product surface
 
-The React application is organized around a world, not around the underlying
-rules-engine resources. A signed-in development identity sees only worlds it
-owns or has joined. Authors configure three user-authored lists:
+The React application presents two deliberately separate product areas over the
+same world model. `/play` is the table and `/build` is the authoring studio; the
+root route only asks which area the user wants to enter. A signed-in development
+identity sees only worlds it owns or has joined. Authors configure three
+user-authored lists:
 
 - **capacities**: numeric scores or pools carried by every entity;
 - **capabilities**: binary or rated skills carried by every entity;
@@ -29,24 +31,30 @@ Bun. It uses browser `fetch`, History API routing, local storage, and native
 form controls. There is no router, global-state library, form framework,
 component framework, or service worker.
 
-| Path                              | Responsibility                                                        |
-| --------------------------------- | --------------------------------------------------------------------- |
-| `src/App.tsx`                     | Development identity gate and top-level route selection.              |
-| `src/worldRoutes.ts`              | World/invite path parsing and URL construction.                        |
-| `src/api/client.ts`               | JSON fetch adapter, errors, path helpers, and identity header.         |
-| `src/api/types.ts`                | Compile-time contract for the world and live-play APIs.                |
-| `src/components/StudioUI.tsx`     | Brand, fields, modal, notices, loading/empty states, avatars, roles.   |
-| `src/features/WorldLibrary.tsx`   | Membership-filtered world library and world creation.                 |
-| `src/features/WorldWorkspace.tsx` | Role-aware configuration/play shell.                                  |
-| `src/features/MechanicsWorkspace.tsx` | Capacity/capability master-detail editor.                         |
-| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                 |
-| `src/features/PeopleWorkspace.tsx` | Members, invite creation, one-time token display, and revocation.    |
-| `src/features/SettingsWorkspace.tsx` | World details and owner-only archive command.                       |
-| `src/features/WorldPlay.tsx`      | Roster, generated sheets, ad-hoc problem lifecycle, history/receipts. |
-| `src/features/EntityProfilePanel.tsx` | Configured-field reader/editor with completion and visibility.    |
-| `src/hooks/`                      | Collection/resource loading, dirty guards, and SSE refresh.           |
-| `src/styles/tokens.css`           | The only file allowed to contain literal design colors.               |
-| `src/styles/app.css`              | Responsive library, editor, invitation, and dark play-table layouts.  |
+| Path                                        | Responsibility                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `src/App.tsx`                               | Neutral home, development identity boundary, redirects, and top-level area selection. |
+| `src/worldRoutes.ts`                        | Play, Build, invite, and legacy path parsing plus URL construction.                   |
+| `src/api/client.ts`                         | JSON fetch adapter, errors, path helpers, and identity header.                        |
+| `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                               |
+| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.                  |
+| `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                         |
+| `src/features/BuildLibrary.tsx`             | Owner/editor Builder library and world creation.                                      |
+| `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                     |
+| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Builder shell.                                                      |
+| `src/features/PlayWorkspace.tsx`            | Independent Play shell and world loader.                                              |
+| `src/features/RosterWorkspace.tsx`          | Builder entity, controller, profile, and direct sheet setup.                          |
+| `src/features/RosterModals.tsx`             | Builder-only entity creation and controller assignment dialogs.                       |
+| `src/features/EntityDetail.tsx`             | Shared profile tabs and generated sheet reader/editor presentation.                   |
+| `src/features/MechanicsWorkspace.tsx`       | Capacity/capability master-detail editor.                                             |
+| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                                          |
+| `src/features/PeopleWorkspace.tsx`          | Members, invite creation, one-time token display, and revocation.                     |
+| `src/features/SettingsWorkspace.tsx`        | World details and owner-only archive command.                                         |
+| `src/features/WorldPlay.tsx`                | Read-only live roster/sheets, ad-hoc problem lifecycle, history/receipts.             |
+| `src/features/EntityProfilePanel.tsx`       | Configured-field reader/editor with completion and visibility.                        |
+| `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                           |
+| `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                               |
+| `src/styles/app.css`                        | Responsive library, editor, invitation, and dark play-table layouts.                  |
 
 ESLint includes hooks and JSX accessibility rules. Stylelint enforces tokenized
 colors and bounded selector complexity. Prettier, TypeScript, Bun tests, and
@@ -56,44 +64,52 @@ Knip are all part of frontend CI.
 
 Routes are parsed without an external router:
 
-| URL                                                   | Surface                         |
-| ----------------------------------------------------- | ------------------------------- |
-| `/worlds`                                             | Current identity's world list.  |
-| `/invite/{opaque-token}`                              | Public invite preview/redeem.   |
-| `/worlds/{world-id}/capacities/{mechanic-id?}`        | Capacity catalog/editor.        |
-| `/worlds/{world-id}/capabilities/{mechanic-id?}`      | Capability catalog/editor.      |
-| `/worlds/{world-id}/character-fields`                 | Required character-field editor. |
-| `/worlds/{world-id}/people`                           | Members and invite links.       |
-| `/worlds/{world-id}/settings`                         | World details/lifecycle.        |
-| `/worlds/{world-id}/play`                             | Live table.                     |
+| URL                                             | Surface                                       |
+| ----------------------------------------------- | --------------------------------------------- |
+| `/`                                             | Neutral Play or Build choice; no API load.    |
+| `/play`                                         | Current identity's table list.                |
+| `/play/{world-id}`                              | Onboarding or live table.                     |
+| `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
+| `/build`                                        | Editable-world list and world creation.       |
+| `/build/{world-id}/capacities/{mechanic-id?}`   | Capacity catalog/editor.                      |
+| `/build/{world-id}/capabilities/{mechanic-id?}` | Capability catalog/editor.                    |
+| `/build/{world-id}/character-fields`            | Required character-field editor.              |
+| `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
+| `/build/{world-id}/people`                      | Members and invite links.                     |
+| `/build/{world-id}/settings`                    | World details/lifecycle.                      |
+| `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
-Unknown paths fall back to `/worlds` behavior. A bare world path opens
-capacities. Players and spectators who request configuration are sent to the
-play surface in memory; the server independently enforces the same boundary.
+Unknown paths render a not-found screen rather than silently opening a library.
+A bare Builder world path canonicalizes to capacities. Legacy `/worlds` paths
+replace themselves with the corresponding root, Play, or Build URL. A player or
+spectator cannot cause Play to render under a Build URL; the Builder shows an
+explicit access boundary and offers a deliberate transition to Play.
 
 `dnd.selected-user` stores the selected local-development user UUID. The API
-client sends it as `X-DND-User-ID`. Invite URLs remain in the address bar while
-the identity gate is shown, so choosing a profile returns the user to the
-invitation rather than losing the token. This storage is an identity adapter,
-not production authentication.
+client sends it as `X-DND-User-ID`. The root choice bypasses identity selection
+and does not fetch users or worlds. Play, Build, and invite URLs remain in the
+address bar while the identity gate is shown, so choosing a profile returns the
+user to the requested area rather than losing the path or token. This storage is
+an identity adapter, not production authentication.
 
 ## World library
 
-`WorldLibrary` requests only `GET /api/worlds`; it never enumerates rulesets.
-Cards show the user's role, active member count, capacity/capability counts, and
-last activity. Owners/editors can configure or enter play. Players/spectators
-can only enter play. Creating a world immediately opens the capacity editor.
+Both libraries request only `GET /api/worlds`; neither enumerates rulesets. The
+Build library filters to owner/editor memberships, offers world creation, and
+opens the capacity editor. The Play library shows every admitted world and
+emphasizes role, player readiness, table size, and last activity. Neither
+library exposes actions belonging to the other area.
 
 ## Static configuration
 
-The workspace sidebar contains exactly:
+The Builder sidebar contains exactly:
 
 - Capacities;
 - Capabilities;
 - Character fields;
+- Roster & sheets;
 - People & invites;
-- Settings;
-- Enter play.
+- Settings.
 
 Capacity modes are `score` and `pool`. Capability modes are `binary` and
 `rating`. Numeric definitions can declare default, minimum, maximum, step, and
@@ -131,12 +147,12 @@ The live table has three regions on wide screens: roster, current problem and
 history, and selected entity sheet. It collapses to a single-column flow on
 narrow screens.
 
-An editor/facilitator can create a generic entity and optionally assign one or
-more active players as controllers. Every active capacity and capability
-appears automatically on its sheet, with configured defaults. Facilitators may
-replace controller sets and make direct setup edits. During a ruling they can
-apply effects only to active definitions whose `mutable_during_play` flag
-permits it.
+An editor/facilitator creates generic entities, assigns active player
+controllers, edits profiles, and makes direct setup sheet changes in the
+Builder roster. Every active capacity and capability appears automatically on
+the generated sheet, with configured defaults. Play renders those sheets
+read-only; during a ruling a facilitator can apply effects only to active
+definitions whose `mutable_during_play` flag permits it.
 
 The roster labels entities controlled by the current membership as “Your
 character” and otherwise names active controllers. The selected entity panel

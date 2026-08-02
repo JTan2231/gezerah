@@ -1,10 +1,10 @@
 # System documentation
 
 This directory is the canonical guide to Worldwright. It describes the system
-implemented in this repository: a membership-scoped world library, a static
-capacity/capability editor, generated entity sheets, player-controlled
-characters with world-authored onboarding fields, and a multiplayer table
-where facilitators create every problem ad hoc.
+implemented in this repository: separate membership-scoped Play and Build
+entry points, a static capacity/capability editor, generated entity sheets,
+player-controlled characters with world-authored onboarding fields, and a
+multiplayer table where facilitators create every problem ad hoc.
 
 The application intentionally has no built-in entity classes, privileged
 configured keys, seed vocabulary, or canonical JSON document model. Ruleset
@@ -102,25 +102,25 @@ effect ordering, default handling, and atomic failure semantics aligned.
 
 ## Terminology
 
-| Term               | Meaning                                                                                                        |
-| ------------------ | -------------------------------------------------------------------------------------------------------------- |
-| World              | Membership and product boundary over one backing ruleset and one primary game.                                |
-| Capacity           | User-authored numeric score or pool that appears on generated sheets.                                         |
-| Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                              |
-| World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                           |
-| Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                               |
-| Ruleset            | Internal isolation boundary and container for a world's authored mechanical vocabulary.                     |
-| Owner schema       | User-authored generic capability/tag retained by the underlying engine; never a built-in class.              |
-| Entity             | Generic durable state owner represented to authors as a person or other world subject.                       |
-| Character          | Product view of a game entity controlled by one or more active player memberships.                           |
-| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                           |
-| Entity profile     | One entity's values for the world's active character fields, separate from typed engine state.               |
-| State definition   | Normalized typed schema underlying a capacity or capability.                                                  |
-| Logical state      | Stored overrides combined with authored missing/default semantics.                                            |
-| Game               | Live-play boundary that maps an exclusive subset of one ruleset's entities.                                   |
-| Interaction        | An ad-hoc facilitator prompt with its audience, responders, actions, ruling, and effects.                     |
-| Resolution receipt | Immutable record of a committed ruling, requested effects, applied before/after values, and narrative.       |
-| Configured problem | Legacy reusable engine aggregate retained for compatibility and not exposed by the Worldwright frontend.     |
+| Term               | Meaning                                                                                                  |
+| ------------------ | -------------------------------------------------------------------------------------------------------- |
+| World              | Membership and product boundary over one backing ruleset and one primary game.                           |
+| Capacity           | User-authored numeric score or pool that appears on generated sheets.                                    |
+| Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                          |
+| World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                      |
+| Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                           |
+| Ruleset            | Internal isolation boundary and container for a world's authored mechanical vocabulary.                  |
+| Owner schema       | User-authored generic capability/tag retained by the underlying engine; never a built-in class.          |
+| Entity             | Generic durable state owner represented to authors as a person or other world subject.                   |
+| Character          | Product view of a game entity controlled by one or more active player memberships.                       |
+| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                       |
+| Entity profile     | One entity's values for the world's active character fields, separate from typed engine state.           |
+| State definition   | Normalized typed schema underlying a capacity or capability.                                             |
+| Logical state      | Stored overrides combined with authored missing/default semantics.                                       |
+| Game               | Live-play boundary that maps an exclusive subset of one ruleset's entities.                              |
+| Interaction        | An ad-hoc facilitator prompt with its audience, responders, actions, ruling, and effects.                |
+| Resolution receipt | Immutable record of a committed ruling, requested effects, applied before/after values, and narrative.   |
+| Configured problem | Legacy reusable engine aggregate retained for compatibility and not exposed by the Worldwright frontend. |
 
 ## Sources of truth
 

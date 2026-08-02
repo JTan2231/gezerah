@@ -2,8 +2,9 @@
 
 ## Create and configure a world
 
-1. Choose or create a local development profile.
-2. Create a world from **Your worlds**.
+1. Open `/`, choose **Build**, then choose or create a local development
+   profile.
+2. Create a world from the Builder library.
 3. Define the capacities that every entity may carry. Choose score or pool and
    configure the numeric default/bounds/step/unit.
 4. Define the capabilities that every entity may carry. Choose binary or
@@ -14,21 +15,25 @@
    player-controlled entity must complete. Labels and guidance are authored for
    this world; zero fields is valid.
 7. Invite editors, players, or spectators through expiring links.
-8. Enter play and create the roster. Optionally assign active players as an
-   entity's controllers; that entity is presented as their character. Sheets
-   are generated from the active capacity/capability definitions.
+8. Open **Roster & sheets** in Builder. Create the roster and optionally assign
+   active players as an entity's controllers; that entity is presented as their
+   character. Sheets are generated from the active capacity/capability
+   definitions.
+9. Return to `/`, choose **Play**, select the world, and enter the live table.
 
 Names and keys are ruleset-scoped and user-authored. Do not introduce a
 canonical list of attributes, skills, entity classes, or privileged keys.
 
 ## Join a world
 
-1. Open `/invite/{token}`.
+1. Open `/play/invite/{token}` for a player/spectator invitation or
+   `/build/invite/{token}` for an editor invitation. Legacy `/invite/{token}`
+   links canonicalize after their role is loaded.
 2. If no local identity is selected, choose one without losing the invite URL.
 3. Review the world, inviter, and offered role.
 4. Redeem the link.
-5. The world now appears in **Your worlds** and the user receives matching
-   world/game membership.
+5. The world now appears in the corresponding Play or Build library and the
+   user receives matching world/game membership.
 6. A player waits for a DM to assign a controlled entity. After assignment,
    fill the world's required character fields. Partial drafts may be saved, but
    live play opens only after one controlled character is complete.
@@ -40,7 +45,7 @@ authors can revoke a link at any time.
 
 Problems are runtime moments, never authored configuration.
 
-1. The facilitator enters play and clicks **New problem**.
+1. The facilitator enters the world through `/play` and clicks **New problem**.
 2. Write what is happening, with an optional short title.
 3. Optionally select context entities and choose eligible player responders.
    Players still onboarding and incomplete controlled entities are excluded.
@@ -66,9 +71,10 @@ Creating an entity creates an empty normalized state root and assigns it to the
 world's primary game. Logical defaults make every active universal mechanic
 appear immediately; default values need not be redundantly stored.
 
-Facilitators can use **Save sheet** for setup changes. The request supplies the
-current state revision and replaces the logical state atomically. A stale
-revision returns `409 revision_conflict`; reload before retrying.
+Facilitators use **Roster & sheets** in Builder for **Save sheet** setup
+changes. The request supplies the current state revision and replaces the
+logical state atomically. A stale revision returns `409 revision_conflict`;
+reload before retrying. Sheets are read-only in Play.
 
 During game time, prefer effects in a resolved ruling because they produce an
 immutable before/after receipt. Direct sheet changes are intended for setup and
@@ -79,7 +85,8 @@ correction and do not append a game event.
 1. An owner/editor publishes character fields for the world. Each active field
    is required for every controlled entity; visibility is configured once on
    the field rather than chosen by each player.
-2. A facilitator creates or selects an ordinary entity in Play.
+2. A facilitator creates or selects an ordinary entity in **Roster & sheets**
+   in Builder.
 3. Use **Controllers** to select any number of active player memberships. The
    game revision guards the complete replacement.
 4. Until setup is complete, the controller sees only their controlled entities

@@ -9,6 +9,7 @@ import {
   RolePill,
 } from "../components/StudioUI";
 import { useDirtyGuard } from "../hooks/useDraft";
+import type { Navigate } from "../worldRoutes";
 
 export function SettingsWorkspace({
   world,
@@ -16,7 +17,7 @@ export function SettingsWorkspace({
   onWorldChanged,
 }: {
   world: World;
-  navigate: (path: string) => void;
+  navigate: Navigate;
   onWorldChanged: () => void;
 }) {
   const [name, setName] = useState(world.name);
@@ -69,7 +70,7 @@ export function SettingsWorkspace({
         method: "POST",
         ...jsonBody({ expected_revision: world.revision }),
       });
-      navigate("/worlds");
+      navigate("/build");
     } catch (reason) {
       setError(
         reason instanceof ApiError

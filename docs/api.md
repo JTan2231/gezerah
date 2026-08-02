@@ -67,16 +67,16 @@ indices or durable nested IDs.
 
 Common status/code pairs are:
 
-| Status | Typical codes                                                                                         | Meaning                                                                   |
-| ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                        | The transport, path ID, or query syntax is malformed.                     |
-| 401    | `authentication_required`, `invalid_identity`                                                         | The development identity header is absent, malformed, or unknown.         |
-| 403    | `world_forbidden`, `game_forbidden`, role/ownership codes, `character_setup_required`, `entity_profile_forbidden` | The actor lacks authority or has not completed live-play onboarding.       |
-| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                                  | The resource/invite/endpoint is absent, expired, revoked, or hidden.       |
-| 409    | `revision_conflict`, `duplicate_key`, `configuration_changed`, lifecycle and in-use codes             | Current state conflicts with the command.                                 |
-| 422    | `validation_failed`, `invalid_reference`, `archived_reference`                                        | JSON is structurally readable but violates a domain or database rule.     |
-| 500    | `internal_error`, `database_error`                                                                    | Unexpected server/database failure.                                       |
-| 503    | `database_unavailable`                                                                                | Health check could not ping PostgreSQL.                                   |
+| Status | Typical codes                                                                                                     | Meaning                                                               |
+| ------ | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                                    | The transport, path ID, or query syntax is malformed.                 |
+| 401    | `authentication_required`, `invalid_identity`                                                                     | The development identity header is absent, malformed, or unknown.     |
+| 403    | `world_forbidden`, `game_forbidden`, role/ownership codes, `character_setup_required`, `entity_profile_forbidden` | The actor lacks authority or has not completed live-play onboarding.  |
+| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                                             | The resource/invite/endpoint is absent, expired, revoked, or hidden.  |
+| 409    | `revision_conflict`, `duplicate_key`, `configuration_changed`, lifecycle and in-use codes                         | Current state conflicts with the command.                             |
+| 422    | `validation_failed`, `invalid_reference`, `archived_reference`                                                    | JSON is structurally readable but violates a domain or database rule. |
+| 500    | `internal_error`, `database_error`                                                                                | Unexpected server/database failure.                                   |
+| 503    | `database_unavailable`                                                                                            | Health check could not ping PostgreSQL.                               |
 
 The standard-library mux may return its own `405 Method Not Allowed` response
 for a known path with the wrong method.
@@ -133,26 +133,26 @@ World IDs are also the backing ruleset IDs. World endpoints are the authorized
 product surface; they intentionally expose capacities/capabilities rather than
 the generic definition aggregate.
 
-| Method and path                                  | Authority                    | Request/response                                                                                 |
-| ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------ |
-| `GET /api/worlds`                                | Known user                   | Active memberships only; returns role/count/activity summary plus derived `play_status`.          |
-| `POST /api/worlds`                               | Known user                   | Name/optional description; creates ruleset, primary game, owner and facilitator memberships.     |
-| `GET /api/worlds/{world_id}`                     | Active world member          | World summary for the current user.                                                              |
-| `PATCH /api/worlds/{world_id}`                   | Owner/editor, active world   | Name, nullable description, and `expected_revision`.                                              |
-| `POST /api/worlds/{world_id}/archive`            | Owner                        | `expected_revision`; rejects unfinished interactions, archives world and primary game.            |
-| `GET /api/worlds/{world_id}/members`             | Active world member          | World membership list with each member's derived `play_status`.                                   |
-| `GET /api/worlds/{world_id}/character-fields`    | Active world member          | Active ordered requirements and schema revision; spectator view omits restricted definitions.     |
-| `PUT /api/worlds/{world_id}/character-fields`    | Owner/editor, active world   | Atomically replaces active requirements using `expected_revision`.                                |
-| `GET /api/worlds/{world_id}/entities`            | Active world member          | Primary-game roster with logical state and character completion; onboarding players see controls only. |
-| `POST /api/worlds/{world_id}/entities`           | Owner/editor, active world   | Display name, optional key/controllers; creates and assigns entity and state root.                 |
-| `GET /api/worlds/{world_id}/entities/{entity_id}` | Active world member         | One assigned entity; onboarding players may read only a controlled entity.                        |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}` | Owner/editor, active world  | Replaces entity display metadata.                                                                 |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/archive` | Owner/editor, active world | Archives the entity.                                                              |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/state` | Active world member     | Logical state; onboarding players may read only a controlled entity.                              |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/state` | Owner/editor, active world | Full logical values plus `expected_revision`; defaults normalize out of storage.                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world | Replaces active player controllers using `expected_game_revision`.                         |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/profile` | Active world member | Configured fields, visibility-filtered values, completion, and derived `can_edit`.                 |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile` | Owner/editor or active controller | Replaces non-empty field values using profile and field-schema revisions.              |
+| Method and path                                               | Authority                         | Request/response                                                                                       |
+| ------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET /api/worlds`                                             | Known user                        | Active memberships only; returns role/count/activity summary plus derived `play_status`.               |
+| `POST /api/worlds`                                            | Known user                        | Name/optional description; creates ruleset, primary game, owner and facilitator memberships.           |
+| `GET /api/worlds/{world_id}`                                  | Active world member               | World summary for the current user.                                                                    |
+| `PATCH /api/worlds/{world_id}`                                | Owner/editor, active world        | Name, nullable description, and `expected_revision`.                                                   |
+| `POST /api/worlds/{world_id}/archive`                         | Owner                             | `expected_revision`; rejects unfinished interactions, archives world and primary game.                 |
+| `GET /api/worlds/{world_id}/members`                          | Active world member               | World membership list with each member's derived `play_status`.                                        |
+| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Active ordered requirements and schema revision; spectator view omits restricted definitions.          |
+| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces active requirements using `expected_revision`.                                     |
+| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Primary-game roster with logical state and character completion; onboarding players see controls only. |
+| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Display name, optional key/controllers; creates and assigns entity and state root.                     |
+| `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One assigned entity; onboarding players may read only a controlled entity.                             |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces entity display metadata.                                                                      |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Archives the entity.                                                                                   |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Logical state; onboarding players may read only a controlled entity.                                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full logical values plus `expected_revision`; defaults normalize out of storage.                       |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Replaces active player controllers using `expected_game_revision`.                                     |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Configured fields, visibility-filtered values, completion, and derived `can_edit`.                     |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Replaces non-empty field values using profile and field-schema revisions.                              |
 
 World creation is transactional. The response role is always `owner`; the
 primary game's corresponding role is `facilitator`.
@@ -241,13 +241,13 @@ are returned as read-only `legacy_sections`.
 
 ### Capacities and capabilities
 
-| Method and path                                              | Authority                   | Notes                                           |
-| ------------------------------------------------------------ | --------------------------- | ----------------------------------------------- |
-| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member     | Lists active and archived definitions.          |
-| `POST /api/worlds/{world_id}/mechanics`                      | Owner/editor, active world  | Creates a user-authored mechanic.                |
-| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`         | Active world member         | One mechanic.                                   |
-| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`         | Owner/editor, active world  | Replaces author-facing mechanic configuration.  |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive` | Owner/editor, active world | Archives while retaining state/history.         |
+| Method and path                                                  | Authority                  | Notes                                          |
+| ---------------------------------------------------------------- | -------------------------- | ---------------------------------------------- |
+| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | Lists active and archived definitions.         |
+| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates a user-authored mechanic.              |
+| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | One mechanic.                                  |
+| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces author-facing mechanic configuration. |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives while retaining state/history.        |
 
 Mechanic payload:
 
@@ -274,13 +274,13 @@ used by the engine for generic world entities. Mutable numeric mechanics allow
 
 ### World invite links
 
-| Method and path                                             | Authority                  | Notes                                                                 |
-| ----------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/invites`                        | Owner/editor, active world | Metadata only; never returns existing raw tokens.                     |
-| `POST /api/worlds/{world_id}/invites`                       | Owner/editor, active world | Role plus 1–90 expiry days; create response alone includes `join_path`. |
-| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke`    | Owner/editor, active world | Idempotently sets revocation time.                                    |
-| `GET /api/world-invites/{opaque_token}`                     | Public                     | Active-world, unexpired, non-revoked preview.                         |
-| `POST /api/world-invites/{opaque_token}/redeem`             | Known user                 | Creates/reactivates matching world and game memberships atomically.   |
+| Method and path                                          | Authority                  | Notes                                                                                                                       |
+| -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                                                                           |
+| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role plus 1–90 expiry days; create response alone includes a role-scoped `/play/invite/*` or `/build/invite/*` `join_path`. |
+| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently sets revocation time.                                                                                          |
+| `GET /api/world-invites/{opaque_token}`                  | Public                     | Active-world, unexpired, non-revoked preview.                                                                               |
+| `POST /api/world-invites/{opaque_token}/redeem`          | Known user                 | Creates/reactivates matching world and game memberships atomically.                                                         |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only a
 SHA-256 digest is stored. Redemption increments `use_count` once per
@@ -362,14 +362,14 @@ game event. Its durable output is the changed state.
 
 ### Users and games
 
-| Method and path                     | Authority      | Request               | Response/notes                                          |
-| ----------------------------------- | -------------- | --------------------- | ------------------------------------------------------- |
-| `GET /api/users`                    | Public/trusted | None                  | Up to 1000 local users.                                 |
-| `POST /api/users`                   | Public/trusted | `{id?,display_name}`  | Creates local user.                                     |
-| `GET /api/games`                    | Known user     | None                  | Active memberships; world players still onboarding are omitted. |
-| `POST /api/games`                   | Known user     | `GameCreate`          | Creates active game and actor's facilitator membership. |
-| `GET /api/games/{game_id}`          | Play-ready member | None               | Complete game/membership/entity-ID summary.             |
-| `POST /api/games/{game_id}/archive` | Facilitator    | `{expected_revision}` | Archives only when every interaction is final.          |
+| Method and path                     | Authority         | Request               | Response/notes                                                  |
+| ----------------------------------- | ----------------- | --------------------- | --------------------------------------------------------------- |
+| `GET /api/users`                    | Public/trusted    | None                  | Up to 1000 local users.                                         |
+| `POST /api/users`                   | Public/trusted    | `{id?,display_name}`  | Creates local user.                                             |
+| `GET /api/games`                    | Known user        | None                  | Active memberships; world players still onboarding are omitted. |
+| `POST /api/games`                   | Known user        | `GameCreate`          | Creates active game and actor's facilitator membership.         |
+| `GET /api/games/{game_id}`          | Play-ready member | None                  | Complete game/membership/entity-ID summary.                     |
+| `POST /api/games/{game_id}/archive` | Facilitator       | `{expected_revision}` | Archives only when every interaction is final.                  |
 
 Archiving blocks game-scoped Play mutation routes. It does not make the
 underlying ruleset, entities, or state immutable through the trusted authoring
@@ -377,16 +377,16 @@ API, whose endpoints do not consult game status.
 
 ### Game membership and entity scope
 
-| Method and path                                            | Authority     | Request                          | Response/notes                                                                                                                  |
-| ---------------------------------------------------------- | ------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/games/{game_id}/entities`                        | Play-ready member | None                         | Entities assigned to this game.                                                                                                 |
-| `GET /api/games/{game_id}/available-entities`              | Facilitator   | None                             | Current/available candidates used by game management.                                                                           |
-| `GET /api/play/rule-sets/{rule_set_id}/available-entities` | Known user    | None                             | Active entities in ruleset not assigned to any game.                                                                            |
-| `GET /api/games/{game_id}/state-variable-definitions`      | Play-ready member | None                         | Definitions eligible for at least one mapped entity, including archived definitions needed to interpret retained state/history. |
-| `PUT /api/games/{game_id}/entities`                        | Facilitator   | `{entity_ids,expected_revision}` | Replaces mapping; referenced historical entities cannot be released.                                                            |
-| `POST /api/games/{game_id}/memberships`                    | Facilitator   | `MembershipCreate`               | Adds invited or active membership; returns updated game.                                                                        |
-| `PUT /api/games/{game_id}/memberships/{membership_id}`     | Facilitator   | `MembershipUpdate`               | Updates role/status; returns updated game.                                                                                      |
-| `PATCH /api/games/{game_id}/memberships/{membership_id}`   | Facilitator   | `MembershipUpdate`               | Alias of PUT used by the current UI.                                                                                            |
+| Method and path                                            | Authority         | Request                          | Response/notes                                                                                                                  |
+| ---------------------------------------------------------- | ----------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/games/{game_id}/entities`                        | Play-ready member | None                             | Entities assigned to this game.                                                                                                 |
+| `GET /api/games/{game_id}/available-entities`              | Facilitator       | None                             | Current/available candidates used by game management.                                                                           |
+| `GET /api/play/rule-sets/{rule_set_id}/available-entities` | Known user        | None                             | Active entities in ruleset not assigned to any game.                                                                            |
+| `GET /api/games/{game_id}/state-variable-definitions`      | Play-ready member | None                             | Definitions eligible for at least one mapped entity, including archived definitions needed to interpret retained state/history. |
+| `PUT /api/games/{game_id}/entities`                        | Facilitator       | `{entity_ids,expected_revision}` | Replaces mapping; referenced historical entities cannot be released.                                                            |
+| `POST /api/games/{game_id}/memberships`                    | Facilitator       | `MembershipCreate`               | Adds invited or active membership; returns updated game.                                                                        |
+| `PUT /api/games/{game_id}/memberships/{membership_id}`     | Facilitator       | `MembershipUpdate`               | Updates role/status; returns updated game.                                                                                      |
+| `PATCH /api/games/{game_id}/memberships/{membership_id}`   | Facilitator       | `MembershipUpdate`               | Alias of PUT used by the current UI.                                                                                            |
 
 World-backed membership responses include `play_status` and
 `controlled_entity_ids`. Non-player roles are ready while active. An active
@@ -404,24 +404,24 @@ attribution, or a live ruling effect target.
 
 ### Interactions and actions
 
-| Method and path                                                                        | Authority       | Request                                       | Response/notes                                                                            |
-| -------------------------------------------------------------------------------------- | --------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `GET /api/games/{game_id}/interactions`                                                | Play-ready member | None                                        | Visibility-filtered feed. Facilitator sees all; others see addressed open/resolved items. |
-| `POST /api/games/{game_id}/interactions`                                               | Facilitator     | `InteractionSave`                             | Creates draft or creates/presents with `present:true`.                                    |
-| `GET /api/games/{game_id}/interactions/{interaction_id}`                               | Visible play-ready member | None                               | One filtered interaction; private data omitted for non-facilitators.                      |
-| `PUT /api/games/{game_id}/interactions/{interaction_id}`                               | Facilitator     | `InteractionSave`                             | Replaces editable draft using expected revision.                                          |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/present`                      | Facilitator     | `{expected_revision}`                         | `draft → open`.                                                                           |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/adjudicate`                   | Facilitator     | `{expected_revision}`                         | `open → adjudicating`.                                                                    |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/cancel`                       | Facilitator     | `{expected_revision}`                         | Any non-final state → cancelled.                                                          |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/actions`                      | Eligible player | `{text,acting_entity_id?,expected_revision}`  | Creates action; acting entity must be controlled; guard is interaction revision.           |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player   | `{expected_revision}`                         | Withdraws submitted action; guard is action revision.                                     |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/preview`                      | Facilitator     | `LiveRuling` without required idempotency key | Advisory state; interaction must be adjudicating.                                         |
-| `POST /api/games/{game_id}/interactions/{interaction_id}/resolve`                      | Facilitator     | `LiveRuling` with idempotency key             | Atomic state + receipt + lifecycle + event.                                               |
+| Method and path                                                                        | Authority                 | Request                                       | Response/notes                                                                            |
+| -------------------------------------------------------------------------------------- | ------------------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `GET /api/games/{game_id}/interactions`                                                | Play-ready member         | None                                          | Visibility-filtered feed. Facilitator sees all; others see addressed open/resolved items. |
+| `POST /api/games/{game_id}/interactions`                                               | Facilitator               | `InteractionSave`                             | Creates draft or creates/presents with `present:true`.                                    |
+| `GET /api/games/{game_id}/interactions/{interaction_id}`                               | Visible play-ready member | None                                          | One filtered interaction; private data omitted for non-facilitators.                      |
+| `PUT /api/games/{game_id}/interactions/{interaction_id}`                               | Facilitator               | `InteractionSave`                             | Replaces editable draft using expected revision.                                          |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/present`                      | Facilitator               | `{expected_revision}`                         | `draft → open`.                                                                           |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/adjudicate`                   | Facilitator               | `{expected_revision}`                         | `open → adjudicating`.                                                                    |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/cancel`                       | Facilitator               | `{expected_revision}`                         | Any non-final state → cancelled.                                                          |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/actions`                      | Eligible player           | `{text,acting_entity_id?,expected_revision}`  | Creates action; acting entity must be controlled; guard is interaction revision.          |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player             | `{expected_revision}`                         | Withdraws submitted action; guard is action revision.                                     |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/preview`                      | Facilitator               | `LiveRuling` without required idempotency key | Advisory state; interaction must be adjudicating.                                         |
+| `POST /api/games/{game_id}/interactions/{interaction_id}/resolve`                      | Facilitator               | `LiveRuling` with idempotency key             | Atomic state + receipt + lifecycle + event.                                               |
 
 ### Game events (SSE)
 
-| Method and path                   | Authority     | Request                                                      | Response/notes                     |
-| --------------------------------- | ------------- | ------------------------------------------------------------ | ---------------------------------- |
+| Method and path                   | Authority         | Request                                                      | Response/notes                     |
+| --------------------------------- | ----------------- | ------------------------------------------------------------ | ---------------------------------- |
 | `GET /api/games/{game_id}/events` | Play-ready member | Optional `?after=<non-negative event ID>` or `Last-Event-ID` | Reconnectable `text/event-stream`. |
 
 The server sends an initial `retry: 1500`, then events such as:
@@ -944,7 +944,7 @@ game.
 | Interaction title                              | 200 characters                       |
 | Interaction prompt/action text                 | 10,000 characters                    |
 | Interaction/ruling private notes and narrative | 20,000 characters                    |
-| Character fields                               | 50 active; label 200/guidance 2,000 |
+| Character fields                               | 50 active; label 200/guidance 2,000  |
 | Character-field value                          | 20,000 characters                    |
 | Live ruling effects                            | 100                                  |
 | Condition tree                                 | 10 levels, 250 nodes                 |
