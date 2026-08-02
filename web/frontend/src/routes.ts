@@ -7,7 +7,8 @@ export type AppRoute =
   | "entities"
   | "state"
   | "instances"
-  | "runtime";
+  | "runtime"
+  | "play";
 
 export const routeLabels: Record<AppRoute, string> = {
   overview: "Setup guide",
@@ -19,6 +20,7 @@ export const routeLabels: Record<AppRoute, string> = {
   state: "State inspector",
   instances: "Problem instances",
   runtime: "Runtime",
+  play: "Play",
 };
 
 export function readRoute(): AppRoute {

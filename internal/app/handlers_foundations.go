@@ -48,6 +48,7 @@ func (s *Server) registerResourceRoutes() {
 
 	s.registerConditionRoutes()
 	s.registerProblemRoutes()
+	s.registerPlayFoundationRoutes()
 }
 
 func (s *Server) handleListRuleSets(w http.ResponseWriter, r *http.Request) {

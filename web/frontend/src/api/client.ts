@@ -1,5 +1,7 @@
 import type { ApiErrorPayload } from "./types";
 
+const selectedUserKey = "dnd.selected-user";
+
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -37,6 +39,8 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   headers.set("Accept", "application/json");
   if (init.body !== undefined) headers.set("Content-Type", "application/json");
+  const selectedUserId = readSelectedUserId();
+  if (selectedUserId !== "") headers.set("X-DND-User-ID", selectedUserId);
 
   let response: Response;
   try {
@@ -77,4 +81,25 @@ export function jsonBody(value: unknown): Pick<RequestInit, "body"> {
 export function ruleSetPath(ruleSetId: string, resource = ""): string {
   const base = `/api/rule-sets/${encodeURIComponent(ruleSetId)}`;
   return resource === "" ? base : `${base}/${resource}`;
+}
+
+export function gamePath(gameId: string, resource = ""): string {
+  const base = `/api/games/${encodeURIComponent(gameId)}`;
+  return resource === "" ? base : `${base}/${resource}`;
+}
+
+export function playRuleSetPath(ruleSetId: string, resource = ""): string {
+  const base = `/api/play/rule-sets/${encodeURIComponent(ruleSetId)}`;
+  return resource === "" ? base : `${base}/${resource}`;
+}
+
+export function readSelectedUserId(): string {
+  if (typeof window === "undefined") return "";
+  return window.localStorage.getItem(selectedUserKey) ?? "";
+}
+
+export function selectUserId(userId: string): void {
+  if (typeof window === "undefined") return;
+  if (userId === "") window.localStorage.removeItem(selectedUserKey);
+  else window.localStorage.setItem(selectedUserKey, userId);
 }

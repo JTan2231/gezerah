@@ -413,6 +413,33 @@ type AppliedEffect struct {
 	Changed            bool
 }
 
+// ConcreteEffect is an ordered state mutation whose targets have already been
+// resolved to durable entity IDs. TargetDefinitionID is optional provenance:
+// configured problem resolution supplies it, while live adjudication does not
+// need an abstract target definition.
+type ConcreteEffect struct {
+	ID                 ID
+	Position           int
+	Operation          EffectOperation
+	TargetDefinitionID ID
+	EntityIDs          []ID
+	StateVariableID    ID
+	Operand            *StateValue
+	AdjustmentAmount   *Decimal
+}
+
+// TransitionPlan is the common mechanical boundary shared by configured
+// problem outcomes and facilitator-authored live rulings.
+type TransitionPlan struct {
+	Effects []ConcreteEffect
+}
+
+type TransitionResult struct {
+	AppliedEffects   []AppliedEffect
+	State            StateSnapshot
+	ChangedRecordIDs []ID
+}
+
 type ResolutionInput struct {
 	Problem      ProblemDefinition
 	Instance     ProblemInstance

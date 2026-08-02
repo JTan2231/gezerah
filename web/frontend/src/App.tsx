@@ -13,6 +13,7 @@ import { Instances } from "./features/Instances";
 import { Runtime } from "./features/Runtime";
 import { RuleSetOnboarding } from "./features/RuleSetOnboarding";
 import { RuleSetEditor } from "./features/RuleSetEditor";
+import { Play } from "./features/Play";
 import type { RuleSet } from "./api/types";
 import type { AppRoute } from "./routes";
 import { readRoute } from "./routes";
@@ -108,6 +109,7 @@ export default function App() {
       {route === "state" ? <StateInspector ruleSetId={selected.id} /> : null}
       {route === "instances" ? <Instances ruleSetId={selected.id} /> : null}
       {route === "runtime" ? <Runtime ruleSetId={selected.id} /> : null}
+      {route === "play" ? <Play ruleSetId={selected.id} /> : null}
       {creating ? (
         <RuleSetOnboarding
           compact

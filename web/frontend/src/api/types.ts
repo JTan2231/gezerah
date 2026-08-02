@@ -14,6 +14,44 @@ export interface RuleSet {
   updated_at?: string | undefined;
 }
 
+export interface User {
+  id: string;
+  display_name: string;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export type GameRole = "facilitator" | "player" | "spectator";
+export type GameMembershipStatus = "invited" | "active" | "left";
+export type GameStatus = "active" | "archived";
+
+export interface GameMembership {
+  id: string;
+  game_id?: string | undefined;
+  user_id: string;
+  role: GameRole;
+  status: GameMembershipStatus;
+  revision: number;
+  display_name?: string | undefined;
+  user?: User | undefined;
+  joined_at?: string | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export interface Game {
+  id: string;
+  rule_set_id: string;
+  name: string;
+  status: GameStatus;
+  revision: number;
+  memberships: GameMembership[];
+  entity_ids: string[];
+  created_by_user_id?: string | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
 export interface OwnerSchema {
   id: string;
   key: string;
@@ -48,6 +86,105 @@ export type StateScalarValue =
     };
 
 export type StateValue = StateScalarValue | StateScalarValue[];
+
+export type ConcreteEffect =
+  | {
+      id?: string | undefined;
+      type: "set";
+      entity_ids: string[];
+      state_variable_id: string;
+      value: StateValue;
+    }
+  | {
+      id?: string | undefined;
+      type: "clear";
+      entity_ids: string[];
+      state_variable_id: string;
+    }
+  | {
+      id?: string | undefined;
+      type: "adjust-number";
+      entity_ids: string[];
+      state_variable_id: string;
+      amount: number;
+    }
+  | {
+      id?: string | undefined;
+      type: "add-value" | "remove-value";
+      entity_ids: string[];
+      state_variable_id: string;
+      value: StateScalarValue;
+    };
+
+export type InteractionStatus =
+  "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
+export type InteractionActionStatus =
+  "submitted" | "withdrawn" | "selected" | "declined";
+
+export interface InteractionAction {
+  id: string;
+  interaction_id?: string | undefined;
+  submitted_by_membership_id: string;
+  submitted_by_user_id?: string | undefined;
+  submitted_by_name?: string | undefined;
+  text: string;
+  status: InteractionActionStatus;
+  revision: number;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export interface ConcreteAppliedEffect {
+  effect_id: string;
+  entity_id: string;
+  state_variable_id: string;
+  before?: StateValue | undefined;
+  after?: StateValue | undefined;
+  changed: boolean;
+}
+
+export interface InteractionResolution {
+  id: string;
+  selected_action_id?: string | undefined;
+  action_summary?: string | undefined;
+  narrative: string;
+  private_notes?: string | undefined;
+  resolved_by_membership_id: string;
+  effects: ConcreteEffect[];
+  applied_effects: ConcreteAppliedEffect[];
+  resolved_at?: string | undefined;
+}
+
+export interface Interaction {
+  id: string;
+  game_id: string;
+  title?: string | undefined;
+  prompt: string;
+  private_notes?: string | undefined;
+  status: InteractionStatus;
+  revision: number;
+  created_by_membership_id: string;
+  audience_membership_ids: string[];
+  entity_ids: string[];
+  eligible_responder_membership_ids: string[];
+  actions: InteractionAction[];
+  resolution?: InteractionResolution | undefined;
+  presented_at?: string | undefined;
+  resolved_at?: string | undefined;
+  cancelled_at?: string | undefined;
+  created_at?: string | undefined;
+  updated_at?: string | undefined;
+}
+
+export interface InteractionResolutionResult {
+  preview?: boolean | undefined;
+  replayed?: boolean | undefined;
+  interaction_id: string;
+  interaction_revision: number;
+  narrative: string;
+  applied_effects: ConcreteAppliedEffect[];
+  state: { records: Record<string, StateRecordResponse> };
+}
 
 export interface ChoiceOption {
   id: string;

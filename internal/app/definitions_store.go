@@ -375,7 +375,11 @@ func saveDefinitionDomain(ctx context.Context, db *Server, ruleSetID, definition
 		if err = tx.QueryRow(ctx, `
 			select exists(select 1 from state_values where rule_set_id = $1 and state_variable_id = $2)
 				or exists(select 1 from condition_criteria where rule_set_id = $1 and state_variable_id = $2)
-				or exists(select 1 from effects where rule_set_id = $1 and state_variable_id = $2)`,
+				or exists(select 1 from effects where rule_set_id = $1 and state_variable_id = $2)
+				or exists(
+					select 1 from interaction_resolution_effects
+					where rule_set_id = $1 and state_variable_id = $2
+				)`,
 			ruleSetID, definitionID).Scan(&used); err != nil {
 			return rules.StateVariableDefinition{}, err
 		}

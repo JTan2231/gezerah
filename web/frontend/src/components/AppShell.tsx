@@ -11,7 +11,8 @@ const navGroups: Array<{ label: string; routes: AppRoute[] }> = [
     routes: ["owner-schemas", "state-variables", "conditions", "problems"],
   },
   { label: "World", routes: ["entities", "state"] },
-  { label: "Run", routes: ["instances", "runtime"] },
+  { label: "Simulate", routes: ["instances", "runtime"] },
+  { label: "Play", routes: ["play"] },
 ];
 
 export function AppShell({

@@ -1,9 +1,17 @@
-# Stateful Rule Composer
+# Stateful Rule Composer and Game Player
 
 This repository implements a configurable, typed state-transition system. Rule
 authors define owner schemas, entities, state variables, reusable conditions,
 problems, target bindings, choices, and ordered effects without a built-in
-world ontology.
+world ontology. The Play surface adds games with real participant memberships:
+a facilitator can present an improvised interaction, players submit free-form
+actions, and the facilitator commits a public narrative plus optional typed
+effects. The state update and its normalized receipt are atomic.
+
+Rulesets define the mechanical vocabulary. A game maps an exclusive subset of
+one ruleset's generic entities into a live runtime world. Users and memberships
+are separate from those fictional entities; “Dungeon Master” is presented as
+the game-level `facilitator` role, not a privileged schema or configured key.
 
 `DATA.md` is authoritative for domain and relational semantics. `CODE.md`
 defines the application, API, frontend, transaction, and testing design.
@@ -28,6 +36,13 @@ createdb dnd
 
 Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
+
+Use the Build sections to author schemas, variables, entities, conditions, and
+optional configured problems. Use **Play** to select a development user, create
+or select an assigned game, enroll unassigned entities, present interactions,
+submit player actions, preview rulings, resolve them, and archive a completed
+game while retaining its read-only history. The legacy Runtime section remains
+the ruleset-scoped simulator for configured problem definitions.
 
 Useful process commands:
 
@@ -60,9 +75,18 @@ concurrent starts serialize schema upgrades.
 | `DATABASE_URL` | unset | Hosting fallback when `DND_DATABASE_URL` is unset. |
 | `DND_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, or `error`. |
 
-Authentication and ruleset membership are intentionally not defined yet. Do
-not expose the initial application beyond a trusted environment until those
-policies are implemented.
+Game roles, statuses, visibility, and mutation permissions are enforced by the
+server. Authentication is not: the current development UI stores a selected
+user UUID and sends it as `X-DND-User-ID`. Any client can forge that header.
+This is intentionally a trusted-development identity adapter, so do not expose
+the application or its database outside a trusted environment until it is
+replaced by real session or identity-provider authentication. Command bodies do
+not choose their acting user or membership.
+
+Player-safe live responses omit facilitator private notes and reject entities,
+references, actions, or effects outside the requested game's mapping. Generic
+builder endpoints remain authoring tools for the trusted environment; they are
+not a public player API.
 
 ## Validation
 
@@ -79,7 +103,9 @@ and `e2e`.
 
 When `DND_TEST_DATABASE_URL` is set, the backend target also starts the built
 application against that explicitly disposable test database, validating the
-complete migration chain. GitHub Actions supplies such a PostgreSQL database.
+complete migration chain. End-to-end tests create their own disposable database
+and exercise both configured transitions and the multiplayer Play loop. GitHub
+Actions supplies a PostgreSQL database.
 
 ## Deployment
 
