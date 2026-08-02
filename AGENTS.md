@@ -1,9 +1,5 @@
 # Working agreement
 
-Read `DATA.md` before changing domain semantics or the relational model. It is
-the source of truth for invariants and schema names. Read `CODE.md` before code,
-API, architecture, or interface changes.
-
 Use `./ci.sh` to validate code changes. Focused targets are available with
 `./ci.sh frontend`, `./ci.sh backend`, and `./ci.sh e2e`.
 

@@ -13,9 +13,6 @@ one ruleset's generic entities into a live runtime world. Users and memberships
 are separate from those fictional entities; “Dungeon Master” is presented as
 the game-level `facilitator` role, not a privileged schema or configured key.
 
-`DATA.md` is authoritative for domain and relational semantics. `CODE.md`
-defines the application, API, frontend, transaction, and testing design.
-
 ## Stack
 
 - Go 1.25, standard-library HTTP routing, and embedded static assets.
@@ -104,8 +101,7 @@ and `e2e`.
 When `DND_TEST_DATABASE_URL` is set, the backend target also starts the built
 application against that explicitly disposable test database, validating the
 complete migration chain. End-to-end tests create their own disposable database
-and exercise both configured transitions and the multiplayer Play loop. GitHub
-Actions supplies a PostgreSQL database.
+and exercise both configured transitions and the multiplayer Play loop.
 
 ## Deployment
 
