@@ -67,10 +67,10 @@ Common status/code pairs are:
 
 | Status | Typical codes                                                                                         | Meaning                                                                   |
 | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`, `endpoint_not_found`                                  | The transport, path ID, or query syntax is malformed.                     |
+| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                        | The transport, path ID, or query syntax is malformed.                     |
 | 401    | `authentication_required`, `invalid_identity`                                                         | The development identity header is absent, malformed, or unknown.         |
 | 403    | `game_forbidden`, `facilitator_required`, `player_required`, `responder_required`, `action_forbidden` | The known actor lacks membership, role, audience, or ownership authority. |
-| 404    | `not_found`                                                                                           | The resource is absent or deliberately hidden by visibility filtering.    |
+| 404    | `not_found`, `endpoint_not_found`                                                                     | The resource or endpoint is absent, or a resource is hidden by filtering. |
 | 409    | `revision_conflict`, `duplicate_key`, `configuration_changed`, lifecycle and in-use codes             | Current state conflicts with the command.                                 |
 | 422    | `validation_failed`, `invalid_reference`, `archived_reference`                                        | JSON is structurally readable but violates a domain or database rule.     |
 | 500    | `internal_error`, `database_error`                                                                    | Unexpected server/database failure.                                       |
@@ -206,6 +206,10 @@ game event. Its durable output is the changed state.
 | `GET /api/games/{game_id}`          | Active member  | None                  | Complete game/membership/entity-ID summary.             |
 | `POST /api/games/{game_id}/archive` | Facilitator    | `{expected_revision}` | Archives only when every interaction is final.          |
 
+Archiving blocks game-scoped Play mutation routes. It does not make the
+underlying ruleset, entities, or state immutable through the trusted authoring
+API, whose endpoints do not consult game status.
+
 ### Game membership and entity scope
 
 | Method and path                                            | Authority     | Request                          | Response/notes                                                                                                                  |
@@ -237,9 +241,9 @@ game event. Its durable output is the changed state.
 
 ### Game events (SSE)
 
-| Method and path                   | Authority     | Request                                                      | Response/notes                  |
-| --------------------------------- | ------------- | ------------------------------------------------------------ | ------------------------------- |
-| `GET /api/games/{game_id}/events` | Active member | Optional `?after=<non-negative event ID>` or `Last-Event-ID` | Long-lived `text/event-stream`. |
+| Method and path                   | Authority     | Request                                                      | Response/notes                     |
+| --------------------------------- | ------------- | ------------------------------------------------------------ | ---------------------------------- |
+| `GET /api/games/{game_id}/events` | Active member | Optional `?after=<non-negative event ID>` or `Last-Event-ID` | Reconnectable `text/event-stream`. |
 
 The server sends an initial `retry: 1500`, then events such as:
 
@@ -252,10 +256,15 @@ data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id
 
 Empty batches produce keep-alive comments. The handler polls and reauthorizes
 the membership every 1.5 seconds, emits at most 100 visible events per batch,
-and closes silently if membership is revoked or the client disconnects.
-Facilitators receive all events; other roles receive only events safe for their
-visible interactions. Consumers should use the event as an invalidation signal
-and reload authoritative game resources.
+and closes silently if membership is revoked or the client disconnects. The
+current HTTP server has a 30-second response write deadline, so clients must
+also reconnect deadline-closed streams using the last event ID. Facilitators
+receive all events. Other roles receive game-wide events and, except for draft
+create/update events, events for audience interactions that have ever been
+presented. This can include a lifecycle event while the interaction query is
+hidden during adjudication or after cancellation; an event does not grant read
+visibility. Consumers should use events only as invalidation signals and reload
+authoritative game resources.
 
 ## Payload reference
 
@@ -658,6 +667,9 @@ At least one of `role` or `status` is required on update. Roles are
 Game responses include the membership array, assigned `entity_ids`, game
 revision/status, creator user ID, and timestamps.
 
+Membership creation accepts only `invited` or `active`; omitting `status`
+defaults it to `active`. The `left` status is update-only.
+
 ### Interaction
 
 `InteractionSave`:
@@ -677,10 +689,11 @@ revision/status, creator user ID, and timestamps.
 ```
 
 `expected_revision` is used for PUT; create does not need it. An omitted/empty
-audience on create is expanded to active game members. Eligible responders must
-be active player memberships in the audience. The current API writes context
-entities as public and does not expose context labels/visibility fields even
-though relational support exists.
+audience on either create or draft replacement is expanded to all active game
+members, so the API cannot persist a deliberately empty audience. Eligible
+responders must be active player memberships in the audience. The current API
+writes context entities as public and does not expose context labels/visibility
+fields even though relational support exists.
 
 Interaction responses include revision/status, related membership/entity IDs,
 actions, optional applied resolution, and lifecycle timestamps. Non-facilitator
@@ -729,7 +742,11 @@ transport intentionally rejects an empty concrete target list.)
 `narrative` is required; zero effects is valid. Resolve requires a non-empty
 idempotency key up to 200 characters. The response includes the interaction ID
 and revision, narrative, ordered applied before/after effects, and affected
-state records. A safely replayed resolve adds `"replayed": true`.
+state records. A safely replayed resolve adds `"replayed": true`. Replay
+preserves the immutable ruling and applied-effect receipt, but reconstructs its
+`state` map from current state records rather than caching the original response.
+It still requires a known user, an active facilitator membership, and an active
+game.
 
 ## Limits and notable validation rules
 

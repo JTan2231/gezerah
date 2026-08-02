@@ -72,7 +72,9 @@ outlet or URL-encoded selected resource.
 
 The shell groups navigation as Start, Define, World, Simulate, and Play. It
 contains a skip link, ruleset selector, create/edit ruleset controls, accessible
-current-route state, and the main focus target.
+current-route state, and the main focus target. At narrow breakpoints the
+ruleset selector and create/edit controls are hidden; ruleset management is
+currently a wide-layout-only shell capability.
 
 ## Client state model
 
@@ -85,9 +87,10 @@ There is no global store or React context. Ownership is hierarchical:
 5. Successful commands replace/append returned resources in the local feature
    collection or explicitly reload it.
 
-Unmounting a route discards its feature state. Draft protection warns before
-intentional in-app navigation and browser unload; drafts are generally not
-durably stored.
+Unmounting a route discards its feature state. Draft protection is cooperative,
+not application-wide: editors wired through `useDraft` are protected by the
+main navigation and browser unload, while other forms may be discarded without
+a prompt. Drafts are not durably stored.
 
 ### `useCollection`
 
@@ -110,11 +113,17 @@ with `JSON.stringify`, which works for the JSON-shaped ordered editor models in
 this application but should be reconsidered for non-JSON values or objects with
 unstable key insertion order.
 
-Dirty editors increment a module-level count, set
+Dirty `useDraft` editors increment a module-level count, set
 `document.documentElement.dataset.draftDirty`, and register `beforeunload`.
-`confirmDiscardDraft()` uses the browser confirm dialog. Programmatic route,
-ruleset, resource-selection, and resource-creation actions call it; browser
-`popstate` currently does not call the confirmation itself.
+`confirmDiscardDraft()` uses the browser confirm dialog. `App` calls it for
+route and ruleset-selector changes, and `ResourceWorkspace` calls it for
+selection and creation changes.
+
+`useDirtyGuard` by itself sets only the shared dirty marker. The State Inspector
+uses that lighter guard, so main navigation and ruleset selection prompt, but
+switching its entity or unloading the page does not. Browser `popstate`,
+ruleset creation, condition/problem duplication, onboarding, and Play forms are
+also outside the complete guard path.
 
 ### Local storage
 
@@ -191,7 +200,10 @@ cardinality:
 - repeated rows and explicit empty set for `many`.
 
 The server remains authoritative for duplicate set values, exact decimals,
-steps, bounds, reference scope, and archived resources.
+steps, bounds, reference scope, and archived resources. Frontend numeric
+contracts and controls use JavaScript `number` and `valueAsNumber`, so the UI
+cannot losslessly round-trip arbitrary exact decimals outside JavaScript's safe
+precision.
 
 ### Concrete effect editor
 
@@ -244,8 +256,9 @@ display order, then label.
 
 Authors ordered parameters and nested expression trees, supported predicates,
 and quantifiers. Pure helpers generate readable summaries. A saved condition
-can be evaluated with concrete entity bindings; the screen renders the
-met/unmet/unknown tree and missing-state count. Duplication is server-side.
+can be evaluated with concrete entity bindings; the screen renders the root
+met/unmet/unknown status and message plus the missing-state count. It does not
+render the nested evaluation tree. Duplication is server-side.
 
 ### Problems
 
@@ -261,8 +274,9 @@ aggregate.
 Creates an entity from an active problem definition and binds supplied targets.
 The definition/display identity is creation-only in this screen; existing
 edits replace bindings with the current binding revision. The UI filters
-eligible distinct entities, enforces visible min/max/cardinality rules, and
-shows automatic self-bindings.
+eligible entities, avoids duplicates within a target, limits additions by
+maximum/cardinality, displays minimum progress, and shows automatic
+self-bindings. The server enforces the minimum and all binding invariants.
 
 ### State inspector
 
@@ -342,10 +356,10 @@ semantic status colors, radii, shadows, and system font stacks. `app.css` owns
 all component and responsive styling.
 
 Wide layouts use a fixed sidebar, bounded main content, sticky resource lists,
-and sticky save bars. At 980px the shell becomes a top navigation region and
-master/detail layouts collapse. At 680px form grids, headers, identity controls,
-and action areas stack. Loading animation is disabled under
-`prefers-reduced-motion`.
+and sticky save bars. At 980px the shell becomes a top navigation region,
+ruleset management controls are hidden, and master/detail layouts collapse. At
+680px form grids, headers, identity controls, and action areas stack. Loading
+animation is disabled under `prefers-reduced-motion`.
 
 Accessibility features include:
 
@@ -374,14 +388,18 @@ worktree.
 ## Frontend tests and current gaps
 
 Bun unit tests cover options/compatibility, condition summaries, problem draft
-duplication, and live effect construction. Playwright covers accessible
-authoring, configured preview/resolve/rollback/defaults, full role-separated
-Play, privacy, idempotency, archival, and multi-browser live refresh.
+duplication, and live effect construction. Playwright covers label/role-based
+authoring with one initial keyboard-focus check,
+configured preview/resolve/rollback/defaults, role-separated Play, privacy,
+idempotency, archival, multi-context live refresh, and SSE connection/event
+coverage. Because live refresh retains a polling fallback, the test does not
+isolate SSE as the cause of each UI refresh.
 
 Current gaps include:
 
 - no component-level React tests;
 - no runtime API response validation;
+- no lossless arbitrary-precision decimal round-trip through frontend controls;
 - no shared query cache or request deduplication;
 - no durable draft/offline support;
 - no automated accessibility audit;

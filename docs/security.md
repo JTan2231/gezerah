@@ -15,16 +15,18 @@ turn a forgeable identity into authentication.
 
 ## Endpoint trust matrix
 
-| Surface                      | Current gate                                   | Consequence                                                                        |
-| ---------------------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
-| SPA/static assets            | None                                           | Public content.                                                                    |
-| `/api/health`                | None                                           | Reveals service/database readiness.                                                |
-| `/api/users` GET/POST        | None                                           | Users can be enumerated/created.                                                   |
-| `/api/rule-sets/**`          | None                                           | Any reachable client can read/change all authored configuration and generic state. |
-| `/api/games` and `/api/play` | Known UUID header                              | Header can impersonate any local user.                                             |
-| Game reads                   | Active membership after header lookup          | Sound authorization only if identity were trustworthy.                             |
-| Facilitator commands         | Active facilitator role                        | Sound role check only if identity were trustworthy.                                |
-| Player actions               | Active player + eligible responder + ownership | Server-enforced, but actor identity is forgeable.                                  |
+| Surface                  | Current gate                                   | Consequence                                                                        |
+| ------------------------ | ---------------------------------------------- | ---------------------------------------------------------------------------------- |
+| SPA/static assets        | None                                           | Public content.                                                                    |
+| `/api/health`            | None                                           | Reveals service/database readiness.                                                |
+| `/api/users` GET/POST    | None                                           | Users can be enumerated/created.                                                   |
+| `/api/rule-sets/**`      | None                                           | Any reachable client can read/change all authored configuration and generic state. |
+| `POST /api/games`        | Known UUID header                              | Any known user can create a game for any ruleset and claim unassigned entities.    |
+| `GET /api/games`         | Known UUID header                              | Returns games in which that user has an active membership.                         |
+| `/api/play/rule-sets/**` | Known UUID header                              | Any known user can enumerate unassigned entities in an arbitrary ruleset.          |
+| Game reads               | Active membership after header lookup          | Sound authorization only if identity were trustworthy.                             |
+| Facilitator commands     | Active facilitator role                        | Sound role check only if identity were trustworthy.                                |
+| Player actions           | Active player + eligible responder + ownership | Server-enforced, but actor identity is forgeable.                                  |
 
 Do not treat network reachability, the React UI, or hidden controls as an access
 control.
@@ -38,9 +40,10 @@ Within the trusted identity assumption, the server enforces:
 - facilitator role is required for game management and interaction rulings;
 - only eligible active players can submit, at most one current action each;
 - a player can withdraw only their own action;
-- game status and interaction lifecycle gate every mutation;
+- game status and interaction lifecycle gate live-game API mutations;
 - expected revisions prevent stale overwrites;
-- live effect targets/references remain inside the game mapping;
+- live receipt effect targets and reference values remain inside the game
+  mapping;
 - an entity belongs to at most one game;
 - a game retains at least one active facilitator;
 - non-facilitator interaction visibility requires audience membership and an
@@ -48,7 +51,8 @@ Within the trusted identity assumption, the server enforces:
 - adjudicating/draft/cancelled interactions are hidden from non-facilitators;
 - private notes are omitted from non-facilitator responses;
 - SSE events are filtered and membership is rechecked every batch;
-- applied receipts/final interactions/events are immutable in PostgreSQL.
+- applied resolution roots and their receipt trees, final interaction root rows,
+  and existing event rows have PostgreSQL immutability triggers.
 
 Tests exercise role denials, visibility, private-field omission, game scope, and
 multi-browser event behavior. These checks should be preserved when real
@@ -65,10 +69,17 @@ endpoint.
 
 ### Game scope
 
-Player-safe endpoints load entities and variable definitions from the game's
-explicit entity mapping. Live effect targets and reference operands/defaults
-must remain in that mapping. Generic builder endpoints are broader and must not
-be exposed as a player API.
+Game-scoped entity reads use the game's explicit entity mapping, and live receipt
+targets, reference operands, and captured before/after values must remain in that
+mapping. Variable definitions remain ruleset-scoped. Their defaults and generic
+`state_values` may reference another entity in the ruleset even when that entity
+is not assigned to the game; assignment and release do not validate this
+reference closure. The game definition response can therefore contain such a
+default, and a later live resolution may reject incompatible stored references.
+
+Generic builder and problem-runtime endpoints are broader and must not be
+exposed as player APIs. They can mutate game-assigned entities without the live
+game lifecycle or receipt path.
 
 ### Participant versus entity
 
@@ -96,8 +107,8 @@ which fields non-facilitators may receive and test JSON absence.
 - `X-Content-Type-Options: nosniff` on JSON responses;
 - optimistic revision guards and idempotent live resolve;
 - normalized relational constraints and cross-scope composite foreign keys;
-- immutable receipt/event triggers;
-- HTTP read/write/idle timeouts and graceful shutdown.
+- applied-receipt and event update/delete protection triggers;
+- HTTP read/write/idle timeouts and a bounded shutdown attempt.
 
 These reduce malformed input and integrity risk. They do not replace
 authentication, transport security, authorization on builder APIs, or abuse
@@ -121,8 +132,11 @@ Impact: complete impersonation of any user and all game roles.
 - ruleset/configuration/entity/state/problem runtime endpoints are
   unauthenticated;
 - no ruleset owner/editor/viewer model;
-- generic state writes can modify entities that are assigned to live games,
-  outside a live resolution receipt.
+- any known user can create a game for any ruleset and exclusively claim its
+  unassigned entities;
+- generic state writes and generic problem-choice resolution can modify entities
+  assigned to active or archived games outside a live resolution receipt or game
+  lifecycle gate.
 
 Impact: complete configuration/state compromise and bypass of live audit
 history by any reachable client.
@@ -134,7 +148,9 @@ history by any reachable client.
 - no CSRF defense designed around authenticated browser sessions;
 - no Content Security Policy, HSTS, frame-ancestor protection, Referrer Policy,
   or Permissions Policy;
-- no application rate limiting or connection quotas.
+- no application rate limiting or connection quotas;
+- the default `:8080` bind, including the `./run.sh` default, listens on all
+  interfaces rather than loopback.
 
 Same-origin browser defaults help the current UI but do not protect direct HTTP
 clients or a future cookie-authenticated deployment.
@@ -151,8 +167,9 @@ clients or a future cookie-authenticated deployment.
 
 ### Audit and privacy operations
 
-- live applied receipts/events are durable, but configuration/state edits lack
-  an actor audit trail;
+- live applied receipts/events are durable, but final interaction children and
+  event-type field shapes are not fully protected as an audit record;
+- configuration/state edits lack an actor audit trail;
 - no retention/deletion policy for user names, actions, narratives, or private
   notes;
 - no user export or erasure workflow;
@@ -162,6 +179,8 @@ clients or a future cookie-authenticated deployment.
 ### Infrastructure
 
 - one database role performs migrations and runtime reads/writes;
+- that role has schema-change privileges, so DDL can remove the triggers and the
+  immutable rows are not tamper-evident against a database credential holder;
 - database URL is the sole application secret and has no rotation helper;
 - no metrics, intrusion alerting, WAF, or provider policy is defined here;
 - no production threat model or penetration test is recorded.
@@ -175,12 +194,13 @@ Before untrusted/public use, implement and verify at least:
    client-chosen identity header as an authority source.
 2. **Protect user discovery/provisioning.** Define signup/invite/admin policy;
    do not allow arbitrary enumeration/creation.
-3. **Authorize every ruleset endpoint.** Add explicit ruleset ownership or
+3. **Authorize every ruleset use.** Add explicit ruleset ownership or
    editor/viewer memberships and apply it to configuration, generic entities,
-   state, conditions, problem runtime, and available-entity queries.
+   state, conditions, problem runtime, ruleset-level Play queries, and game
+   creation/entity claiming.
 4. **Resolve game-state write policy.** Decide whether builder state edits are
-   allowed for entities assigned to a game and, if so, audit them with actor and
-   before/after receipt.
+   allowed for entities assigned to a game, including generic problem
+   resolution, and, if so, audit them with actor and before/after receipt.
 5. **Use deny-by-default middleware.** Make new routes private unless explicitly
    classified; preserve resource-level game checks after authentication.
 6. **Add browser security.** TLS at the edge, secure/HttpOnly/SameSite cookies if
@@ -225,7 +245,8 @@ For every new endpoint or field, answer:
 
 Until hardening is complete:
 
-- bind to loopback or place the service on an access-controlled private network;
+- set `DND_ADDR=127.0.0.1:8080` for local use, or place the wildcard-bound service
+  on an access-controlled private network;
 - do not share it with untrusted users;
 - do not store sensitive personal information or secrets in prompts/notes;
 - use a disposable/non-sensitive database for demonstrations;

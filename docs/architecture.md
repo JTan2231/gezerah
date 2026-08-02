@@ -51,7 +51,10 @@ flowchart TB
 The binary starts by loading environment configuration, configuring structured
 JSON logging, opening a `pgxpool`, pinging PostgreSQL, applying every unapplied
 embedded migration, constructing the HTTP server, and listening. `SIGINT` and
-`SIGTERM` trigger a graceful HTTP shutdown with a ten-second deadline.
+`SIGTERM` trigger a bounded HTTP shutdown attempt with a ten-second deadline.
+Active request contexts are not derived from the process root context, so an
+open SSE handler can consume that deadline before it disconnects or a write
+fails.
 
 The HTTP server sends `/api` and `/api/*` to a method-aware API mux. All other
 GET paths use static-file serving with SPA fallback to `index.html`. Missing
@@ -94,9 +97,11 @@ flowchart TD
 The React application is a client-rendered SPA with a small history-based route
 helper rather than an external router. Feature screens own server collections
 and edit drafts. Shared components provide workspaces, typed value editors, and
-effect editors. All network calls pass through one fetch adapter, which adds
+effect editors. Ordinary JSON calls pass through one fetch adapter, which adds
 JSON headers, maps the error envelope, and attaches the selected development
-user when present.
+user when present. The game-event hook uses a separate streaming `fetch`, adds
+the identity header itself, reconnects with its cursor, and keeps a three-second
+query-polling fallback active.
 
 ### HTTP/application layer
 
@@ -217,7 +222,11 @@ sequenceDiagram
 The transaction is the consistency boundary: state, interaction lifecycle,
 receipt, selected/declined action statuses, and game event either all commit or
 all roll back. Reusing the same idempotency key with an equivalent request
-returns the prior result; using it for different content is a conflict.
+returns the immutable ruling and applied effects with `replayed: true`; using it
+for different content is a conflict. Replay state records are loaded at replay
+time, so they may be newer than the state returned by the original request.
+Replay also passes through the current identity, facilitator, and active-game
+checks.
 
 ## Consistency and concurrency
 
@@ -238,15 +247,20 @@ Read paths that assemble multi-table aggregates commonly use read-only
 
 ## Events and freshness
 
-Game mutations append rows to `game_events`. The browser opens an SSE request to
-`GET /api/games/{game_id}/events`, providing an `after` cursor or
-`Last-Event-ID`. The server emits event IDs and JSON event payloads and sends
-periodic keep-alive comments. Events are hints that cause the client to reload
-authoritative resources; they are not a full state-replication protocol.
+Game-scoped Play mutations append rows to `game_events`. Trusted ruleset
+authoring endpoints can also change entities, state, or configuration visible
+to a game, but they neither consult game status nor append game events. The
+browser opens an SSE request to `GET /api/games/{game_id}/events`, providing an
+`after` cursor or `Last-Event-ID`. The server emits event IDs and JSON event
+payloads and sends periodic keep-alive comments. Events are hints that cause the
+client to reload authoritative resources; they are not a full state-replication
+protocol.
 
 There is no external broker. Each stream handler polls PostgreSQL, so capacity
-planning must include one long-lived request and recurring event queries per
-connected game client.
+planning must include one open request and recurring event queries per connected
+game client. The current Go server's 30-second write deadline bounds each
+HTTP/1 stream; the browser hook reconnects with its last cursor when a stream
+ends.
 
 ## Repository layout
 

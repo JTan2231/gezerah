@@ -350,8 +350,12 @@ released from the game, preserving receipt integrity.
 
 The game-scoped entity and state-variable endpoints filter the generic
 configuration to the mapped runtime world. Concrete live effects may target
-only mapped entities, and reference values/defaults must also remain inside the
-mapped entity set.
+only mapped entities. A live transition also rejects reference operands or
+authored defaults whose referenced entity is outside the current mapping.
+Mapping replacement itself does not enforce that reference closure: an entity
+referenced only by mutable state or a variable default can be released, after
+which a later transition that encounters the reference will fail. Historical
+interaction and receipt references do prevent release.
 
 ## Live interactions
 
@@ -408,16 +412,21 @@ The application `changed` flag records whether the stored override changed;
 before/after values are logical values. They can therefore look equal when an
 effect removes a redundant stored override and falls back to the same default.
 
+Replaying a committed idempotency key verifies the request against that receipt,
+but response state records are loaded at replay time. They may reflect later
+state changes, and replay still requires a current active facilitator and active
+game.
+
 ## Revisions, events, and history
 
-| Revision                 | Advances when                                                     |
-| ------------------------ | ----------------------------------------------------------------- |
-| State record             | The stored state for its entity changes.                          |
-| Problem-instance binding | Target bindings are replaced.                                     |
-| Game                     | Membership or entity assignment changes, or the game is archived. |
-| Membership               | Its role or status changes.                                       |
-| Interaction              | Draft/lifecycle data changes or an action is submitted/withdrawn. |
-| Action                   | The action is withdrawn or finalized by resolution.               |
+| Revision                 | Advances when                                                          |
+| ------------------------ | ---------------------------------------------------------------------- |
+| State record             | Stored state or owner-schema memberships change its materialized view. |
+| Problem-instance binding | Target bindings are replaced.                                          |
+| Game                     | Membership or entity assignment changes, or the game is archived.      |
+| Membership               | Its role or status changes.                                            |
+| Interaction              | Draft/lifecycle data changes or an action is submitted/withdrawn.      |
+| Action                   | The action is withdrawn or finalized by resolution.                    |
 
 No-op replacements generally return current state without manufacturing a new
 revision. Clients should use the latest response as the source for the next
@@ -426,7 +435,8 @@ expected revision.
 Game events are an append-only cursor stream. They identify that a game-level
 fact changed and carry related interaction/submission/resolution IDs when
 applicable. They do not embed full new state; clients reload authoritative
-resources after receiving them.
+resources after receiving them. Only game-scoped Play commands append these
+events; trusted authoring changes to mapped entities or state do not.
 
 ## Archive semantics
 
@@ -436,7 +446,8 @@ Archiving is retention, not deletion:
 - new references to archived configuration are generally rejected;
 - archived problem definitions cannot create new instances;
 - archived entities cannot be newly assigned to games;
-- archived games are read-only;
+- archived games reject game-scoped Play mutations, while trusted authoring
+  endpoints can still change their underlying ruleset entities and state;
 - a game cannot be archived with draft, open, or adjudicating interactions;
 - resolved/cancelled interactions and applied receipts remain history.
 

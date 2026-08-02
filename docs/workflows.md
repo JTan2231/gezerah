@@ -136,6 +136,9 @@ then:
 
 An entity assigned to another game is unavailable. Once a game uses an entity
 in interaction or resolution history, that entity cannot be released.
+An entity referenced only by mutable state or a state-variable default is not
+protected by the release check; removing it can make a later live transition
+fail reference validation.
 
 ### Present an interaction
 
@@ -148,7 +151,9 @@ in interaction or resolution history, that entity cannot be released.
    withdraw it while the interaction remains open.
 
 The audience and responder lists use membership IDs, not user IDs. Context
-entities must already be assigned to the game.
+entities must already be assigned to the game. On both create and draft edit, an
+omitted or empty audience expands to all active memberships; the current API
+cannot persist a deliberately empty audience.
 
 ### Adjudicate and resolve
 
@@ -164,19 +169,25 @@ entities must already be assigned to the game.
 
 If the response is lost after commit, retry the exact same request with the
 same idempotency key. The server returns `replayed: true`. Do not reuse the key
-for different content or a different interaction.
+for different content or a different interaction. The immutable ruling and
+applied effects are replayed, but response state is reloaded and may include
+later changes. Replay also requires the actor and game still to satisfy the
+active-facilitator and active-game checks.
 
 ### Cancel and archive
 
 A facilitator may cancel a draft, open, or adjudicating interaction. Resolved
 and cancelled interactions are final. A game may be archived only after every
-interaction is resolved or cancelled; archive makes all mutation commands fail
-while retaining read-only history.
+interaction is resolved or cancelled; archive makes game-scoped Play mutations
+fail while retaining Play history. Trusted authoring endpoints remain able to
+change the underlying ruleset, mapped entities, and their state.
 
 ## Client freshness and conflict recovery
 
-The Play screen connects to the game event stream. Events trigger reloads; they
-do not merge state locally. For any `revision_conflict`:
+The Play screen connects to the game event stream. Individual streams reconnect
+after the server's current 30-second write deadline, and a three-second query
+poll remains active as a fallback. Events trigger reloads; they do not merge
+state locally. For any `revision_conflict`:
 
 1. preserve unsaved user input where practical;
 2. reload the authoritative aggregate;

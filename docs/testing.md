@@ -30,13 +30,18 @@ On first invocation, `ci.sh`:
    temporary index;
 4. writes a tree and synthetic commit without modifying the real index;
 5. creates a detached temporary worktree;
-6. reinvokes itself there with isolated caches;
+6. reinvokes itself there with isolated build and package caches;
 7. removes the worktree and temporary files on exit.
 
 This design validates unsaved/untracked source changes while keeping dependency
 installs and generated frontend assets out of the active checkout. Ignored
 files are not copied, so tests must not depend on local `.dnd`, `node_modules`,
 `web/static` output, or test artifacts.
+
+Bun, Go, temporary, and Node compile caches are isolated beneath the temporary
+CI directory. The Playwright browser cache is different: an explicit
+`PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user cache is
+reused on macOS/Linux when one can be resolved.
 
 The validator requires a valid Git repository with a `HEAD` commit.
 
@@ -53,7 +58,8 @@ The validator requires a valid Git repository with a `HEAD` commit.
 5. Bun unit tests;
 6. Knip unused-code analysis;
 7. TypeScript check;
-8. production Vite build.
+8. `bun run build`, which repeats the TypeScript check and then runs the
+   production Vite build.
 
 ### Backend
 
@@ -139,7 +145,8 @@ There are no current component-rendering unit tests.
 
 `test/specs/configuration.spec.ts` exercises:
 
-- keyboard-accessible ruleset/schema/entity/Boolean-state authoring;
+- label/role-addressable ruleset/schema/entity/Boolean-state authoring and one
+  initial keyboard-focus check;
 - advisory configured preview versus atomic resolve;
 - stale state revision conflict and default normalization;
 - condition unknown/unmet/met behavior;
@@ -153,15 +160,19 @@ There are no current component-rendering unit tests.
 - private-note omission;
 - interaction presentation, action submission, adjudication, preview, resolve,
   idempotent replay, and narrative-only rulings;
-- immutable/read-only history and game archive guards;
-- separate browser contexts receiving live SSE refresh without private data.
+- resolved-receipt display and game archive guards;
+- separate browser contexts receiving live refresh without private data, an
+  application SSE request, and a directly observed server-sent event. The
+  three-second polling fallback means the test does not isolate SSE as the
+  cause of each UI refresh.
 
 ## E2E harness lifecycle
 
 Playwright global setup:
 
 1. creates `test/artifacts` and removes stale runtime metadata;
-2. builds the production frontend into `web/static` in the isolated worktree;
+2. builds the production frontend into `web/static` in the current checkout,
+   which is the disposable worktree when invoked through `ci.sh`;
 3. builds a temporary Go binary;
 4. creates a unique database named `dnd_e2e_<timestamp>_<random>`;
 5. selects a free loopback port;
@@ -169,8 +180,9 @@ Playwright global setup:
 7. waits up to 60 seconds for `/api/health`;
 8. writes the base URL to runtime metadata for specs.
 
-Teardown terminates the process group, closes the log, drops the database,
-removes the binary directory, and removes runtime metadata.
+Teardown terminates the process group on POSIX systems or the child process on
+Windows, closes the log, drops the database, removes the binary directory, and
+removes runtime metadata.
 
 Database URL precedence is:
 
@@ -190,9 +202,14 @@ The E2E launcher tries, in order:
 2. common system Chrome/Chromium locations for the platform;
 3. `bunx playwright install chromium`.
 
-`DND_E2E_BROWSER_EXECUTABLE` can explicitly override the executable passed to
-Playwright. The current configuration runs one Desktop Chrome/Chromium project,
-one worker, no retries, and a 90-second test timeout.
+The Playwright config reads `DND_E2E_BROWSER_EXECUTABLE`, but the custom launcher
+performs the discovery sequence before starting Playwright. A discovered system
+browser replaces the configured value; if no bundled or system browser exists,
+the launcher installs Chromium before it can proceed. The variable is therefore
+not a reliable discovery/install bypass in the current harness.
+
+The current configuration runs one Desktop Chrome/Chromium project, one worker,
+no retries, and a 90-second test timeout.
 
 ## Artifacts
 
@@ -208,6 +225,8 @@ The active checkout usually receives no artifacts when invoked through root
 `ci.sh`, because the entire run occurs in the disposable worktree that is
 removed afterward. To preserve artifacts for interactive debugging, run the
 test project directly in the working checkout after installing dependencies.
+A direct run also rebuilds ignored production output under `web/static` in that
+checkout.
 
 ## Fast local iteration
 

@@ -13,7 +13,7 @@ One process owns:
 - startup migrations;
 - HTTP API and SSE connections;
 - production SPA/static-file serving;
-- signal-driven graceful shutdown.
+- signal-driven, ten-second bounded shutdown attempt.
 
 There are no background worker processes, caches, message brokers, ORM, code
 generation step, or dependency-injection framework.
@@ -29,8 +29,9 @@ generation step, or dependency-injection framework.
 5. `migrations.Run` applies embedded forward-only migrations.
 6. `app.NewServer` loads the embedded static filesystem and registers routes.
 7. A listener is created and `http.Server.Serve` begins.
-8. A signal or unexpected serve error starts graceful shutdown with a ten-
-   second deadline.
+8. A signal or unexpected serve error starts HTTP shutdown with a ten-second
+   deadline. Active request contexts are not rooted in the process context, so
+   an open SSE handler can consume that deadline.
 
 HTTP timeouts are:
 
@@ -42,8 +43,11 @@ HTTP timeouts are:
 | Idle connection   | 60 seconds |
 | Graceful shutdown | 10 seconds |
 
-SSE is a long-lived response and uses response-controller flushing. If changing
-global timeouts, verify event streams under the deployment's reverse proxy.
+SSE uses response-controller flushing, but that does not disable the configured
+30-second server write deadline. An HTTP/1 stream is therefore reconnectable
+rather than indefinite; the current browser hook reconnects with its cursor. If
+changing global timeouts, verify event streams under the deployment's reverse
+proxy.
 
 ## Package map
 
@@ -239,6 +243,10 @@ set. After validation and default normalization, the adapter compares storage
 state. A no-op retains the revision; otherwise it rewrites scalar rows and
 increments the state root.
 
+The state revision can also advance without a scalar-row rewrite when an
+entity's owner-schema memberships change. That invalidates a materialized
+applicability/default/unknown view based on the prior memberships.
+
 Resolution persistence updates only record IDs reported as changed by the pure
 engine. Every changed record is rewritten and incremented inside the enclosing
 resolution transaction.
@@ -305,6 +313,11 @@ selected submission and idempotency key before applying mechanics. State,
 receipt, application rows, action statuses, interaction status, and game event
 share one transaction.
 
+An idempotent replay loads the immutable receipt but rebuilds response state
+from current state records. It is receipt-equivalent, not a byte-for-byte replay
+of the original response, and still requires the actor to be an active
+facilitator of an active game.
+
 ### Lock discipline
 
 When adding a command that touches several aggregates, follow existing sorted
@@ -324,7 +337,8 @@ receipt/context fields. IDs in commands are revalidated against the requested
 game so cross-game references fail closed.
 
 The generic authoring endpoints do not apply these checks. Never route a player
-feature through them.
+feature through them. They can continue changing an archived game's underlying
+ruleset entities and state, and those changes do not append `game_events`.
 
 ## SSE implementation
 
@@ -342,6 +356,10 @@ The event endpoint:
 
 It intentionally sends identifiers and event types, not aggregate snapshots.
 This reduces disclosure risk and makes the normal query endpoints authoritative.
+For non-facilitators, event filtering uses audience membership plus whether an
+interaction was ever presented; it is not the same as current interaction read
+visibility. Adjudicating/cancelled lifecycle events can therefore be delivered
+while the interaction query itself is hidden.
 
 ## Testing seams
 

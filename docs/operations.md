@@ -11,7 +11,7 @@ That binary:
 - serves API/SSE routes;
 - serves the embedded SPA and assets;
 - logs structured JSON to stdout;
-- handles graceful termination.
+- attempts bounded HTTP shutdown on termination signals.
 
 The required build order is:
 
@@ -35,6 +35,16 @@ binary whose SPA routes return 503.
 | `DND_DATABASE_URL` | Preferred                      | PostgreSQL URL.                             |
 | `DATABASE_URL`     | Fallback                       | Hosting-provider database URL.              |
 | `DND_LOG_LEVEL`    | `info`                         | `debug`, `info`, `warn`/`warning`, `error`. |
+
+If neither database variable is set, the final fallback is
+`postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
+development; a production process with no database variable will try that local
+address rather than fail configuration parsing. Unknown log-level values also
+silently select `info`.
+
+The default bind address `:8080` listens on all interfaces. For the current
+trusted-development build, use `DND_ADDR=127.0.0.1:8080` unless network access is
+independently restricted. `./run.sh` otherwise inherits the wildcard default.
 
 Treat database URLs as secrets. The application does not read secret files or
 rotate credentials. Supply them through the deployment platform and restrict
@@ -69,12 +79,19 @@ deadlines.
 
 `SIGINT` or `SIGTERM` cancels the root context and calls HTTP shutdown with a
 ten-second deadline. The server stops accepting new connections and waits for
-handlers. Long-lived SSE requests observe cancellation and exit.
+handlers. Request contexts are not currently derived from the root context, and
+`http.Server.Shutdown` does not cancel active requests. An open SSE handler can
+therefore remain active until its request disconnects or a write fails, consume
+the full shutdown deadline, and make shutdown return an error.
 
-Configure the platform termination grace period to exceed ten seconds. A forced
-kill can interrupt in-flight requests, but PostgreSQL transactions roll back
-when their connections close. Clients resolving live interactions should retry
-the identical request with the same idempotency key after ambiguous failure.
+The HTTP server also has a fixed 30-second write timeout. That timeout can end
+an SSE stream even though the handler sends keep-alives; the frontend reconnects
+and also polls every three seconds. Configure the platform termination grace
+period to exceed ten seconds, but do not treat the current SSE shutdown as
+graceful. A forced kill can interrupt in-flight requests, but PostgreSQL
+transactions roll back when their connections close. Clients resolving live
+interactions should retry the identical request with the same idempotency key
+after ambiguous failure.
 
 ## Logging and observability
 
@@ -89,7 +106,9 @@ request summaries, and recovered panics with stacks. Request summaries include:
 
 The server does not intentionally log request/response bodies or identity
 headers in its standard request log. Database/validation errors returned to
-clients are often generalized, while panic stacks remain in server logs.
+clients are often generalized. Ordinary handler and database failures are not
+logged with their underlying cause; only the request status remains. Panic
+stacks remain in server logs.
 
 There is currently no:
 
@@ -98,6 +117,7 @@ There is currently no:
 - distributed tracing;
 - structured game/ruleset/user IDs on every request log;
 - slow-query logger;
+- per-migration version, progress, or duration logging;
 - alert configuration;
 - application-level audit log for configuration edits.
 
@@ -116,9 +136,17 @@ The repository's only deployment definition is Railway:
 - health path is `/api/health` with a 30-second timeout;
 - configured replica count is one.
 
-Attach PostgreSQL so Railway supplies `DATABASE_URL`, or set
-`DND_DATABASE_URL`. Do not deploy publicly in the current authentication state;
-see [Security](security.md).
+Adding a Railway PostgreSQL service does not by itself inject its variables into
+the application service. Define a reference variable such as
+`DATABASE_URL=${{Postgres.DATABASE_URL}}`, using the actual database service
+name, or set `DND_DATABASE_URL` to an equivalent reference. Without it, the
+application falls back to local PostgreSQL and startup fails.
+
+The repository does not configure Railway `drainingSeconds`, so the checked-in
+deployment does not establish the greater-than-ten-second termination grace
+required above. Configure that service setting before relying on signal-based
+shutdown. Do not deploy publicly in the current authentication state; see
+[Security](security.md).
 
 ### Railway release checklist
 
@@ -127,11 +155,13 @@ see [Security](security.md).
    binary compatibility.
 3. Take/verify a database backup before a risky migration.
 4. Confirm Bun/Go versions and the build log shows Vite before Go.
-5. Confirm database URL and log level configuration.
-6. Deploy one instance and watch migration/startup logs.
-7. Verify `/api/health`, an SPA route, and representative authorized API reads.
-8. Verify a non-destructive SSE connection and a safe revision-guarded command.
-9. Monitor errors and database health through the release window.
+5. Confirm the application service has the PostgreSQL reference variable and the
+   expected log level.
+6. Configure a termination/draining grace period greater than ten seconds.
+7. Deploy one instance and watch migration/startup logs.
+8. Verify `/api/health`, an SPA route, and representative authorized API reads.
+9. Verify a non-destructive SSE connection and a safe revision-guarded command.
+10. Monitor errors and database health through the release window.
 
 ## Other hosting environments
 
@@ -142,7 +172,8 @@ A compatible platform must provide:
 - one HTTP port from `DND_ADDR` or `PORT`;
 - TLS termination/reverse proxy if exposed;
 - persistent database backups;
-- signal-based graceful shutdown;
+- signal delivery and a termination grace period longer than the application's
+  ten-second shutdown deadline;
 - stdout log collection;
 - sufficient startup time for migrations.
 
@@ -163,8 +194,9 @@ horizontal scaling:
 - the application has no server-local session state;
 - any replica can answer normal queries/commands;
 - SSE handlers poll shared PostgreSQL and can reconnect to another replica;
-- every connected Play client consumes one long-lived HTTP request plus regular
-  database polling;
+- every connected Play client attempts a streaming HTTP request and also polls
+  every three seconds; the fixed 30-second server write timeout can force stream
+  reconnection;
 - event delivery is at-least-observed through cursor replay, but it is an
   invalidation hint rather than a broker guarantee.
 
@@ -195,10 +227,11 @@ Editing an already-applied migration does not rerun it because
 
 ## Backup, restore, and rollback
 
-Application state includes user-authored configuration and immutable game
-history; back it up as durable business data. The repository provides no
-scheduled backup or restore automation. Use managed PostgreSQL point-in-time
-recovery and/or tested logical backups appropriate to the provider.
+Application state includes user-authored configuration and protected portions
+of live game history; back it up as durable business data. The repository
+provides no scheduled backup or restore automation. Use managed PostgreSQL
+point-in-time recovery and/or tested logical backups appropriate to the
+provider.
 
 For a binary-only regression with a backwards-compatible schema, redeploy the
 previous binary. For a migration/data regression, a binary rollback alone may
@@ -264,9 +297,10 @@ treated as an idempotency conflict and investigated rather than forced.
 1. Confirm active membership and identity header.
 2. Check proxy buffering and idle timeouts; the response sets no-buffer hints
    and sends keep-alives.
-3. Verify cursor syntax and inspect recent `game_events`.
-4. Check PostgreSQL/event query health.
-5. The frontend has a three-second query fallback, so distinguish stream failure
+3. Account for the fixed 30-second server write timeout and expected reconnects.
+4. Verify cursor syntax and inspect recent `game_events`.
+5. Check PostgreSQL/event query health.
+6. The frontend has a three-second query fallback, so distinguish stream failure
    from general API refresh failure.
 
 ## Production-readiness gaps
@@ -277,6 +311,8 @@ treated as an idempotency conflict and investigated rather than forced.
 - no metrics/tracing/alerts or audit trail for configuration changes;
 - no pool tuning or capacity test;
 - no multi-replica/load/SSE soak test;
+- SSE requests are not cancelled by the process root context and use a fixed
+  30-second write timeout;
 - no container/release pipeline beyond Railway configuration;
 - no documented provider-specific incident response or disaster-recovery SLO.
 

@@ -55,9 +55,11 @@ seed step; create all ruleset vocabulary through the application/API.
 
 ## Environment configuration
 
-The application does not load `.env` files and the repository has no example
-environment file. Export variables in the shell/process manager that launches
-the application.
+The Go application and root shell scripts do not source `.env` files, and the
+repository has no example environment file. Export backend variables in the
+shell/process manager that launches the application. Vite independently loads
+`.env`, `.env.local`, `.env.<mode>`, and `.env.<mode>.local` from
+`web/frontend/`; only `VITE_`-prefixed values are exposed to client code.
 
 ### Runtime variables
 
@@ -83,12 +85,12 @@ directly, not when using the managed local workflow.
 
 ### Test variables
 
-| Variable                     | Consumer              | Purpose                                                                                                              |
-| ---------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `DND_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable. |
-| `DND_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                           |
-| `DND_E2E_BROWSER_EXECUTABLE` | E2E                   | Explicit Chrome/Chromium executable.                                                                                 |
-| `PLAYWRIGHT_BROWSERS_PATH`   | Playwright/CI         | Browser cache/install location.                                                                                      |
+| Variable                     | Consumer              | Purpose                                                                                                                         |
+| ---------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `DND_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
+| `DND_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
+| `DND_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
+| `PLAYWRIGHT_BROWSERS_PATH`   | Playwright/CI         | Browser cache/install location.                                                                                                 |
 
 The E2E admin URL path is rewritten to `/postgres` for database administration.
 Use credentials that can safely operate there. The backend smoke behavior is
@@ -110,6 +112,9 @@ different: it applies migrations directly to `DND_TEST_DATABASE_URL`.
 
 Aliases include `up`, `down`, `ps`, `log`, `follow`, and service aliases such as
 `back`/`api` and `front`/`web`/`vite`.
+
+`logs` prints the managed log path or paths; it does not print their contents.
+Use `tail` to show the last 80 lines and continue following the selected logs.
 
 ### Backend behavior
 
@@ -294,8 +299,10 @@ abandoned `dnd_e2e_*` database if a previous process was forcibly interrupted.
 
 ### E2E browser fails
 
-Install Chrome/Chromium, provide `DND_E2E_BROWSER_EXECUTABLE`, or allow the
-harness to install Playwright Chromium. Inspect `test/artifacts/` after a test
+Install Playwright Chromium or Chrome/Chromium in one of the launcher's common
+system locations. `DND_E2E_BROWSER_EXECUTABLE` is not currently a reliable
+discovery bypass: the launcher performs discovery/install first and may replace
+the value with a detected system browser. Inspect `test/artifacts/` after a test
 failure.
 
 ## Working constraints

@@ -16,7 +16,7 @@ The schema uses:
 - composite foreign keys carrying `rule_set_id` or `game_id` to enforce scope;
 - check constraints for tagged shapes, bounds, statuses, and lifecycles;
 - partial unique indexes for one/set semantics and selected/idempotent records;
-- triggers for `updated_at` and immutable history.
+- triggers for `updated_at` and selected final/append-only history rows.
 
 ## Connection and privileges
 
@@ -67,22 +67,27 @@ or data repair framework.
 | `004_conditions.sql`          | Conditions           | Sets, parameters/schema requirements, recursive expressions, criteria, typed predicates.                         |
 | `005_problem_definitions.sql` | Configured problems  | Targets, invocations, choices, outcomes, consequences, effects, typed operands.                                  |
 | `006_problem_instances.sql`   | Configured instances | Instance/entity link, binding revision, ordered concrete target bindings.                                        |
-| `007_live_play.sql`           | Multiplayer Play     | Users, games, memberships, game entity scope, interactions/actions, immutable ruling receipts, events.           |
+| `007_live_play.sql`           | Multiplayer Play     | Users, games, memberships, game entity scope, interactions/actions, applied-receipt protection, event cursor.    |
 
 ## Logical schema
 
 ### Foundations
 
-| Table                  | Purpose                                                                       |
-| ---------------------- | ----------------------------------------------------------------------------- |
-| `rule_sets`            | Top-level mechanical isolation boundary and globally unique key.              |
-| `state_owner_schemas`  | User-authored ownership capabilities scoped to a ruleset.                     |
-| `entities`             | Generic state owners with optional ruleset-unique key.                        |
-| `entity_owner_schemas` | Many-to-many entity capability membership.                                    |
-| `state_records`        | One revision/timestamp root per entity, even when it has no scalar overrides. |
+| Table                  | Purpose                                                          |
+| ---------------------- | ---------------------------------------------------------------- |
+| `rule_sets`            | Top-level mechanical isolation boundary and globally unique key. |
+| `state_owner_schemas`  | User-authored ownership capabilities scoped to a ruleset.        |
+| `entities`             | Generic state owners with optional ruleset-unique key.           |
+| `entity_owner_schemas` | Many-to-many entity capability membership.                       |
+| `state_records`        | At most one revision/timestamp root per entity.                  |
 
 `state_owner_schemas` is the persisted table name for the domain/API concept
 “owner schema.”
+
+Public creation handlers insert a `state_records` row for every entity, including
+one with no scalar overrides, and loaders rely on that application invariant.
+The foreign key and primary key do not require the row to exist: direct SQL can
+create an entity without a state root, and inner-join loaders will omit it.
 
 ### State definitions and values
 
@@ -133,13 +138,15 @@ save validation require a complete tree.
 | `problem_choices`                           | Ordered choices and optional availability invocation.                  |
 | `choice_resolutions`                        | Automatic/condition resolution discriminator and invocation.           |
 | `choice_outcomes`                           | Automatic, met, or unmet outcome per choice.                           |
-| `consequence_sets`                          | One owned consequence container per outcome.                           |
+| `consequence_sets`                          | At most one owned consequence container per outcome.                   |
 | `effects`                                   | Ordered configured state operations against abstract targets.          |
 | `effect_value_operands`                     | Typed set/add/remove operand scalar rows.                              |
 
 Several problem references are deferrable because invocations, choices, and
 their owning problem form a cyclic aggregate during replacement. Application
-validation still performs semantic checks before commit.
+validation still performs semantic checks and requires complete resolution and
+outcome structures before commit; not every exact-one relationship is enforced
+from parent to child by a foreign key.
 
 ### Problem instances
 
@@ -208,7 +215,13 @@ are unique by effect/entity, and before/after phases are exactly enumerated.
 Event IDs are generated `bigint` identities and indexed by `(game_id, id)`.
 The payload is intentionally not a JSON state snapshot. Current event types
 cover game, membership, entity assignment, interaction lifecycle, submission,
-and resolution changes.
+and resolution changes. `resolution-updated` is allowed by the schema but no
+current handler emits it.
+
+The schema validates the event type and game scope of any populated resource
+IDs, but it does not require the actor/resource ID combination appropriate to
+each type. Inserts remain allowed. `game_events` is therefore an append-only
+invalidation cursor, not a tamper-evident or semantically complete audit log.
 
 ## Typed scalar storage
 
@@ -254,9 +267,12 @@ for example:
     → game_entities(entity_id, game_id)
 ```
 
-This makes cross-scope data invalid even if application code is bypassed.
-Domain validation provides better messages and rules that cannot be expressed
-comfortably as static SQL constraints, such as schema-set implications.
+These constraints make those references cross-scope-invalid even if application
+code is bypassed. Generic defaults and `state_values` carry only ruleset scope;
+assigning an entity to a game does not require every generic reference reachable
+from it to be assigned to that game. Domain validation provides better messages
+and rules that cannot be expressed comfortably as static SQL constraints, such
+as schema-set implications.
 
 ## Revisions and timestamps
 
@@ -272,7 +288,8 @@ increments a revision; it does not.
 
 Migration 007 adds triggers that:
 
-- reject updates/deletes once an interaction is resolved or cancelled;
+- reject updates/deletes of an `interactions` root row once it is resolved or
+  cancelled;
 - reject updates/deletes once a resolution is applied;
 - reject inserts/updates/deletes of children owned by an applied resolution;
 - prevent reparenting of receipt child rows;
@@ -281,9 +298,17 @@ Migration 007 adds triggers that:
   before/after value sets;
 - reject every update/delete of `game_events`.
 
-These are database audit guarantees, not merely API behavior. An applied receipt
-is deliberately hard to “fix” in place; corrections should be represented by a
-new later domain action rather than rewriting history.
+Audience, responder, context, and action-submission rows have no equivalent
+final-interaction trigger and remain directly mutable after resolution or
+cancellation. Event inserts also remain allowed. The applied receipt tree is the
+strong immutable portion of the record and is deliberately hard to “fix” in
+place; corrections should be represented by a new later domain action rather
+than rewriting it.
+
+These are DML protections while the triggers remain installed, not
+tamper-evidence against the configured database role. Startup migrations and
+normal runtime use the same DDL-capable connection, so a holder of those
+credentials can alter schema protections.
 
 ## Delete and archive behavior
 
@@ -375,7 +400,12 @@ durable play history.
 A typical logical backup is:
 
 ```sh
-pg_dump --format=custom --no-owner --file=dnd.dump "$DND_DATABASE_URL"
+database_url="${DND_DATABASE_URL:-${DATABASE_URL:-}}"
+if [ -z "$database_url" ]; then
+  echo "DND_DATABASE_URL or DATABASE_URL is required" >&2
+  exit 1
+fi
+pg_dump --format=custom --no-owner --file=dnd.dump "$database_url"
 ```
 
 Restore into an empty, access-controlled database with compatible PostgreSQL
@@ -399,6 +429,7 @@ incident; the migration runner itself cannot roll back.
 - no separate least-privilege migration/runtime roles;
 - no connection-pool tuning through application environment variables;
 - no database metrics or slow-query integration;
+- no per-migration version, progress, or duration logging;
 - no online/expand-contract migration framework;
 - no cleanup tool for abandoned E2E databases after a forcibly interrupted
   run.
