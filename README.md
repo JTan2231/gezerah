@@ -1,17 +1,17 @@
-# Stateful Rule Composer and Game Player
+# Worldwright
 
-This repository implements a configurable, typed state-transition system. Rule
-authors define owner schemas, entities, state variables, reusable conditions,
-problems, target bindings, choices, and ordered effects without a built-in
-world ontology. The Play surface adds games with real participant memberships:
-a facilitator can present an improvised interaction, players submit free-form
-actions, and the facilitator commits a public narrative plus optional typed
-effects. The state update and its normalized receipt are atomic.
+Worldwright is a collaborative world editor and live play table. Authors define
+the capacities and capabilities that matter in a world, create people and other
+stateful subjects from that vocabulary, and invite the table with expiring
+links. During play, a facilitator presents problems in the moment, players
+offer free-form actions, and the facilitator commits a narrative ruling plus
+optional typed effects. Problems are never required as advance configuration.
 
-Rulesets define the mechanical vocabulary. A game maps an exclusive subset of
-one ruleset's generic entities into a live runtime world. Users and memberships
-are separate from those fictional entities; “Dungeon Master” is presented as
-the game-level `facilitator` role, not a privileged schema or configured key.
+The implementation is backed by a configurable typed state-transition engine.
+It has no built-in world ontology, entity classes, privileged configured keys,
+or seed vocabulary. Real users and world memberships are separate from the
+fictional subjects they control; “Dungeon Master” is a product role, not a
+special mechanic or configured key.
 
 ## Documentation
 
@@ -41,12 +41,15 @@ createdb dnd
 Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-Use the Build sections to author schemas, variables, entities, conditions, and
-optional configured problems. Use **Play** to select a development user, create
-or select an assigned game, enroll unassigned entities, present interactions,
-submit player actions, preview rulings, resolve them, and archive a completed
-game while retaining its read-only history. The legacy Runtime section remains
-the ruleset-scoped simulator for configured problem definitions.
+Choose a local development profile, then create a world or open one you have
+joined. **Configure** defines capacities, capabilities, people, invitations,
+and world settings. **Play** is the live table: present an ad-hoc problem,
+collect player actions, preview a narrative ruling and its effects, then commit
+an immutable resolution receipt.
+
+The generic configured-problem API remains as an engine compatibility surface,
+but it is not part of the product UI and new worlds do not create configured
+problems.
 
 Useful process commands:
 
@@ -108,7 +111,8 @@ and `e2e`.
 When `DND_TEST_DATABASE_URL` is set, the backend target also starts the built
 application against that explicitly disposable test database, validating the
 complete migration chain. End-to-end tests create their own disposable database
-and exercise both configured transitions and the multiplayer Play loop.
+and exercise world privacy, invitations, authored mechanics, generated sheets,
+and the multiplayer ad-hoc Play loop.
 
 ## Deployment
 

@@ -1,0 +1,207 @@
+import { useEffect, type ReactNode } from "react";
+
+import type { ApiError } from "../api/client";
+import { humanize } from "../domain/display";
+
+export function Brand({ compact = false }: { compact?: boolean }) {
+  return (
+    <span
+      className={compact ? "studio-brand studio-brand-compact" : "studio-brand"}
+    >
+      <span className="brand-glyph" aria-hidden="true">
+        W
+      </span>
+      <span className="brand-copy">
+        <strong>Worldwright</strong>
+        {!compact ? <small>Stories, held together.</small> : null}
+      </span>
+    </span>
+  );
+}
+
+export function Avatar({
+  name,
+  size = "normal",
+}: {
+  name: string;
+  size?: "small" | "normal";
+}) {
+  const initials = name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+  return (
+    <span className={`avatar avatar-${size}`} aria-hidden="true">
+      {initials || "?"}
+    </span>
+  );
+}
+
+export function PageIntro({
+  eyebrow,
+  title,
+  description,
+  actions,
+}: {
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: ReactNode;
+}) {
+  return (
+    <header className="page-intro">
+      <div>
+        {eyebrow === undefined ? null : <p className="eyebrow">{eyebrow}</p>}
+        <h1>{title}</h1>
+        {description === undefined ? null : <p>{description}</p>}
+      </div>
+      {actions === undefined ? null : (
+        <div className="page-actions">{actions}</div>
+      )}
+    </header>
+  );
+}
+
+export function Field({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string | undefined;
+  error?: string | undefined;
+  children: ReactNode;
+}) {
+  return (
+    <label className={error === undefined ? "field" : "field field-error"}>
+      <span className="field-label">{label}</span>
+      {children}
+      {error === undefined ? null : (
+        <span className="field-message">{error}</span>
+      )}
+      {error !== undefined || hint === undefined ? null : (
+        <span className="field-hint">{hint}</span>
+      )}
+    </label>
+  );
+}
+
+export function ErrorMessage({
+  error,
+  onRetry,
+}: {
+  error: ApiError;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="notice notice-error" role="alert">
+      <div>
+        <strong>
+          {error.code === "network_error"
+            ? "Connection lost"
+            : "That did not work"}
+        </strong>
+        <p>{error.message}</p>
+      </div>
+      {onRetry === undefined ? null : (
+        <button className="button button-quiet" type="button" onClick={onRetry}>
+          Try again
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function LoadingState({ label = "Loading" }: { label?: string }) {
+  return (
+    <div className="loading-state" role="status">
+      <span className="loading-orbit" aria-hidden="true" />
+      <span>{label}</span>
+    </div>
+  );
+}
+
+export function EmptyState({
+  symbol,
+  title,
+  description,
+  action,
+}: {
+  symbol?: string;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="empty-state">
+      {symbol === undefined ? null : (
+        <span className="empty-symbol" aria-hidden="true">
+          {symbol}
+        </span>
+      )}
+      <h2>{title}</h2>
+      <p>{description}</p>
+      {action === undefined ? null : <div>{action}</div>}
+    </div>
+  );
+}
+
+export function Modal({
+  title,
+  description,
+  onClose,
+  children,
+}: {
+  title: string;
+  description?: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
+
+  return (
+    <div className="modal-backdrop">
+      <button
+        className="modal-dismiss"
+        type="button"
+        aria-label="Close dialog"
+        onClick={onClose}
+      />
+      <section
+        className="modal-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="modal-title"
+      >
+        <header className="modal-header">
+          <div>
+            <h2 id="modal-title">{title}</h2>
+            {description === undefined ? null : <p>{description}</p>}
+          </div>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Close"
+            onClick={onClose}
+          >
+            ×
+          </button>
+        </header>
+        {children}
+      </section>
+    </div>
+  );
+}
+
+export function RolePill({ role }: { role: string }) {
+  return <span className={`role-pill role-${role}`}>{humanize(role)}</span>;
+}

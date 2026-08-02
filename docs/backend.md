@@ -91,6 +91,9 @@ HTTP and persistence adapter. Naming follows a consistent pattern:
 - `domain_loaders.go`: common ruleset-domain loading through a small `queryer`
   interface implemented by both pools and transactions;
 - `interaction_receipts.go`: immutable live ruling receipt persistence/loading;
+- `handlers_worlds.go`, `handlers_world_mechanics.go`, and
+  `handlers_world_entities.go`: the authorized world product adapter over
+  normalized ruleset, game, state-definition, and entity resources;
 - `server.go`, `json.go`, `config.go`: cross-cutting server infrastructure.
 
 The files are organized by resource rather than by a generic repository

@@ -68,6 +68,7 @@ or data repair framework.
 | `005_problem_definitions.sql` | Configured problems  | Targets, invocations, choices, outcomes, consequences, effects, typed operands.                                  |
 | `006_problem_instances.sql`   | Configured instances | Instance/entity link, binding revision, ordered concrete target bindings.                                        |
 | `007_live_play.sql`           | Multiplayer Play     | Users, games, memberships, game entity scope, interactions/actions, applied-receipt protection, event cursor.    |
+| `008_world_studio.sql`        | World product model  | World/game pairing, world roles, hashed invite links/redemptions, capacity/capability classification.             |
 
 ## Logical schema
 
@@ -170,6 +171,31 @@ structurally also a generic entity/state owner.
 
 `game_entities.entity_id` is the primary key, enforcing assignment to at most
 one game. Composite foreign keys prove that game and entity share a ruleset.
+
+### World studio
+
+| Table                       | Purpose                                                                                      |
+| --------------------------- | -------------------------------------------------------------------------------------------- |
+| `world_profiles`            | Pairs one backing ruleset with one primary game and stores world status/revision.             |
+| `world_memberships`         | Owner/editor/player/spectator role and lifecycle for one user in one world.                   |
+| `world_invites`             | Expiring/revocable role offer with unique SHA-256 token digest and use count.                 |
+| `world_invite_redemptions`  | One durable redemption per invite/user linked to the resulting world membership.             |
+| `world_mechanics`           | Capacity/capability kind, author-facing mode, and live-mutation flag for a state definition.  |
+
+`world_profiles.primary_game_id` has a composite foreign key proving that the
+game belongs to the same ruleset. World and game memberships remain separate
+because their role vocabularies serve different boundaries; application
+transactions create/redeem them together.
+
+Invite rows never store raw bearer tokens. The application stores a lowercase
+64-character SHA-256 hex digest and returns the raw URL-safe token only from the
+create response. Redemption rows keep use counting idempotent per invite/user.
+
+`world_mechanics.state_variable_id` is both its primary key and a composite
+foreign key to a normalized definition in the same ruleset. The table does not
+duplicate defaults, bounds, values, or effect operations. World mechanic
+definitions intentionally have no rows in `state_variable_owner_schemas`; an
+empty definition owner set is the engine's explicit universal case.
 
 ### Interactions and actions
 

@@ -10,6 +10,27 @@ interface RuleSetResponse {
   name: string;
 }
 
+interface WorldResponse {
+  id: string;
+  name: string;
+  role: "owner" | "editor" | "player" | "spectator";
+  capacity_count: number;
+  capability_count: number;
+}
+
+interface WorldMechanicResponse {
+  id: string;
+  kind: "capacity" | "capability";
+  mode: "score" | "pool" | "binary" | "rating";
+  name: string;
+}
+
+interface WorldEntityResponse {
+  id: string;
+  display_name: string;
+  state: StateResponse;
+}
+
 interface EntityResponse {
   id: string;
   key?: string;
@@ -68,108 +89,135 @@ interface ConditionEvaluationResponse {
   }>;
 }
 
-test("an author configures typed state through the accessible UI", async ({
+test("an author creates a world whose entity sheets stem from capacities and capabilities", async ({
   page,
 }) => {
   const baseURL = await readBaseURL();
-  await page.goto(`${baseURL}/app/overview`);
+  const unique = randomUUID().slice(0, 8);
+  const authorName = `World Author ${unique}`;
+  await page.goto(`${baseURL}/worlds`);
 
   await expect(
-    page.getByRole("heading", { name: "Compose a world with explicit rules." }),
+    page.getByRole("heading", { name: "Who is opening the book?" }),
   ).toBeVisible();
-  const rulesetName = page.getByLabel("Ruleset name");
-  await page.keyboard.press("Tab");
-  await expect(rulesetName).toBeFocused();
-  await rulesetName.fill("E2E Rules");
-  await page.getByLabel("Stable key").fill("e2e-rules");
+  await page.getByLabel("Your display name").fill(authorName);
+  await page.getByRole("button", { name: "Create local profile" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Where are we headed?" }),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Create world" }).click();
+  await page.getByLabel("World name").fill(`Ember Coast ${unique}`);
+  await page
+    .getByLabel("Short description")
+    .fill("A rain-soaked frontier made at the table.");
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Create world" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Capacities" })).toBeVisible();
+
+  await page.getByRole("button", { name: "New capacity" }).click();
+  await page.getByLabel("Name").fill("Resolve");
+  await page.getByLabel("Description").fill("Composure under pressure.");
+  await page.getByRole("radio", { name: /Pool/ }).check();
+  await page.getByLabel("Default").fill("8");
+  await page.getByLabel("Minimum").fill("0");
+  await page.getByLabel("Maximum").fill("12");
+  await page.getByLabel("Step").fill("1");
+  await page.getByLabel("Unit").fill("grit");
+  await page.getByRole("button", { name: "Create capacity" }).click();
+  await expect(page.getByText("All changes saved")).toBeVisible();
+
+  await page.getByRole("button", { name: /Capabilities/ }).click();
+  await page.getByRole("button", { name: "New capability" }).click();
+  await page.getByLabel("Name").fill("Climbing");
   await page
     .getByLabel("Description")
-    .fill("Disposable browser acceptance ruleset.");
-  await page.getByRole("button", { name: "Create ruleset" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Build semantics before scenarios." }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Owner schemas" }).click();
-  await page.getByRole("button", { name: /Schema$/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "New owner schema" }),
-  ).toBeVisible();
-  await page.getByLabel("Label").fill("Stateful");
-  await page.getByLabel("Stable key").fill("stateful");
-  await page.getByRole("button", { name: "Save" }).click();
+    .fill("Moving safely across steep or unstable ground.");
+  await page.getByRole("button", { name: "Create capability" }).click();
   await expect(page.getByText("All changes saved")).toBeVisible();
 
-  await page.getByRole("button", { name: "Entities" }).click();
-  await page.getByRole("button", { name: /Entity$/ }).click();
-  await expect(page.getByRole("heading", { name: "New entity" })).toBeVisible();
-  await page.getByLabel("Display name").fill("Control Panel");
-  await page.getByLabel("Stable key").fill("control-panel");
-  await page.getByRole("checkbox", { name: /Stateful/ }).check();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
-
-  await page.getByRole("button", { name: "State variables" }).click();
-  await page.getByRole("button", { name: /Variable$/ }).click();
-  await expect(
-    page.getByRole("heading", { name: "New state variable" }),
-  ).toBeVisible();
-  await page.getByLabel("Label").fill("Powered");
-  await page.getByLabel("Stable namespaced key").fill("core-powered");
-  await page.getByRole("checkbox", { name: /Stateful/ }).check();
+  await page.getByRole("button", { name: /Enter play/ }).click();
+  await expect(page.getByText("The table is listening")).toBeVisible();
+  await page.getByRole("button", { name: "Create entity" }).first().click();
+  await page.getByLabel("Display name").fill("Aria Vale");
   await page
-    .getByRole("group", { name: "Scalar kind" })
-    .getByRole("radio", { name: /^Boolean/ })
-    .check();
-  await page.getByRole("checkbox", { name: "Set the complete value" }).check();
-  await page
-    .getByRole("checkbox", { name: "Clear to missing behavior" })
-    .check();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
+    .getByRole("dialog")
+    .getByRole("button", { name: "Create entity" })
+    .click();
+  await expect(page.getByRole("heading", { name: "Aria Vale" })).toBeVisible();
+  await page.getByLabel("Resolve").fill("6");
+  await page.getByLabel("Climbing").check();
+  await page.getByRole("button", { name: "Save sheet" }).click();
+  await expect(page.getByText("state r1")).toBeVisible();
 
-  await page.getByRole("button", { name: "State inspector" }).click();
-  await page.getByLabel("Entity").selectOption({ label: "Control Panel" });
-  await expect(
-    page.getByRole("heading", { name: "Control Panel" }),
-  ).toBeVisible();
-  await expect(page.getByText("Unknown", { exact: true })).toBeVisible();
-  await page.getByRole("radio", { name: "Override value" }).check();
-  await page.getByRole("radio", { name: "True", exact: true }).check();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("All changes saved")).toBeVisible();
-  await expect(page.getByText("r1", { exact: true })).toBeVisible();
-
-  const rulesets = await getJSON<RuleSetResponse[]>(
-    page,
-    `${baseURL}/api/rule-sets`,
+  const authorID = await page.evaluate(
+    () => localStorage.getItem("dnd.selected-user") ?? "",
   );
-  const ruleSet = rulesets.find((item) => item.key === "e2e-rules");
-  expect(ruleSet).toBeDefined();
-  const entities = await getJSON<EntityResponse[]>(
+  expect(authorID).not.toBe("");
+  const worlds = await getJSON<WorldResponse[]>(
     page,
-    `${baseURL}/api/rule-sets/${ruleSet?.id}/entities`,
+    `${baseURL}/api/worlds`,
+    authorID,
   );
-  const entity = entities.find((item) => item.key === "control-panel");
-  expect(entity).toBeDefined();
-  const variables = await getJSON<VariableResponse[]>(
+  expect(worlds).toHaveLength(1);
+  expect(worlds[0]).toMatchObject({
+    role: "owner",
+    capacity_count: 1,
+    capability_count: 1,
+  });
+  const world = worlds[0];
+  expect(world).toBeDefined();
+  const mechanics = await getJSON<WorldMechanicResponse[]>(
     page,
-    `${baseURL}/api/rule-sets/${ruleSet?.id}/state-variable-definitions`,
+    `${baseURL}/api/worlds/${world?.id}/mechanics`,
+    authorID,
   );
-  const variable = variables.find((item) => item.key === "core-powered");
-  expect(variable).toBeDefined();
-  const state = await getJSON<{
-    revision: number;
-    values: Record<string, unknown>;
-  }>(
+  expect(mechanics).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        kind: "capacity",
+        mode: "pool",
+        name: "Resolve",
+      }),
+      expect.objectContaining({
+        kind: "capability",
+        mode: "binary",
+        name: "Climbing",
+      }),
+    ]),
+  );
+  const entities = await getJSON<WorldEntityResponse[]>(
     page,
-    `${baseURL}/api/rule-sets/${ruleSet?.id}/entities/${entity?.id}/state`,
+    `${baseURL}/api/worlds/${world?.id}/entities`,
+    authorID,
   );
-  expect(state.revision).toBe(1);
-  expect(state.values[variable?.id ?? ""]).toEqual({
+  const aria = entities.find((entity) => entity.display_name === "Aria Vale");
+  const resolve = mechanics.find((mechanic) => mechanic.name === "Resolve");
+  const climbing = mechanics.find((mechanic) => mechanic.name === "Climbing");
+  expect(aria?.state.values[resolve?.id ?? ""]).toEqual({
+    kind: "number",
+    value: 6,
+  });
+  expect(aria?.state.values[climbing?.id ?? ""]).toEqual({
     kind: "boolean",
     value: true,
   });
+
+  const outsider = await postJSON<{ id: string }>(
+    page,
+    `${baseURL}/api/users`,
+    { display_name: `Outsider ${unique}` },
+  );
+  expect(
+    await getJSON<WorldResponse[]>(page, `${baseURL}/api/worlds`, outsider.id),
+  ).toEqual([]);
+  const forbidden = await page.request.get(
+    `${baseURL}/api/worlds/${world?.id}`,
+    { headers: identityHeaders(outsider.id) },
+  );
+  expect(forbidden.status()).toBe(403);
 });
 
 test("preview is advisory and resolution atomically persists authored effects", async ({
@@ -318,31 +366,15 @@ test("preview is advisory and resolution atomically persists authored effects", 
   );
   expect(stateAfterAPIPreview).toEqual(initialState);
 
-  await page.goto(`${baseURL}/app/runtime`);
-  await page.getByLabel("Ruleset").selectOption({ label: ruleSet.name });
-  await page
-    .getByLabel("Problem instance")
-    .selectOption({ label: "Training Dummy" });
-  await expect(
-    page.getByRole("heading", { name: "Take ten damage" }),
-  ).toBeVisible();
-  await expect(page.getByText("Available", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  await expect(
-    page.getByText("Advisory preview", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("State changed", { exact: true })).toBeVisible();
-
-  const stateAfterUIPreview = await getJSON<StateResponse>(
+  const applied = await postJSON<ResolutionResponse>(
     page,
-    `${ruleSetURL}/entities/${instance.id}/state`,
+    `${operationURL}/resolve`,
+    {
+      expected_binding_revision: 0,
+      expected_state_revisions: { [instance.id]: 0 },
+    },
   );
-  expect(stateAfterUIPreview).toEqual(initialState);
-
-  await page.getByRole("button", { name: "Resolve choice" }).click();
-  await expect(
-    page.getByText("Transition applied", { exact: true }),
-  ).toBeVisible();
+  expect(applied.status).toBe("applied");
   const resolvedState = await getJSON<StateResponse>(
     page,
     `${ruleSetURL}/entities/${instance.id}/state`,
@@ -370,17 +402,10 @@ test("preview is advisory and resolution atomically persists authored effects", 
   );
   expect(stateAfterConflict).toEqual(resolvedState);
 
-  await page.getByRole("button", { name: "State inspector" }).click();
-  await page.getByLabel("Entity").selectOption({ label: "Training Dummy" });
-  await expect(
-    page.getByText("Stored override", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("radio", { name: "Use default" }).check();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Defaulted", { exact: true })).toBeVisible();
-  const defaultedState = await getJSON<StateResponse>(
+  const defaultedState = await putJSON<StateResponse>(
     page,
     `${ruleSetURL}/entities/${instance.id}/state`,
+    { expected_revision: 1, values: {} },
   );
   expect(defaultedState.revision).toBe(2);
   expect(defaultedState.values[health.id]).toEqual({
@@ -634,8 +659,11 @@ test("conditions drive authoritative outcomes and invalid effects roll back", as
 async function getJSON<T>(
   page: import("@playwright/test").Page,
   url: string,
+  userId?: string,
 ): Promise<T> {
-  const response = await page.request.get(url);
+  const response = await page.request.get(url, {
+    ...(userId === undefined ? {} : { headers: identityHeaders(userId) }),
+  });
   expect(response.ok(), `${response.status()} ${url}`).toBe(true);
   return (await response.json()) as T;
 }
@@ -644,8 +672,12 @@ async function postJSON<T>(
   page: import("@playwright/test").Page,
   url: string,
   data: unknown,
+  userId?: string,
 ): Promise<T> {
-  const response = await page.request.post(url, { data });
+  const response = await page.request.post(url, {
+    data,
+    ...(userId === undefined ? {} : { headers: identityHeaders(userId) }),
+  });
   expect(
     response.ok(),
     `${response.status()} ${url}: ${await response.text()}`,
@@ -657,11 +689,19 @@ async function putJSON<T>(
   page: import("@playwright/test").Page,
   url: string,
   data: unknown,
+  userId?: string,
 ): Promise<T> {
-  const response = await page.request.put(url, { data });
+  const response = await page.request.put(url, {
+    data,
+    ...(userId === undefined ? {} : { headers: identityHeaders(userId) }),
+  });
   expect(
     response.ok(),
     `${response.status()} ${url}: ${await response.text()}`,
   ).toBe(true);
   return (await response.json()) as T;
+}
+
+function identityHeaders(userId: string): Record<string, string> {
+  return { "X-DND-User-ID": userId };
 }

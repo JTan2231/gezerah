@@ -125,7 +125,9 @@ PostgreSQL integration fixture. They cover:
 - condition/problem/interaction mappings and generated IDs;
 - archived-reference and dependency guards;
 - event cursor parsing and matching;
-- development identity vocabulary and live effect validation.
+- development identity vocabulary and live effect validation;
+- universal owner-set mechanics, world key generation, invite token hashing,
+  and capacity/capability definition mapping.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -134,10 +136,9 @@ Playwright rather than a dedicated Go handler/database suite.
 
 Bun tests under `web/frontend/src/domain/*.test.ts` cover pure helpers:
 
-- metadata-driven presentation/effect compatibility and defaults;
-- condition summary generation;
-- deep choice draft duplication and ID/key behavior;
-- live concrete effect eligibility and construction.
+- human-readable API vocabulary and past/future relative timestamps;
+- invite/world route parsing, URL encoding, default sections, and selected
+  mechanic round trips.
 
 There are no current component-rendering unit tests.
 
@@ -145,8 +146,8 @@ There are no current component-rendering unit tests.
 
 `test/specs/configuration.spec.ts` exercises:
 
-- label/role-addressable ruleset/schema/entity/Boolean-state authoring and one
-  initial keyboard-focus check;
+- development identity, world creation, capacity/capability authoring, generated
+  entity sheets, direct setup state, world-list isolation, and role denial;
 - advisory configured preview versus atomic resolve;
 - stale state revision conflict and default normalization;
 - condition unknown/unmet/met behavior;
@@ -154,17 +155,14 @@ There are no current component-rendering unit tests.
 
 `test/specs/play.spec.ts` exercises:
 
-- local users, game/membership/entity setup;
-- facilitator/player/spectator permissions;
-- game-safe entity/variable filtering;
-- private-note omission;
-- interaction presentation, action submission, adjudication, preview, resolve,
-  idempotent replay, and narrative-only rulings;
-- resolved-receipt display and game archive guards;
-- separate browser contexts receiving live refresh without private data, an
-  application SSE request, and a directly observed server-sent event. The
-  three-second polling fallback means the test does not isolate SSE as the
-  cause of each UI refresh.
+- membership-filtered world lists and forbidden direct reads;
+- opaque public invite preview, redemption, role assignment, editor-only invite
+  creation, revocation, and closed-link rejection;
+- confirmation that a new world has no configured problem definitions;
+- separate facilitator/player browser contexts receiving an improvised prompt;
+- player action submission, private adjudication, action selection, effect
+  construction, advisory preview, atomic resolve, receipt/history display, and
+  generated-sheet state refresh.
 
 ## E2E harness lifecycle
 

@@ -82,9 +82,6 @@ func ValidateStateVariableDefinition(definition StateVariableDefinition, schemas
 	if definition.Cardinality != CardinalityOne && definition.Cardinality != CardinalityMany {
 		errs = append(errs, validation("unsupported", "cardinality", "cardinality must be one or many"))
 	}
-	if len(definition.OwnerSchemaIDs) == 0 {
-		errs = append(errs, validation("required", "owner_schema_ids", "at least one owner schema is required"))
-	}
 	for _, duplicate := range duplicateIDs(definition.OwnerSchemaIDs) {
 		errs = append(errs, validation("duplicate", "owner_schema_ids", fmt.Sprintf("owner schema %q is repeated", duplicate)))
 	}

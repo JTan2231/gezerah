@@ -7,8 +7,10 @@ public or untrusted-network exposure.
 
 The selected browser user UUID is stored in local storage and sent as
 `X-DND-User-ID`. Any client can forge that header. `GET /api/users` exposes
-local users, `POST /api/users` creates them without authentication, and the
-ruleset authoring/state/runtime endpoints have no authentication checks at all.
+local users and `POST /api/users` creates them without authentication. World
+endpoints enforce membership and role after resolving that header, while the
+older generic ruleset authoring/state/runtime endpoints still have no
+authentication checks at all.
 
 Server-side game role checks are valuable authorization logic, but they do not
 turn a forgeable identity into authentication.
@@ -20,6 +22,11 @@ turn a forgeable identity into authentication.
 | SPA/static assets        | None                                           | Public content.                                                                    |
 | `/api/health`            | None                                           | Reveals service/database readiness.                                                |
 | `/api/users` GET/POST    | None                                           | Users can be enumerated/created.                                                   |
+| `GET /api/world-invites/{token}` | Opaque bearer token                  | Exposes invite preview for an active, unexpired, non-revoked link.                 |
+| `POST /api/world-invites/{token}/redeem` | Known UUID header + bearer token | Creates matching world/game membership.                                           |
+| World list/read          | Known UUID + active world membership           | Returns only worlds the resolved user owns or joined.                              |
+| World configuration     | Active owner/editor membership                 | Capacity/capability/entity/invite mutation; active-world lifecycle required.       |
+| World archive           | Active owner membership                        | Requires no unfinished interaction.                                                |
 | `/api/rule-sets/**`      | None                                           | Any reachable client can read/change all authored configuration and generic state. |
 | `POST /api/games`        | Known UUID header                              | Any known user can create a game for any ruleset and claim unassigned entities.    |
 | `GET /api/games`         | Known UUID header                              | Returns games in which that user has an active membership.                         |
@@ -36,6 +43,14 @@ control.
 Within the trusted identity assumption, the server enforces:
 
 - acting user is derived from the header, never chosen in a command body;
+- world lists are membership-filtered and direct world reads require active
+  membership;
+- world configuration/invite creation requires owner/editor and archive
+  requires owner;
+- invite tokens are stored only as SHA-256 digests, expire, can be revoked, and
+  count one redemption per invite/user pair;
+- invite redemption updates world and primary-game memberships in one
+  transaction and does not escalate an already-active member's role;
 - active membership is required to read a game/connect its event stream;
 - facilitator role is required for game management and interaction rulings;
 - only eligible active players can submit, at most one current action each;
@@ -55,8 +70,8 @@ Within the trusted identity assumption, the server enforces:
   and existing event rows have PostgreSQL immutability triggers.
 
 Tests exercise role denials, visibility, private-field omission, game scope, and
-multi-browser event behavior. These checks should be preserved when real
-authentication is added.
+multi-browser event behavior, plus world-list isolation and invite redemption.
+These checks should be preserved when real authentication is added.
 
 ## Data boundaries
 
@@ -66,6 +81,20 @@ Composite database foreign keys and domain checks prevent configuration and
 generic state references from crossing rulesets. This is data integrity, not
 tenant isolation: every caller can currently access every ruleset authoring
 endpoint.
+
+World APIs provide a narrower tenant-like view over that same data and should
+be the only configuration surface exposed by the product frontend. They do not
+make the legacy endpoints safe; a reachable caller can bypass world membership
+by using the trusted generic paths directly.
+
+### Invite bearer scope
+
+The raw invite token is returned only at creation and is not recoverable from
+the database or invite-list API. Anyone holding a valid token can preview the
+world and redeem the offered role using any forgeable development identity.
+There is no maximum-use limit, email binding, rate limit, or token-audience
+binding. Production deployment needs authenticated accounts, abuse controls,
+and an explicit invitation policy.
 
 ### Game scope
 

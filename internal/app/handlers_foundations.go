@@ -20,6 +20,8 @@ var (
 )
 
 func (s *Server) registerResourceRoutes() {
+	s.registerWorldRoutes()
+
 	s.api.HandleFunc("GET /api/rule-sets", s.handleListRuleSets)
 	s.api.HandleFunc("POST /api/rule-sets", s.handleCreateRuleSet)
 	s.api.HandleFunc("GET /api/rule-sets/{rule_set_id}", s.handleGetRuleSet)

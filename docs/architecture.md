@@ -2,21 +2,28 @@
 
 ## Purpose and boundaries
 
-The application is a configurable typed state-transition system. It lets users
-author a mechanical vocabulary without baking a particular game world's
-ontology into the codebase. That vocabulary can then be exercised by either a
-configured problem simulator or an improvised multiplayer game loop.
+The application is a world-centered typed state-transition system. Authors
+define only the capacities and capabilities that matter, without baking a game
+ontology into the codebase. Entity sheets are generated from that static
+configuration; actual problems are improvised in the multiplayer loop.
+
+The generic rules engine still supports configured conditions/problems as a
+compatibility and testing surface, but the product frontend does not expose
+them and new world flows must not require them.
 
 The system owns:
 
 - ruleset-scoped configuration and generic entities;
+- authorized world profiles, memberships, and expiring bearer invitations;
+- universal capacity/capability definitions over normalized typed state;
 - typed entity state and optimistic revisions;
 - reusable conditions and configured problem definitions;
 - configured problem instances and choice resolution;
 - development users, games, memberships, entity assignment, and live
   interactions;
 - atomic application and immutable receipts for live rulings;
-- the authoring and Play browser interface.
+- the world library, static configuration, invitation, and live-table browser
+  interface.
 
 The system does not currently own:
 
@@ -94,14 +101,37 @@ flowchart TD
 
 ### Browser layer
 
+The browser layer has three top-level states: development identity selection,
+the membership-filtered world library, and one role-aware world workspace.
+World configuration is a master-detail editor for capacities/capabilities plus
+people/settings. Play reuses the existing authorized game/interaction handlers
+and treats SSE rows as reload signals.
+
+Routing is implemented with the History API and preserves invite tokens through
+the identity gate. There is no frontend route that authors a reusable problem.
+
+### World application layer
+
+`internal/app/handlers_worlds.go`, `handlers_world_mechanics.go`, and
+`handlers_world_entities.go` adapt the world product model to existing
+normalized resources. World creation establishes its ruleset, primary game,
+owner world membership, and facilitator game membership in one transaction.
+Invite redemption establishes paired memberships in one transaction.
+
+World mechanics are ordinary normalized state-variable definitions with an
+explicit empty/universal owner-schema set. `world_mechanics` stores only the
+author-facing kind, mode, and live-mutation flag; values/defaults/effect
+allowlists remain in the existing typed tables.
+
 The React application is a client-rendered SPA with a small history-based route
 helper rather than an external router. Feature screens own server collections
-and edit drafts. Shared components provide workspaces, typed value editors, and
-effect editors. Ordinary JSON calls pass through one fetch adapter, which adds
-JSON headers, maps the error envelope, and attaches the selected development
-user when present. The game-event hook uses a separate streaming `fetch`, adds
-the identity header itself, reconnects with its cursor, and keeps a three-second
-query-polling fallback active.
+and edit drafts. Shared components provide the world shell, mechanic editor,
+generated sheets, invite modal, and ruling-effect builder. Ordinary JSON calls
+pass through one fetch adapter, which adds JSON headers, maps the error
+envelope, and attaches the selected development user when present. The
+game-event hook uses a separate streaming `fetch`, adds the identity header
+itself, reconnects with its cursor, and keeps a three-second query-polling
+fallback active.
 
 ### HTTP/application layer
 

@@ -2,10 +2,11 @@
 
 ## Model overview
 
-The model separates authored mechanics, generic state owners, configured
-simulation, and live play. Nothing in the configured vocabulary is globally
-special: every schema, key, option, unit, condition, problem, and entity is
-created by a user inside a ruleset.
+The product model separates world membership, static authored mechanics,
+generic state owners, and improvised live play. Nothing in the configured
+vocabulary is globally special: every mechanic name and entity is created by a
+user inside a ruleset. The engine also retains configured simulation aggregates
+for compatibility, but the world UI never treats a problem as configuration.
 
 ```mermaid
 erDiagram
@@ -23,12 +24,39 @@ erDiagram
     PROBLEM_DEFINITION ||--o{ PROBLEM_INSTANCE : instantiates
     PROBLEM_INSTANCE ||--o{ TARGET_BINDING : binds
     RULE_SET ||--o{ GAME : powers
+    RULE_SET ||--o| WORLD_PROFILE : presents_as
+    WORLD_PROFILE ||--|{ WORLD_MEMBERSHIP : admits
+    WORLD_PROFILE ||--o{ WORLD_INVITE : offers
+    WORLD_PROFILE ||--o{ WORLD_MECHANIC : classifies
+    STATE_VARIABLE ||--o| WORLD_MECHANIC : represented_by
     GAME }o--o{ ENTITY : assigns
     GAME ||--|{ MEMBERSHIP : has
     GAME ||--o{ INTERACTION : hosts
     INTERACTION ||--o{ ACTION : receives
     INTERACTION ||--o| RESOLUTION : concludes
 ```
+
+## World product model
+
+A world is an authorized view over one backing ruleset and one primary game.
+`world_profiles` stores that pairing and the world lifecycle revision. A world
+membership has an `owner`, `editor`, `player`, or `spectator` role; the owner
+and editor correspond to facilitator membership in the primary game.
+
+A world mechanic is a small classification over a normalized state-variable
+definition:
+
+- a capacity is a numeric `score` or `pool`;
+- a capability is a Boolean `binary` value or numeric `rating`;
+- `mutable_during_play` determines whether a live ruling may target it.
+
+The classification adds no canonical name, entity class, or special key.
+Internal stable keys exist only to satisfy normalized storage identity.
+
+World problems are `interactions`: prompt-first, free-form moments created by a
+facilitator during play. They do not reference a problem definition. Their
+audience, responders, context entities, player actions, ruling, requested
+effects, and before/after receipt are captured relationally.
 
 ## Rulesets and authored identity
 
@@ -69,8 +97,11 @@ entity also creates its empty state-record root.
 
 The main eligibility rules are intentionally explicit:
 
-- A variable is applicable when the entity implements **any** one of the
-  variable's owner schemas.
+- A variable with one or more owner schemas is applicable when the entity
+  implements **any** one of them.
+- An empty variable owner-schema set is the explicit **universal** case and
+  applies to every entity. World capacities/capabilities use this form instead
+  of manufacturing a privileged catch-all schema.
 - A condition parameter or problem target is satisfied only when an entity
   implements **all** schemas required by that parameter or target.
 - A reference value is eligible when it remains in the same ruleset and, when

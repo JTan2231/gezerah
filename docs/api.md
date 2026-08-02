@@ -6,10 +6,11 @@ The API is same-origin and rooted at `/api`. The React application is its
 primary client. There is no explicit API version prefix or published backwards-
 compatibility policy, so coordinated client/server changes should land together.
 
-Ruleset authoring endpoints are trusted-environment tools and currently have no
-authentication checks. Game and interaction endpoints use a development-only
-identity header plus server-side membership/role authorization. See
-[Security](security.md) before exposing any endpoint outside a trusted network.
+World, game, and interaction endpoints use a development-only identity header
+plus server-side membership/role authorization. Older generic ruleset
+authoring endpoints remain trusted-environment compatibility tools with no
+authentication checks. See [Security](security.md) before exposing any endpoint
+outside a trusted network.
 
 ## Conventions
 
@@ -34,7 +35,8 @@ numbers, not quoted numbers, `NaN`, or infinities.
 ### Identity
 
 `GET /api/users` and `POST /api/users` are public within the trusted deployment.
-Every other `/api/games*` or `/api/play*` request must include:
+Every `/api/worlds*`, invite-redemption, `/api/games*`, or `/api/play*` request
+must include (public invite preview is the exception):
 
 ```http
 X-DND-User-ID: 2a7c0a53-65be-47d6-9e71-a97cbb1e53d4
@@ -69,8 +71,8 @@ Common status/code pairs are:
 | ------ | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                        | The transport, path ID, or query syntax is malformed.                     |
 | 401    | `authentication_required`, `invalid_identity`                                                         | The development identity header is absent, malformed, or unknown.         |
-| 403    | `game_forbidden`, `facilitator_required`, `player_required`, `responder_required`, `action_forbidden` | The known actor lacks membership, role, audience, or ownership authority. |
-| 404    | `not_found`, `endpoint_not_found`                                                                     | The resource or endpoint is absent, or a resource is hidden by filtering. |
+| 403    | `world_forbidden`, `world_editor_required`, `world_owner_required`, `game_forbidden`, `facilitator_required`, `player_required`, `responder_required`, `action_forbidden` | The known actor lacks membership, role, audience, or ownership authority. |
+| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                                  | The resource/invite/endpoint is absent, expired, revoked, or hidden.       |
 | 409    | `revision_conflict`, `duplicate_key`, `configuration_changed`, lifecycle and in-use codes             | Current state conflicts with the command.                                 |
 | 422    | `validation_failed`, `invalid_reference`, `archived_reference`                                        | JSON is structurally readable but violates a domain or database rule.     |
 | 500    | `internal_error`, `database_error`                                                                    | Unexpected server/database failure.                                       |
@@ -121,6 +123,79 @@ for public access.
 | Method and path   | Authority | Request | Response                                                                             |
 | ----------------- | --------- | ------- | ------------------------------------------------------------------------------------ |
 | `GET /api/health` | Public    | None    | `200 {"ok":true,"timestamp":"..."}` after a two-second database ping; otherwise 503. |
+
+### Worlds
+
+World IDs are also the backing ruleset IDs. World endpoints are the authorized
+product surface; they intentionally expose capacities/capabilities rather than
+the generic definition aggregate.
+
+| Method and path                                  | Authority                    | Request/response                                                                                 |
+| ------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------------ |
+| `GET /api/worlds`                                | Known user                   | Active memberships only; returns the user's worlds with role/count/activity summary.             |
+| `POST /api/worlds`                               | Known user                   | Name/optional description; creates ruleset, primary game, owner and facilitator memberships.     |
+| `GET /api/worlds/{world_id}`                     | Active world member          | World summary for the current user.                                                              |
+| `PATCH /api/worlds/{world_id}`                   | Owner/editor, active world   | Name, nullable description, and `expected_revision`.                                              |
+| `POST /api/worlds/{world_id}/archive`            | Owner                        | `expected_revision`; rejects unfinished interactions, archives world and primary game.            |
+| `GET /api/worlds/{world_id}/members`             | Active world member          | World membership list.                                                                           |
+| `GET /api/worlds/{world_id}/entities`            | Active world member          | Primary-game roster with logical generated state.                                                 |
+| `POST /api/worlds/{world_id}/entities`           | Owner/editor, active world   | Display name and optional internal key; creates/assigns entity and state root.                     |
+| `GET /api/worlds/{world_id}/entities/{entity_id}` | Active world member         | One assigned entity and logical state.                                                            |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}` | Owner/editor, active world  | Replaces entity display metadata.                                                                 |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/archive` | Owner/editor, active world | Archives the entity.                                                              |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/state` | Active world member     | Logical state, defaults, unknowns, and revision.                                                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/state` | Owner/editor, active world | Full logical values plus `expected_revision`; defaults normalize out of storage.                   |
+
+World creation is transactional. The response role is always `owner`; the
+primary game's corresponding role is `facilitator`.
+
+### Capacities and capabilities
+
+| Method and path                                              | Authority                   | Notes                                           |
+| ------------------------------------------------------------ | --------------------------- | ----------------------------------------------- |
+| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member     | Lists active and archived definitions.          |
+| `POST /api/worlds/{world_id}/mechanics`                      | Owner/editor, active world  | Creates a user-authored mechanic.                |
+| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`         | Active world member         | One mechanic.                                   |
+| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`         | Owner/editor, active world  | Replaces author-facing mechanic configuration.  |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive` | Owner/editor, active world | Archives while retaining state/history.         |
+
+Mechanic payload:
+
+```json
+{
+  "kind": "capacity",
+  "mode": "pool",
+  "name": "Resolve",
+  "description": "Composure under pressure.",
+  "minimum": 0,
+  "maximum": 12,
+  "step": 1,
+  "default_number": 8,
+  "unit": "grit",
+  "mutable_during_play": true
+}
+```
+
+Capacities accept `score` or `pool`. Capabilities accept `binary` or `rating`;
+binary capabilities omit numeric fields and default to false. All world
+mechanics have an empty owner-schema set, the explicit universal representation
+used by the engine for generic world entities. Mutable numeric mechanics allow
+`adjust-number` and `set`; mutable binary mechanics allow `set`.
+
+### World invite links
+
+| Method and path                                             | Authority                  | Notes                                                                 |
+| ----------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/invites`                        | Owner/editor, active world | Metadata only; never returns existing raw tokens.                     |
+| `POST /api/worlds/{world_id}/invites`                       | Owner/editor, active world | Role plus 1–90 expiry days; create response alone includes `join_path`. |
+| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke`    | Owner/editor, active world | Idempotently sets revocation time.                                    |
+| `GET /api/world-invites/{opaque_token}`                     | Public                     | Active-world, unexpired, non-revoked preview.                         |
+| `POST /api/world-invites/{opaque_token}/redeem`             | Known user                 | Creates/reactivates matching world and game memberships atomically.   |
+
+Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only a
+SHA-256 digest is stored. Redemption increments `use_count` once per
+invite/user pair. An already-active member receives the existing world without
+role escalation.
 
 ### Rulesets
 

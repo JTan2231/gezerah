@@ -78,18 +78,18 @@ export function jsonBody(value: unknown): Pick<RequestInit, "body"> {
   return { body: JSON.stringify(value) };
 }
 
-export function ruleSetPath(ruleSetId: string, resource = ""): string {
-  const base = `/api/rule-sets/${encodeURIComponent(ruleSetId)}`;
-  return resource === "" ? base : `${base}/${resource}`;
-}
-
 export function gamePath(gameId: string, resource = ""): string {
   const base = `/api/games/${encodeURIComponent(gameId)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 
-export function playRuleSetPath(ruleSetId: string, resource = ""): string {
-  const base = `/api/play/rule-sets/${encodeURIComponent(ruleSetId)}`;
+export function worldPath(worldId: string, resource = ""): string {
+  const base = `/api/worlds/${encodeURIComponent(worldId)}`;
+  return resource === "" ? base : `${base}/${resource}`;
+}
+
+export function worldInvitePath(token: string, resource = ""): string {
+  const base = `/api/world-invites/${encodeURIComponent(token)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 

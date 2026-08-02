@@ -2,7 +2,10 @@ package rules
 
 func EntityImplementsAny(entity Entity, schemaIDs []ID) bool {
 	if len(schemaIDs) == 0 {
-		return false
+		// An empty owner set is the explicit universal case. It lets a
+		// ruleset define mechanics that appear on every generic entity without
+		// manufacturing a privileged catch-all schema.
+		return true
 	}
 	have := idSet(entity.OwnerSchemaIDs)
 	for _, id := range schemaIDs {
@@ -24,6 +27,9 @@ func EntityImplementsAll(entity Entity, schemaIDs []ID) bool {
 }
 
 func schemaSetsIntersect(left, right []ID) bool {
+	if len(left) == 0 || len(right) == 0 {
+		return true
+	}
 	leftSet := idSet(left)
 	for _, id := range right {
 		if _, ok := leftSet[id]; ok {

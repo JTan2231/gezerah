@@ -1,132 +1,106 @@
 import { useEffect, useState } from "react";
 
-import { AppShell } from "./components/AppShell";
-import { EmptyState, ErrorNotice, LoadingRows } from "./components/ui";
-import { Overview } from "./features/Overview";
-import { OwnerSchemas } from "./features/OwnerSchemas";
-import { StateVariables } from "./features/StateVariables";
-import { Conditions } from "./features/Conditions";
-import { Problems } from "./features/Problems";
-import { Entities } from "./features/Entities";
-import { StateInspector } from "./features/StateInspector";
-import { Instances } from "./features/Instances";
-import { Runtime } from "./features/Runtime";
-import { RuleSetOnboarding } from "./features/RuleSetOnboarding";
-import { RuleSetEditor } from "./features/RuleSetEditor";
-import { Play } from "./features/Play";
-import type { RuleSet } from "./api/types";
-import type { AppRoute } from "./routes";
-import { readRoute } from "./routes";
+import { readSelectedUserId, selectUserId } from "./api/client";
+import type { User } from "./api/types";
+import { Brand, ErrorMessage, LoadingState } from "./components/StudioUI";
+import { IdentityGate } from "./features/IdentityGate";
+import { InvitePage } from "./features/InvitePage";
+import { WorldLibrary } from "./features/WorldLibrary";
+import { WorldWorkspace } from "./features/WorldWorkspace";
 import { useCollection } from "./hooks/useCollection";
-import { confirmDiscardDraft } from "./hooks/useDraft";
-
-const selectedRuleSetKey = "dnd.selected-rule-set";
+import { readLocation } from "./worldRoutes";
 
 export default function App() {
-  const rulesets = useCollection<RuleSet>("/api/rule-sets");
-  const [selectedId, setSelectedId] = useState(
-    () => localStorage.getItem(selectedRuleSetKey) ?? "",
+  const [selectedUserId, setSelectedUserId] = useState(readSelectedUserId);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [location, setLocation] = useState(readLocation);
+  const users = useCollection<User>(
+    selectedUserId === "" ? null : "/api/users",
   );
-  const [route, setRoute] = useState<AppRoute>(() => readRoute());
-  const [creating, setCreating] = useState(false);
-  const [editingRuleSet, setEditingRuleSet] = useState(false);
-  const selected =
-    rulesets.items.find((item) => item.id === selectedId) ?? rulesets.items[0];
+  const user =
+    selectedUser?.id === selectedUserId
+      ? selectedUser
+      : users.items.find((candidate) => candidate.id === selectedUserId);
 
   useEffect(() => {
-    if (selected === undefined) return;
-    setSelectedId(selected.id);
-    localStorage.setItem(selectedRuleSetKey, selected.id);
-  }, [selected]);
-  useEffect(() => {
-    const handlePop = () => setRoute(readRoute());
-    window.addEventListener("popstate", handlePop);
-    return () => window.removeEventListener("popstate", handlePop);
+    function handlePopState() {
+      setLocation(readLocation());
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
-  function navigate(next: AppRoute) {
-    if (!confirmDiscardDraft()) return;
-    const path = `/app/${next}`;
+  function navigate(path: string) {
     window.history.pushState(null, "", path);
-    setRoute(next);
-    document.querySelector<HTMLElement>("#main-content")?.focus();
-  }
-  function created(ruleSet: RuleSet) {
-    rulesets.replaceItem(ruleSet, (item) => item.id);
-    setSelectedId(ruleSet.id);
-    localStorage.setItem(selectedRuleSetKey, ruleSet.id);
-    setCreating(false);
+    setLocation(readLocation(path));
+    window.requestAnimationFrame(() => {
+      document.querySelector<HTMLElement>("main, [tabindex='-1']")?.focus();
+      window.scrollTo({ top: 0, behavior: "instant" });
+    });
   }
 
-  if (rulesets.loading)
+  function chooseUser(nextUser: User) {
+    selectUserId(nextUser.id);
+    setSelectedUserId(nextUser.id);
+    setSelectedUser(nextUser);
+  }
+
+  if (selectedUserId !== "" && users.loading && user === undefined) {
     return (
-      <main className="boot-screen">
-        <div className="brand boot-brand">
-          <span className="brand-mark">R</span>
-          <strong>Rule Composer</strong>
-        </div>
-        <LoadingRows />
+      <main className="app-boot">
+        <Brand />
+        <LoadingState label="Opening your worlds" />
       </main>
     );
-  if (rulesets.error !== null)
+  }
+
+  if (selectedUserId !== "" && users.error !== null && user === undefined) {
     return (
-      <main className="boot-screen">
-        <ErrorNotice error={rulesets.error} onRetry={rulesets.reload} />
-        <EmptyState
-          title="Your drafts stay local"
-          description="Reconnect to load authoritative rulesets from the server."
-        />
+      <main className="app-boot">
+        <Brand />
+        <ErrorMessage error={users.error} onRetry={users.reload} />
+        <button
+          className="button button-quiet"
+          type="button"
+          onClick={() => {
+            selectUserId("");
+            setSelectedUserId("");
+          }}
+        >
+          Choose another local profile
+        </button>
       </main>
     );
-  if (selected === undefined) return <RuleSetOnboarding onCreated={created} />;
+  }
+
+  if (user === undefined) return <IdentityGate onSelected={chooseUser} />;
+
+  if (location.type === "invite") {
+    return (
+      <InvitePage token={location.token} user={user} navigate={navigate} />
+    );
+  }
+
+  if (location.type === "world") {
+    return (
+      <WorldWorkspace
+        worldId={location.worldId}
+        section={location.section}
+        resourceId={location.resourceId}
+        user={user}
+        navigate={navigate}
+      />
+    );
+  }
 
   return (
-    <AppShell
-      rulesets={rulesets.items}
-      ruleSet={selected}
-      route={route}
-      onRuleSetChange={(id) => {
-        if (!confirmDiscardDraft()) return;
-        setSelectedId(id);
-        localStorage.setItem(selectedRuleSetKey, id);
+    <WorldLibrary
+      user={user}
+      navigate={navigate}
+      onSwitchProfile={() => {
+        setSelectedUserId("");
+        setSelectedUser(null);
       }}
-      onCreateRuleSet={() => setCreating(true)}
-      onEditRuleSet={() => setEditingRuleSet(true)}
-      onNavigate={navigate}
-    >
-      {route === "overview" ? (
-        <Overview ruleSetId={selected.id} onNavigate={navigate} />
-      ) : null}
-      {route === "owner-schemas" ? (
-        <OwnerSchemas ruleSetId={selected.id} />
-      ) : null}
-      {route === "state-variables" ? (
-        <StateVariables ruleSetId={selected.id} />
-      ) : null}
-      {route === "conditions" ? <Conditions ruleSetId={selected.id} /> : null}
-      {route === "problems" ? <Problems ruleSetId={selected.id} /> : null}
-      {route === "entities" ? <Entities ruleSetId={selected.id} /> : null}
-      {route === "state" ? <StateInspector ruleSetId={selected.id} /> : null}
-      {route === "instances" ? <Instances ruleSetId={selected.id} /> : null}
-      {route === "runtime" ? <Runtime ruleSetId={selected.id} /> : null}
-      {route === "play" ? <Play ruleSetId={selected.id} /> : null}
-      {creating ? (
-        <RuleSetOnboarding
-          compact
-          onCreated={created}
-          onCancel={() => setCreating(false)}
-        />
-      ) : null}
-      {editingRuleSet ? (
-        <RuleSetEditor
-          source={selected}
-          onSaved={(saved) => {
-            rulesets.replaceItem(saved, (item) => item.id);
-            setEditingRuleSet(false);
-          }}
-          onCancel={() => setEditingRuleSet(false)}
-        />
-      ) : null}
-    </AppShell>
+    />
   );
 }
