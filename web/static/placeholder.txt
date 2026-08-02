@@ -1,0 +1,1 @@
+Vite copies this file so the embedded static directory remains present in clean builds.

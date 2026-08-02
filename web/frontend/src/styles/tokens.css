@@ -1,0 +1,35 @@
+:root {
+  color-scheme: dark;
+
+  --color-page: #0c100e;
+  --color-sidebar: #101512;
+  --color-surface: #151b17;
+  --color-surface-raised: #1a221d;
+  --color-surface-soft: #202922;
+  --color-surface-hover: #263229;
+  --color-text: #eef3ed;
+  --color-text-muted: #a6b1a8;
+  --color-text-soft: #78837b;
+  --color-border: #303b33;
+  --color-border-strong: #465449;
+  --color-accent: #c8f17a;
+  --color-accent-strong: #daf99d;
+  --color-accent-ink: #16200f;
+  --color-accent-soft: #26391e;
+  --color-good: #8ddfb1;
+  --color-good-soft: #173026;
+  --color-warn: #f2ce79;
+  --color-warn-soft: #332b18;
+  --color-bad: #f2a29c;
+  --color-bad-soft: #371d1c;
+  --color-info: #99c9ef;
+  --color-info-soft: #182d3d;
+  --color-overlay: rgb(2 7 4 / 72%);
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 28%), 0 18px 48px rgb(0 0 0 / 10%);
+  --shadow-float: 0 24px 72px rgb(0 0 0 / 50%);
+  --radius-small: 7px;
+  --radius: 11px;
+  --radius-large: 18px;
+  --font-sans: "Avenir Next", avenir, "Segoe UI", sans-serif;
+  --font-mono: "SFMono-Regular", consolas, "Liberation Mono", monospace;
+}

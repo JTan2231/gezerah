@@ -1,0 +1,13 @@
+.DS_Store
+.dnd/
+/out
+/coverage/
+
+web/frontend/node_modules/
+web/frontend/bun.lockb
+web/static/*
+!web/static/placeholder.txt
+
+test/node_modules/
+test/artifacts/
+test/bun.lockb

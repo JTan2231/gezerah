@@ -1,0 +1,89 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"net"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"dnd/internal/app"
+	"dnd/internal/migrations"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+func main() {
+	config := app.LoadConfig()
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: config.LogLevel})))
+
+	if err := run(config); err != nil {
+		slog.Error("dnd stopped", "error", err)
+		os.Exit(1)
+	}
+}
+
+func run(config app.Config) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	db, err := pgxpool.New(ctx, config.DatabaseURL)
+	if err != nil {
+		return fmt.Errorf("configure database: %w", err)
+	}
+	defer db.Close()
+
+	if err := db.Ping(ctx); err != nil {
+		return fmt.Errorf("connect database: %w", err)
+	}
+
+	if err := migrations.Run(ctx, db); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+
+	server, err := app.NewServer(ctx, db, config)
+	if err != nil {
+		return fmt.Errorf("build server: %w", err)
+	}
+
+	httpServer := &http.Server{
+		Addr:              config.Addr,
+		Handler:           server.Routes(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	listener, err := net.Listen("tcp", config.Addr)
+	if err != nil {
+		return fmt.Errorf("listen on %s: %w", config.Addr, err)
+	}
+
+	serveErrors := make(chan error, 1)
+	go func() {
+		slog.Info("dnd listening", "address", listener.Addr().String())
+		serveErrors <- httpServer.Serve(listener)
+	}()
+
+	var serveErr error
+	select {
+	case <-ctx.Done():
+	case err := <-serveErrors:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serveErr = fmt.Errorf("serve: %w", err)
+			stop()
+		}
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("graceful shutdown: %w", err)
+	}
+	return serveErr
+}
