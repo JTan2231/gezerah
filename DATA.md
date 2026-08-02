@@ -1,0 +1,1122 @@
+# Stateful Rule Composer Data Model
+
+## Purpose
+
+This document defines the domain semantics and PostgreSQL data model for the
+stateful rule composer. Implementation architecture, HTTP behavior, frontend
+structure, transactions, and testing are specified in `CODE.md`.
+
+The system lets a rules author define typed state, conditions over that state,
+problems with selectable choices, and ordered consequences that change state.
+Current state belongs to participants and problem instances. Conditions inspect
+a consistent snapshot of those values. Resolving a choice selects an outcome
+and applies all of its effects atomically.
+
+```text
+State Variable Definitions
+       |                    \
+       v                     v
+Current State <- Effects   Conditions
+       |                     |
+       +----> Problem -> Choice
+                         | availability condition
+                         | resolution condition
+                         | met consequences
+                         | unmet consequences
+                         v
+                    Updated State
+```
+
+This is a small typed state-transition system. A snapshot is a consistent read
+of current values, not a retained historical artifact or dependency graph.
+Definitions and current state are directly mutable. The initial system has no
+publication lifecycle, configuration versions, event log, state history, or
+stored snapshots. Editing a shared condition set or problem changes future
+evaluation immediately; applying an outcome updates current state in place.
+
+## Requirements
+
+The model must support:
+
+- a configurable vocabulary of typed state variables;
+- metadata-driven configuration and state-editing interfaces;
+- current state for participants and problem instances;
+- validation before definitions, conditions, problems, or state are saved;
+- deterministic three-valued condition evaluation;
+- explanations of why a condition is met, unmet, or unknown;
+- reusable condition sets shared by problems and choices;
+- separate availability and resolution conditions;
+- typed effects applied in an explicit order;
+- consequences on both met and unmet outcomes;
+- atomic outcome application across participant and problem state;
+- stable identities for expression nodes, choices, outcomes, consequence sets,
+  and effects;
+- future extension to derived values and transition history without requiring
+  either initially; and
+- fully relational PostgreSQL persistence without JSON or JSONB columns.
+
+The database also avoids PostgreSQL array columns for modeled collections.
+Options, units, operands, effects, and many-valued state are child rows.
+
+## Non-goals
+
+The initial model does not include:
+
+- a complete participant-creation workflow;
+- dice, random outcomes, checks, modifiers, or difficulty classes;
+- derived state, formulas, or dependency graphs;
+- state history, provenance, event sourcing, replay, or historical snapshots;
+- drafts, publishing, or versioned rule definitions;
+- arbitrary executable expressions or user-provided scripts;
+- comparisons between state variables;
+- party-wide or team-composition conditions;
+- participant roles or role assignments;
+- multiple participants or arbitrary target bindings in one resolution;
+- a complete item, equipment, encumbrance, currency, or economy model;
+- inventory stacks, quantities, equipped state, or per-entry metadata;
+- consequences that send messages or invoke external systems; or
+- concurrent configuration editing as a user-facing workflow.
+
+## Core concepts
+
+| Concept | Meaning |
+| --- | --- |
+| Ruleset | Ownership and namespace boundary for configuration and runtime entities. |
+| State variable | A declared, typed location that may hold a value. |
+| State record | The maintained current values for one participant or problem instance. |
+| State snapshot | A consistent read of the state records bound to one evaluation. |
+| Condition | A read-only expression returning `met`, `unmet`, or `unknown`. |
+| Requirement | A condition used as a prerequisite; not a separate expression type. |
+| Effect | One typed operation that changes current state. |
+| Consequence set | An ordered list of effects applied atomically. |
+| Problem definition | Authored configuration describing a problem and its choices. |
+| Problem instance | One occurrence of a problem definition with independent current state. |
+| Choice | An action selected in the context of a problem instance. |
+| Outcome | The branch selected when a choice resolves. |
+| Transition | The atomic selection and application of one outcome. |
+
+Conceptually:
+
+```text
+State:      (bound target, state variable ID) -> typed value
+Condition:  State -> met | unmet | unknown
+Effect:     State -> State | application error
+Resolution: current state + chosen choice -> outcome + updated current state
+```
+
+`Current` and `updated` describe the before and after values of one transaction;
+they do not imply retained copies.
+
+## Relational conventions
+
+- Primary keys are UUIDs generated by PostgreSQL with `gen_random_uuid()`.
+- IDs are durable references. Human-readable keys are never derived from labels.
+- Mutable aggregate roots carry `created_at` and `updated_at` timestamps.
+- Enum-like values use `text` plus named `CHECK` constraints rather than
+  PostgreSQL enum types.
+- Owned child records use `ON DELETE CASCADE`; referenced configuration normally
+  uses `ON DELETE RESTRICT`.
+- Referenced definitions are archived rather than deleted.
+- Ordered children use a zero-based non-negative `position` and a unique
+  constraint within their parent.
+- A child row that references a second ruleset-scoped aggregate repeats
+  `rule_set_id` and uses composite foreign keys to both parents. This deliberate
+  redundancy lets PostgreSQL reject cross-ruleset references without triggers.
+- Numbers use PostgreSQL `numeric`. The application rejects NaN, infinities,
+  out-of-bound values, and values that do not align to a declared step.
+- JSON is an API representation only. No canonical application data is stored
+  in `json`, `jsonb`, or array columns.
+
+Some invariants depend on data in another row or on an entire tree. PostgreSQL
+enforces row shape, uniqueness, ownership, and referential integrity; the Go
+domain validator authoritatively enforces cross-row bounds, steps, cardinality,
+tree acyclicity, maximum depth, and operator compatibility.
+
+## Ownership and entities
+
+### `rule_sets`
+
+A ruleset scopes all authored definitions and runtime entities. The first
+application may seed one default ruleset, but the ownership boundary is present
+from the beginning so keys are not globally coupled forever.
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `key` | `text` | Non-empty, stable, unique. |
+| `name` | `text` | Non-empty. |
+| `description` | `text` | Nullable. |
+| `created_at` | `timestamptz` | Required. |
+| `updated_at` | `timestamptz` | Required. |
+
+### `entities`
+
+`entities` is the relational supertype for durable objects that may own state or
+be referenced by state. It prevents polymorphic reference values from becoming
+unchecked strings.
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `rule_set_id` | `uuid` | FK to `rule_sets`; required. |
+| `entity_type` | `text` | `participant`, `item`, `organization`, `named-entity`, or `problem-instance`. |
+| `display_name` | `text` | Non-empty current display label. |
+| `archived` | `boolean` | Defaults to false. |
+| `created_at` | `timestamptz` | Required. |
+| `updated_at` | `timestamptz` | Required. |
+
+The table has `UNIQUE (id, rule_set_id, entity_type)` so subtype and typed
+reference tables can use composite foreign keys that preserve scope and type.
+
+Subtype tables are:
+
+```text
+participants
+  entity_id PK/FK -> entities
+  rule_set_id
+  entity_type = participant
+
+items
+  entity_id PK/FK -> entities
+  rule_set_id
+  entity_type = item
+  key
+  description
+
+organizations
+  entity_id PK/FK -> entities
+  rule_set_id
+  entity_type = organization
+  key
+  description
+
+named_entities
+  entity_id PK/FK -> entities
+  rule_set_id
+  entity_type = named-entity
+```
+
+An informal ally or organization that does not warrant a richer record is still
+created as a `named-entity`. Reference and relationship values therefore always
+have a real entity foreign key. An optional fallback name may be retained on a
+value for display resilience, but it is not a substitute for entity identity.
+
+## State addresses and owners
+
+The resolver initially binds exactly two targets:
+
+```ts
+type StateTarget = "participant" | "problem";
+type StateOwnerType = "participant" | "problem-instance";
+
+type StateAddress = {
+  target: StateTarget;
+  stateVariableId: string;
+};
+```
+
+During resolution, `participant` means the selected participant and `problem`
+means the current problem instance. Validation maps those targets to owner types
+and rejects mismatches. This explicit binding leaves room for future targets
+such as another participant, an item, a party, or a location without pretending
+that they already exist.
+
+## Value schemas
+
+Every state-variable definition declares one scalar value kind and a cardinality
+of `one` or `many`.
+
+| Kind | Schema metadata | Scalar logical value |
+| --- | --- | --- |
+| `text` | None initially. | String. |
+| `choice` | Ordered configured options. | One option key. |
+| `measurement` | Ordered units; optional minimum, maximum, and step. | Numeric amount and unit. |
+| `number` | Optional minimum, maximum, step, and display unit. | Number. |
+| `boolean` | None. | Boolean. |
+| `reference` | Allowed entity types. | Entity ID and optional fallback name. |
+| `relationship` | Allowed entity types. | Entity ID, optional relationship label, and optional fallback name. |
+
+Many-valued variables have set semantics. Positions are persisted only to make
+editing and API serialization deterministic; reordering does not change logical
+meaning. Normalized duplicates are invalid. Ordered lists and multisets require
+new explicit schemas later.
+
+## State-variable definitions
+
+### `state_variable_definitions`
+
+| Column | Type | Rules |
+| --- | --- | --- |
+| `id` | `uuid` | Primary key. |
+| `rule_set_id` | `uuid` | FK to owning ruleset. |
+| `key` | `text` | Namespaced and unique within ruleset. |
+| `label` | `text` | Non-empty. |
+| `description` | `text` | Nullable. |
+| `owner_type` | `text` | `participant` or `problem-instance`. |
+| `category` | `text` | See category list below. |
+| `section` | `text` | Non-empty UI grouping label. |
+| `value_kind` | `text` | One supported scalar kind. |
+| `cardinality` | `text` | `one` or `many`. |
+| `missing_kind` | `text` | `unknown` or `default`. |
+| `omit_default_when_stored` | `boolean` | Allowed only for a default. |
+| `condition_addressable` | `boolean` | Whether new criteria may reference it. |
+| `display_order` | `integer` | Non-negative. |
+| `presentation_control` | `text` | Nullable supported control name. |
+| `presentation_help_text` | `text` | Nullable. |
+| `number_minimum` | `numeric` | Nullable; number schemas only. |
+| `number_maximum` | `numeric` | Nullable; number schemas only. |
+| `number_step` | `numeric` | Nullable and positive; number schemas only. |
+| `number_unit` | `text` | Nullable display unit; number schemas only. |
+| `measurement_minimum` | `numeric` | Nullable; measurement schemas only. |
+| `measurement_maximum` | `numeric` | Nullable; measurement schemas only. |
+| `measurement_step` | `numeric` | Nullable and positive; measurement schemas only. |
+| `archived` | `boolean` | Defaults to false. |
+| `created_at` | `timestamptz` | Required. |
+| `updated_at` | `timestamptz` | Required. |
+
+The definition table exposes
+`UNIQUE (id, rule_set_id, owner_type, value_kind, cardinality)` for typed current
+value and operand foreign keys.
+
+Categories are organizational metadata, independent of value kind:
+
+```text
+identity, personality, appearance, story, connection,
+capacity, capability, status, inventory, problem
+```
+
+Supported presentation controls are:
+
+```text
+short-text, long-text, select, measurement, number, checkbox,
+reference-picker, relationship-editor
+```
+
+### Definition child tables
+
+```text
+state_variable_choice_options
+  id
+  state_variable_id
+  key
+  label
+  position
+  UNIQUE (state_variable_id, key)
+  UNIQUE (state_variable_id, position)
+
+state_variable_measurement_units
+  id
+  state_variable_id
+  unit
+  position
+  UNIQUE (state_variable_id, unit)
+  UNIQUE (state_variable_id, position)
+
+state_variable_allowed_entity_types
+  state_variable_id
+  entity_type
+  PRIMARY KEY (state_variable_id, entity_type)
+
+state_variable_effect_operations
+  state_variable_id
+  operation
+  PRIMARY KEY (state_variable_id, operation)
+```
+
+Effect operations are `set`, `clear`, `adjust-number`, `add-value`, and
+`remove-value`.
+
+### Relational typed-value shape
+
+Defaults, current state, and effect literals use the same conceptual checked
+union of ordinary columns:
+
+```text
+value_kind
+text_value
+number_value
+boolean_value
+choice_option_id
+measurement_amount
+measurement_unit_id
+referenced_entity_id
+referenced_entity_type
+relationship_kind
+fallback_name
+```
+
+The discriminator determines the populated columns:
+
+- `text`: `text_value` only;
+- `number`: `number_value` only;
+- `boolean`: `boolean_value` only;
+- `choice`: `choice_option_id` only;
+- `measurement`: `measurement_amount` and `measurement_unit_id`;
+- `reference`: referenced entity ID/type and optional fallback name;
+- `relationship`: referenced entity ID/type, optional relationship label, and
+  optional fallback name.
+
+Choice-option and measurement-unit composite foreign keys ensure the selected
+option or unit belongs to the referenced variable. Entity composite foreign keys
+ensure references stay inside the ruleset and preserve their type.
+
+### `state_variable_default_values`
+
+This table owns zero or more typed-value rows for a definition:
+
+```text
+state_variable_default_values
+  id
+  rule_set_id
+  state_variable_id
+  value_kind
+  cardinality
+  position
+  <typed-value columns>
+  UNIQUE (state_variable_id, position)
+```
+
+`missing_kind = unknown` requires no default rows. A single-valued default
+requires exactly one row. A many-valued default may have zero or more unique
+rows. Zero rows plus `missing_kind = default` represents an empty set.
+`rule_set_id` is constrained against the owning definition and any referenced
+entity, preventing a reference default from crossing rulesets.
+
+Once a definition is referenced by state, a condition, or an effect, its owner
+type, value schema, cardinality, missing semantics, and semantic meaning cannot
+change in place. Labels, descriptions, presentation hints, display order, and
+archive state remain mutable. A semantic replacement receives a new ID and key.
+
+Archived definitions remain readable by existing state and rules but cannot be
+selected for newly authored criteria or effects.
+
+## Initial state-variable catalog
+
+The initial catalog contains the complete participant field inventory plus
+explicit status, inventory, and problem-instance state. Only capacities,
+capabilities, Current Health, and Problem Resolved are initially condition
+addressable. Inventory is writable before reference predicates are introduced.
+
+### Identity
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `identity.character-name` | Character Name | text, short-text | one | no | none |
+| `identity.player-name` | Player Name | text, short-text | one | no | none |
+| `identity.race` | Race | choice | one | no | none |
+| `identity.background` | Background | choice | one | no | none |
+| `identity.alignment` | Alignment | choice | one | no | none |
+
+Race, Background, and Alignment options are catalog configuration, not
+hard-coded application constants.
+
+### Personality
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `personality.traits` | Personality Traits | text, long-text | many | no | none |
+| `personality.ideals` | Ideals | text, long-text | many | no | none |
+| `personality.bonds` | Bonds | text, long-text | many | no | none |
+| `personality.flaws` | Flaws | text, long-text | many | no | none |
+
+### Appearance
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `appearance.age` | Age | number, years | one | no | none |
+| `appearance.height` | Height | measurement | one | no | none |
+| `appearance.weight` | Weight | measurement | one | no | none |
+| `appearance.eyes` | Eyes | text, short-text | one | no | none |
+| `appearance.skin` | Skin | text, short-text | one | no | none |
+| `appearance.hair` | Hair | text, short-text | one | no | none |
+
+### Story
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `story.backstory` | Character Backstory | text, long-text | one | no | none |
+
+### Connections
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `connections.allies` | Allies | relationship to participant or named entity | many | no | none |
+| `connections.organizations` | Organizations | relationship to organization or named entity | many | no | none |
+
+An organization's name belongs to the referenced entity rather than being
+duplicated as participant state. A lightweight named entity represents a target
+for which no durable organization record exists.
+
+### Capacities
+
+The following variables are numeric, single-valued, participant-owned,
+condition-addressable, and allow `set` and `adjust-number`:
+
+| Key | Label |
+| --- | --- |
+| `capacity.strength` | Strength |
+| `capacity.dexterity` | Dexterity |
+| `capacity.constitution` | Constitution |
+| `capacity.intelligence` | Intelligence |
+| `capacity.wisdom` | Wisdom |
+| `capacity.charisma` | Charisma |
+
+The seed catalog must choose their numeric minimum, maximum, and step. Condition
+operands and effect results must respect those constraints.
+
+### Capabilities
+
+The following variables are Boolean, single-valued, participant-owned,
+condition-addressable, and allow `set`:
+
+| Key | Label |
+| --- | --- |
+| `capability.acrobatics` | Acrobatics |
+| `capability.animal-handling` | Animal Handling |
+| `capability.arcana` | Arcana |
+| `capability.athletics` | Athletics |
+| `capability.deception` | Deception |
+| `capability.history` | History |
+| `capability.insight` | Insight |
+| `capability.intimidation` | Intimidation |
+| `capability.investigation` | Investigation |
+| `capability.medicine` | Medicine |
+| `capability.nature` | Nature |
+| `capability.perception` | Perception |
+| `capability.performance` | Performance |
+| `capability.persuasion` | Persuasion |
+| `capability.religion` | Religion |
+| `capability.sleight-of-hand` | Sleight of Hand |
+| `capability.stealth` | Stealth |
+| `capability.survival` | Survival |
+
+Each defaults to false with `omit_default_when_stored = true`. An omitted value
+therefore means the participant does not have the capability, not that its value
+is unknown.
+
+### Status
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `status.health-current` | Current Health | number | one | yes | `set`, `adjust-number` |
+
+Current Health has unknown missing-value semantics. Its catalog definition must
+declare any universal minimum, maximum, and step. Effects never clamp values;
+an out-of-range result fails the transition atomically. Participant-specific
+maximum health and death thresholds are deferred because they require
+cross-variable invariants or derived state.
+
+### Inventory
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `inventory.items` | Inventory Items | reference to item | many | no | `set`, `add-value`, `remove-value` |
+
+Inventory defaults to an empty set with omitted storage. It contains references
+to durable item entities. Quantities, stacking, equipped state, per-entry
+condition, currency, and encumbrance are deferred.
+
+Reference predicates are not initially defined, so inventory may be changed by
+effects before authored conditions can inspect it. Membership predicates can be
+added later without changing current-state storage.
+
+### Problem state
+
+| Key | Label | Schema | Cardinality | Conditions | Effects |
+| --- | --- | --- | --- | --- | --- |
+| `problem.resolved` | Problem Resolved | boolean | one | yes | `set` |
+
+Problem Resolved belongs to problem-instance state, defaults to false, and may
+be omitted from storage. A problem can require it to be false for availability
+and set it to true in a terminal outcome.
+
+## Current state records
+
+### `state_records`
+
+```text
+state_records
+  owner_entity_id PK
+  rule_set_id
+  owner_type
+  revision
+  updated_at
+```
+
+`owner_entity_id`, ruleset, and type have a composite foreign key to `entities`.
+Only participants and problem instances may own state initially. A record is
+created with its owner and retained for the owner's lifetime.
+
+`revision` is an optimistic-concurrency token, not history. It starts at zero
+and increments whenever that record's persisted values change.
+
+### `state_values`
+
+```text
+state_values
+  id
+  owner_entity_id
+  rule_set_id
+  owner_type
+  state_variable_id
+  value_kind
+  cardinality
+  position
+  <typed-value columns>
+```
+
+Required constraints include:
+
+- a composite FK from the owner columns to `state_records`;
+- a composite FK from variable ID, ruleset, owner type, value kind, and
+  cardinality to `state_variable_definitions`;
+- unique `(owner_entity_id, state_variable_id, position)`;
+- `position = 0` for single-valued rows;
+- a partial unique constraint on `(owner_entity_id, state_variable_id)` for
+  `cardinality = one`;
+- typed-row shape checks; and
+- normalized duplicate checks for many-valued variables, implemented with
+  kind-specific partial unique indexes where practical and authoritative
+  application validation in all cases.
+
+Stored values equal to an omitted default are normalized out. A missing entry
+with a default is materialized logically during reads, evaluation, and effect
+application. A missing entry with unknown semantics remains unknown.
+
+The API representation of a state record is:
+
+```ts
+type StateRecord = {
+  ownerType: "participant" | "problem-instance";
+  ownerId: string;
+  revision: number;
+  values: Record<string, StateValue>;
+  updatedAt: string;
+};
+
+type ResolutionSnapshot = {
+  participant: StateRecord;
+  problem: StateRecord;
+};
+```
+
+The map and arrays exist only at the API/domain boundary; Postgres stores their
+members as rows.
+
+## Conditions
+
+A condition is the underlying read model. A requirement, availability guard,
+and resolution test all use the same expression representation.
+
+### `condition_sets`
+
+```text
+condition_sets
+  id
+  rule_set_id
+  key
+  name
+  description
+  archived
+  created_at
+  updated_at
+  UNIQUE (rule_set_id, key)
+  UNIQUE (id, rule_set_id)
+```
+
+Condition sets are mutable and reusable. Editing one affects every problem and
+choice that references it. Existing references to archived sets remain valid;
+archived sets cannot be selected for new references.
+
+### `condition_expression_nodes`
+
+```text
+condition_expression_nodes
+  id
+  rule_set_id
+  condition_set_id
+  parent_node_id nullable
+  position
+  node_type       all | any | at-least | criterion
+  required_count nullable
+```
+
+Constraints include:
+
+- at most one root through a partial unique index on `condition_set_id` where
+  `parent_node_id IS NULL`, with validation requiring that root to exist;
+- a composite self-FK that requires parent and child to belong to the same set;
+- a composite FK that requires the node and set to share a ruleset;
+- unique node IDs;
+- unique `(condition_set_id, parent_node_id, position)` for siblings;
+- non-negative positions; and
+- `required_count` present only for `at-least` nodes.
+
+Expression IDs remain stable when nodes are moved or edited. They are frontend
+keys and identifiers in evaluation explanations.
+
+### Criteria and operands
+
+```text
+condition_criteria
+  expression_node_id PK
+  condition_set_id
+  rule_set_id
+  target             participant | problem
+  state_variable_id
+  operator           eq | gt | gte | lt | lte | between | is | one-of
+
+condition_number_predicates
+  criterion_node_id PK
+  value nullable
+  minimum nullable
+  maximum nullable
+
+condition_boolean_predicates
+  criterion_node_id PK
+  value
+
+condition_choice_operands
+  criterion_node_id
+  choice_option_id
+  position
+  PRIMARY KEY (criterion_node_id, position)
+  UNIQUE (criterion_node_id, choice_option_id)
+```
+
+Number operators `eq`, `gt`, `gte`, `lt`, and `lte` use `value`. `between` uses
+inclusive `minimum` and `maximum`. Boolean `is` uses one Boolean row. Choice
+`is` uses one option row; `one-of` uses one or more unique option rows.
+
+Initial predicate support is:
+
+| Variable schema | Predicates |
+| --- | --- |
+| number | `eq`, `gt`, `gte`, `lt`, `lte`, `between` |
+| boolean | `is true`, `is false` |
+| choice | `is`, `one-of` |
+
+Text, measurement, reference, relationship, and many-valued predicates are not
+initially exposed. Number operands must be finite and within variable bounds. A
+range requires `minimum <= maximum`. Choice operands must name currently
+declared options.
+
+### Group semantics
+
+Groups must contain at least one child.
+
+- `all` is unmet if any child is unmet, met if every child is met, and unknown
+  otherwise.
+- `any` is met if any child is met, unmet if every child is unmet, and unknown
+  otherwise.
+- `at-least N` is met when at least N children are met, unmet when the count of
+  met plus unknown children is below N, and unknown otherwise.
+
+An `at-least` count is an integer from one through the number of children.
+Arbitrary group negation is intentionally absent because it obscures
+missing-value semantics. A Boolean criterion can still explicitly require
+false.
+
+### Criterion semantics
+
+- A known valid value satisfying its predicate is met.
+- A known valid value not satisfying its predicate is unmet.
+- A missing value with unknown semantics is unknown.
+- A missing value with a default is evaluated using the default.
+- A stored value with the wrong type or cardinality is invalid state and causes
+  an input error rather than an unknown result.
+
+An evaluation contains the condition-set ID, aggregate status, a tree of node
+results, and unique missing state addresses. Every node result contains its
+expression ID, status, and a derived human-readable message. Criterion results
+may also include the state address and actual value.
+
+Messages are derived from current labels and canonical values; they are not
+stored as authored rule text. Examples include:
+
+```text
+Strength 16 satisfies Strength >= 14.
+Athletics is false and does not satisfy Has Athletics.
+Current Health is required but has not been provided.
+The problem is already resolved.
+One of Athletics or Acrobatics is required.
+```
+
+## Problems, choices, outcomes, and effects
+
+### `problem_definitions`
+
+```text
+problem_definitions
+  id
+  rule_set_id
+  key
+  name
+  description
+  available_condition_set_id nullable
+  archived
+  created_at
+  updated_at
+  UNIQUE (rule_set_id, key)
+  UNIQUE (id, rule_set_id)
+```
+
+Problem definitions are reusable mutable configuration. Editing one changes
+future availability and resolution for all existing instances. Existing current
+state is neither recalculated nor reversed.
+
+### `problem_choices`
+
+```text
+problem_choices
+  id
+  rule_set_id
+  problem_definition_id
+  key
+  name
+  description
+  position
+  available_condition_set_id nullable
+  UNIQUE (problem_definition_id, key)
+  UNIQUE (problem_definition_id, position)
+```
+
+### `choice_resolutions`
+
+```text
+choice_resolutions
+  choice_id PK
+  rule_set_id
+  resolution_type       automatic | condition
+  condition_set_id nullable
+```
+
+An automatic resolution has no condition set. A condition resolution requires
+one reusable condition set.
+
+### `choice_outcomes`
+
+```text
+choice_outcomes
+  id
+  rule_set_id
+  choice_id
+  branch                automatic | met | unmet
+  label
+  UNIQUE (choice_id, branch)
+```
+
+An automatic choice has exactly one `automatic` outcome. A condition choice has
+exactly one `met` and one `unmet` outcome. Both may have consequences, including
+an explicitly empty consequence set.
+
+### `consequence_sets`
+
+```text
+consequence_sets
+  id
+  rule_set_id
+  outcome_id UNIQUE
+```
+
+Consequence sets are owned by outcomes rather than named reusable resources.
+Their IDs remain stable for editing. Named reusable consequence sets are
+deferred until demonstrated reuse justifies shared-mutation semantics.
+
+### `effects`
+
+```text
+effects
+  id
+  rule_set_id
+  consequence_set_id
+  position
+  operation             set | clear | adjust-number | add-value | remove-value
+  target                participant | problem
+  state_variable_id
+  adjustment_amount nullable
+  UNIQUE (consequence_set_id, position)
+```
+
+### `effect_value_operands`
+
+```text
+effect_value_operands
+  id
+  rule_set_id
+  effect_id
+  state_variable_id
+  value_kind
+  cardinality
+  position
+  <typed-value columns>
+  UNIQUE (effect_id, position)
+```
+
+Operand counts depend on the operation:
+
+- scalar `set`: exactly one operand;
+- many-valued `set`: zero or more unique operands, with zero meaning the empty
+  set;
+- `clear`: no operands;
+- `adjust-number`: no operand rows and one finite `adjustment_amount`;
+- `add-value` and `remove-value`: exactly one scalar operand.
+
+Effects have these semantics:
+
+- `set` replaces the complete logical value.
+- `clear` removes persisted rows; the resulting logical value is the variable's
+  default or unknown.
+- `adjust-number` adds its amount to a known single-valued number. Unknown input
+  or an invalid result is an application error.
+- `add-value` adds one normalized member to a many-valued set. Adding an
+  existing member is an idempotent no-op.
+- `remove-value` removes one normalized member from a many-valued set. Removing
+  an absent member is an idempotent no-op.
+
+Effects execute in position order against a working copy. Later effects observe
+earlier results. Every effect must be listed in the target variable's allowed
+operations and must also have the correct structural shape:
+
+| Operation | Required variable shape |
+| --- | --- |
+| `set` | Any supported schema with matching cardinality. |
+| `clear` | Any supported schema. |
+| `adjust-number` | Number with cardinality one. |
+| `add-value` | Any supported scalar schema with cardinality many. |
+| `remove-value` | Any supported scalar schema with cardinality many. |
+
+An effect may be valid configuration but fail against runtime state, such as an
+adjustment to unknown health or a result outside declared bounds. One failure
+aborts the complete consequence set. It is not reinterpreted as an unmet
+resolution condition.
+
+### `problem_instances`
+
+```text
+problem_instances
+  entity_id PK/FK -> entities
+  rule_set_id
+  entity_type = problem-instance
+  problem_definition_id
+  created_at
+  updated_at
+```
+
+Every problem instance has its own `state_records` row. Runtime state never
+lives on a reusable problem definition. Existing instances prevent their
+definition from being deleted. Archived definitions cannot create new
+instances.
+
+## Availability and resolution semantics
+
+Availability answers whether an action may be selected. Resolution determines
+which outcome occurs after an available action is selected. They are not
+interchangeable.
+
+- If Strength >= 14 is an availability condition, a weaker participant cannot
+  attempt the action and cannot experience its failure consequence.
+- If Strength >= 14 is a resolution condition, the participant may attempt the
+  action; the result selects the met or unmet outcome.
+
+A problem is available only when its optional problem-level availability set is
+met. A choice is available only when both problem and choice availability sets
+are met. Unmet means unavailable. Unknown means required state is incomplete.
+Neither result applies effects.
+
+An automatic choice selects its sole outcome. A conditional choice evaluates
+its resolution condition. Met selects the met outcome; unmet selects the unmet
+outcome; unknown stops as incomplete and applies neither.
+
+Invalid definitions, invalid persisted state, revision conflicts, and effect
+application failures are errors rather than resolution statuses.
+
+## Worked example
+
+For **The Trapped Reliquary**, current state is:
+
+```text
+Participant:
+  Dexterity = 12
+  Sleight of Hand = true
+  Strength = 11
+  Current Health = 10
+  Inventory Items = []
+
+Problem instance:
+  Problem Resolved = false
+```
+
+The reusable `careful-idol` condition is an `any` root with two criteria:
+
+```text
+Dexterity >= 14
+Sleight of Hand is true
+```
+
+Relationally, this is one condition-set row, three expression-node rows, two
+criterion rows, one numeric-predicate row, and one Boolean-predicate row.
+
+The problem uses another condition set, `problem-unresolved`, as its
+availability guard. Its important choice reads:
+
+```text
+THE TRAPPED RELIQUARY
+Available when:
+  Problem Resolved is false
+
+Choice: Lift the idol carefully
+When chosen, test:
+  ANY of:
+    Dexterity is at least 14
+    Has Sleight of Hand
+
+If met:
+  Add Ancient Idol to Inventory Items
+  Set Problem Resolved to true
+
+If unmet:
+  Reduce Current Health by 2
+```
+
+The met branch owns two ordered effect rows. The first owns a reference operand
+pointing to the Ancient Idol item entity. The second owns a Boolean true
+operand. The unmet branch owns one numeric adjustment effect with amount `-2`.
+
+Because Sleight of Hand is true, the example condition is met. Resolution adds
+the idol and marks the problem instance resolved in one transaction. If either
+state write fails, neither change commits.
+
+## Validation requirements
+
+### State-variable definitions
+
+- IDs and ruleset-scoped keys are non-empty and unique.
+- Keys use a stable namespaced format.
+- Labels and sections are non-empty.
+- Owner types, categories, kinds, cardinalities, and controls are supported.
+- Numeric and measurement bounds are finite and ordered.
+- Steps are finite and greater than zero.
+- Measurement schemas declare at least one unique unit.
+- Choice keys are non-empty and unique within the variable.
+- Reference schemas declare at least one allowed entity type.
+- Default rows match kind and cardinality.
+- `omit_default_when_stored` is allowed only with a default.
+- Many-valued defaults have no normalized duplicates.
+- Allowed effect operations are compatible with schema and cardinality.
+- Referenced definitions cannot be deleted.
+- Used semantic schemas cannot change in place.
+
+### State records
+
+- The owner exists in the same ruleset and has the declared owner type.
+- Every value references a definition for that ruleset and owner type.
+- Every value kind and cardinality agrees with its definition.
+- Numbers and measurements are finite and satisfy bounds and steps.
+- Choice values reference current options belonging to their variable.
+- Reference and relationship targets exist and have allowed entity types.
+- Many-valued collections have no normalized duplicates.
+- Values equal to omitted defaults are normalized out.
+- Writes supply the expected current revision.
+
+### Condition sets
+
+- IDs and ruleset-scoped keys are unique and non-empty.
+- Names are non-empty.
+- Expression IDs are unique within the tree.
+- The tree has exactly one root and no cycles or disconnected nodes.
+- Every group has at least one child.
+- Every `at-least` count is valid for its child count.
+- Criteria reference condition-addressable variables in the same ruleset.
+- Criterion targets agree with variable owner types.
+- Predicate kind and operator match the variable schema.
+- Operands are normalized and valid for the variable.
+- Archived variables cannot receive new criterion references.
+- The tree has a maximum depth of 10 and maximum total node count of 250.
+
+### Effects and consequence sets
+
+- Consequence-set and effect IDs are non-empty and unique within a problem.
+- Effect positions are complete and unique within their consequence set.
+- Every effect references a variable in the same ruleset.
+- Effect targets agree with variable owner types.
+- Operations are enabled by their variables and structurally compatible.
+- Literal values and amounts are normalized, finite, and schema-valid.
+- Newly authored effects cannot reference archived variables.
+- Consequence sets may be empty.
+
+### Problem definitions
+
+- IDs and ruleset-scoped keys are unique and non-empty.
+- Names are non-empty.
+- Every problem has at least one choice.
+- Choice IDs and keys are unique within the problem.
+- Outcome, consequence-set, and effect IDs are unique within the problem.
+- Positions are unique and non-negative.
+- Referenced condition sets exist in the same ruleset.
+- Archived condition sets cannot be newly assigned.
+- Every choice has exactly one valid resolution shape.
+- Conditional choices explicitly define met and unmet outcomes, even when an
+  outcome has no effects.
+- Existing instances prevent definition deletion.
+- Archived definitions cannot create instances.
+
+### Runtime resolution
+
+- The instance references the requested problem definition.
+- The choice belongs to that definition.
+- Participant and problem records exist and are schema-valid.
+- Evaluation uses one consistent state and configuration snapshot.
+- Availability is reevaluated by the server.
+- Every effect remains valid when reached in ordered application.
+- Resulting values satisfy their definitions.
+- Expected state revisions still match at commit.
+- Any failure aborts every state update.
+
+## Deletion, mutation, and usage rules
+
+Normalized foreign keys replace the derived-reference indexes that a document
+model would need:
+
+- condition criteria directly identify state-variable usage;
+- effects directly identify state-variable usage;
+- problem and choice condition FKs directly identify condition-set usage; and
+- problem instances directly identify definition usage.
+
+Usage screens query these relations. They are never separately editable.
+
+Saving a condition set or problem replaces its owned relational aggregate in a
+transaction while preserving supplied stable IDs. Runtime state rows are
+updated in place. No transition table is required initially.
+
+If receipts or historical reconstruction are added later, a receipt would need
+problem, instance, choice, outcome, effects, and before/after values. Exact
+historical reconstruction would additionally require immutable configuration
+revisions; that remains explicitly outside the initial system.
+
+## Deferred extensions
+
+The model leaves room for:
+
+- derived state and dependency graphs;
+- transition receipts, audit history, provenance, and event sourcing;
+- versioned or published configuration;
+- reusable consequence sets;
+- ordered first-match outcome cases;
+- multiple independent all-matching rules;
+- dice and random outcomes;
+- additional state targets and named bindings;
+- multiple participant roles and collective party conditions;
+- state-variable-to-state-variable comparisons;
+- text, reference, relationship, measurement, and many-valued predicates;
+- structured objects and ordered-list schemas;
+- structured inventory entries;
+- participant-specific bounds and cross-variable invariants;
+- effects that create entities or problem instances;
+- narrative or external consequences;
+- per-problem overrides of shared condition sets; and
+- concurrent configuration editing.
+
+Each extension must introduce explicit domain semantics and relational storage.
+It must not enter through arbitrary operator strings, JSON patches, JSONB
+documents, or executable expressions.
