@@ -10,102 +10,88 @@ type ValuePresence string
 const (
 	ValueStored    ValuePresence = "stored"
 	ValueDefaulted ValuePresence = "defaulted"
-	ValueUnknown   ValuePresence = "unknown"
 )
 
 type LogicalValue struct {
 	Presence ValuePresence
-	Value    *StateValue
+	Value    StateValue
 }
 
 type LogicalStateRecord struct {
-	OwnerEntityID          ID
-	Revision               int64
-	Values                 map[ID]StateValue
-	DefaultedDefinitionIDs []ID
-	UnknownDefinitionIDs   []ID
+	EntityID             ID
+	Revision             int64
+	Values               map[ID]StateValue
+	DefaultedMechanicIDs []ID
 }
 
-func ValidateStateRecord(record StateRecord, entity Entity, definitions map[ID]StateVariableDefinition, entities map[ID]Entity) ValidationErrors {
+func ValidateStateRecord(record StateRecord, entity Entity, definitions map[ID]MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
-	if record.OwnerEntityID != entity.ID {
-		errs = append(errs, validation("owner_mismatch", "owner_entity_id", "state record does not belong to the supplied entity"))
+	if record.EntityID != entity.ID {
+		errs = append(errs, validation("entity_mismatch", "entity_id", "state record does not belong to the supplied entity"))
 	}
 	if record.Revision < 0 {
 		errs = append(errs, validation("invalid_revision", "revision", "state revision cannot be negative"))
 	}
-	for definitionID, value := range record.Values {
-		path := "values[" + string(definitionID) + "]"
-		definition, exists := definitions[definitionID]
+	for mechanicID, value := range record.Values {
+		path := "values[" + string(mechanicID) + "]"
+		definition, exists := definitions[mechanicID]
 		if !exists {
-			errs = append(errs, validation("unknown_state_variable", path, "state-variable definition does not exist"))
+			errs = append(errs, validation("unknown_mechanic", path, "mechanic definition does not exist"))
 			continue
 		}
-		if definition.RuleSetID != entity.RuleSetID {
-			errs = append(errs, validation("cross_ruleset_reference", path, "state-variable definition belongs to another ruleset"))
+		if definition.WorldID != entity.WorldID {
+			errs = append(errs, validation("cross_world_reference", path, "mechanic belongs to another world"))
 			continue
 		}
-		if !EntityImplementsAny(entity, definition.OwnerSchemaIDs) {
-			errs = append(errs, validation("ineligible_state_owner", path, "entity is not eligible to own this state variable"))
-			continue
+		for _, item := range ValidateStateValue(definition, value) {
+			item.Path = pathForNestedValidation(path, item.Path)
+			errs = append(errs, item)
 		}
-		errs = append(errs, ValidateStateValue(definition, value, entities)...)
-		if definition.MissingKind == MissingDefault && definition.OmitDefaultWhenStored && definition.DefaultValue != nil && StateValuesEqual(value, *definition.DefaultValue) {
-			errs = append(errs, validation("unnormalized_default", path, "stored values equal to an omitted default must be removed"))
+		if StateValuesEqual(value, definition.DefaultValue) {
+			errs = append(errs, validation("unnormalized_default", path, "stored values equal to the mechanic default must be removed"))
 		}
 	}
 	return errs
 }
 
-func LogicalStateValue(record StateRecord, definition StateVariableDefinition) LogicalValue {
+func LogicalStateValue(record StateRecord, definition MechanicDefinition) LogicalValue {
 	if value, ok := record.Values[definition.ID]; ok {
-		copy := CloneStateValue(value)
-		return LogicalValue{Presence: ValueStored, Value: &copy}
+		return LogicalValue{Presence: ValueStored, Value: CloneStateValue(value)}
 	}
-	if definition.MissingKind == MissingDefault && definition.DefaultValue != nil {
-		copy := CloneStateValue(*definition.DefaultValue)
-		return LogicalValue{Presence: ValueDefaulted, Value: &copy}
-	}
-	return LogicalValue{Presence: ValueUnknown}
+	return LogicalValue{Presence: ValueDefaulted, Value: CloneStateValue(definition.DefaultValue)}
 }
 
-func MaterializeLogicalState(entity Entity, record StateRecord, definitions map[ID]StateVariableDefinition) LogicalStateRecord {
+func MaterializeLogicalState(entity Entity, record StateRecord, definitions map[ID]MechanicDefinition) LogicalStateRecord {
 	result := LogicalStateRecord{
-		OwnerEntityID:          entity.ID,
-		Revision:               record.Revision,
-		Values:                 make(map[ID]StateValue),
-		DefaultedDefinitionIDs: []ID{},
-		UnknownDefinitionIDs:   []ID{},
+		EntityID:             entity.ID,
+		Revision:             record.Revision,
+		Values:               make(map[ID]StateValue),
+		DefaultedMechanicIDs: []ID{},
 	}
-	definitionIDs := make([]ID, 0, len(definitions))
+	mechanicIDs := make([]ID, 0, len(definitions))
 	for id := range definitions {
-		definitionIDs = append(definitionIDs, id)
+		mechanicIDs = append(mechanicIDs, id)
 	}
-	sort.Slice(definitionIDs, func(i, j int) bool { return definitionIDs[i] < definitionIDs[j] })
-	for _, id := range definitionIDs {
+	sort.Slice(mechanicIDs, func(i, j int) bool { return mechanicIDs[i] < mechanicIDs[j] })
+	for _, id := range mechanicIDs {
 		definition := definitions[id]
-		if definition.RuleSetID != entity.RuleSetID || !EntityImplementsAny(entity, definition.OwnerSchemaIDs) {
+		if definition.WorldID != entity.WorldID {
 			continue
 		}
 		logical := LogicalStateValue(record, definition)
-		if logical.Value != nil {
-			result.Values[id] = CloneStateValue(*logical.Value)
-		}
-		switch logical.Presence {
-		case ValueDefaulted:
-			result.DefaultedDefinitionIDs = append(result.DefaultedDefinitionIDs, id)
-		case ValueUnknown:
-			result.UnknownDefinitionIDs = append(result.UnknownDefinitionIDs, id)
+		result.Values[id] = CloneStateValue(logical.Value)
+		if logical.Presence == ValueDefaulted {
+			result.DefaultedMechanicIDs = append(result.DefaultedMechanicIDs, id)
 		}
 	}
 	return result
 }
 
-func NormalizeStateRecord(record StateRecord, definitions map[ID]StateVariableDefinition) StateRecord {
+func NormalizeStateRecord(record StateRecord, definitions map[ID]MechanicDefinition) StateRecord {
 	result := CloneStateRecord(record)
 	for id, value := range result.Values {
 		definition, ok := definitions[id]
-		if ok && definition.MissingKind == MissingDefault && definition.OmitDefaultWhenStored && definition.DefaultValue != nil && StateValuesEqual(value, *definition.DefaultValue) {
+		if ok && StateValuesEqual(value, definition.DefaultValue) {
 			delete(result.Values, id)
 		}
 	}
@@ -129,7 +115,7 @@ func CloneSnapshot(snapshot StateSnapshot) StateSnapshot {
 	return result
 }
 
-func ValidateSnapshot(snapshot StateSnapshot, entities map[ID]Entity, definitions map[ID]StateVariableDefinition) ValidationErrors {
+func ValidateSnapshot(snapshot StateSnapshot, entities map[ID]Entity, definitions map[ID]MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
 	for entityID, record := range snapshot.Records {
 		entity, exists := entities[entityID]
@@ -137,10 +123,10 @@ func ValidateSnapshot(snapshot StateSnapshot, entities map[ID]Entity, definition
 			errs = append(errs, validation("unknown_entity", "records["+string(entityID)+"]", "snapshot entity does not exist"))
 			continue
 		}
-		if record.OwnerEntityID != entityID {
-			errs = append(errs, validation("owner_mismatch", "records["+string(entityID)+"].owner_entity_id", "map key and record owner differ"))
+		if record.EntityID != entityID {
+			errs = append(errs, validation("entity_mismatch", "records["+string(entityID)+"].entity_id", "map key and record entity differ"))
 		}
-		for _, item := range ValidateStateRecord(record, entity, definitions, entities) {
+		for _, item := range ValidateStateRecord(record, entity, definitions) {
 			item.Path = fmt.Sprintf("records[%s].%s", entityID, item.Path)
 			errs = append(errs, item)
 		}

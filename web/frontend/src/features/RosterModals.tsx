@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
-import type { Game, World, WorldEntity, WorldMember } from "../api/types";
+import type { World, WorldEntity, WorldMember } from "../api/types";
 import { Avatar, ErrorMessage, Field, Modal } from "../components/StudioUI";
 
 export function NewEntityModal({
@@ -109,14 +109,12 @@ export function NewEntityModal({
 
 export function ManageControllersModal({
   world,
-  game,
   entity,
   members,
   onClose,
   onSaved,
 }: {
   world: World;
-  game: Game;
   entity: WorldEntity | undefined;
   members: WorldMember[];
   onClose: () => void;
@@ -129,13 +127,7 @@ export function ManageControllersModal({
     entity === undefined
       ? []
       : players
-          .filter((member) =>
-            game.memberships.some(
-              (gameMember) =>
-                gameMember.user_id === member.user_id &&
-                gameMember.controlled_entity_ids.includes(entity.id),
-            ),
-          )
+          .filter((member) => member.controlled_entity_ids.includes(entity.id))
           .map((member) => member.id);
   const [controllerIDs, setControllerIDs] = useState(initialControllerIDs);
   const [saving, setSaving] = useState(false);
@@ -152,7 +144,7 @@ export function ManageControllersModal({
       await api(worldPath(world.id, `entities/${entityID}/controllers`), {
         method: "PUT",
         ...jsonBody({
-          expected_game_revision: game.revision,
+          expected_table_revision: world.table_revision,
           controller_world_membership_ids: controllerIDs,
         }),
       });

@@ -16,9 +16,8 @@ Focused targets are:
 ./ci.sh e2e
 ```
 
-`all` is the default. `test` aliases `e2e`. The E2E target runs the complete
-frontend and backend target first, then browser tests; it is not a browser-only
-shortcut.
+`all` is the default. The E2E target runs the complete frontend and backend
+target first, then browser tests; it is not a browser-only shortcut.
 
 ## Isolated worktree behavior
 
@@ -75,8 +74,8 @@ The validator requires a valid Git repository with a `HEAD` commit.
 
 The smoke test runs only when `DND_TEST_DATABASE_URL` is set. It starts the
 built binary against that exact database, waits for the listening log, and
-stops it. The database must be explicitly disposable because the full migration
-chain may alter it.
+stops it. The database must be explicitly disposable because startup installs
+the schema.
 
 ### End to end
 
@@ -98,17 +97,11 @@ Files under `internal/rules/*_test.go` construct storage-neutral domain maps and
 snapshots. Coverage includes:
 
 - exact decimal canonicalization, arithmetic, and JSON;
-- definition/value/reference validation for every kind;
-- many-value set semantics and duplicate rejection;
-- default/unknown logical state and normalization;
-- condition tree validation, limits, all predicates, three-valued truth tables,
-  empty plural bindings, and missing-address ordering;
-- target/condition invocation bindings;
-- problem instance automatic binding;
+- numeric/Boolean definition and value validation;
+- authored-default logical state and normalization;
 - ordered effects observing earlier effects;
-- atomic failure, idempotent add/remove, clear/default behavior;
-- unavailable/incomplete/applied choice resolution;
-- concrete live transition target/ownership validation.
+- atomic failure and default behavior;
+- concrete live transition target/world-scope validation.
 
 These are the preferred tests for mechanical semantics because they are fast,
 deterministic, and independent of SQL/HTTP.
@@ -122,13 +115,13 @@ PostgreSQL integration fixture. They cover:
 - strict JSON and the error envelope;
 - static-file/SPA routing and panic recovery;
 - API tagged values and exact numeric transport;
-- condition/problem/interaction mappings and generated IDs;
-- archived-reference and dependency guards;
+- interaction mappings and generated IDs;
+- archived-mechanic and dependency guards;
 - event cursor parsing and matching;
 - development identity vocabulary and live effect validation;
-- universal owner-set mechanics, world key generation, invite token hashing,
-  capacity/capability definition mapping, character-field/profile validation,
-  and semantic no-op comparison.
+- world creation, invite token hashing, capacity/capability mapping,
+  character-field/profile validation, and semantic no-op comparison;
+- denial of removed route families with `404 endpoint_not_found`.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -149,18 +142,13 @@ There are no current component-rendering unit tests.
 
 - development identity, world creation, capacity/capability authoring, generated
   entity sheets, character-field publishing, direct setup state, world-list
-  isolation, and role denial;
-- advisory configured preview versus atomic resolve;
-- stale state revision conflict and default normalization;
-- condition unknown/unmet/met behavior;
-- authoritative conditional outcomes and rollback of invalid effects.
+  isolation, and role denial.
 
 `test/specs/play.spec.ts` exercises:
 
 - membership-filtered world lists and forbidden direct reads;
 - opaque public invite preview, redemption, role assignment, editor-only invite
   creation, revocation, and closed-link rejection;
-- confirmation that a new world has no configured problem definitions;
 - separate facilitator/player browser contexts receiving an improvised prompt;
 - facilitator character-control assignment, waiting/setup admission states,
   zero-field readiness, partial profile drafts, live-route denial during
@@ -282,9 +270,11 @@ applicable.
 
 ### Migration
 
-Exercise both an empty database through E2E and, where feasible, a database at
-the immediately previous schema version. Set `DND_TEST_DATABASE_URL` only to a
-database that can be destroyed or modified without consequence.
+Exercise an empty database through E2E. Verify that an unknown or non-prefix
+migration history is rejected with the clean-database instruction. Once a
+second migration exists after `001_worldwright.sql`, test upgrades from each
+supported predecessor derived from that baseline. Set `DND_TEST_DATABASE_URL`
+only to a database that can be destroyed or modified without consequence.
 
 ## Current gaps
 

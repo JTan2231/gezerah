@@ -24,7 +24,7 @@ export function InvitePage({
   user,
   navigate,
 }: {
-  area?: AppArea | undefined;
+  area: AppArea;
   token: string;
   user: User;
   navigate: Navigate;
@@ -83,7 +83,7 @@ export function InvitePage({
           <button
             className="button button-ink"
             type="button"
-            onClick={() => navigate(area === undefined ? "/" : `/${area}`)}
+            onClick={() => navigate(`/${area}`)}
           >
             Return to your worlds
           </button>
@@ -121,7 +121,7 @@ export function InvitePage({
             <button
               className="text-button"
               type="button"
-              onClick={() => navigate(`/${canonicalArea ?? area ?? "play"}`)}
+              onClick={() => navigate(`/${canonicalArea ?? area}`)}
             >
               Not now
             </button>

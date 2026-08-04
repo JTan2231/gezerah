@@ -2,39 +2,28 @@
 
 ## Purpose and boundaries
 
-The application is a world-centered typed state-transition system. Authors
-define only the capacities and capabilities that matter, without baking a game
-ontology into the codebase. Entity sheets are generated from that static
-configuration; actual problems are improvised in the multiplayer loop.
+Worldwright is a world-centered typed state-transition system. Authors define
+only the capacities, capabilities, character fields, and entities that matter
+to their world. Problems are improvised in the multiplayer loop rather than
+authored as reusable configuration.
 
-The generic rules engine still supports configured conditions/problems as a
-compatibility and testing surface, but the product frontend does not expose
-them and new world flows must not require them.
+The world is the sole product and data boundary. It owns:
 
-The system owns:
-
-- ruleset-scoped configuration and generic entities;
-- authorized world profiles, memberships, and expiring bearer invitations;
-- universal capacity/capability definitions over normalized typed state;
-- world-authored character-field requirements, player controls, and derived
-  live-play admission;
-- typed entity state and optimistic revisions;
-- reusable conditions and configured problem definitions;
-- configured problem instances and choice resolution;
-- development users, games, memberships, entity assignment, and live
-  interactions;
-- atomic application and immutable receipts for live rulings;
-- separate Play and Build libraries, static configuration, invitation, and
-  live-table browser interfaces.
+- owner/editor/player/spectator memberships and expiring bearer invitations;
+- numeric/Boolean capacity and capability definitions;
+- entities, scalar state, character fields, profiles, and player control;
+- improvised interactions, actions, rulings, and immutable receipts;
+- one append-only event cursor for live invalidation;
+- separate Play and Build browser surfaces over the same resources.
 
 The system does not currently own:
 
 - production authentication, sessions, passwords, or an identity provider;
-- a built-in game ontology, entity taxonomy, or seed ruleset;
-- cross-ruleset inheritance or sharing;
+- built-in entity classes, mechanic names, or seeded vocabulary;
+- cross-world inheritance or resource sharing;
 - matchmaking, chat, files, maps, dice, or turn scheduling;
-- background job processing or an external event broker;
-- a public compatibility/versioning promise for the HTTP API.
+- background jobs or an external event broker;
+- a separately versioned public HTTP API.
 
 ## Runtime topology
 
@@ -44,30 +33,27 @@ The system does not currently own:
 flowchart TB
     Client[Browser]
     Binary[Single dnd Go binary]
-    Migrations[Embedded forward-only migrations]
+    Migrations[Embedded SQL migrations]
     Static[Embedded Vite build]
     Postgres[(PostgreSQL)]
 
     Client -->|GET application routes| Binary
     Binary --> Static
     Client -->|JSON commands and queries| Binary
-    Client -->|game event stream| Binary
+    Client -->|world event stream| Binary
     Binary -->|pgx pool| Postgres
     Binary -->|startup, advisory lock| Migrations
     Migrations --> Postgres
 ```
 
-The binary starts by loading environment configuration, configuring structured
-JSON logging, opening a `pgxpool`, pinging PostgreSQL, applying every unapplied
-embedded migration, constructing the HTTP server, and listening. `SIGINT` and
-`SIGTERM` trigger a bounded HTTP shutdown attempt with a ten-second deadline.
-Active request contexts are not derived from the process root context, so an
-open SSE handler can consume that deadline before it disconnects or a write
-fails.
+The binary loads configuration, installs structured logging, connects to
+PostgreSQL, applies unapplied embedded migrations, constructs the HTTP server,
+and listens. `SIGINT` and `SIGTERM` start a bounded shutdown attempt with a
+ten-second deadline.
 
-The HTTP server sends `/api` and `/api/*` to a method-aware API mux. All other
-GET paths use static-file serving with SPA fallback to `index.html`. Missing
-asset paths under `/assets/` do not receive the SPA fallback.
+The HTTP server sends `/api` and `/api/*` to a method-aware API mux. Other GET
+paths use static-file serving with SPA fallback to `index.html`. Missing assets
+under `/assets/` do not receive that fallback.
 
 ### Local development
 
@@ -79,8 +65,8 @@ flowchart LR
 ```
 
 `./run.sh` builds and manages the Go process and starts Vite. PID files and
-logs are stored below ignored `.dnd/`. The frontend preserves normal relative
-`/api` calls in both topologies.
+logs live below ignored `.dnd/`. The frontend uses the same relative `/api`
+paths in both topologies.
 
 ## Architectural layers
 
@@ -88,263 +74,198 @@ logs are stored below ignored `.dnd/`. The frontend preserves normal relative
 flowchart TD
     UI[React features and components]
     HTTP[HTTP DTOs, handlers, authorization, errors]
-    Map[Domain mapping and loaders]
-    Engine[Storage-neutral rules engine]
-    Store[Relational persistence functions]
+    Rules[Pure scalar transition engine]
+    Store[Relational queries and transactions]
     PG[(PostgreSQL constraints)]
 
     UI --> HTTP
-    HTTP --> Map
-    Map --> Engine
+    HTTP --> Rules
     HTTP --> Store
     Store --> PG
-    Map --> Store
 ```
 
 ### Browser layer
 
-The browser layer begins with a data-free choice between two sibling product
-areas. `/build` owns the owner/editor world library and the static authoring
-studio; `/play` owns the admitted-world table picker, player onboarding, and
-live table. They share identity, API, types, hooks, and primitive components but
-have independent route trees and navigation shells. Build never mounts the game
-event stream, while Play never renders configuration or direct setup controls.
+The browser starts with a data-free choice between `/build` and `/play`.
+Build owns the owner/editor world library and configuration studio. Play owns
+the admitted-world table picker, player onboarding, and live table. Both areas
+share identity, API types, fetch helpers, route helpers, and UI primitives.
 
 World configuration is a master-detail editor for capacities/capabilities plus
-character fields, roster setup, people, and settings. Builder roster setup adds
-game-scoped player-control relationships and separately loaded configured
-character profiles to generated sheets. Play reuses the authorized
-game/interaction handlers, renders direct sheet state read-only, and treats SSE
-rows as reload signals. A player who is not play-ready sees only
-controlled-character onboarding; live game resources are not requested until
-readiness changes.
+character fields, roster setup, people, and settings. Build never mounts the
+event stream; Play does not render configuration or direct setup-state inputs.
+A player who is not ready sees only controlled-character onboarding and does
+not request live interactions or events.
 
-Routing is implemented with the History API, canonicalizes legacy `/worlds`
-links, and preserves area-scoped invite tokens through the identity gate. There
-is no frontend route that authors a reusable problem.
+Routing uses the History API. Only the current `/build/**`, `/play/**`, and
+area-scoped invite URLs are recognized. Unknown paths render not found.
 
-### World application layer
-
-`internal/app/handlers_worlds.go`, `handlers_world_mechanics.go`,
-`handlers_world_entities.go`, `handlers_world_character_fields.go`, and
-`handlers_world_entity_profiles.go` adapt the world product model to normalized
-resources. World creation establishes its ruleset, character-field revision
-root, primary game, owner world membership, and facilitator game membership in
-one transaction. Invite redemption establishes paired memberships in one
-transaction. Character control is a many-to-many game-membership/entity edge;
-field definitions and per-entity text values are distinct ruleset-scoped
-relational aggregates.
-
-World mechanics are ordinary normalized state-variable definitions with an
-explicit empty/universal owner-schema set. `world_mechanics` stores only the
-author-facing kind, mode, and live-mutation flag; values/defaults/effect
-allowlists remain in the existing typed tables.
-
-Character-field, profile, control, and readiness data stop at the application
-boundary. Domain snapshots continue to construct `rules.Entity` exclusively
-from generic entity identity, owner-schema membership, and typed state. Profile
-prose can therefore neither change applicability nor be targeted as mechanical
-state. The application separately prevents an incomplete controlled entity
-from entering a new interaction context or live effect plan.
-
-The React application is a client-rendered SPA with a small history-based route
-helper rather than an external router. Feature screens own server collections
-and edit drafts. Separate Play and Build shells compose shared mechanic,
-profile, sheet, invite, and ruling primitives. Ordinary JSON calls pass through
-one fetch adapter, which adds JSON headers, maps the error envelope, and
-attaches the selected development user when present. The game-event hook uses a
-separate streaming `fetch`, adds the identity header itself, reconnects with its
-cursor, and keeps a three-second query-polling fallback active.
+Ordinary JSON calls pass through one fetch adapter that sets JSON headers, maps
+the error envelope, and adds the selected development identity. The world-event
+hook uses streaming `fetch`, adds the identity header, remembers its cursor,
+and reconnects after a stream ends.
 
 ### HTTP/application layer
 
-`internal/app` owns the transport and database orchestration:
+`internal/app` owns transport and persistence orchestration:
 
-- API DTOs model tagged JSON unions and protect numeric parsing.
-- Handlers perform path/body validation and translate errors to HTTP.
-- Mapping files convert DTOs and rows to storage-neutral domain types.
-- Store files save and load normalized relational aggregates.
-- Domain loaders assemble ruleset snapshots needed by the engine.
-- Live Play handlers apply identity, membership, role, visibility, and
-  game-entity boundaries.
-- Transaction orchestration supplies consistent snapshots, locks mutable roots,
-  checks revisions, calls the rules engine, and persists atomically.
+- strict request/response DTOs preserve exact numeric input;
+- handlers validate path, query, body, identity, membership, and role;
+- world-scoped queries load relational aggregates;
+- command transactions lock mutable roots and recheck revisions;
+- live rulings call the pure transition engine and persist state/history
+  atomically;
+- visibility filtering removes private fields before serialization.
 
-The application layer deliberately does not place SQL or HTTP concerns in the
-rules engine.
+The application layer does not put SQL, HTTP, authentication, clocks, or UUID
+generation into the rules engine.
 
 ### Rules engine
 
-`internal/rules` is pure Go and storage-neutral. IDs are non-empty stable
-strings, so the engine does not depend on PostgreSQL UUIDs. It validates
-definitions, state, condition bindings, problem bindings, effect plans, and
-snapshots. It evaluates three-valued conditions and applies ordered transition
-plans to cloned in-memory snapshots.
+`internal/rules` is pure Go and storage-neutral. Stable IDs are strings. It
+validates numeric/Boolean mechanic definitions, materialized state snapshots,
+and ordered `set`/`adjust-number` effects. It applies a transition to a cloned
+snapshot and returns before/after applications plus changed record IDs.
 
-The engine does not increment revisions, write receipts, acquire locks, or
-commit transactions. Those are adapter responsibilities.
+The engine does not increment revisions, acquire locks, write receipts, or
+commit transactions. Those remain adapter responsibilities.
 
 ### Persistence layer
 
-PostgreSQL is the authoritative store. Configuration aggregates are normalized
-across typed relational tables. Foreign keys carry ruleset IDs where needed to
-make cross-ruleset references structurally impossible. Check constraints mirror
-important tagged-union shapes, bounds, statuses, and lifecycle invariants.
+PostgreSQL is authoritative. The clean baseline is normalized around
+`world_id`; there are no secondary configuration or live-play containers.
+Composite foreign keys make cross-world relationships structurally invalid.
+Checks enforce scalar tagged shapes, numeric bounds metadata, roles, statuses,
+and lifecycle shapes. Triggers protect final receipts and event rows.
 
-Application validation provides useful field messages; database constraints
-remain the final integrity boundary.
+JSON is a transport format, not canonical storage.
 
 ## Major data flows
 
-### Authoring a configuration aggregate
+### Creating a world
+
+```mermaid
+sequenceDiagram
+    participant UI as Build library
+    participant H as HTTP handler
+    participant DB as PostgreSQL
+
+    UI->>H: POST /api/worlds
+    H->>DB: Begin transaction
+    H->>DB: Insert world
+    H->>DB: Insert owner membership
+    H->>DB: Insert character-field revision root
+    H->>DB: Insert world-created event
+    H->>DB: Commit
+    H-->>UI: 201 World
+```
+
+No additional container, generated vocabulary, or seed row is created.
+
+### Authoring a mechanic
 
 ```mermaid
 sequenceDiagram
     participant UI as React editor
     participant H as HTTP handler
-    participant M as DTO/domain mapper
     participant R as Rules validator
     participant DB as PostgreSQL
 
-    UI->>H: POST or PUT strict JSON
-    H->>M: Decode tagged payload
-    M->>DB: Load referenced ruleset resources
-    M->>R: Validate complete domain aggregate
-    R-->>M: Validation errors or valid value
-    M->>DB: Replace normalized child rows in transaction
-    DB-->>H: Saved aggregate
-    H-->>UI: 201/200 JSON or error envelope
+    UI->>H: POST or PUT world mechanic
+    H->>H: Check active owner/editor
+    H->>R: Validate kind, mode, default, bounds, step
+    R-->>H: Valid mechanic or field errors
+    H->>DB: Persist normalized world_mechanics row
+    H-->>UI: Saved mechanic
 ```
 
-PUTs for owner schemas, entities, state variables, conditions, and problems are
-aggregate replacements. Nested child IDs preserve durable identity when they
-are supplied. New nested resources receive generated UUIDs in the mapping
-layer. Archive commands are explicit POSTs and keep historical references
-intact.
-
-### Configured choice resolution
-
-```mermaid
-sequenceDiagram
-    participant UI as Runtime screen
-    participant H as Resolution handler
-    participant DB as PostgreSQL
-    participant R as Rules engine
-
-    UI->>H: Preview/resolve choice + expected revisions
-    H->>DB: Load definition, bindings, entities, conditions, state
-    H->>R: ResolveChoice(snapshot)
-    R->>R: Validate availability and resolution conditions
-    R->>R: Select outcome and apply ordered effects
-    R-->>H: unavailable, incomplete, or applied result
-    alt preview
-        H-->>UI: Advisory result; transaction remains read-only
-    else resolve
-        H->>DB: Verify guards and persist changed records atomically
-        H-->>UI: Authoritative result
-    end
-```
-
-Availability is a conjunction of the problem guard and the selected choice
-guard. An unmet guard makes the choice unavailable even if another guard is
-unknown. If no guard is unmet but one is unknown, resolution is incomplete.
+Archiving is explicit and retains stored values and receipt references.
 
 ### Live interaction resolution
 
 ```mermaid
 sequenceDiagram
     participant F as Facilitator client
-    participant H as Play handler
+    participant H as World interaction handler
     participant DB as PostgreSQL
     participant R as Transition engine
     participant E as SSE clients
 
     F->>H: Resolve ruling + revision + idempotency key
-    H->>DB: Lock game, interaction, definitions, entities, state
-    H->>DB: Check facilitator, active game, revision, selected action
-    H->>R: Apply concrete effects to snapshot
-    R-->>H: Before/after results or atomic failure
-    H->>DB: Persist state revisions
-    H->>DB: Insert ruling and normalized effect/application receipt
-    H->>DB: Mark interaction resolved and append game event
+    H->>DB: Lock world, interaction, mechanics, entities, state
+    H->>DB: Recheck facilitator, lifecycle, revisions, selected action
+    H->>R: Apply ordered concrete effects
+    R-->>H: Before/after applications or atomic failure
+    H->>DB: Persist changed state revisions
+    H->>DB: Insert immutable ruling and applications
+    H->>DB: Finalize interaction/actions and append world event
     H->>DB: Commit
     H-->>F: Resolution result
-    DB-->>E: Event becomes visible to polling SSE loop
+    DB-->>E: Cursor becomes visible to event polling
 ```
 
-The transaction is the consistency boundary: state, interaction lifecycle,
-receipt, selected/declined action statuses, and game event either all commit or
-all roll back. Reusing the same idempotency key with an equivalent request
-returns the immutable ruling and applied effects with `replayed: true`; using it
-for different content is a conflict. Replay state records are loaded at replay
-time, so they may be newer than the state returned by the original request.
-Replay also passes through the current identity, facilitator, and active-game
-checks.
+State, the receipt, selected/declined action statuses, interaction lifecycle,
+and event either all commit or all roll back. Equivalent idempotent replay
+returns the immutable ruling with `replayed: true`; different content conflicts.
 
 ## Consistency and concurrency
 
-The system uses three complementary mechanisms:
+The system combines:
 
-1. **Optimistic revisions.** Clients send expected state, binding, membership,
-   game, interaction, or action revisions for overwrite-sensitive commands.
-   Stale requests receive `409 revision_conflict`.
-2. **Row locks and ordered locking.** Mutation transactions lock aggregate
-   roots and state rows before rechecking guards. Entity and definition IDs are
-   sorted where a stable lock order matters.
-3. **Database constraints.** Uniqueness, foreign keys, typed shapes, lifecycle
-   checks, and immutability triggers protect against invalid writes from any
-   application path.
+1. **Optimistic revisions.** Settings, the world table, character fields,
+   profiles, entity state, memberships, interactions, and actions reject stale
+   expected revisions.
+2. **Row locks and stable ordering.** Mutation transactions lock aggregate roots
+   first and sort mechanic/entity IDs where lock order matters.
+3. **Database constraints.** Uniqueness, world-scoped foreign keys, tagged
+   shapes, lifecycle checks, and immutability triggers remain the final guard.
 
-Read paths that assemble multi-table aggregates commonly use read-only
-`REPEATABLE READ` transactions so a response cannot mix revisions.
+`worlds.revision` protects settings and lifecycle. `worlds.table_revision`
+protects complete controller-set replacements and other table-scoped authority.
+The two counters advance independently.
+
+Read paths that assemble several tables may use read-only `REPEATABLE READ` so
+a response cannot combine different revisions.
 
 ## Events and freshness
 
-Game-scoped Play mutations append rows to `game_events`. Trusted ruleset
-authoring endpoints can also change entities, state, or configuration visible
-to a game, but they neither consult game status nor append game events. The
-browser opens an SSE request to `GET /api/games/{game_id}/events`, providing an
-`after` cursor or `Last-Event-ID`. The server emits event IDs and JSON event
-payloads and sends periodic keep-alive comments. Events are hints that cause the
-client to reload authoritative resources; they are not a full state-replication
-protocol.
+Live mutations append `world_events`. The browser opens
+`GET /api/worlds/{world_id}/events` with an `after` cursor or `Last-Event-ID`.
+The server emits monotonic IDs and compact resource references, plus keep-alive
+comments. Events are invalidation hints; clients reload authoritative world
+resources instead of reconstructing state from event payloads.
 
-There is no external broker. Each stream handler polls PostgreSQL, so capacity
-planning must include one open request and recurring event queries per connected
-game client. The current Go server's 30-second write deadline bounds each
-HTTP/1 stream; the browser hook reconnects with its last cursor when a stream
-ends.
+There is no broker. Each open handler polls PostgreSQL, so capacity planning
+must account for one request and recurring event queries per connected table
+client. The HTTP server's write deadline can close a stream; clients reconnect
+with their last cursor.
 
 ## Repository layout
 
-| Path                            | Responsibility                                                                          |
-| ------------------------------- | --------------------------------------------------------------------------------------- |
-| `cmd/dnd/`                      | Executable entrypoint, process lifecycle, and HTTP server startup.                      |
-| `internal/rules/`               | Pure domain types, validation, condition evaluation, and state transitions.             |
-| `internal/app/`                 | HTTP DTOs/handlers, persistence, authorization, mapping, and transaction orchestration. |
-| `internal/migrations/`          | Embedded forward-only PostgreSQL schema migrations.                                     |
-| `web/frontend/`                 | React/Vite authoring and Play SPA.                                                      |
-| `web/static/`                   | Ignored frontend build output embedded by Go; only a placeholder is tracked.            |
-| `web/static.go`                 | `embed.FS` declaration for production frontend files.                                   |
-| `test/`                         | Playwright harness, disposable database management, and end-to-end scenarios.           |
-| `ci.sh`                         | Isolated validation orchestrator.                                                       |
-| `run.sh`                        | Managed local backend/frontend processes.                                               |
-| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                             |
+| Path                            | Responsibility                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                                  |
+| `internal/rules/`               | Pure scalar definition/state validation and transitions.                     |
+| `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                   |
+| `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                          |
+| `web/frontend/`                 | React/Vite Build and Play SPA.                                               |
+| `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.           |
+| `test/`                         | Playwright harness and clean-database acceptance scenarios.                  |
+| `ci.sh`, `run.sh`               | Validation and managed local development.                                    |
+| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                  |
 
 ## Design constraints for future changes
 
-- Keep fictional vocabulary in ruleset configuration, not Go constants,
-  migrations, or seed data.
-- Do not make a configured key privileged. Reference durable IDs and declared
-  relationships.
-- Preserve normalized relational storage as the authoritative model. JSON may
-  be a transport representation, but not the canonical persisted aggregate.
-- Keep rules engine functions deterministic and independent of HTTP, SQL,
-  clocks, or authentication.
-- Validate at both the domain and database boundaries.
-- Route both configured and improvised mutations through `TransitionPlan` so
-  their mechanics cannot drift.
-- Treat receipts and events as history. Add new facts instead of rewriting
+- Keep fictional vocabulary in user-authored world configuration, not Go
+  constants, migrations, or seed data.
+- Do not make a configured key, entity name, or mechanic name privileged.
+- Keep `world_id` as the single configuration, authorization, and live scope.
+- Preserve normalized relational storage; JSON may be transport, never the
+  canonical aggregate.
+- Keep rules functions deterministic and independent of HTTP, SQL, clocks, or
+  authentication.
+- Validate at both application and database boundaries.
+- Route every live mechanical mutation through one concrete transition path.
+- Treat receipts and events as history; add new facts instead of rewriting
   applied history.
-- Keep player-facing reads game-scoped and filtered; do not expose generic
-  builder endpoints as a substitute for a player API.
+- Keep player reads world-scoped and visibility-filtered.

@@ -9,8 +9,9 @@ usage() {
 	cat <<'EOF'
 Usage: ./reset-db.sh [--yes]
 
-Deletes all application data from the configured local development database.
-The database schema and migration history are preserved. Without --yes, the
+Rebuilds the configured local development database from an empty public schema.
+Every object in that schema, plus objects that depend on it, is deleted. The
+current baseline is installed on the next backend start. Without --yes, the
 database name must be typed to confirm the reset.
 EOF
 }
@@ -78,22 +79,16 @@ case "$database_name" in
 	;;
 esac
 
-public_table_count="$(psql_scalar "select count(*) from pg_tables where schemaname = 'public'")"
-if [ "$public_table_count" = "0" ]; then
-	printf 'Local database "%s" is already empty.\n' "$database_name"
-	exit 0
-fi
-
-is_dnd_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null and to_regclass('public.rule_sets') is not null")"
+is_dnd_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
 if [ "$is_dnd_database" != "t" ]; then
-	printf 'Refusing to reset database "%s": it does not look like a migrated Worldwright database.\n' \
+	printf 'Refusing to reset database "%s": the Worldwright migration ledger is absent.\n' \
 		"$database_name" >&2
 	exit 1
 fi
 
 printf 'Target: local PostgreSQL database "%s" (%s)\n' \
 	"$database_name" "${server_address:-local socket}"
-printf 'This permanently deletes all application data while preserving migrations.\n'
+printf 'This permanently deletes the entire public schema and all application data.\n'
 
 if [ "$assume_yes" -ne 1 ]; then
 	printf 'Type the database name to continue: '
@@ -157,28 +152,16 @@ psql \
 	--dbname="$database_url" <<'SQL'
 begin;
 set local lock_timeout = '5s';
-
-do $reset$
-declare
-	table_list text;
+do $lock$
 begin
-	select string_agg(
-		format('%I.%I', schemaname, tablename),
-		', ' order by schemaname, tablename
-	)
-	into table_list
-	from pg_tables
-	where schemaname = 'public'
-	  and tablename <> 'schema_migrations';
-
-	if table_list is not null then
-		execute 'truncate table ' || table_list || ' restart identity';
-	end if;
+	perform pg_advisory_xact_lock(3016533762926936644);
 end
-$reset$;
-
+$lock$;
+drop schema public cascade;
+create schema public authorization current_user;
+grant usage on schema public to public;
 commit;
 SQL
 
-printf 'Local database "%s" was reset; schema and migration history were preserved.\n' \
+printf 'Local database "%s" now has an empty public schema; the next backend start will install the current baseline.\n' \
 	"$database_name"

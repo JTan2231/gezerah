@@ -7,19 +7,17 @@ player-controlled characters with world-authored onboarding fields, and a
 multiplayer table where facilitators create every problem ad hoc.
 
 The application intentionally has no built-in entity classes, privileged
-configured keys, seed vocabulary, or canonical JSON document model. Ruleset
+configured keys, seed vocabulary, or canonical JSON document model. World
 authors supply the mechanical vocabulary through world configuration. The
-server stores that vocabulary in relational, ruleset-scoped structures and
-enforces its declared constraints. Generic configured-problem resources remain
-available only as an engine compatibility surface; the product UI does not
-expose them.
+server stores that vocabulary in relational, world-scoped structures and
+enforces its declared constraints.
 
 ## Documentation map
 
 | Document                        | Use it to understand                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | [Architecture](architecture.md) | System boundaries, runtime topology, layers, data flow, and repository layout.                        |
-| [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, games, and interactions.                    |
+| [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, and interactions.                           |
 | [Workflows](workflows.md)       | World creation, configuration, invitations, sheets, and the ad-hoc Play lifecycle.                    |
 | [API reference](api.md)         | HTTP conventions, authentication adapter, payloads, errors, concurrency guards, SSE, and every route. |
 | [Backend](backend.md)           | Go server construction, application packages, rules engine, persistence adapters, and transactions.   |
@@ -51,30 +49,19 @@ PostgreSQL, serves `/api/*`, and serves the embedded frontend for every other
 route. During development, Vite serves the frontend on port `5173` and proxies
 `/api` to the Go process on port `8080`.
 
-## Primary product path and compatibility engine
+## Product path
 
-The shared state-transition engine supports two paths with different product
-status:
-
-1. **Worldwright** is the primary path. A world author defines capacities and
-   capabilities, generates sheets for stateful subjects, admits participants by
-   invite link, and runs improvised interactions in the primary game. The state
-   change and immutable resolution receipt are one transaction.
-2. **Configured runtime** is a compatibility path in the API and rules engine.
-   It can still resolve reusable definitions and authored outcomes, but it has
-   no frontend route and new world workflows do not depend on it.
-
-Both paths eventually create an ordered concrete transition plan and pass it
-to the same pure Go transition engine. This keeps type checking, ownership,
-effect ordering, default handling, and atomic failure semantics aligned.
+A world author defines capacities and capabilities, generates sheets for
+stateful subjects, admits participants by invite link, and runs improvised
+interactions at the table. Live effects become an ordered concrete transition
+plan. State changes, the immutable resolution receipt, and the world event
+commit in one transaction.
 
 ## Core invariants
 
-- Configuration is user-authored and scoped to exactly one ruleset.
+- Configuration is user-authored and scoped to exactly one world.
 - Durable identities are UUIDs at the HTTP and database boundaries.
-- Owner schemas are capabilities/tags, not built-in classes. An entity may
-  implement zero or more of them.
-- A character is an ordinary game entity with one or more active player-control
+- A character is an ordinary world entity with one or more active player-control
   relationships, never an engine class or privileged configured key.
 - Every active character field is authored by the world owner/editor and is
   required for every controlled character; there is no built-in field list.
@@ -82,45 +69,35 @@ effect ordering, default handling, and atomic failure semantics aligned.
   by the rules engine or exposed as mechanical state.
 - Player admission to live play is derived from control and character-field
   completion rather than persisted as a second membership lifecycle.
-- A state variable with declared owner schemas can be owned when those sets
-  intersect; an empty owner-schema set is explicitly universal.
 - Typed state is stored relationally; the database does not use a canonical
   JSON document as its source of truth.
 - Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic.
-- Many-valued state has set semantics and rejects duplicates.
-- Missing state is either logically `unknown` or materialized from an authored
-  default.
-- Conditions use three-valued logic: `met`, `unmet`, and `unknown`.
+- Missing stored state materializes from the mechanic's authored default.
 - Effects execute in authored order and observe earlier effects in the same
   transition.
 - Failed transitions do not partially mutate state.
-- State, bindings, memberships, games, interactions, and action submissions
+- State, memberships, the world table, interactions, and action submissions
   use revision guards where concurrent commands could overwrite one another.
-- One ruleset entity can be assigned to at most one game at a time.
-- A committed live resolution, its applied-effect receipt, and its game event
+- A committed live resolution, its applied-effect receipt, and its world event
   are immutable audit history.
 
 ## Terminology
 
-| Term               | Meaning                                                                                                  |
-| ------------------ | -------------------------------------------------------------------------------------------------------- |
-| World              | Membership and product boundary over one backing ruleset and one primary game.                           |
-| Capacity           | User-authored numeric score or pool that appears on generated sheets.                                    |
-| Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                          |
-| World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                      |
-| Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                           |
-| Ruleset            | Internal isolation boundary and container for a world's authored mechanical vocabulary.                  |
-| Owner schema       | User-authored generic capability/tag retained by the underlying engine; never a built-in class.          |
-| Entity             | Generic durable state owner represented to authors as a person or other world subject.                   |
-| Character          | Product view of a game entity controlled by one or more active player memberships.                       |
-| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                       |
-| Entity profile     | One entity's values for the world's active character fields, separate from typed engine state.           |
-| State definition   | Normalized typed schema underlying a capacity or capability.                                             |
-| Logical state      | Stored overrides combined with authored missing/default semantics.                                       |
-| Game               | Live-play boundary that maps an exclusive subset of one ruleset's entities.                              |
-| Interaction        | An ad-hoc facilitator prompt with its audience, responders, actions, ruling, and effects.                |
-| Resolution receipt | Immutable record of a committed ruling, requested effects, applied before/after values, and narrative.   |
-| Configured problem | Legacy reusable engine aggregate retained for compatibility and not exposed by the Worldwright frontend. |
+| Term               | Meaning                                                                                                |
+| ------------------ | ------------------------------------------------------------------------------------------------------ |
+| World              | Membership, configuration, entity, live-play, receipt, and event boundary.                             |
+| Capacity           | User-authored numeric score or pool that appears on generated sheets.                                  |
+| Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                        |
+| World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                    |
+| Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                         |
+| Entity             | Durable state owner represented to authors as a person or other world subject.                         |
+| Character          | Product view of a world entity controlled by one or more active player memberships.                    |
+| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                     |
+| Entity profile     | One entity's values for the world's active character fields, separate from typed mechanical state.     |
+| State definition   | Normalized numeric or Boolean schema underlying a capacity or capability.                              |
+| Logical state      | Stored overrides combined with the mechanic's authored default.                                        |
+| Interaction        | An ad-hoc facilitator prompt with its audience, responders, actions, ruling, and effects.              |
+| Resolution receipt | Immutable record of a committed ruling, requested effects, applied before/after values, and narrative. |
 
 ## Sources of truth
 
@@ -128,7 +105,7 @@ The documentation explains behavior; these implementation areas are the final
 authority when behavior and prose diverge:
 
 - `internal/rules/` for domain validation and transition semantics.
-- `internal/app/api_*.go` and `internal/app/handlers_*.go` for HTTP contracts,
+- `internal/app/api.go`, `routes.go`, and the resource files for HTTP contracts,
   including character-field configuration, readiness, control, and profile
   authorization.
 - `internal/migrations/*.sql` for persisted shape and database constraints.

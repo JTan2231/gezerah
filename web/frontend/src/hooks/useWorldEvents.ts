@@ -1,29 +1,32 @@
 import { useEffect } from "react";
 
-import { gamePath, readSelectedUserId } from "../api/client";
+import { readSelectedUserId, worldPath } from "../api/client";
 
-export function useGameEvents(
-  gameId: string | undefined,
+export function useWorldEvents(
+  worldId: string | undefined,
   onRefresh: () => void,
 ): void {
   useEffect(() => {
-    if (gameId === undefined) return undefined;
+    if (worldId === undefined) return undefined;
     const controller = new AbortController();
     let cursor = "";
     let reconnectTimer: number | undefined;
 
     async function connect() {
-      if (controller.signal.aborted || gameId === undefined) return;
+      if (controller.signal.aborted || worldId === undefined) return;
       const headers = new Headers({ Accept: "text/event-stream" });
       const userId = readSelectedUserId();
       if (userId !== "") headers.set("X-DND-User-ID", userId);
       const suffix =
         cursor === "" ? "" : `?after=${encodeURIComponent(cursor)}`;
       try {
-        const response = await fetch(`${gamePath(gameId, "events")}${suffix}`, {
-          headers,
-          signal: controller.signal,
-        });
+        const response = await fetch(
+          `${worldPath(worldId, "events")}${suffix}`,
+          {
+            headers,
+            signal: controller.signal,
+          },
+        );
         if (!response.ok || response.body === null)
           throw new Error(`event stream failed (${response.status})`);
         const reader = response.body.getReader();
@@ -49,7 +52,7 @@ export function useGameEvents(
           }
         }
       } catch {
-        // The polling interval below remains the compatibility fallback.
+        // The reconnect below resumes invalidation after a stream failure.
       }
       if (!controller.signal.aborted) {
         onRefresh();
@@ -58,11 +61,9 @@ export function useGameEvents(
     }
 
     void connect();
-    const pollTimer = window.setInterval(onRefresh, 3000);
     return () => {
       controller.abort();
-      window.clearInterval(pollTimer);
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
     };
-  }, [gameId, onRefresh]);
+  }, [worldId, onRefresh]);
 }

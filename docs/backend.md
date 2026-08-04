@@ -3,37 +3,26 @@
 ## Stack and process model
 
 The backend is a Go 1.25 application with one direct runtime dependency:
-`github.com/jackc/pgx/v5`. It uses the standard library HTTP server and
+`github.com/jackc/pgx/v5`. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
-migrations and production frontend assets.
+the PostgreSQL schema and production frontend.
 
-One process owns:
-
-- PostgreSQL connection pooling;
-- startup migrations;
-- HTTP API and SSE connections;
-- production SPA/static-file serving;
-- signal-driven, ten-second bounded shutdown attempt.
-
-There are no background worker processes, caches, message brokers, ORM, code
-generation step, or dependency-injection framework.
+One process owns connection pooling, startup migrations, JSON/SSE routes,
+embedded SPA serving, and signal-driven shutdown. There is no ORM, worker,
+cache, message broker, code generator, or dependency-injection framework.
 
 ## Startup and shutdown
 
-`cmd/dnd/main.go` is deliberately thin:
+`cmd/dnd/main.go`:
 
-1. `app.LoadConfig()` resolves environment variables.
-2. A JSON `slog` handler is installed on stdout.
-3. `signal.NotifyContext` watches `SIGINT` and `SIGTERM`.
-4. `pgxpool.New` creates the pool and `Ping` verifies connectivity.
-5. `migrations.Run` applies embedded forward-only migrations.
-6. `app.NewServer` loads the embedded static filesystem and registers routes.
-7. A listener is created and `http.Server.Serve` begins.
-8. A signal or unexpected serve error starts HTTP shutdown with a ten-second
-   deadline. Active request contexts are not rooted in the process context, so
-   an open SSE handler can consume that deadline.
-
-HTTP timeouts are:
+1. loads environment configuration;
+2. installs a JSON `slog` handler;
+3. watches `SIGINT`/`SIGTERM`;
+4. opens and pings `pgxpool`;
+5. applies embedded migrations;
+6. constructs the API/static server;
+7. listens;
+8. attempts HTTP shutdown with a ten-second deadline.
 
 | Timeout           | Value      |
 | ----------------- | ---------- |
@@ -43,87 +32,64 @@ HTTP timeouts are:
 | Idle connection   | 60 seconds |
 | Graceful shutdown | 10 seconds |
 
-SSE uses response-controller flushing, but that does not disable the configured
-30-second server write deadline. An HTTP/1 stream is therefore reconnectable
-rather than indefinite; the current browser hook reconnects with its cursor. If
-changing global timeouts, verify event streams under the deployment's reverse
-proxy.
+SSE uses response-controller flushing, but the configured write deadline can
+still end a stream. Clients reconnect with their last world-event cursor.
 
 ## Package map
 
 ### `cmd/dnd`
 
-Executable/process lifecycle only. It should not accumulate domain or route
-logic.
+Executable and process lifecycle only.
 
 ### `internal/rules`
 
-Pure storage-neutral mechanics:
+Pure scalar mechanics:
 
-| File             | Responsibility                                                                            |
-| ---------------- | ----------------------------------------------------------------------------------------- |
-| `types.go`       | Domain types and enum vocabularies.                                                       |
-| `definitions.go` | Ruleset, schema, entity, and state-variable definition validation.                        |
-| `values.go`      | Tagged scalar/value construction, equality, set semantics, and value validation.          |
-| `state.go`       | Logical defaults/unknowns, state validation, materialization, normalization, and cloning. |
-| `conditions.go`  | Condition validation, three-valued evaluation, quantifiers, and predicates.               |
-| `bindings.go`    | Invocation mappings and problem target/instance binding validation.                       |
-| `problems.go`    | Problem aggregate, resolution, outcome, and configured-effect validation.                 |
-| `effects.go`     | Concrete transition validation and pure ordered application.                              |
-| `resolution.go`  | Configured choice availability/outcome selection.                                         |
-| `decimal.go`     | Exact finite base-10 parsing, canonicalization, arithmetic, and JSON text behavior.       |
-| `ownership.go`   | Schema-set eligibility helpers.                                                           |
-| `errors.go`      | Validation paths and domain error categories.                                             |
+| File             | Responsibility                                                               |
+| ---------------- | -----------------------------------------------------------------------------|
+| `types.go`       | World/mechanic/entity/state/effect domain types and enum vocabulary.          |
+| `definitions.go` | Numeric/Boolean mechanic and entity validation.                              |
+| `values.go`      | Scalar construction, equality, and definition-aware validation.              |
+| `state.go`       | Authored defaults, sparse overrides, materialization, normalization, cloning. |
+| `effects.go`     | Ordered `set`/`adjust-number` transition validation and application.         |
+| `decimal.go`     | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.    |
+| `errors.go`      | Validation paths and domain error categories.                                |
 
 The package takes fully loaded maps/snapshots and returns values. It must not
-query a database, read a request, log, inspect environment variables, generate
-IDs, or mutate a caller-owned snapshot.
+query PostgreSQL, inspect HTTP/environment, log, generate IDs, or mutate a
+caller-owned snapshot.
 
 ### `internal/app`
 
-HTTP and persistence adapter. Naming follows a consistent pattern:
+HTTP and persistence adapter:
 
-- `api_*.go`: request/response DTOs and tagged transport unions;
-- `handlers_*.go`: routing, validation, authorization, transactions, commands,
-  and response emission;
-- `*_mapping.go`: transport/domain conversion and generated nested IDs;
-- `*_store.go`: normalized aggregate loading and persistence;
-- `domain_loaders.go`: common ruleset-domain loading through a small `queryer`
-  interface implemented by both pools and transactions;
-- `interaction_receipts.go`: immutable live ruling receipt persistence/loading;
-- `handlers_worlds.go`, `handlers_world_mechanics.go`,
-  `handlers_world_entities.go`, `handlers_world_character_fields.go`, and
-  `handlers_world_entity_profiles.go`: the authorized world adapter over
-  normalized ruleset, game, state-definition, entity, player-control,
-  character-field, and profile-value resources;
-- `character_readiness.go`: derived entity completion and world-backed player
-  admission shared by world and live-game handlers;
-- `server.go`, `json.go`, `config.go`: cross-cutting server infrastructure.
+- request/response DTOs encode only current world resources and scalar unions;
+- authorization helpers derive one world membership from the identity header;
+- route handlers perform validation, visibility filtering, and transaction
+  orchestration;
+- SQL loaders/savers use `world_id` on every scoped aggregate;
+- receipt persistence records ordered requested effects and scalar applications;
+- server/JSON/config files provide cross-cutting infrastructure.
 
-The files are organized by resource rather than by a generic repository
-abstraction. That keeps complex aggregate-specific SQL and invariants visible.
+There is one membership/role vocabulary. Owners and editors receive
+facilitator authority directly; there is no parallel live membership model.
 
 ### `internal/migrations`
 
-Numbered SQL migrations embedded into the executable. The migration runner is
-described in [Database](database.md).
+`001_worldwright.sql` is the one clean baseline. The runner remains available
+for future migrations but does not upgrade databases created by an earlier
+schema. See [Database](database.md).
 
 ### `web`
 
-`web/static.go` embeds `web/static`. The directory contains a tracked
-placeholder so a backend-only checkout can compile before the first frontend
-build.
+`web/static.go` embeds `web/static`. A tracked placeholder lets backend-only
+checkouts compile before a frontend build.
 
 ## HTTP server construction
 
-`NewServerWithStaticFS` is the test seam. It constructs:
-
-- a private API `ServeMux`;
-- an `http.FileServer` over the provided filesystem;
-- resource route registrations;
-- explicit JSON not-found handlers for `/api` and `/api/`.
-
-`Server.Routes()` creates the root handler stack:
+`NewServerWithStaticFS` is the test seam. It constructs a private API mux, a
+file server over the provided filesystem, current world route registrations,
+and explicit JSON not-found handlers for `/api` and `/api/`.
 
 ```text
 request logger
@@ -133,292 +99,226 @@ request logger
         └── GET everything else → static/SPA handler
 ```
 
-For API requests, `http.MaxBytesReader` caps the body at 1 MiB. Recovery logs
-the panic and stack. API panics become a JSON `500 internal_error`; static-route
-panics become plain text. The logger records method, path, status, bytes, and
-duration for every request.
+API bodies are capped at 1 MiB. Recovery logs panic and stack; API panics return
+the JSON `500 internal_error` envelope. Request summaries record method, path,
+status, bytes, and duration.
 
 ### Static/SPA behavior
 
-For a non-API GET:
+For non-API GET requests:
 
-1. Normalize the path.
-2. Serve an existing non-directory file directly.
-3. For any `/assets/*` path, let the file server return its normal not-found
-   response rather than falling back to HTML.
-4. Otherwise serve `index.html`, enabling browser history routes.
-5. If the embedded filesystem has no `index.html`, return
-   `503 frontend has not been built`.
+1. normalize the path;
+2. serve an existing non-directory file;
+3. let missing `/assets/*` return normal not found;
+4. otherwise serve `index.html` for client routing;
+5. return 503 when the embedded build has no `index.html`.
 
-Because assets are embedded at Go compile time, rebuilding only Vite does not
-change an already-built production binary.
+Assets are embedded at Go compile time; rebuilding Vite alone cannot change an
+already-built production binary.
 
 ## Request and response handling
 
-### Strict JSON
+### Strict JSON and scalar values
 
-`decodeJSON` uses `json.Decoder.DisallowUnknownFields`, reads exactly one JSON
-value, and reports body-limit errors with the configured byte count. Tagged
-unions implement custom marshal/unmarshal behavior so an operand cannot carry
-fields from another kind unnoticed.
+`decodeJSON` rejects unknown fields, reads one JSON value, and preserves exact
+numbers. The state scalar DTO accepts only:
 
-Do not replace tagged DTOs with `map[string]any`: doing so would weaken union
-validation and round exact numeric input through `float64`.
+```json
+{ "kind": "number", "value": 1.25 }
+{ "kind": "boolean", "value": true }
+```
 
-### Validation layers
+Custom union decoding ensures the number/Boolean shape cannot carry fields from
+another variant. Do not replace it with `map[string]any`, which would weaken the
+boundary and round through `float64`.
 
-Handlers generally validate in this order:
+### Validation order
+
+Handlers generally validate:
 
 1. path/query syntax and UUID shape;
-2. strict body decode;
-3. transport-level required fields, lengths, IDs, and key syntax;
-4. DTO-to-domain conversion;
-5. loading referenced ruleset resources;
-6. domain aggregate validation;
-7. archived/in-use/projected-dependency rules;
-8. database constraints during persistence.
+2. strict body decoding;
+3. transport required fields, lengths, and enums;
+4. known development identity;
+5. active world membership and required role/readiness;
+6. world ownership of every referenced resource;
+7. domain mechanics/state/transition rules;
+8. archive/lifecycle/revision constraints;
+9. PostgreSQL constraints during persistence.
 
-Transport and domain failures return path-indexed `fields` when practical.
-PostgreSQL remains the final boundary for uniqueness, references, and check
-constraints.
+Transport/domain failures return path-indexed fields where practical.
+PostgreSQL is the final uniqueness, reference, and check boundary.
 
 ### Error mapping
 
-`statusError` carries an intentional HTTP status/code/message/field map. The
-central adapter also maps:
+`statusError` carries intentional status/code/message/fields. The common mapper
+also handles:
 
-- `pgx.ErrNoRows` to 404 `not_found`;
-- PostgreSQL `23505` to 409 `duplicate_key`;
-- `23503` to 422 `invalid_reference`;
-- `23514` and `22P02` to 422 `validation_failed`;
-- other PostgreSQL failures to 500 `database_error`;
-- other errors to 500 `internal_error`.
+- `pgx.ErrNoRows` → 404 `not_found`;
+- PostgreSQL `23505` → 409 `conflict`;
+- `23503` → 422 `invalid_reference`;
+- `23514`, `22P02`, `22003` → 422 `validation_failed`;
+- other database failures → 500 `database_error`;
+- other failures → 500 `internal_error`.
 
-Rules `DomainError` values preserve their sentinel category and a list of
-machine-readable validation paths. Runtime handlers translate those categories
-before passing them to the common writer.
+### IDs
 
-### IDs and keys
+HTTP resources use canonical UUID text. Creates may accept a supplied ID for
+retry-safe construction; otherwise the server generates a random version-4
+UUID. Domain IDs remain strings so `internal/rules` does not depend on UUID
+implementation details.
 
-HTTP IDs use canonical UUID text. Create operations may accept a supplied ID to
-support retry-safe client construction; otherwise the server generates random
-version-4 UUIDs. Domain IDs remain strings so the pure package is not tied to
-UUID implementation details.
+## Persistence patterns
 
-Stable keys use the shared validation helper and are typically limited to 120
-characters. Nested arrays use their transport order to populate explicit
-database `position` columns.
+### World aggregates
 
-## Authoring aggregate persistence
+Top-level authoring commands remain explicit and relational. A save normally:
 
-Top-level authoring resources are persisted as relational aggregates. Save
-functions commonly:
+1. authorizes and loads/locks the current world aggregate;
+2. validates the complete command;
+3. inserts or updates the root;
+4. replaces owned ordered/link rows where appropriate;
+5. increments the relevant revision only on a meaningful change;
+6. reloads the authoritative response;
+7. commits before writing JSON.
 
-1. lock or load the current root and dependency set;
-2. validate the complete replacement;
-3. insert/update the root row;
-4. replace owned link/child rows in deterministic position order;
-5. reload the domain aggregate or return the saved domain value;
-6. commit before writing the response.
+Owned rows commonly cascade from their root; historical references use
+`ON DELETE RESTRICT`. Product APIs archive rather than hard delete.
 
-External references use `ON DELETE RESTRICT`; owned child rows generally use
-`ON DELETE CASCADE`. Since public APIs archive rather than delete, cascades are
-mainly aggregate-maintenance and ruleset-deletion safeguards, not normal user
-workflows.
+### Scalar state
 
-Semantic edits are protected when existing state, condition invocations,
-problem effects, instances, or live receipts rely on the previous shape. The
-application may permit label/description/presentation changes while rejecting a
-kind, cardinality, option, unit, target, or ownership change that would make
-stored data invalid.
-
-## State persistence
-
-Each entity has exactly one `state_records` root even when it has no stored
-values. `state_values` holds normalized typed scalar rows.
+Each entity has exactly one `state_records` root. `state_values` stores at most
+one numeric or Boolean override per mechanic.
 
 Reading state:
 
-1. Load the entity, definitions, state root, and stored scalar rows.
-2. Reconstruct explicit domain cardinality/value unions.
-3. Validate/reference-map option IDs and units.
-4. Materialize applicable logical defaults and unknowns.
-5. Convert durable choice/unit IDs back to option keys/unit text for HTTP.
+1. load the world entity, active/retained mechanics, state root, and overrides;
+2. rebuild typed scalar values;
+3. materialize missing values from mechanic defaults;
+4. validate the snapshot;
+5. return `values`, `defaulted_mechanic_ids`, and revision.
 
-Replacing state treats the request's `values` map as the full stored override
-set. After validation and default normalization, the adapter compares storage
-state. A no-op retains the revision; otherwise it rewrites scalar rows and
-increments the state root.
+Replacing state treats the request map as complete logical state. Values equal
+to defaults normalize to absent override rows. A semantic no-op keeps the
+revision; a changed sparse map rewrites affected rows and increments the root.
 
-The state revision can also advance without a scalar-row rewrite when an
-entity's owner-schema memberships change. That invalidates a materialized
-applicability/default/unknown view based on the prior memberships.
+Resolution persistence updates only entity records reported changed by the
+pure transition engine, in the same transaction as the receipt.
 
-Resolution persistence updates only record IDs reported as changed by the pure
-engine. Every changed record is rewritten and incremented inside the enclosing
-resolution transaction.
+### Character profiles
 
-Character profiles deliberately do not use state persistence. A world-level
-revision guards atomic replacement of ordered field definitions, and each
-entity profile has an independent revision guarding complete replacement of
-its non-empty values. Definition IDs and value rows preserve provenance when a
-field is reordered, renamed, or archived. Profile queries filter restricted
-fields/values before serialization and never extend `rules.Entity` or state
-snapshot types. Legacy free-form sections are loaded read-only.
+Profiles do not use mechanical state. A world-level field-set revision guards
+the ordered requirements; each entity profile has its own revision. Text rows
+preserve field UUID and author provenance. Read paths filter restricted fields
+and values before serialization. Profile changes never advance state revision.
 
-## Rules engine execution
+### Controller sets
 
-### Conditions
+Controller replacement is a complete set operation over
+`world_membership_entity_controls`. The command checks the world's
+`table_revision`, validates every target as an active player membership in the
+same world, replaces rows, increments `table_revision`, and appends an event.
 
-The application loads only the state records reachable through bound parameter
-entities and evaluates against a consistent snapshot. The engine returns a
-complete evaluation tree rather than a Boolean so callers can explain
-`unknown`, `unmet`, and `met` outcomes.
+## Rules execution
 
-### Concrete transitions
-
-Both runtime paths converge on:
+Live rulings map concrete effect DTOs to:
 
 ```go
-rules.ApplyTransition(plan, entities, definitions, snapshot)
+rules.ApplyTransition(plan, entities, mechanics, snapshot)
 ```
 
-The function validates the plan and snapshot, clones the input, sorts effects
-by position, applies each effect to each concrete entity in supplied order, and
-returns applications plus changed record IDs. A failure returns no partially
-usable working snapshot. This is in-memory atomicity; the adapter supplies
-database transaction atomicity.
+The function validates the plan/snapshot, clones input, applies effects by
+position, and returns applications plus changed entity IDs. A failure returns
+no partially usable snapshot. PostgreSQL supplies transactional atomicity
+around the pure in-memory atomicity.
 
-Configured problems first use `ResolveChoice`, which evaluates availability,
-maps abstract targets, selects an outcome, and builds/applies a concrete plan.
-Live adjudication maps its already-concrete effect DTOs straight to a transition
-plan.
+Only `set` and `adjust-number` exist. Every target and mechanic must belong to
+the request world. Numeric results must satisfy bounds/step; Boolean mechanics
+accept only Boolean `set`.
 
 ## Transaction patterns
 
 ### Consistent reads
 
-Multiquery aggregate reads and previews often use read-only `REPEATABLE READ`.
-This prevents a response from combining a root at one revision with children or
-state from another.
+Multiquery resources and previews may use read-only `REPEATABLE READ` so a
+response cannot combine a root at one revision with children/state from another.
 
 ### Optimistic commands
 
-State, binding, game, membership, interaction, and action updates compare an
-expected revision after loading/locking the current root. Conflicts return 409
-instead of silently overwriting.
-
-### Configured resolution
-
-Preview uses read-only repeatable-read and no write locks. Resolve uses read
-committed plus explicit shared/exclusive locks in stable order:
-
-- referenced condition sets and problem configuration;
-- problem instance and binding rows;
-- bound entities and state roots.
-
-After acquiring locks it reloads/rechecks dependencies and revisions. Only an
-`applied` result persists; unavailable/incomplete results commit no state.
+World settings, world table, character-field set, profile, state, membership,
+interaction, and action roots compare expected revisions after loading/locking.
+Conflicts return 409 rather than overwriting newer state.
 
 ### Live resolution
 
-Resolve locks the active game/facilitator boundary, the interaction, current
-game entity mapping, definitions, entities, and state roots. It rechecks the
-selected submission and idempotency key before applying mechanics. State,
-receipt, application rows, action statuses, interaction status, and game event
-share one transaction.
+Resolve locks the active world/facilitator boundary, interaction, referenced
+mechanics/entities/state roots, and selected action in stable order. It rechecks
+idempotency and revisions, applies the transition, then persists state,
+resolution, requested effects, targets, applications, action statuses,
+interaction status, and world event in one transaction.
 
-An idempotent replay loads the immutable receipt but rebuilds response state
-from current state records. It is receipt-equivalent, not a byte-for-byte replay
-of the original response, and still requires the actor to be an active
-facilitator of an active game.
+An equivalent idempotent replay loads the immutable receipt and current state,
+and still checks current identity, facilitator authority, and active world.
 
 ### Lock discipline
 
-When adding a command that touches several aggregates, follow existing sorted
-ID and root-first lock order. Do not introduce a new path that locks state and
-then configuration if the existing path locks configuration then state; that
-would create avoidable deadlocks.
+Keep root-first and sorted-ID lock order. Do not add a path that locks state
+before world/mechanic roots when resolution locks them in the opposite order.
 
-## Live Play authorization and filtering
+## Authorization and filtering
 
-Play handlers derive a user from `X-DND-User-ID`, verify that it exists, and
-then load an active game membership. For a world-backed player, game read/live
-routes additionally derive play readiness from current controls and active
-character-field values. Facilitator commands call a stronger helper that
-verifies role and active game status while locking the game root.
+All non-public product handlers derive a user from `X-DND-User-ID`, verify the
+user, and load an active membership in the path world. Owner/editor helpers add
+configuration or facilitator authority. Players must also have at least one
+complete controlled entity before live interaction/event access.
 
-World profile writes authorize either an owner/editor or the paired active
-player membership named by `game_membership_entity_controls`. They lock/check
-both the profile and character-field revisions, so a stale draft cannot ignore
-new requirements. Controller replacement and field-set replacement remain
-owner/editor-only. An optional acting entity on a player action is accepted
-only when that same live control edge exists and the entity is complete; the
-accepted row stores a display-name snapshot for later history.
+Profile writes allow owner/editor or the entity's current active controller.
+Controller and field-set replacement are owner/editor only. An acting entity on
+an action must be controlled and complete. Interaction context/effect targets
+must be active and eligible.
 
-Players remain active world members during onboarding, but world roster/state
-queries narrow to their controlled entities and game/interactions/events return
-`character_setup_required`. Interaction validation excludes non-ready players
-from audiences/responders and rejects incomplete controlled entities as new
-context or live-effect targets.
-
-Non-facilitator interaction visibility is enforced in SQL, not merely in the
-React UI. Response loading also omits private notes and facilitator-private
-receipt/context fields. IDs in commands are revalidated against the requested
-game so cross-game references fail closed.
-
-The generic authoring endpoints do not apply these checks. Never route a player
-feature through them. They can continue changing an archived game's underlying
-ruleset entities and state, and those changes do not append `game_events`.
+Non-facilitator interaction visibility is enforced in SQL/response loading.
+Private notes and restricted profile text are omitted server-side. Every ID in
+a command is revalidated against `world_id`; frontend checks are affordances,
+not authorization.
 
 ## SSE implementation
 
-The event endpoint:
+The world event endpoint:
 
-- authenticates and checks active membership before sending headers;
+- authenticates and checks readiness before headers;
 - parses `after`, falling back to `Last-Event-ID`;
-- disables intermediary buffering/caching headers;
-- flushes an initial retry directive;
-- every 1.5 seconds, rechecks membership and queries up to 100 visible events;
-- sends keep-alive comments for empty batches;
+- disables buffering/caching and flushes `retry: 1500`;
+- rechecks membership and queries up to 100 visible events per batch;
+- sends keep-alive comments when empty;
 - advances the cursor only after writing an event;
-- exits on request cancellation, membership revocation, query error, or flush
-  error.
+- exits on cancellation, revoked authority, query error, or flush failure.
 
-It intentionally sends identifiers and event types, not aggregate snapshots.
-This reduces disclosure risk and makes the normal query endpoints authoritative.
-For non-facilitators, event filtering uses audience membership plus whether an
-interaction was ever presented; it is not the same as current interaction read
-visibility. Adjudicating/cancelled lifecycle events can therefore be delivered
-while the interaction query itself is hidden.
+Payloads contain identifiers and event types, never aggregate snapshots.
+Clients treat them as reload signals.
 
 ## Testing seams
 
-- Pure mechanics are tested directly with constructed maps/snapshots.
-- `NewServerWithStaticFS` permits static/API behavior tests without a Vite
-  build.
-- `queryer` lets loaders work with a pool or transaction.
-- Mapping tests verify generated IDs, exact numbers, tagged unions, and
-  archived references.
-- Browser tests provide the current PostgreSQL-backed handler integration
-  coverage; `internal/app` does not have a separate pgx-backed integration
-  suite.
+- Pure mechanics use constructed maps/snapshots.
+- `NewServerWithStaticFS` tests API/static behavior without a Vite build.
+- The small `queryer` interface lets helpers use pools or transactions.
+- DTO tests cover strict scalar unions and exact numbers.
+- Playwright supplies clean-PostgreSQL handler integration and multi-user flow.
+- Route tests require removed URL families to return `404 endpoint_not_found`.
 
 ## Adding a backend capability
 
-For a new ruleset-authored mechanic:
+For a new world-authored mechanic feature:
 
-1. Add storage-neutral types and validation to `internal/rules`.
-2. Add a forward-only migration with relational constraints.
-3. Add strict DTOs and mapping; preserve exact number handling.
-4. Add aggregate loader/saver functions.
-5. Register method-aware routes and implement handlers.
-6. Revalidate archived, cross-ruleset, in-use, revision, and lock-order cases.
-7. Add rules unit tests, mapping/handler tests where possible, frontend contract
-   updates, and an end-to-end path for a user-visible workflow.
-8. Update this documentation and the API/domain references.
+1. extend pure scalar types/validation only when mechanical behavior changes;
+2. add a world-scoped relational migration when persistence changes;
+3. add strict DTOs and exact-number mapping;
+4. implement explicit queries/transactions and role checks;
+5. register only a world-scoped method-aware route;
+6. cover archive, cross-world, revision, and lock-order cases;
+7. update frontend contract, browser coverage, and canonical docs;
+8. run focused CI and then full `./ci.sh`.
 
-For a Play capability, additionally define membership/role/visibility rules,
-game-scope every referenced entity, decide whether it needs an immutable
-receipt/event, and test with separate identities. Do not rely on frontend
-capability checks for authorization.
+For live commands, also define readiness, visibility, idempotency,
+receipt/event behavior, and test separate identities. Never rely on UI hiding as
+authorization.

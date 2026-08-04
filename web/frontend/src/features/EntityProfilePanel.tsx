@@ -85,8 +85,7 @@ function CharacterStatus({ profile }: { profile: EntityProfile }) {
 }
 
 function EntityProfileReader({ profile }: { profile: EntityProfile }) {
-  const legacy = profile.legacy_sections ?? [];
-  if (profile.fields.length === 0 && legacy.length === 0)
+  if (profile.fields.length === 0)
     return (
       <EmptyState
         title="No character story is visible"
@@ -106,7 +105,6 @@ function EntityProfileReader({ profile }: { profile: EntityProfile }) {
           <p>{characterField.value}</p>
         </section>
       ))}
-      <LegacySections sections={legacy} />
     </div>
   );
 }
@@ -172,7 +170,6 @@ function EntityProfileEditor({
     }
   }
 
-  const legacy = profile.legacy_sections ?? [];
   return (
     <form className="profile-editor" onSubmit={(event) => void save(event)}>
       {profile.fields.length === 0 ? (
@@ -211,7 +208,6 @@ function EntityProfileEditor({
           ))}
         </div>
       )}
-      <LegacySections sections={legacy} />
       {error === null ? null : <ErrorMessage error={error} />}
       {profile.fields.length > 0 ? (
         <footer>
@@ -228,35 +224,5 @@ function EntityProfileEditor({
         </footer>
       ) : null}
     </form>
-  );
-}
-
-function LegacySections({
-  sections,
-}: {
-  sections: NonNullable<EntityProfile["legacy_sections"]>;
-}) {
-  if (sections.length === 0) return null;
-  return (
-    <section className="legacy-profile-sections">
-      <header>
-        <div>
-          <p className="eyebrow">Legacy story</p>
-          <h3>Earlier free-form sections</h3>
-        </div>
-        <span>Read only</span>
-      </header>
-      {sections.map((section) => (
-        <section className="profile-section" key={section.id}>
-          <header>
-            <h4>{section.title}</h4>
-            {section.visibility === "controllers-and-facilitators" ? (
-              <span>Private</span>
-            ) : null}
-          </header>
-          <p>{section.body}</p>
-        </section>
-      ))}
-    </section>
   );
 }

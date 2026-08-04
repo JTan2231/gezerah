@@ -20,6 +20,7 @@ func (s *Server) handleGetWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
+
 	item, err := loadWorldCharacterFieldSetResponse(
 		r.Context(), s.db, worldID, member.Role != "spectator",
 	)
@@ -36,6 +37,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
+
 	var request replaceWorldCharacterFieldsRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
@@ -64,6 +66,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer tx.Rollback(r.Context()) //nolint:errcheck
+
 	member, err := requireWorldEditor(r.Context(), tx, r, worldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -71,8 +74,10 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 	}
 	var revision int64
 	if err := tx.QueryRow(r.Context(), `
-		select revision from world_character_field_sets
-		where rule_set_id = $1 for update`, worldID,
+		select revision
+		from world_character_field_sets
+		where world_id = $1
+		for update`, worldID,
 	).Scan(&revision); err != nil {
 		handleAppError(w, err)
 		return
@@ -81,6 +86,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, revisionConflict("character fields", *request.ExpectedRevision, revision))
 		return
 	}
+
 	current, err := loadWorldCharacterFieldSetResponse(r.Context(), tx, worldID, true)
 	if err != nil {
 		handleAppError(w, err)
@@ -105,21 +111,23 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 	}
 	sort.Strings(currentIDs)
 	sort.Strings(desiredIDs)
-	if !equalStrings(currentIDs, desiredIDs) {
+	if !characterFieldStringSlicesEqual(currentIDs, desiredIDs) {
 		var unfinished bool
 		if err := tx.QueryRow(r.Context(), `
 			select exists(
-				select 1 from interactions
-				where game_id = $1 and status in ('draft', 'open', 'adjudicating')
-			)`, member.PrimaryGameID,
+				select 1
+				from interactions
+				where world_id = $1 and status in ('draft', 'open', 'adjudicating')
+			)`, worldID,
 		).Scan(&unfinished); err != nil {
 			handleAppError(w, err)
 			return
 		}
 		if unfinished {
 			handleAppError(w, &statusError{
-				Status: http.StatusConflict, Code: "character_fields_in_use",
-				Message: "resolve or cancel the active problem before changing character requirements",
+				Status:  http.StatusConflict,
+				Code:    "character_fields_in_use",
+				Message: "finish or cancel active interactions before changing character requirements",
 			})
 			return
 		}
@@ -128,11 +136,14 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 	for index, field := range request.Fields {
 		var existingWorldID string
 		err := tx.QueryRow(r.Context(), `
-			select rule_set_id::text from world_character_fields where id = $1`, field.ID,
+			select world_id::text
+			from world_character_fields
+			where id = $1`, field.ID,
 		).Scan(&existingWorldID)
 		if err == nil && existingWorldID != worldID {
 			handleAppError(w, &statusError{
-				Status: http.StatusUnprocessableEntity, Code: "invalid_character_field",
+				Status:  http.StatusUnprocessableEntity,
+				Code:    "invalid_character_field",
 				Message: "character fields are invalid",
 				Fields: map[string]string{
 					fmt.Sprintf("fields[%d].id", index): "field belongs to another world",
@@ -149,14 +160,14 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 	if _, err := tx.Exec(r.Context(), `
 		update world_character_fields
 		set archived = true, updated_by_user_id = $2
-		where rule_set_id = $1 and not archived`, worldID, member.UserID); err != nil {
+		where world_id = $1 and not archived`, worldID, member.UserID); err != nil {
 		handleAppError(w, err)
 		return
 	}
 	for position, field := range request.Fields {
 		if _, err := tx.Exec(r.Context(), `
 			insert into world_character_fields (
-				id, rule_set_id, label, help_text, visibility, position, archived,
+				id, world_id, label, help_text, visibility, position, archived,
 				created_by_user_id, updated_by_user_id
 			) values ($1, $2, $3, $4, $5, $6, false, $7, $7)
 			on conflict (id) do update set
@@ -174,22 +185,15 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		}
 	}
 	if _, err := tx.Exec(r.Context(), `
-		update world_character_field_sets set revision = revision + 1
-		where rule_set_id = $1`, worldID); err != nil {
+		update world_character_field_sets
+		set revision = revision + 1
+		where world_id = $1`, worldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	var actorGameMembershipID string
-	if err := tx.QueryRow(r.Context(), `
-		select id::text from game_memberships where game_id = $1 and user_id = $2`,
-		member.PrimaryGameID, member.UserID,
-	).Scan(&actorGameMembershipID); err != nil {
-		handleAppError(w, err)
-		return
-	}
-	if err := appendGameEvent(
-		r.Context(), tx, member.PrimaryGameID, "character-fields-updated", actorGameMembershipID,
-	); err != nil {
+	if _, err := tx.Exec(r.Context(), `
+		insert into world_events (world_id, event_type, actor_membership_id)
+		values ($1, 'character-fields-updated', $2)`, worldID, member.ID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -197,6 +201,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
+
 	item, err := loadWorldCharacterFieldSetResponse(r.Context(), s.db, worldID, true)
 	if err != nil {
 		handleAppError(w, err)
@@ -211,19 +216,22 @@ func loadWorldCharacterFieldSetResponse(
 	worldID string,
 	includeRestricted bool,
 ) (worldCharacterFieldSetResponse, error) {
-	var result worldCharacterFieldSetResponse
-	result.Fields = make([]worldCharacterFieldResponse, 0)
+	result := worldCharacterFieldSetResponse{
+		Fields: make([]worldCharacterFieldResponse, 0),
+	}
 	if err := db.QueryRow(ctx, `
 		select revision, created_at, updated_at
-		from world_character_field_sets where rule_set_id = $1`, worldID,
+		from world_character_field_sets
+		where world_id = $1`, worldID,
 	).Scan(&result.Revision, &result.CreatedAt, &result.UpdatedAt); err != nil {
 		return result, err
 	}
+
 	rows, err := db.Query(ctx, `
 		select id::text, label, help_text, visibility,
 			created_by_user_id::text, updated_by_user_id::text, created_at, updated_at
 		from world_character_fields
-		where rule_set_id = $1 and not archived
+		where world_id = $1 and not archived
 			and ($2 or visibility = 'table')
 		order by position, id`, worldID, includeRestricted)
 	if err != nil {
@@ -252,6 +260,7 @@ func validateWorldCharacterFieldsRequest(request *replaceWorldCharacterFieldsReq
 	if len(request.Fields) > maxWorldCharacterFields {
 		fields["fields"] = fmt.Sprintf("must contain at most %d fields", maxWorldCharacterFields)
 	}
+
 	seenIDs := make(map[string]struct{}, len(request.Fields))
 	seenLabels := make(map[string]struct{}, len(request.Fields))
 	for index := range request.Fields {
@@ -261,6 +270,7 @@ func validateWorldCharacterFieldsRequest(request *replaceWorldCharacterFieldsReq
 		if field.Visibility == "" {
 			field.Visibility = "table"
 		}
+
 		path := fmt.Sprintf("fields[%d]", index)
 		if field.ID != "" {
 			if !validID(field.ID) {
@@ -276,7 +286,7 @@ func validateWorldCharacterFieldsRequest(request *replaceWorldCharacterFieldsReq
 			fields[path+".label"] = "must be unique within the field set"
 		}
 		seenLabels[normalizedLabel] = struct{}{}
-		if field.HelpText != nil && len(*field.HelpText) > 2000 {
+		if field.HelpText != nil && len([]rune(*field.HelpText)) > 2000 {
 			fields[path+".help_text"] = "must be 2000 characters or fewer"
 		}
 		if field.Visibility != "table" && field.Visibility != "controllers-and-facilitators" {
@@ -296,10 +306,29 @@ func worldCharacterFieldsMatch(
 	for index := range current {
 		if current[index].ID != desired[index].ID ||
 			current[index].Label != desired[index].Label ||
-			!optionalStringsEqual(current[index].HelpText, desired[index].HelpText) ||
+			!characterFieldOptionalStringsEqual(current[index].HelpText, desired[index].HelpText) ||
 			current[index].Visibility != desired[index].Visibility {
 			return false
 		}
 	}
 	return true
+}
+
+func characterFieldStringSlicesEqual(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
+}
+
+func characterFieldOptionalStringsEqual(left, right *string) bool {
+	if left == nil || right == nil {
+		return left == nil && right == nil
+	}
+	return *left == *right
 }

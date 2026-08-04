@@ -69,7 +69,7 @@ Startup is fail-fast:
 - `503 database_unavailable` otherwise.
 
 This is both liveness and database readiness. It does not validate every table,
-frontend asset, write permission, disk capacity, or migration compatibility.
+frontend asset, write permission, disk capacity, or complete schema contents.
 
 Do not send production traffic until startup migrations finish and health is
 green. A long migration delays listening and may exceed platform startup
@@ -86,7 +86,7 @@ the full shutdown deadline, and make shutdown return an error.
 
 The HTTP server also has a fixed 30-second write timeout. That timeout can end
 an SSE stream even though the handler sends keep-alives; the frontend reconnects
-and also polls every three seconds. Configure the platform termination grace
+with its last cursor. Configure the platform termination grace
 period to exceed ten seconds, but do not treat the current SSE shutdown as
 graceful. A forced kill can interrupt in-flight requests, but PostgreSQL
 transactions roll back when their connections close. Clients resolving live
@@ -115,7 +115,7 @@ There is currently no:
 - metrics endpoint or OpenTelemetry integration;
 - request/correlation ID;
 - distributed tracing;
-- structured game/ruleset/user IDs on every request log;
+- structured world/user IDs on every request log;
 - slow-query logger;
 - per-migration version, progress, or duration logging;
 - alert configuration;
@@ -151,8 +151,8 @@ shutdown. Do not deploy publicly in the current authentication state; see
 ### Railway release checklist
 
 1. Run the complete `./ci.sh` against the release source.
-2. Review every new migration for data backfill, lock time, and forward/backward
-   binary compatibility.
+2. Review every new migration for data backfill, lock time, and coordinated
+   application/schema rollout.
 3. Take/verify a database backup before a risky migration.
 4. Confirm Bun/Go versions and the build log shows Vite before Go.
 5. Confirm the application service has the PostgreSQL reference variable and the
@@ -165,9 +165,9 @@ shutdown. Do not deploy publicly in the current authentication state; see
 
 ## Other hosting environments
 
-A compatible platform must provide:
+A hosting platform must provide:
 
-- a Linux/macOS-compatible Go binary environment;
+- a Linux or macOS Go binary environment;
 - PostgreSQL with `pgcrypto` and migration privileges;
 - one HTTP port from `DND_ADDR` or `PORT`;
 - TLS termination/reverse proxy if exposed;
@@ -194,9 +194,8 @@ horizontal scaling:
 - the application has no server-local session state;
 - any replica can answer normal queries/commands;
 - SSE handlers poll shared PostgreSQL and can reconnect to another replica;
-- every connected Play client attempts a streaming HTTP request and also polls
-  every three seconds; the fixed 30-second server write timeout can force stream
-  reconnection;
+- every connected Play client holds a streaming HTTP request; the fixed
+  30-second server write timeout can force stream reconnection;
 - event delivery is at-least-observed through cursor replay, but it is an
   invalidation hint rather than a broker guarantee.
 
@@ -210,13 +209,20 @@ buffering/timeouts before increasing replicas.
 Migrations are automatic and forward-only. Deployment is therefore also the
 schema-change mechanism.
 
+The current `001_worldwright.sql` release is a clean baseline, not an in-place
+upgrade. Deploy it with a newly provisioned empty database. Do not attach a
+database whose `schema_migrations` contains any other baseline or whose public
+schema contains application tables. If data must be retained, use separately
+reviewed one-time export/transform/import tooling outside the running service,
+verify the new database, and retire that tooling.
+
 For each production migration:
 
 1. understand the source schema and existing data volume;
-2. favor expand/backfill/switch/contract across releases for incompatible
-   changes;
-3. ensure the old binary can tolerate the expanded schema until traffic fully
-   moves;
+2. coordinate schema and application changes in one release and do not retain
+   dual-read or dual-write paths;
+3. use a separately rehearsed one-time data operation when a change cannot be
+   expressed safely in startup SQL;
 4. avoid long exclusive locks and full-table rewrites in the startup path;
 5. back up and rehearse restore;
 6. deploy while monitoring the migration lock and health timeout;
@@ -228,13 +234,13 @@ Editing an already-applied migration does not rerun it because
 ## Backup, restore, and rollback
 
 Application state includes user-authored configuration and protected portions
-of live game history; back it up as durable business data. The repository
+of live world history; back it up as durable business data. The repository
 provides no scheduled backup or restore automation. Use managed PostgreSQL
 point-in-time recovery and/or tested logical backups appropriate to the
 provider.
 
-For a binary-only regression with a backwards-compatible schema, redeploy the
-previous binary. For a migration/data regression, a binary rollback alone may
+For a binary-only regression with an unchanged schema, redeploy the previous
+binary. For a migration/data regression, a binary rollback alone may
 be unsafe because migrations do not roll back. Options are:
 
 - deploy a new forward repair migration/application;
@@ -244,7 +250,7 @@ be unsafe because migrations do not roll back. Options are:
 
 Never run ad hoc destructive SQL against the only production database. Preserve
 the incident database for analysis, stop writers when consistency requires it,
-and verify rulesets, logical state, receipts, revisions, and event cursors after
+and verify worlds, logical state, receipts, revisions, and event cursors after
 recovery. See [Database](database.md) for a logical backup example.
 
 ## Runbooks
@@ -288,7 +294,7 @@ with a replaced revision.
 
 ### Ambiguous live resolve
 
-Retry the identical resolve body with the same game-scoped idempotency key. A
+Retry the identical resolve body with the same world-scoped idempotency key. A
 matching committed ruling returns `replayed:true`; different content must be
 treated as an idempotency conflict and investigated rather than forced.
 
@@ -298,14 +304,14 @@ treated as an idempotency conflict and investigated rather than forced.
 2. Check proxy buffering and idle timeouts; the response sets no-buffer hints
    and sends keep-alives.
 3. Account for the fixed 30-second server write timeout and expected reconnects.
-4. Verify cursor syntax and inspect recent `game_events`.
+4. Verify cursor syntax and inspect recent `world_events`.
 5. Check PostgreSQL/event query health.
 6. The frontend has a three-second query fallback, so distinguish stream failure
    from general API refresh failure.
 
 ## Production-readiness gaps
 
-- development-only forgeable identity and unauthenticated builder APIs;
+- development-only forgeable identity and public identity provisioning;
 - no built-in TLS/security-header/rate-limit layer;
 - no backup/restore automation or release rollback tooling;
 - no metrics/tracing/alerts or audit trail for configuration changes;

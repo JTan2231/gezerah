@@ -9,7 +9,7 @@ export interface World {
   revision: number;
   role: WorldRole;
   membership_id: string;
-  primary_game_id: string;
+  table_revision: number;
   member_count: number;
   capacity_count: number;
   capability_count: number;
@@ -28,6 +28,7 @@ export interface WorldMember {
   status: "active" | "left";
   play_status: PlayStatus;
   revision: number;
+  controlled_entity_ids: string[];
   joined_at?: string | undefined;
   created_at: string;
   updated_at: string;
@@ -76,7 +77,6 @@ export interface WorldMechanic {
 export interface WorldEntity {
   id: string;
   display_name: string;
-  key?: string | undefined;
   archived: boolean;
   state_revision: number;
   state: StateRecordResponse;
@@ -94,85 +94,28 @@ export interface User {
   updated_at?: string | undefined;
 }
 
-type GameRole = "facilitator" | "player" | "spectator";
-type GameMembershipStatus = "invited" | "active" | "left";
-type GameStatus = "active" | "archived";
-
 export type PlayStatus =
   "waiting-for-character" | "setup-required" | "ready" | "unavailable";
 
 export type CharacterStatus = "not-controlled" | "setup-required" | "ready";
 
-export interface GameMembership {
-  id: string;
-  game_id?: string | undefined;
-  user_id: string;
-  role: GameRole;
-  status: GameMembershipStatus;
-  play_status: PlayStatus;
-  revision: number;
-  controlled_entity_ids: string[];
-  display_name?: string | undefined;
-  user?: User | undefined;
-  joined_at?: string | undefined;
-  created_at?: string | undefined;
-  updated_at?: string | undefined;
-}
-
-export interface Game {
-  id: string;
-  rule_set_id: string;
-  name: string;
-  status: GameStatus;
-  revision: number;
-  memberships: GameMembership[];
-  entity_ids: string[];
-  created_by_user_id?: string | undefined;
-  created_at?: string | undefined;
-  updated_at?: string | undefined;
-}
-
-export type StateScalarValue =
-  | { kind: "text"; value: string }
-  | { kind: "choice"; value: string }
-  | { kind: "measurement"; amount: number; unit: string }
-  | { kind: "number"; value: number }
-  | { kind: "boolean"; value: boolean }
-  | {
-      kind: "reference";
-      entity_id: string;
-      fallback_name?: string | undefined;
-    };
-
-export type StateValue = StateScalarValue | StateScalarValue[];
+export type StateValue =
+  { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
 
 export type ConcreteEffect =
   | {
       id?: string | undefined;
       type: "set";
       entity_ids: string[];
-      state_variable_id: string;
+      mechanic_id: string;
       value: StateValue;
-    }
-  | {
-      id?: string | undefined;
-      type: "clear";
-      entity_ids: string[];
-      state_variable_id: string;
     }
   | {
       id?: string | undefined;
       type: "adjust-number";
       entity_ids: string[];
-      state_variable_id: string;
+      mechanic_id: string;
       amount: number;
-    }
-  | {
-      id?: string | undefined;
-      type: "add-value" | "remove-value";
-      entity_ids: string[];
-      state_variable_id: string;
-      value: StateScalarValue;
     };
 
 type InteractionStatus =
@@ -215,17 +158,6 @@ export interface WorldCharacterFieldSet {
   updated_at: string;
 }
 
-export interface EntityProfileSection {
-  id: string;
-  title: string;
-  body: string;
-  visibility: EntityProfileVisibility;
-  created_by_user_id: string;
-  updated_by_user_id: string;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface EntityProfile {
   entity_id: string;
   revision: number;
@@ -236,7 +168,6 @@ export interface EntityProfile {
   missing_field_ids?: string[] | undefined;
   can_edit: boolean;
   fields: EntityProfileField[];
-  legacy_sections?: EntityProfileSection[] | undefined;
   updated_by_user_id?: string | undefined;
   created_at?: string | undefined;
   updated_at?: string | undefined;
@@ -255,7 +186,7 @@ export interface EntityProfileField {
 interface ConcreteAppliedEffect {
   effect_id: string;
   entity_id: string;
-  state_variable_id: string;
+  mechanic_id: string;
   before?: StateValue | undefined;
   after?: StateValue | undefined;
   changed: boolean;
@@ -275,7 +206,7 @@ interface InteractionResolution {
 
 export interface Interaction {
   id: string;
-  game_id: string;
+  world_id: string;
   title?: string | undefined;
   prompt: string;
   private_notes?: string | undefined;
@@ -305,11 +236,10 @@ export interface InteractionResolutionResult {
 }
 
 interface StateRecordResponse {
-  owner_entity_id: string;
+  entity_id: string;
   revision: number;
   values: Record<string, StateValue>;
-  defaulted_definition_ids: string[];
-  unknown_definition_ids: string[];
+  defaulted_mechanic_ids: string[];
   updated_at: string;
 }
 

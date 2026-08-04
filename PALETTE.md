@@ -10,7 +10,7 @@ The implementation follows the useful part of Arcade's palette system:
 
 ```text
 relational color intent
-    -> versioned frontend compiler
+    -> declared frontend compiler
     -> validated semantic CSS tokens
     -> variables scoped to one world workspace
     -> ordinary component CSS
@@ -38,7 +38,7 @@ never stored in PostgreSQL or accepted from the API.
   remain application-controlled and are not recolored by a world palette.
 - The first release has no named palette catalog, per-entity palette, palette
   archive flow, import/export, or seeded palette row.
-- The renderer model name is an internal format version, not ruleset
+- The renderer model name is an internal format identifier, not world
   vocabulary or a privileged configured key.
 
 ## Product behavior
@@ -46,7 +46,7 @@ never stored in PostgreSQL or accepted from the API.
 ### Default worlds
 
 Creating a world does not insert appearance configuration. `appearance` is
-`null` in the world response and the frontend uses its versioned standard
+`null` in the world response and the frontend uses its standard
 intent/fallback token snapshot. Existing worlds therefore retain their current
 appearance without a data backfill.
 
@@ -88,7 +88,7 @@ loaded, so users never see an unthemed workspace followed by a themed one.
 
 ### Shared updates
 
-Saving appearance appends a `world-appearance-updated` primary-game event in
+Saving appearance appends a `world-appearance-updated` world event in
 the same transaction. `WorldPlay` includes the parent world's reload callback
 in its existing SSE/poll invalidation path. Other members at the table then see
 the new appearance without reconstructing state from the event payload.
@@ -118,7 +118,7 @@ invalid.
 
 | Field                  | Constraint                | Meaning                                 |
 | ---------------------- | ------------------------- | --------------------------------------- |
-| `model`                | Exact supported version   | Selects immutable compiler semantics.   |
+| `model`                | Exact supported model     | Selects the current compiler semantics. |
 | `surface_hue`          | Integer `0..359`          | Hue of the world's underlying material. |
 | `surface_colorfulness` | Integer `0..100`          | Chroma strength of the material.        |
 | `accent_hue`           | Optional integer `0..359` | Independent action/highlight hue.       |
@@ -127,22 +127,17 @@ invalid.
 The TypeScript type must encode the accent pair as a discriminated union so a
 partial pair is not representable in normal frontend code.
 
-### Model versioning
+### Renderer model
 
-`worldwright-pigment-v1` is a compatibility boundary. Once shipped, changing a
-formula in a way that materially restyles existing stored intents requires one
-of:
-
-1. preserving the v1 compiler and adding a new model version; or
-2. an explicit migration and documented compatibility decision.
-
-Refactoring that produces byte-identical token output does not require a new
-model.
+`worldwright-pigment-v1` is the only accepted model. If compiler semantics
+change materially, migrate stored intents and update the model identifier in
+one coordinated release, then delete the superseded compiler and identifier.
+Only one renderer implementation and identifier may remain.
 
 ### Compiler inputs
 
 Create a frozen `standardWorldPaletteIntent` in frontend code. It is product
-presentation fallback data, not a database seed or user-authored ruleset
+presentation fallback data, not a database seed or user-authored world
 vocabulary. Calibrate it so the generated standard snapshot preserves the
 current Worldwright appearance.
 
@@ -230,16 +225,14 @@ UI must not offer coordinates that only sometimes pass validation.
 
 ### Migration
 
-Use the next available migration number. Migration `009` is currently present
-for player-controlled entities, so this plan expects
-`internal/migrations/010_world_appearance.sql` when implemented against the
-current worktree.
+Add `internal/migrations/002_world_appearance.sql` after the clean
+`001_worldwright.sql` baseline.
 
 Create a one-to-zero-or-one relational aggregate:
 
 ```sql
 create table world_appearances (
-    rule_set_id uuid primary key,
+    world_id uuid primary key,
     material_model text not null,
     surface_hue integer not null,
     surface_colorfulness integer not null,
@@ -255,7 +248,7 @@ create table world_appearances (
 
 Add named constraints for:
 
-- `rule_set_id` referencing `world_profiles(rule_set_id)` with cascade delete;
+- `world_id` referencing `worlds(id)` with cascade delete;
 - creator/updater IDs referencing `users(id)` with restrict delete;
 - `material_model = 'worldwright-pigment-v1'`;
 - surface and accent hue ranges;
@@ -283,10 +276,10 @@ a simultaneous world name/description edit.
 - Replacing an existing row requires its exact positive revision.
 - A successful replacement increments the appearance revision once.
 - A mismatch returns the standard `409 revision_conflict` response.
-- Lock `world_profiles` before testing row absence so concurrent first writes
+- Lock `worlds` before testing row absence so concurrent first writes
   cannot both insert.
 - Normalize and compare the complete intent before writing. An exact semantic
-  no-op returns the current resource without a revision increment or game
+  no-op returns the current resource without a revision increment or world
   event.
 
 ## HTTP API
@@ -358,7 +351,7 @@ Validation and errors:
 - stale appearance writes receive `409 revision_conflict` with expected and
   actual revisions.
 
-Do not accept actor IDs, ruleset IDs, CSS values, or generated token maps in the
+Do not accept actor IDs, world IDs, CSS values, or generated token maps in the
 request.
 
 ### Transaction
@@ -366,13 +359,13 @@ request.
 The PUT handler transaction should:
 
 1. resolve the current user and require active owner/editor membership;
-2. lock `world_profiles` and obtain the primary game ID;
+2. lock the `worlds` row;
 3. load `world_appearances` for update when present;
 4. compare logical/current and expected revisions;
 5. return immediately for a normalized semantic no-op;
 6. insert or replace the complete appearance intent;
-7. append `world-appearance-updated` to the primary game's event stream using
-   the acting game membership;
+7. append `world-appearance-updated` to `world_events` using the acting world
+   membership;
 8. commit;
 9. return the authoritative saved appearance.
 
@@ -382,7 +375,7 @@ The database row and invalidation event must commit or roll back together.
 
 ### API types and normalization
 
-Update `internal/app/api_worlds.go` with:
+Update the world API DTOs with:
 
 - `worldAppearanceMaterialIntentResponse`;
 - `worldAppearanceResponse`;
@@ -396,8 +389,7 @@ adapter. Appearance is presentation data and does not belong in
 
 ### Handlers and storage
 
-Prefer a focused `internal/app/handlers_world_appearance.go` rather than making
-`handlers_worlds.go` substantially larger. It should own:
+Prefer a focused world-appearance handler file. It should own:
 
 - route registration or the appearance route handler;
 - intent normalization;
@@ -406,9 +398,9 @@ Prefer a focused `internal/app/handlers_world_appearance.go` rather than making
 - semantic equality;
 - response loading.
 
-Update `registerWorldRoutes` and `loadWorldResponse` in
-`internal/app/handlers_worlds.go`. Extend the `game_events` type constraint in
-the migration for `world-appearance-updated`.
+Update world route registration and world response loading. Extend the
+`world_events` type constraint in the migration for
+`world-appearance-updated`.
 
 Do not load appearance through domain snapshot loaders or pass it to the rules
 engine.
@@ -489,8 +481,8 @@ absence—not `null`—for the optional accent pair in requests.
 5. Keep literal colors out of component CSS. `tokens.css` remains the complete
    CSS runtime-failure fallback, while compiler calibration and generated
    snapshot values live only under `src/palette`.
-6. Remove legacy hue/material aliases after all consumers have migrated; do not
-   leave permanent duplicate naming systems.
+6. Remove the old hue/material tokens in the same phase as their final consumer;
+   leave only the semantic token system.
 
 The palette checker must compare the generated token-name set with both the
 frozen allowlist and fallback declarations so compiler/CSS drift fails CI.
@@ -654,7 +646,7 @@ preference.
 - [ ] Add color primitives, types, compiler, validation, and snapshot.
 - [ ] Define the standard intent and calibrate both profiles.
 - [ ] Introduce semantic fallback tokens with no intentional visual change.
-- [ ] Migrate affected CSS consumers and remove legacy aliases.
+- [ ] Migrate affected CSS consumers and remove the old tokens.
 - [ ] Add unit tests and `check:palette`.
 - [ ] Wire palette validation into `./ci.sh frontend`.
 - [ ] Run `./ci.sh frontend`.
@@ -707,7 +699,7 @@ The palette work is complete when all of the following are true:
 
 - [ ] Existing and new worlds without appearance rows render the current
       standard design without intentional drift.
-- [ ] The database contains only normalized, ruleset-scoped palette intent and
+- [ ] The database contains only normalized, world-scoped palette intent and
       no generated colors, canonical JSON, system keys, or seeded palette rows.
 - [ ] Owners/editors can save appearance; players/spectators cannot.
 - [ ] Appearance uses an independent optimistic revision and stale writes fail.
@@ -741,7 +733,7 @@ the same compiler and intent model later:
 - server-side CSS compilation.
 
 A named palette catalog should be introduced only after there is a concrete
-reuse or assignment surface. If that happens, use a ruleset-scoped relational
+reuse or assignment surface. If that happens, use a world-scoped relational
 table and composite foreign keys, with no built-in named row or privileged key.
 
 ## Principal risks and mitigations
@@ -751,9 +743,9 @@ table and composite foreign keys, with no built-in named row or privileged key.
 | Existing token names blur hue and usage.                                       | Complete the semantic-token migration before applying runtime overrides.                                      |
 | Compiler output drifts from CSS fallbacks.                                     | Compare exact token names and the standard snapshot in `check:palette`.                                       |
 | User coordinates create unreadable states.                                     | Restrict user intent to hue/colorfulness; derive lightness and enforce contrast for the full accepted domain. |
-| A formula change silently restyles every world.                                | Treat `material_model` as an immutable, versioned rendering contract.                                         |
+| A formula change silently restyles every world.                                | Migrate stored intents and replace the renderer model in one coordinated release.                             |
 | World colors leak into the library or another world.                           | Install variables only on `.world-workspace`; use an explicitly scoped card swatch in the library.            |
 | Appearance writes race with one another or world settings.                     | Use a dedicated revision and lock the world root during create/update.                                        |
-| Remote players retain stale colors.                                            | Append a game event atomically and include world reload in the existing Play invalidation callback.           |
+| Remote players retain stale colors.                                            | Append a world event atomically and include world reload in the existing Play invalidation callback.          |
 | The Arcade implementation is ported wholesale and adds unnecessary complexity. | Reuse only tested color math and compiler patterns needed by Worldwright's two profiles.                      |
-| Highly colorful palettes overpower game semantics.                             | Cap profile chroma, keep semantic status colors fixed, and use restrained surfaces.                           |
+| Highly colorful palettes overpower live-play semantics.                        | Cap profile chroma, keep semantic status colors fixed, and use restrained surfaces.                           |

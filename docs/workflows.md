@@ -21,19 +21,18 @@
    definitions.
 9. Return to `/`, choose **Play**, select the world, and enter the live table.
 
-Names and keys are ruleset-scoped and user-authored. Do not introduce a
-canonical list of attributes, skills, entity classes, or privileged keys.
+Names are world-scoped and user-authored. Do not introduce a canonical list of
+attributes, skills, entity classes, or privileged names.
 
 ## Join a world
 
 1. Open `/play/invite/{token}` for a player/spectator invitation or
-   `/build/invite/{token}` for an editor invitation. Legacy `/invite/{token}`
-   links canonicalize after their role is loaded.
+   `/build/invite/{token}` for an editor invitation.
 2. If no local identity is selected, choose one without losing the invite URL.
 3. Review the world, inviter, and offered role.
 4. Redeem the link.
 5. The world now appears in the corresponding Play or Build library and the
-   user receives matching world/game membership.
+   user receives one world membership.
 6. A player waits for a DM to assign a controlled entity. After assignment,
    fill the world's required character fields. Partial drafts may be saved, but
    live play opens only after one controlled character is complete.
@@ -67,18 +66,18 @@ is draft, open, or adjudicating.
 
 ## Prepare and edit entity sheets
 
-Creating an entity creates an empty normalized state root and assigns it to the
-world's primary game. Logical defaults make every active universal mechanic
-appear immediately; default values need not be redundantly stored.
+Creating an entity creates an empty normalized state root. Logical defaults
+make every active mechanic appear immediately; default values need not be
+redundantly stored.
 
 Facilitators use **Roster & sheets** in Builder for **Save sheet** setup
 changes. The request supplies the current state revision and replaces the
 logical state atomically. A stale revision returns `409 revision_conflict`;
 reload before retrying. Sheets are read-only in Play.
 
-During game time, prefer effects in a resolved ruling because they produce an
+During play, prefer effects in a resolved ruling because they produce an
 immutable before/after receipt. Direct sheet changes are intended for setup and
-correction and do not append a game event.
+correction and do not append a world event.
 
 ## Assign and author characters
 
@@ -88,7 +87,7 @@ correction and do not append a game event.
 2. A facilitator creates or selects an ordinary entity in **Roster & sheets**
    in Builder.
 3. Use **Controllers** to select any number of active player memberships. The
-   game revision guards the complete replacement.
+   world table revision guards the complete replacement.
 4. Until setup is complete, the controller sees only their controlled entities
    and the configured profile form—not the live table.
 5. Fill any subset and choose **Save character**. The command checks both the
@@ -108,14 +107,6 @@ permission. Archived worlds/entities preserve profiles as read-only material.
   Existing stored values and receipts remain.
 - Revoke an invite to prevent future redemption; existing members remain.
 - Archive a world only after all active problems are resolved/cancelled. This
-  archives its primary game and prevents further configuration/play mutations.
+  prevents further configuration and play mutations.
 
 There is no destructive delete workflow in the world UI.
-
-## Compatibility engine workflows
-
-The normalized rules engine and trusted legacy endpoints still support owner
-schemas, conditions, configured problem definitions/instances, and configured
-choice resolution for compatibility and low-level testing. They are not part of
-the Worldwright frontend product. New UI work must not reintroduce pre-authored
-problems into the world configuration flow.

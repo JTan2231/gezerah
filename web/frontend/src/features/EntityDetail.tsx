@@ -251,7 +251,7 @@ function mechanicValue(
   value: StateValue | undefined,
   mechanic: WorldMechanic,
 ): number | boolean {
-  if (Array.isArray(value) || value === undefined)
+  if (value === undefined)
     return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
   if (value.kind === "boolean") return value.value;
   if (value.kind === "number") return value.value;

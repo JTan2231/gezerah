@@ -42,24 +42,12 @@ describe("application routes", () => {
       area: "play",
       token: "token value",
     });
-    expect(readLocation("/invite/token%20value")).toEqual({
-      type: "invite",
-      token: "token value",
-    });
   });
 
-  test("canonicalizes legacy world paths", () => {
-    expect(readLocation("/worlds")).toEqual({
+  test("canonicalizes bare builder world paths", () => {
+    expect(readLocation("/build/world-1")).toEqual({
       type: "redirect",
-      path: "/",
-    });
-    expect(readLocation("/worlds/world-1/play")).toEqual({
-      type: "redirect",
-      path: "/play/world-1",
-    });
-    expect(readLocation("/worlds/world-1/character-fields")).toEqual({
-      type: "redirect",
-      path: "/build/world-1/character-fields",
+      path: "/build/world-1/capacities",
     });
   });
 

@@ -9,7 +9,7 @@ import (
 var (
 	ErrInvalidDefinition = errors.New("invalid definition")
 	ErrInvalidState      = errors.New("invalid state")
-	ErrInvalidBindings   = errors.New("invalid bindings")
+	ErrInvalidTransition = errors.New("invalid transition")
 	ErrEffectApplication = errors.New("effect application failed")
 )
 

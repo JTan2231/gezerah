@@ -1,19 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, ApiError, gamePath, jsonBody, worldPath } from "../api/client";
+import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
   ConcreteEffect,
-  Game,
-  GameMembership,
   Interaction,
   InteractionAction,
   InteractionResolutionResult,
-  StateScalarValue,
   StateValue,
   User,
   World,
   WorldEntity,
   WorldMechanic,
+  WorldMember,
 } from "../api/types";
 import {
   Avatar,
@@ -25,8 +23,7 @@ import {
 } from "../components/StudioUI";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { useGameEvents } from "../hooks/useGameEvents";
-import { useResource } from "../hooks/useResource";
+import { useWorldEvents } from "../hooks/useWorldEvents";
 import { EntityProfilePanel } from "./EntityProfilePanel";
 import { EntityDetail } from "./EntityDetail";
 
@@ -40,33 +37,33 @@ export function WorldPlay({
   onWorldChanged: () => void;
 }) {
   const playReady = world.role !== "player" || world.play_status === "ready";
-  const game = useResource<Game>(
-    playReady ? gamePath(world.primary_game_id) : null,
+  const members = useCollection<WorldMember>(
+    playReady ? worldPath(world.id, "members") : null,
   );
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
   const mechanics = useCollection<WorldMechanic>(
     playReady ? worldPath(world.id, "mechanics") : null,
   );
   const interactions = useCollection<Interaction>(
-    playReady ? gamePath(world.primary_game_id, "interactions") : null,
+    playReady ? worldPath(world.id, "interactions") : null,
   );
   const [creatingProblem, setCreatingProblem] = useState(false);
   const [profileRefreshToken, setProfileRefreshToken] = useState(0);
   const [selectedEntityId, setSelectedEntityId] = useState<
     string | undefined
   >();
-  const reloadGame = game.reload;
+  const reloadMembers = members.reload;
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
 
   const refresh = useCallback(() => {
-    reloadGame();
+    reloadMembers();
     reloadEntities();
     reloadInteractions();
     onWorldChanged();
     setProfileRefreshToken((value) => value + 1);
-  }, [onWorldChanged, reloadEntities, reloadGame, reloadInteractions]);
-  useGameEvents(playReady ? world.primary_game_id : undefined, refresh);
+  }, [onWorldChanged, reloadEntities, reloadInteractions, reloadMembers]);
+  useWorldEvents(playReady ? world.id : undefined, refresh);
 
   useEffect(() => {
     if (playReady) return undefined;
@@ -94,15 +91,13 @@ export function WorldPlay({
       />
     );
 
-  if (game.loading && game.value === null)
+  if (members.loading && members.items.length === 0)
     return <LoadingState label="Setting the table" />;
-  if (game.error !== null)
-    return <ErrorMessage error={game.error} onRetry={game.reload} />;
-  if (game.value === null) return null;
-  const gameMemberships = game.value.memberships;
+  if (members.error !== null)
+    return <ErrorMessage error={members.error} onRetry={members.reload} />;
 
-  const membership = gameMemberships.find(
-    (item) => item.user_id === user.id && item.status === "active",
+  const membership = members.items.find(
+    (item) => item.id === world.membership_id && item.status === "active",
   );
   if (membership === undefined)
     return (
@@ -111,7 +106,7 @@ export function WorldPlay({
         description="An active world membership is required to enter play."
       />
     );
-  const facilitator = membership.role === "facilitator";
+  const facilitator = world.role === "owner" || world.role === "editor";
   const controlledEntityIDs =
     membership.role === "player" ? membership.controlled_entity_ids : [];
   const active = interactions.items.find(
@@ -151,9 +146,7 @@ export function WorldPlay({
             <span>
               <small>Your seat</small>
               <strong>
-                {membership.role === "facilitator"
-                  ? "Dungeon Master"
-                  : humanize(membership.role)}
+                {facilitator ? "Dungeon Master" : humanize(membership.role)}
               </strong>
             </span>
           </div>
@@ -214,7 +207,7 @@ export function WorldPlay({
                       {entitySubtitle(
                         entity,
                         mechanics.items,
-                        gameMemberships,
+                        members.items,
                         membership.id,
                       )}
                     </small>
@@ -236,7 +229,7 @@ export function WorldPlay({
           <div className="table-members">
             <p>
               {
-                game.value.memberships.filter(
+                members.items.filter(
                   (item) =>
                     item.status === "active" && item.play_status === "ready",
                 ).length
@@ -244,20 +237,14 @@ export function WorldPlay({
               people at the table
             </p>
             <div>
-              {game.value.memberships
+              {members.items
                 .filter(
                   (item) =>
                     item.status === "active" && item.play_status === "ready",
                 )
                 .slice(0, 6)
                 .map((item) => (
-                  <Avatar
-                    key={item.id}
-                    name={
-                      item.display_name ?? item.user?.display_name ?? "Member"
-                    }
-                    size="small"
-                  />
+                  <Avatar key={item.id} name={item.display_name} size="small" />
                 ))}
             </div>
           </div>
@@ -281,7 +268,7 @@ export function WorldPlay({
           ) : (
             <LiveInteraction
               interaction={active}
-              game={game.value}
+              world={world}
               membership={membership}
               entities={entities.items}
               mechanics={mechanics.items}
@@ -336,7 +323,8 @@ export function WorldPlay({
 
       {creatingProblem ? (
         <NewProblemModal
-          game={game.value}
+          world={world}
+          members={members.items}
           entities={entities.items}
           onClose={() => setCreatingProblem(false)}
           onCreated={() => {
@@ -481,23 +469,25 @@ function IdleTable({
 }
 
 function NewProblemModal({
-  game,
+  world,
+  members,
   entities,
   onClose,
   onCreated,
 }: {
-  game: Game;
+  world: World;
+  members: WorldMember[];
   entities: WorldEntity[];
   onClose: () => void;
   onCreated: () => void;
 }) {
   const activeMembers = useMemo(
     () =>
-      game.memberships.filter(
+      members.filter(
         (member) =>
           member.status === "active" && member.play_status === "ready",
       ),
-    [game.memberships],
+    [members],
   );
   const responders = useMemo(
     () => activeMembers.filter((member) => member.role === "player"),
@@ -543,7 +533,7 @@ function NewProblemModal({
     setSaving(true);
     setError(null);
     try {
-      await api<Interaction>(gamePath(game.id, "interactions"), {
+      await api<Interaction>(worldPath(world.id, "interactions"), {
         method: "POST",
         ...jsonBody({
           id: crypto.randomUUID(),
@@ -644,17 +634,8 @@ function NewProblemModal({
                       toggle(responderIds, member.id, setResponderIds)
                     }
                   />
-                  <Avatar
-                    name={
-                      member.display_name ??
-                      member.user?.display_name ??
-                      "Player"
-                    }
-                    size="small"
-                  />
-                  <span>
-                    {member.display_name ?? member.user?.display_name}
-                  </span>
+                  <Avatar name={member.display_name} size="small" />
+                  <span>{member.display_name}</span>
                 </label>
               ))
             )}
@@ -684,7 +665,7 @@ function NewProblemModal({
 
 function LiveInteraction({
   interaction,
-  game,
+  world,
   membership,
   entities,
   mechanics,
@@ -692,8 +673,8 @@ function LiveInteraction({
   onChanged,
 }: {
   interaction: Interaction;
-  game: Game;
-  membership: GameMembership;
+  world: World;
+  membership: WorldMember;
   entities: WorldEntity[];
   mechanics: WorldMechanic[];
   facilitator: boolean;
@@ -710,7 +691,7 @@ function LiveInteraction({
     setError(null);
     try {
       await api<Interaction>(
-        gamePath(game.id, `interactions/${interaction.id}/${action}`),
+        worldPath(world.id, `interactions/${interaction.id}/${action}`),
         {
           method: "POST",
           ...jsonBody({ expected_revision: interaction.revision }),
@@ -778,7 +759,7 @@ function LiveInteraction({
       {interaction.status === "open" ? (
         <OpenProblem
           interaction={interaction}
-          game={game}
+          world={world}
           membership={membership}
           entities={entities}
           facilitator={facilitator}
@@ -790,7 +771,7 @@ function LiveInteraction({
       {interaction.status === "adjudicating" && facilitator ? (
         <RulingEditor
           interaction={interaction}
-          game={game}
+          world={world}
           entities={entities}
           mechanics={mechanics}
           onResolved={onChanged}
@@ -803,7 +784,7 @@ function LiveInteraction({
 
 function OpenProblem({
   interaction,
-  game,
+  world,
   membership,
   entities,
   facilitator,
@@ -812,8 +793,8 @@ function OpenProblem({
   onChanged,
 }: {
   interaction: Interaction;
-  game: Game;
-  membership: GameMembership;
+  world: World;
+  membership: WorldMember;
   entities: WorldEntity[];
   facilitator: boolean;
   working: boolean;
@@ -849,7 +830,7 @@ function OpenProblem({
     setError(null);
     try {
       await api<InteractionAction>(
-        gamePath(game.id, `interactions/${interaction.id}/actions`),
+        worldPath(world.id, `interactions/${interaction.id}/actions`),
         {
           method: "POST",
           ...jsonBody({
@@ -877,8 +858,8 @@ function OpenProblem({
     setError(null);
     try {
       await api<InteractionAction>(
-        gamePath(
-          game.id,
+        worldPath(
+          world.id,
           `interactions/${interaction.id}/actions/${currentAction.id}/withdraw`,
         ),
         {
@@ -1036,13 +1017,13 @@ interface EffectDraft {
 
 function RulingEditor({
   interaction,
-  game,
+  world,
   entities,
   mechanics,
   onResolved,
 }: {
   interaction: Interaction;
-  game: Game;
+  world: World;
   entities: WorldEntity[];
   mechanics: WorldMechanic[];
   onResolved: () => void;
@@ -1068,7 +1049,7 @@ function RulingEditor({
     setError(null);
     try {
       const result = await api<InteractionResolutionResult>(
-        gamePath(game.id, `interactions/${interaction.id}/${mode}`),
+        worldPath(world.id, `interactions/${interaction.id}/${mode}`),
         {
           method: "POST",
           ...jsonBody({
@@ -1391,7 +1372,7 @@ function RulingPreview({
               </strong>
               <span>
                 {mechanics.find(
-                  (mechanic) => mechanic.id === effect.state_variable_id,
+                  (mechanic) => mechanic.id === effect.mechanic_id,
                 )?.name ?? "Mechanic"}
               </span>
               <em>
@@ -1442,18 +1423,16 @@ function HistoryCard({
               {resolution.applied_effects.map((effect, index) => (
                 <span key={`${effect.effect_id}-${effect.entity_id}-${index}`}>
                   <i aria-hidden="true">
-                    {mechanics.find(
-                      (item) => item.id === effect.state_variable_id,
-                    )?.kind === "capacity"
+                    {mechanics.find((item) => item.id === effect.mechanic_id)
+                      ?.kind === "capacity"
                       ? "◇"
                       : "✦"}
                   </i>
                   {entities.find((entity) => entity.id === effect.entity_id)
                     ?.display_name ?? "Entity"}
                   :{" "}
-                  {mechanics.find(
-                    (item) => item.id === effect.state_variable_id,
-                  )?.name ?? "mechanic"}{" "}
+                  {mechanics.find((item) => item.id === effect.mechanic_id)
+                    ?.name ?? "mechanic"}{" "}
                   {displayValue(effect.before)} → {displayValue(effect.after)}
                 </span>
               ))}
@@ -1475,7 +1454,7 @@ function effectToAPI(
       id: effect.id,
       type: "set",
       entity_ids: [effect.entityId],
-      state_variable_id: effect.mechanicId,
+      mechanic_id: effect.mechanicId,
       value: { kind: "boolean", value: effect.booleanValue },
     };
   if (effect.operation === "set")
@@ -1483,14 +1462,14 @@ function effectToAPI(
       id: effect.id,
       type: "set",
       entity_ids: [effect.entityId],
-      state_variable_id: effect.mechanicId,
+      mechanic_id: effect.mechanicId,
       value: { kind: "number", value: effect.amount },
     };
   return {
     id: effect.id,
     type: "adjust-number",
     entity_ids: [effect.entityId],
-    state_variable_id: effect.mechanicId,
+    mechanic_id: effect.mechanicId,
     amount: effect.amount,
   };
 }
@@ -1507,31 +1486,17 @@ function effectDescription(
 
 function displayValue(value?: StateValue): string {
   if (value === undefined) return "unknown";
-  if (Array.isArray(value))
-    return value.map((item) => displayScalar(item)).join(", ") || "empty";
-  return displayScalar(value);
-}
-
-function displayScalar(value: StateScalarValue): string {
-  switch (value.kind) {
-    case "number":
-      return String(value.value);
-    case "boolean":
-      return value.value ? "yes" : "no";
-    case "text":
-    case "choice":
-      return value.value;
-    case "measurement":
-      return `${value.amount} ${value.unit}`;
-    case "reference":
-      return value.fallback_name ?? "entity";
-  }
+  return value.kind === "number"
+    ? String(value.value)
+    : value.value
+      ? "yes"
+      : "no";
 }
 
 function entitySubtitle(
   entity: WorldEntity,
   mechanics: WorldMechanic[],
-  memberships: GameMembership[],
+  memberships: WorldMember[],
   currentMembershipID: string,
 ): string {
   if (

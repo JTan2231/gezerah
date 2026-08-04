@@ -25,7 +25,7 @@ type AppLocation =
       section: BuildSection;
       resourceId?: string | undefined;
     }
-  | { type: "invite"; area?: AppArea | undefined; token: string }
+  | { type: "invite"; area: AppArea; token: string }
   | { type: "redirect"; path: string }
   | { type: "not-found" };
 
@@ -80,31 +80,6 @@ export function readLocation(pathname = window.location.pathname): AppLocation {
     return { type: "not-found" };
   }
 
-  if (parts[0] === "invite" && parts[1] !== undefined && parts.length === 2)
-    return { type: "invite", token: parts[1] };
-
-  if (parts[0] === "worlds") return readLegacyWorldLocation(parts);
-  return { type: "not-found" };
-}
-
-function readLegacyWorldLocation(parts: string[]): AppLocation {
-  if (parts.length === 1) return { type: "redirect", path: "/" };
-  const worldId = parts[1];
-  if (worldId === undefined) return { type: "redirect", path: "/" };
-  if (parts[2] === "play" && parts.length === 3)
-    return { type: "redirect", path: playWorldURL(worldId) };
-  if (parts[2] === undefined)
-    return {
-      type: "redirect",
-      path: buildWorldURL(worldId, "capacities"),
-    };
-  if (buildSections.has(parts[2]) && parts[2] !== "roster") {
-    const section = parts[2] as BuildSection;
-    return {
-      type: "redirect",
-      path: buildWorldURL(worldId, section, parts[3]),
-    };
-  }
   return { type: "not-found" };
 }
 

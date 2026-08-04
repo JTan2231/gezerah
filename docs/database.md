@@ -2,10 +2,10 @@
 
 ## Overview
 
-PostgreSQL is the authoritative store. The application persists configuration,
-typed state, bindings, games, interactions, receipts, and events as normalized
-relations. There is no canonical JSON aggregate column and no seeded ruleset
-vocabulary.
+PostgreSQL is authoritative. The schema persists worlds, memberships,
+user-authored mechanics, entities, scalar state, character profiles,
+interactions, receipts, and event cursors as normalized relations. There is no
+canonical JSON aggregate column and no seeded vocabulary.
 
 The schema uses:
 
@@ -13,401 +13,243 @@ The schema uses:
 - `numeric` for exact finite decimals;
 - `timestamptz` for timestamps;
 - explicit `position` columns for authored order;
-- composite foreign keys carrying `rule_set_id` or `game_id` to enforce scope;
-- check constraints for tagged shapes, bounds, statuses, and lifecycles;
-- partial unique indexes for one/set semantics and selected/idempotent records;
-- triggers for `updated_at` and selected final/append-only history rows.
+- composite foreign keys carrying `world_id` to enforce scope;
+- checks for scalar shapes, bounds metadata, roles, statuses, and lifecycles;
+- partial unique indexes for selected and idempotent records;
+- triggers for `updated_at` and immutable history.
 
 ## Connection and privileges
 
-At application startup, the configured role must be able to:
+At startup the configured role must be able to connect, create/alter schema for
+unapplied migrations, create `pgcrypto` (or use an installed extension), take
+advisory locks, and read/write application tables and sequences. Migration and
+runtime work currently share this connection.
 
-- connect to the target database;
-- create and alter schema objects for unapplied migrations;
-- create the `pgcrypto` extension (or use one already installed by a sufficiently
-  privileged administrator);
-- take PostgreSQL advisory locks;
-- read and write application tables/sequences.
+The E2E admin connection additionally needs permission to create/drop its
+disposable database and terminate sessions connected to it.
 
-Normal runtime and migration execution use the same configured connection. The
-repository does not define separate migration/runtime roles.
+## Migration runner and clean baseline
 
-The end-to-end test admin connection additionally needs permission to create
-and drop databases and terminate sessions connected to its disposable test
-database.
+`internal/migrations/migrations.go` embeds every `*.sql` file. Startup:
 
-## Migration runner
+1. acquires one pool connection;
+2. takes advisory lock `3016533762926936644`;
+3. sorts embedded SQL filenames lexically;
+4. when the ledger is absent, verifies that `public` contains no objects except
+   a preinstalled `pgcrypto`, then creates
+   `schema_migrations(version, applied_at)`;
+5. rejects a recorded history that is not an exact prefix of the embedded
+   filenames;
+6. executes each new file and version insert in one transaction with the
+   migration search path fixed to `public`;
+7. releases the advisory lock.
 
-`internal/migrations/migrations.go` embeds every `*.sql` in the package. On
-startup it:
+The current application has one baseline:
 
-1. acquires a dedicated connection from the pool;
-2. takes PostgreSQL advisory lock `3016533762926936644`;
-3. creates `schema_migrations(version, applied_at)` if absent;
-4. lists embedded SQL files and sorts names lexically;
-5. skips versions already recorded by exact filename;
-6. executes each new file in its own transaction;
-7. inserts the filename into `schema_migrations` in that same transaction;
-8. releases the advisory lock, using a five-second background timeout during
-   cleanup.
+| Migration             | Purpose                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| `001_worldwright.sql` | Complete world-native schema: users, worlds, mechanics, state, profiles, controls, live play. |
 
-This allows concurrent application starts to serialize upgrades. The HTTP
-listener is not created until database ping and migrations succeed.
+This baseline is intentionally a clean break. Databases created by the removed
+schema are unsupported and must not be upgraded in place. Create a fresh empty
+database and let the application install `001_worldwright.sql`.
+For a local database that already has a Worldwright migration ledger,
+`./reset-db.sh` safely rebuilds its `public` schema from empty on the next
+backend start.
+Any one-time data salvage belongs outside the runtime repository and must be
+deleted after the new database is verified.
 
-Migrations are forward-only. There is no down migration, schema reset, seed,
-or data repair framework.
-
-## Migration history
-
-| Migration                     | Area                 | Main additions                                                                                                   |
-| ----------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `001_foundations.sql`         | Ruleset foundations  | `pgcrypto`, update trigger, rulesets, owner schemas, entities, schema membership, state roots.                   |
-| `002_state_variables.sql`     | State schema         | Definition metadata, schema links, choice options, units, reference targets, allowed operations, typed defaults. |
-| `003_state_values.sql`        | Stored state         | Typed scalar rows for entity overrides.                                                                          |
-| `004_conditions.sql`          | Conditions           | Sets, parameters/schema requirements, recursive expressions, criteria, typed predicates.                         |
-| `005_problem_definitions.sql` | Configured problems  | Targets, invocations, choices, outcomes, consequences, effects, typed operands.                                  |
-| `006_problem_instances.sql`   | Configured instances | Instance/entity link, binding revision, ordered concrete target bindings.                                        |
-| `007_live_play.sql`           | Multiplayer Play     | Users, games, memberships, game entity scope, interactions/actions, applied-receipt protection, event cursor.    |
-| `008_world_studio.sql`        | World product model  | World/game pairing, world roles, hashed invite links/redemptions, capacity/capability classification.             |
-| `009_player_controlled_entities.sql` | Character controls | Profile roots/legacy free-form sections, control events, and optional action attribution.               |
-| `010_world_character_fields.sql` | Character onboarding | Revisioned world field definitions, per-entity values, and schema-change events.                         |
+The baseline contains no alternate configuration container, secondary live
+container, reusable simulation aggregate, or superseded profile storage.
 
 ## Logical schema
 
-### Foundations
+### Worlds, users, and membership
 
-| Table                  | Purpose                                                          |
-| ---------------------- | ---------------------------------------------------------------- |
-| `rule_sets`            | Top-level mechanical isolation boundary and globally unique key. |
-| `state_owner_schemas`  | User-authored ownership capabilities scoped to a ruleset.        |
-| `entities`             | Generic state owners with optional ruleset-unique key.           |
-| `entity_owner_schemas` | Many-to-many entity capability membership.                       |
-| `state_records`        | At most one revision/timestamp root per entity.                  |
-| `entity_profiles`      | Optional independently revisioned character-profile root per world entity. |
-| `entity_profile_sections` | Retained legacy free-form profile rows, now read-only through HTTP.   |
-| `entity_profile_field_values` | Non-empty entity text values keyed by world character-field UUID. |
+| Table                      | Purpose                                                                    |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `users`                    | Local development identities.                                              |
+| `worlds`                   | Name, description, lifecycle, settings revision, and table revision.       |
+| `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.       |
+| `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.     |
+| `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership. |
 
-`state_owner_schemas` is the persisted table name for the domain/API concept
-“owner schema.”
+`worlds.revision` guards settings and archive commands. `table_revision`
+guards controller-set changes and table authority independently.
 
-Public creation handlers insert a `state_records` row for every entity, including
-one with no scalar overrides, and loaders rely on that application invariant.
-The foreign key and primary key do not require the row to exist: direct SQL can
-create an entity without a state root, and inner-join loaders will omit it.
+Invite rows never store raw bearer tokens. Creation returns the token once;
+the table stores a lowercase 64-character SHA-256 digest. Redemption rows make
+use counting idempotent per invite/user pair.
 
-Profiles are created lazily on the first authorized replacement. An absent row
-is the logical empty profile at revision zero. Active values use plain
-relational text columns and durable configured-field IDs; there is no JSON
-metadata document or seeded field vocabulary. Values for archived definitions
-remain retained. `entity_profile_sections` preserves prose written through the
-superseded free-form API and is exposed read-only rather than migrated into
-invented field mappings.
+### Mechanics, entities, and state
 
-### State definitions and values
+| Table             | Purpose                                                                         |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `world_mechanics` | Capacity/capability kind, mode, scalar type, default, bounds, order, lifecycle. |
+| `entities`        | World-owned fictional state owners with display name and archive flag.          |
+| `state_records`   | One optimistic revision/timestamp root per entity.                              |
+| `state_values`    | Numeric or Boolean stored override per entity/mechanic pair.                    |
 
-| Table                                     | Purpose                                                                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `state_variable_definitions`              | Definition root: kind, cardinality, absence, presentation, bounds, order, archive state. |
-| `state_variable_owner_schemas`            | Schemas that make an entity eligible to own the variable.                                |
-| `state_variable_choice_options`           | Ordered durable choice identities, keys, and labels.                                     |
-| `state_variable_measurement_units`        | Ordered durable unit identities and text.                                                |
-| `state_variable_reference_target_schemas` | Optional schema restrictions for referenced entities.                                    |
-| `state_variable_effect_operations`        | Per-definition effect allowlist.                                                         |
-| `state_variable_default_values`           | Zero or more typed scalar rows forming the authored default.                             |
-| `state_values`                            | Zero or more typed scalar rows forming one entity's stored override for a definition.    |
+`world_mechanics` permits only:
 
-The definition root carries a composite typed identity
-`(id, rule_set_id, value_kind, cardinality)`. Typed value rows reference that
-identity, preventing a row from claiming a kind/cardinality different from its
-definition.
+- capacity `score`/`pool` with `value_kind=number`;
+- capability `rating` with `value_kind=number`;
+- capability `binary` with `value_kind=boolean`.
 
-### Conditions
+Numeric mechanics require an authored default and may carry minimum, maximum,
+positive step, and unit. Boolean mechanics carry none of those numeric columns
+and logically default to false. The composite identity
+`(id, world_id, value_kind)` lets state and receipt rows prove they match their
+mechanic's scalar kind.
 
-| Table                                        | Purpose                                                                   |
-| -------------------------------------------- | ------------------------------------------------------------------------- |
-| `condition_sets`                             | Reusable condition aggregate root.                                        |
-| `condition_parameters`                       | Ordered singular/plural parameters.                                       |
-| `condition_parameter_required_owner_schemas` | Capabilities every bound entity must implement.                           |
-| `condition_expression_nodes`                 | Recursive ordered all/any/at-least/criterion tree with one root.          |
-| `condition_criteria`                         | Parameter, variable, quantifier, count, and operator for criterion nodes. |
-| `condition_number_predicates`                | Exact number or range operands.                                           |
-| `condition_boolean_predicates`               | Boolean operand.                                                          |
-| `condition_choice_operands`                  | Ordered, unique durable choice-option operands.                           |
+Every entity receives one `state_records` row at creation. `state_values` holds
+only overrides; absence means the mechanic's authored default. Its primary key
+allows one scalar per entity/mechanic. A tagged-shape check requires exactly
+one of `number_value` or `boolean_value` according to `value_kind`.
 
-The self-referential expression-tree foreign key is deferrable so aggregate
-replacement can assemble/replace a tree inside one transaction. A partial
-unique index permits at most one root candidate per condition set; domain and
-save validation require a complete tree.
+### Character fields, profiles, and control
 
-### Problem definitions
+| Table                              | Purpose                                                            |
+| ---------------------------------- | ------------------------------------------------------------------ |
+| `world_character_field_sets`       | One optimistic revision root for ordered active requirements.      |
+| `world_character_fields`           | Durable label/guidance/visibility/position rows with soft archive. |
+| `entity_profiles`                  | Optional independently revisioned profile root per entity.         |
+| `entity_profile_field_values`      | Non-empty text value per entity/field with author provenance.      |
+| `world_membership_entity_controls` | Many-to-many player-membership/entity control edge.                |
 
-| Table                                       | Purpose                                                                |
-| ------------------------------------------- | ---------------------------------------------------------------------- |
-| `problem_definitions`                       | Problem root and optional availability invocation reference.           |
-| `problem_definition_instance_owner_schemas` | Schema template copied to new instance entities.                       |
-| `problem_target_definitions`                | Ordered abstract targets, bounds, cardinality, and binding source.     |
-| `problem_target_required_owner_schemas`     | Capabilities target bindings must implement.                           |
-| `condition_invocations`                     | Owned reference from a problem usage site to a reusable condition set. |
-| `condition_invocation_arguments`            | Parameter-to-problem-target mappings.                                  |
-| `problem_choices`                           | Ordered choices and optional availability invocation.                  |
-| `choice_resolutions`                        | Automatic/condition resolution discriminator and invocation.           |
-| `choice_outcomes`                           | Automatic, met, or unmet outcome per choice.                           |
-| `consequence_sets`                          | At most one owned consequence container per outcome.                   |
-| `effects`                                   | Ordered configured state operations against abstract targets.          |
-| `effect_value_operands`                     | Typed set/add/remove operand scalar rows.                              |
+Every world has one character-field-set root. All active fields are required
+for controlled entities. Field visibility is `table` or
+`controllers-and-facilitators`. Profile values are relational text with
+composite foreign keys proving entity, field, and profile share a world.
 
-Several problem references are deferrable because invocations, choices, and
-their owning problem form a cyclic aggregate during replacement. Application
-validation still performs semantic checks and requires complete resolution and
-outcome structures before commit; not every exact-one relationship is enforced
-from parent to child by a foreign key.
-
-### Problem instances
-
-| Table                              | Purpose                                                                                               |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `problem_instances`                | Links a problem definition to the generic entity that represents one instance; owns binding revision. |
-| `problem_instance_target_bindings` | Ordered concrete entity IDs for each target.                                                          |
-
-The instance primary key is `entity_id`, so every problem instance is
-structurally also a generic entity/state owner.
-
-### Games and membership
-
-| Table                             | Purpose                                                                                                           |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `users`                           | Local development identities.                                                                                     |
-| `games`                           | One ruleset's live game, status, revision, and creator.                                                           |
-| `game_memberships`                | User role/status/revision in a game.                                                                              |
-| `game_entities`                   | Exclusive game assignment for ruleset entities.                                                                   |
-| `game_membership_entity_controls` | Many-to-many player-control mapping used for completion, profile authoring, and optional action attribution.       |
-
-`game_entities.entity_id` is the primary key, enforcing assignment to at most
-one game. Composite foreign keys prove that game and entity share a ruleset.
-Control rows carry `game_id` through foreign keys to both membership and entity,
-making cross-game grants structurally impossible. The primary key permits
-multiple controlled entities per membership and multiple controllers per
-entity. Active-player role/status is mutable membership state and is therefore
-validated by commands; membership transitions away from active player remove
-their control rows.
-
-### World studio
-
-| Table                       | Purpose                                                                                      |
-| --------------------------- | -------------------------------------------------------------------------------------------- |
-| `world_profiles`            | Pairs one backing ruleset with one primary game and stores world status/revision.             |
-| `world_memberships`         | Owner/editor/player/spectator role and lifecycle for one user in one world.                   |
-| `world_invites`             | Expiring/revocable role offer with unique SHA-256 token digest and use count.                 |
-| `world_invite_redemptions`  | One durable redemption per invite/user linked to the resulting world membership.             |
-| `world_mechanics`           | Capacity/capability kind, author-facing mode, and live-mutation flag for a state definition.  |
-| `world_character_field_sets` | One optimistic revision root for a world's ordered active character requirements.            |
-| `world_character_fields`    | Durable label/guidance/visibility/position definitions with soft archive.                     |
-
-`world_profiles.primary_game_id` has a composite foreign key proving that the
-game belongs to the same ruleset. World and game memberships remain separate
-because their role vocabularies serve different boundaries; application
-transactions create/redeem them together.
-
-Invite rows never store raw bearer tokens. The application stores a lowercase
-64-character SHA-256 hex digest and returns the raw URL-safe token only from the
-create response. Redemption rows keep use counting idempotent per invite/user.
-
-`world_mechanics.state_variable_id` is both its primary key and a composite
-foreign key to a normalized definition in the same ruleset. The table does not
-duplicate defaults, bounds, values, or effect operations. World mechanic
-definitions intentionally have no rows in `state_variable_owner_schemas`; an
-empty definition owner set is the engine's explicit universal case.
-
-Every world has one `world_character_field_sets` row, including worlds that
-predate migration 010. Field definitions are relational, ruleset-scoped, and
-carry no privileged key. All non-archived rows are required for controlled
-characters. The active ordering is `(position, id)`; application-level
-replacement serializes through the root revision and supplies case-insensitive
-label uniqueness. Profile values have composite foreign keys proving that the
-entity/profile and field belong to the same world.
+Control rows reference a world membership and entity through `(id, world_id)`
+keys, so cross-world control is structurally impossible. The primary key allows
+multiple entities per membership and multiple controllers per entity.
 
 ### Interactions and actions
 
-| Table                             | Purpose                                                                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `interactions`                    | Prompt/private notes/status/revision/lifecycle root.                                                   |
-| `interaction_audience_members`    | Memberships allowed to see a presented interaction.                                                    |
-| `interaction_eligible_responders` | Audience player memberships allowed to submit.                                                         |
-| `interaction_context_entities`    | Ordered game entity context, with label/visibility columns reserved beyond current public-only writer. |
-| `interaction_action_submissions`  | Free-form actions, optional controlled acting entity/name snapshot, status, and revision.              |
+| Table                             | Purpose                                                          |
+| --------------------------------- | ---------------------------------------------------------------- |
+| `interactions`                    | Prompt/private notes/status/revision/lifecycle root.             |
+| `interaction_audience_members`    | Memberships allowed to see a presented interaction.              |
+| `interaction_eligible_responders` | Audience players allowed to submit.                              |
+| `interaction_context_entities`    | Ordered world entity context and visibility.                     |
+| `interaction_action_submissions`  | Free-form actions, acting-entity snapshot, status, and revision. |
 
-Database lifecycle checks constrain timestamp/status combinations for draft,
-open, adjudicating, resolved, and cancelled interactions. A partial unique index
+Lifecycle checks constrain timestamp/status combinations for draft, open,
+adjudicating, resolved, and cancelled interactions. A partial unique index
 allows at most one selected action per interaction.
 
-Action attribution has a nullable `(acting_entity_id, acting_entity_name)`
-pair. The entity is constrained to the same game, while the name is captured
-at submission time for stable history. The mutable control relationship is
-validated by the application when accepting the action rather than retained as
-a historical foreign key.
+Action attribution stores a nullable `(acting_entity_id, acting_entity_name)`
+pair. The entity must share the world; the display name is captured at
+submission for stable history. Current control is checked by the application
+rather than retained as a historical foreign key.
 
-### Live resolution receipts
+### Resolution receipts
 
-| Table                                           | Purpose                                                                                                   |
-| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| `interaction_resolutions`                       | One draft/applied ruling root per interaction, narrative, notes, selected action, actor, idempotency key. |
-| `interaction_resolution_effects`                | Ordered requested concrete operations.                                                                    |
-| `interaction_resolution_effect_targets`         | Ordered mapped game entity targets for each effect.                                                       |
-| `interaction_resolution_effect_operands`        | Typed operand scalar rows for requested effects.                                                          |
-| `interaction_resolution_effect_applications`    | Ordered per-effect/per-entity application and changed flag.                                               |
-| `interaction_resolution_application_value_sets` | Required `before` and `after` wrapper, preserving known/unknown and cardinality.                          |
-| `interaction_resolution_application_values`     | Typed scalar rows for each known before/after value.                                                      |
+| Table                                        | Purpose                                                          |
+| -------------------------------------------- | ---------------------------------------------------------------- |
+| `interaction_resolutions`                    | One draft/applied ruling, narrative, actor, and idempotency key. |
+| `interaction_resolution_effects`             | Ordered requested `set`/`adjust-number` operations and operands. |
+| `interaction_resolution_effect_targets`      | Ordered world entity targets for each effect.                    |
+| `interaction_resolution_effect_applications` | Ordered per-target changed/before/after scalar receipt.          |
 
-The value-set wrapper is necessary because zero scalar rows can mean two
-different things: a known empty many-value or an unknown logical value. It uses
-`known=false, cardinality=null` for unknown and `known=true,
-cardinality=many` with no children for the empty set.
+Effects and applications use dedicated numeric/Boolean columns with shape
+checks; there are no polymorphic scalar sets or unknown-value wrappers.
+Applications require concrete before and after values because every active
+mechanic has a logical default.
 
-`interaction_resolutions` is unique by interaction. A partial game-scoped
-unique index on non-null idempotency key supports safe retry. Application rows
-are unique by effect/entity, and before/after phases are exactly enumerated.
+`interaction_resolutions` is unique per interaction. A partial unique index on
+`(world_id, idempotency_key)` supports safe retry. Application rows are unique
+by effect/entity, and explicit positions preserve execution order.
 
 ### Events
 
-| Table         | Purpose                                                                               |
-| ------------- | ------------------------------------------------------------------------------------- |
-| `game_events` | Append-only identity cursor and normalized related resource IDs for SSE invalidation. |
+| Table          | Purpose                                                               |
+| -------------- | --------------------------------------------------------------------- |
+| `world_events` | Append-only identity cursor and related resource IDs for SSE reloads. |
 
-Event IDs are generated `bigint` identities and indexed by `(game_id, id)`.
-The payload is intentionally not a JSON state snapshot. Current event types
-cover game, membership, entity assignment/control/profile changes,
-character-field schema changes, interaction lifecycle, submission, and
-resolution changes.
-`resolution-updated` is allowed by the schema but no current handler emits it.
+Event IDs are generated `bigint` identities indexed by `(world_id, id)`. The
+payload is not a state snapshot. Event types cover world/membership changes,
+entity control/profile changes, character-field changes, interaction/action
+lifecycle, and resolution application.
 
-The schema validates the event type and game scope of any populated resource
-IDs, but it does not require the actor/resource ID combination appropriate to
-each type. Inserts remain allowed. `game_events` is therefore an append-only
-invalidation cursor, not a tamper-evident or semantically complete audit log.
+The schema checks event type and world scope of populated IDs but does not
+prove every semantically required actor/resource combination. Events are an
+append-only invalidation cursor, not a tamper-evident audit log.
 
-## Typed scalar storage
+## World scope and referential integrity
 
-The schema repeats a deliberate relational tagged-union pattern for defaults,
-current state, configured operands, live requested operands, and live
-before/after receipt values.
-
-Each scalar row has:
-
-- `value_kind` and `cardinality` discriminators;
-- `position`;
-- nullable dedicated columns for text, number, Boolean, choice-option ID,
-  measurement amount/unit ID, reference entity ID, and fallback name;
-- a check constraint requiring exactly the columns appropriate to the selected
-  kind;
-- foreign keys for option/unit/reference identity;
-- finite-number checks;
-- definition identity foreign keys where applicable.
-
-Partial unique indexes enforce set uniqueness by kind for many-valued state.
-Reference set uniqueness is by referenced entity, not fallback text.
-Single-valued rows must use position zero and have at most one row.
-
-This design is verbose by intent. It lets PostgreSQL enforce the same type
-boundary as the rules engine and avoids opaque JSON that can drift from
-definition metadata.
-
-## Scope and referential integrity
-
-Where a reference must remain in one ruleset, foreign keys include
-`rule_set_id`, for example:
+Composite foreign keys carry `world_id`, for example:
 
 ```text
-(state_variable_id, rule_set_id)
-    → state_variable_definitions(id, rule_set_id)
+(mechanic_id, world_id, value_kind)
+    → world_mechanics(id, world_id, value_kind)
 ```
-
-Where a live reference must remain in one game, foreign keys include `game_id`,
-for example:
 
 ```text
-(referenced_entity_id, game_id)
-    → game_entities(entity_id, game_id)
+(entity_id, world_id)
+    → entities(id, world_id)
 ```
 
-These constraints make those references cross-scope-invalid even if application
-code is bypassed. Generic defaults and `state_values` carry only ruleset scope;
-assigning an entity to a game does not require every generic reference reachable
-from it to be assigned to that game. Domain validation provides better messages
-and rules that cannot be expressed comfortably as static SQL constraints, such
-as schema-set implications.
+These constraints make cross-world references invalid even if application code
+is bypassed. Application validation still provides clearer errors and enforces
+rules that depend on current roles, readiness, or lifecycle.
 
 ## Revisions and timestamps
 
-`set_updated_at()` updates mutable roots with an `updated_at` column. Revisions
-are explicit non-negative bigint counters on state records, problem instances,
-games, memberships, interactions, and action submissions.
+`set_updated_at()` updates mutable roots carrying `updated_at`. Explicit
+non-negative revisions exist on worlds, world memberships, character-field
+sets, entity profiles, state records, interactions, and action submissions.
 
-The application increments revisions only for meaningful mutations where
-implemented. Direct SQL writers must not assume an `updated_at` trigger also
-increments a revision; it does not.
+Revisions advance only for meaningful mutations where implemented. A direct
+SQL writer must not assume the timestamp trigger also increments a revision.
+`worlds.table_revision` is separate from `worlds.revision` so controller changes
+do not conflict with unrelated settings drafts.
 
-## Immutability and receipt completeness
+## Immutability
 
-Migration 007 adds triggers that:
+The baseline adds triggers that:
 
-- reject updates/deletes of an `interactions` root row once it is resolved or
-  cancelled;
-- reject updates/deletes once a resolution is applied;
-- reject inserts/updates/deletes of children owned by an applied resolution;
-- prevent reparenting of receipt child rows;
-- check, at transition to applied, that effects have targets, targets have
-  applications, operands match operations, and every application has complete
-  before/after value sets;
-- reject every update/delete of `game_events`.
+- reject updates/deletes of an interaction once resolved or cancelled;
+- reject updates/deletes of an applied resolution;
+- reject updates/deletes of effects, targets, and applications under an applied
+  resolution;
+- reject updates/deletes of every `world_events` row.
 
-Audience, responder, context, and action-submission rows have no equivalent
-final-interaction trigger and remain directly mutable after resolution or
-cancellation. Event inserts also remain allowed. The applied receipt tree is the
-strong immutable portion of the record and is deliberately hard to “fix” in
-place; corrections should be represented by a new later domain action rather
-than rewriting it.
+Audience, responder, context, and action rows are not all protected as a
+complete final audit tree. The applied receipt is the strong immutable record.
+Corrections should be represented by a later domain action, not rewriting it.
 
-These are DML protections while the triggers remain installed, not
-tamper-evidence against the configured database role. Startup migrations and
-normal runtime use the same DDL-capable connection, so a holder of those
-credentials can alter schema protections.
+These are DML protections while triggers remain installed, not tamper evidence
+against a holder of the DDL-capable database credentials.
 
-## Delete and archive behavior
+## Archive and delete behavior
 
-Owned aggregate children generally cascade from their root. Cross-aggregate
-configuration and history references generally restrict deletion. The public
-API does not expose hard deletion and uses archive/final statuses instead.
+Owned children generally cascade from their world or aggregate root. Historical
+cross-references generally restrict deletion. Public APIs use archive/final
+statuses and expose no hard-delete workflow.
 
-Deleting a ruleset directly in SQL would cascade a large amount of authored
-state and may interact with restricted live/history references. It is not a
-supported operational workflow.
+Deleting a world directly would cascade authored data and can interact with
+restricted history references. It is not a supported operational action.
 
 ## Adding a migration
 
-1. Add a new zero-padded SQL filename after the current highest version, for
-   example `008_feature_name.sql`.
-2. Do not edit a migration that may already be recorded in any database. The
-   runner keys by filename and does not checksum prior contents.
-3. Make the file safe to execute inside one transaction. Avoid operations that
-   PostgreSQL forbids in a transaction or split the design into an application-
-   compatible forward sequence.
-4. Preserve user-authored/ruleset-scoped vocabulary; do not insert canonical
-   schemas, keys, entity classes, or seed rules.
-5. Add relational constraints and scope-carrying foreign keys, not only handler
-   validation.
-6. Consider existing data explicitly: add nullable/backfilled/validated changes
-   in a safe order.
-7. Consider locks and table rewrite cost for production-sized data even though
-   the current project has no online-migration framework.
-8. Run `./ci.sh backend` with `DND_TEST_DATABASE_URL` pointing to an explicitly
-   disposable database to exercise the full chain.
-9. Run `./ci.sh e2e` to exercise a clean database and cross-layer behavior.
-10. Update this table catalog and operational notes.
+After the baseline is released:
 
-Because migrations run before the listener opens, a long migration extends
-deployment health-check startup time. Railway currently allows a 30-second
-health-check timeout; plan larger migrations rather than assuming that window is
-adequate.
+1. add the next zero-padded SQL file, beginning with `002_<feature>.sql`;
+2. never edit a migration already recorded in a durable database;
+3. keep each file valid inside one transaction;
+4. preserve user-authored, world-scoped vocabulary—do not seed canonical
+   mechanics, keys, entity classes, or field labels;
+5. add relational constraints and `world_id`-carrying foreign keys;
+6. consider existing rows, locks, and table rewrite cost;
+7. run `./ci.sh backend` against an explicitly disposable database;
+8. run `./ci.sh e2e` for clean-database and cross-layer behavior;
+9. update this catalog and operational notes.
+
+Migrations run before the listener starts, so long work extends deployment
+health-check startup time.
 
 ## Inspection queries
 
@@ -419,15 +261,14 @@ from schema_migrations
 order by version;
 ```
 
-Find current state revisions in a ruleset:
+Find state revisions in a world:
 
 ```sql
-select entity.display_name, record.owner_entity_id, record.revision,
-       record.updated_at
+select entity.display_name, record.entity_id, record.revision, record.updated_at
 from state_records record
-join entities entity on entity.id = record.owner_entity_id
-where record.rule_set_id = $1
-order by lower(entity.display_name), record.owner_entity_id;
+join entities entity on entity.id = record.entity_id
+where record.world_id = $1
+order by lower(entity.display_name), record.entity_id;
 ```
 
 Find unfinished interactions that prevent archive:
@@ -435,7 +276,7 @@ Find unfinished interactions that prevent archive:
 ```sql
 select id, title, status, revision, updated_at
 from interactions
-where game_id = $1
+where world_id = $1
   and status in ('draft', 'open', 'adjudicating')
 order by created_at, id;
 ```
@@ -444,22 +285,20 @@ Inspect recent event cursors:
 
 ```sql
 select id, event_type, interaction_id, submission_id, resolution_id, created_at
-from game_events
-where game_id = $1
+from world_events
+where world_id = $1
 order by id desc
 limit 100;
 ```
 
 Use read-only accounts and transactions for production inspection. Do not
-manually update receipt or event tables.
+manually update receipt or event rows.
 
-## Backup and restore
+## Backup, restore, and cutover
 
-The repository supplies no backup automation. A deployment owner should create
-and test a PostgreSQL-native backup policy before relying on the application for
-durable play history.
-
-A typical logical backup is:
+The repository supplies no backup automation. Deployment owners should create
+and test PostgreSQL-native backups before relying on the application for
+durable history.
 
 ```sh
 database_url="${DND_DATABASE_URL:-${DATABASE_URL:-}}"
@@ -470,28 +309,21 @@ fi
 pg_dump --format=custom --no-owner --file=dnd.dump "$database_url"
 ```
 
-Restore into an empty, access-controlled database with compatible PostgreSQL
-tools, then point a non-production application instance at it and verify:
+Restore into an empty access-controlled database using the same major
+PostgreSQL toolchain, then verify migrations, `/api/health`, representative
+worlds/state/receipts, revisions, and event cursors.
 
-1. `schema_migrations` contains the expected versions;
-2. application startup runs no unexpected/destructive migration;
-3. `/api/health` succeeds;
-4. representative rulesets, logical state, games, and receipts load;
-5. event cursors and revision guards still behave.
-
-Do not restore over a live database. Pause writers, preserve the original
-database, and rehearse the exact provider-specific recovery process. Database
-restore is the current rollback mechanism for a destructive data/schema
-incident; the migration runner itself cannot roll back.
+For the clean-break release, do not point the new binary at a non-current
+database. Provision a new empty database. If old data must be preserved, export
+and transform it with disposable out-of-tree tooling, verify the result, then
+retire that tooling. The application intentionally contains no in-place path.
 
 ## Current operational gaps
 
 - no automated backup, point-in-time recovery, or restore drill;
 - no down migrations or application-level data repair framework;
 - no separate least-privilege migration/runtime roles;
-- no connection-pool tuning through application environment variables;
+- no pool tuning through application environment variables;
 - no database metrics or slow-query integration;
-- no per-migration version, progress, or duration logging;
-- no online/expand-contract migration framework;
-- no cleanup tool for abandoned E2E databases after a forcibly interrupted
-  run.
+- no per-migration progress/duration logging;
+- no cleanup tool for abandoned E2E databases after forced interruption.

@@ -51,7 +51,9 @@ postgres://localhost:5432/dnd?sslmode=disable
 ```
 
 Migrations run automatically when the backend starts. The repository has no
-seed step; create all ruleset vocabulary through the application/API.
+seed step; create all world vocabulary through the application/API. The clean
+baseline requires an empty database; databases created by the removed schema
+must be discarded rather than started with this release.
 
 ## Resetting local data
 
@@ -63,18 +65,20 @@ Reset the development application to an empty state with:
 
 The script uses `DND_DATABASE_URL`, then `DATABASE_URL`, then the same default
 URL as the application. It refuses PostgreSQL system databases, non-loopback
-servers, and databases that do not contain the Worldwright migration ledger
-and foundation tables. After displaying the resolved database name and server,
-it requires that database name to be typed exactly. `--yes` skips only this
-confirmation; it does not bypass the target safety checks.
+servers, and databases without the Worldwright migration ledger. After
+displaying the resolved database name and server, it requires that database
+name to be typed exactly. `--yes` skips only this confirmation; it does not
+bypass the target safety checks.
 
-The reset truncates every table in the `public` schema except
-`schema_migrations`, restarting owned sequences. The relational schema,
-extensions, constraints, and applied-migration history remain in place. A
-managed backend is stopped before the transaction and restarted afterward if
-it was running. If a backend on port 8080 is reachable without managed PID
-state, the script leaves it alone and refuses the reset; stop that process
-explicitly first.
+The reset drops and recreates the entire `public` schema. This removes every
+object in that schema, along with dependent extension objects and the migration
+record, so the next backend start installs the current clean baseline. Reset and
+startup serialize on the same PostgreSQL advisory lock. A managed backend is
+stopped before the transaction and restarted afterward if it was running,
+installing the baseline immediately; otherwise the schema stays empty until the
+next start. If a backend on port 8080 is reachable without managed PID state,
+the script leaves it alone and refuses the reset; stop that process explicitly
+first.
 
 ## Environment configuration
 
@@ -132,9 +136,6 @@ different: it applies migrations directly to `DND_TEST_DATABASE_URL`.
 ./run.sh logs [all|backend|frontend]
 ./run.sh tail [all|backend|frontend]
 ```
-
-Aliases include `up`, `down`, `ps`, `log`, `follow`, and service aliases such as
-`back`/`api` and `front`/`web`/`vite`.
 
 `logs` prints the managed log path or paths; it does not print their contents.
 Use `tail` to show the last 80 lines and continue following the selected logs.
@@ -226,7 +227,7 @@ Validation details are in [Testing](testing.md).
 ### Frontend-only behavior
 
 1. Preserve the API types and server authority boundary.
-2. Put pure compatibility/default/summary logic in `src/domain` when possible.
+2. Put pure default/summary logic in `src/domain` when possible.
 3. Reuse shared editors/workspaces.
 4. Add Bun tests and browser coverage for a workflow change.
 5. Run `./ci.sh frontend`.
@@ -249,7 +250,7 @@ database.
 
 ### New Play command
 
-Define identity, active-membership, role, game scope, visibility, revision,
+Define identity, active-membership, role, world scope, visibility, revision,
 idempotency, history/event, and archive behavior before adding UI controls.
 Test with separate user/browser contexts and confirm private fields are absent
 from non-facilitator JSON.
@@ -331,10 +332,9 @@ failure.
 ## Working constraints
 
 - Do not add built-in entity classes.
-- Do not make a configured key privileged.
+- Do not make a configured name privileged.
 - Do not introduce canonical JSON storage for authored aggregates/state.
-- Do not seed vocabulary; configuration remains user-authored and ruleset-
-  scoped.
+- Do not seed vocabulary; configuration remains user-authored and world-scoped.
 - Use `./ci.sh` as the handoff validator.
 - Preserve unrelated work in a dirty checkout and avoid destructive source-
   control/database commands.

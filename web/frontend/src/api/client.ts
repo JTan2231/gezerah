@@ -78,11 +78,6 @@ export function jsonBody(value: unknown): Pick<RequestInit, "body"> {
   return { body: JSON.stringify(value) };
 }
 
-export function gamePath(gameId: string, resource = ""): string {
-  const base = `/api/games/${encodeURIComponent(gameId)}`;
-  return resource === "" ? base : `${base}/${resource}`;
-}
-
 export function worldPath(worldId: string, resource = ""): string {
   const base = `/api/worlds/${encodeURIComponent(worldId)}`;
   return resource === "" ? base : `${base}/${resource}`;

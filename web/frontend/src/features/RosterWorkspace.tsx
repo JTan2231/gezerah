@@ -1,9 +1,7 @@
 import { useCallback, useState } from "react";
 
-import { gamePath, worldPath } from "../api/client";
+import { worldPath } from "../api/client";
 import type {
-  Game,
-  User,
   World,
   WorldEntity,
   WorldMechanic,
@@ -16,20 +14,16 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 import { useCollection } from "../hooks/useCollection";
-import { useResource } from "../hooks/useResource";
 import { EntityDetail } from "./EntityDetail";
 import { ManageControllersModal, NewEntityModal } from "./RosterModals";
 
 export function RosterWorkspace({
   world,
-  user,
   onWorldChanged,
 }: {
   world: World;
-  user: User;
   onWorldChanged: () => void;
 }) {
-  const game = useResource<Game>(gamePath(world.primary_game_id));
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
   const mechanics = useCollection<WorldMechanic>(
     worldPath(world.id, "mechanics"),
@@ -48,33 +42,24 @@ export function RosterWorkspace({
     activeEntities.find((entity) => entity.id === selectedEntityId) ??
     activeEntities[0];
 
-  const reloadGame = game.reload;
   const reloadEntities = entities.reload;
   const reloadMembers = members.reload;
   const refresh = useCallback(() => {
-    reloadGame();
     reloadEntities();
     reloadMembers();
     onWorldChanged();
     setProfileRefreshToken((value) => value + 1);
-  }, [onWorldChanged, reloadEntities, reloadGame, reloadMembers]);
+  }, [onWorldChanged, reloadEntities, reloadMembers]);
 
-  if (game.loading && game.value === null)
-    return <LoadingState label="Preparing the roster" />;
-  if (game.error !== null)
-    return <ErrorMessage error={game.error} onRetry={game.reload} />;
-  if (game.value === null) return null;
   if (
     (entities.loading && entities.items.length === 0) ||
     (mechanics.loading && mechanics.items.length === 0) ||
     (members.loading && members.items.length === 0)
   )
     return <LoadingState label="Preparing the roster" />;
-  const loadedGame = game.value;
 
-  const currentMembership = loadedGame.memberships.find(
-    (membership) =>
-      membership.user_id === user.id && membership.status === "active",
+  const currentMembership = members.items.find(
+    (membership) => membership.id === world.membership_id,
   );
   const firstError = entities.error ?? mechanics.error ?? members.error;
 
@@ -153,7 +138,7 @@ export function RosterWorkspace({
                     <small>
                       {rosterSubtitle(
                         entity,
-                        loadedGame.memberships,
+                        members.items,
                         currentMembership?.id ?? "",
                       )}
                     </small>
@@ -202,7 +187,6 @@ export function RosterWorkspace({
       {managingControllersFor === undefined ? null : (
         <ManageControllersModal
           world={world}
-          game={loadedGame}
           entity={entities.items.find(
             (entity) => entity.id === managingControllersFor,
           )}
@@ -220,7 +204,7 @@ export function RosterWorkspace({
 
 function rosterSubtitle(
   entity: WorldEntity,
-  memberships: Game["memberships"],
+  memberships: WorldMember[],
   currentMembershipID: string,
 ): string {
   const controllers = memberships.filter(
@@ -236,11 +220,7 @@ function rosterSubtitle(
       : `Setup ${entity.completed_field_count}/${entity.required_field_count}`;
   const names = controllers
     .map((membership) =>
-      membership.id === currentMembershipID
-        ? "You"
-        : (membership.display_name ??
-          membership.user?.display_name ??
-          "Player"),
+      membership.id === currentMembershipID ? "You" : membership.display_name,
     )
     .join(", ");
   return `${readiness} · ${names}`;

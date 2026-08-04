@@ -21,9 +21,6 @@ Problems are not a configuration resource in this UI. A facilitator describes
 each problem at the table, players offer free-form actions, and the facilitator
 resolves the moment with public narration and optional typed state effects.
 
-The older generic ruleset/condition/configured-problem HTTP surface remains an
-engine compatibility layer, but it is not linked or loaded by the frontend.
-
 ## Stack and source layout
 
 The frontend is React 19 and strict TypeScript, built by Vite and managed with
@@ -34,7 +31,7 @@ component framework, or service worker.
 | Path                                        | Responsibility                                                                        |
 | ------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `src/App.tsx`                               | Neutral home, development identity boundary, redirects, and top-level area selection. |
-| `src/worldRoutes.ts`                        | Play, Build, invite, and legacy path parsing plus URL construction.                   |
+| `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                                    |
 | `src/api/client.ts`                         | JSON fetch adapter, errors, path helpers, and identity header.                        |
 | `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                               |
 | `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.                  |
@@ -51,7 +48,7 @@ component framework, or service worker.
 | `src/features/PeopleWorkspace.tsx`          | Members, invite creation, one-time token display, and revocation.                     |
 | `src/features/SettingsWorkspace.tsx`        | World details and owner-only archive command.                                         |
 | `src/features/WorldPlay.tsx`                | Read-only live roster/sheets, ad-hoc problem lifecycle, history/receipts.             |
-| `src/features/EntityProfilePanel.tsx`       | Configured-field reader/editor with completion and visibility.                        |
+| `src/features/EntityProfilePanel.tsx`       | Character-field reader/editor with completion and visibility.                         |
 | `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                           |
 | `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                               |
 | `src/styles/app.css`                        | Responsive library, editor, invitation, and dark play-table layouts.                  |
@@ -80,10 +77,9 @@ Routes are parsed without an external router:
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
 Unknown paths render a not-found screen rather than silently opening a library.
-A bare Builder world path canonicalizes to capacities. Legacy `/worlds` paths
-replace themselves with the corresponding root, Play, or Build URL. A player or
-spectator cannot cause Play to render under a Build URL; the Builder shows an
-explicit access boundary and offers a deliberate transition to Play.
+A bare Builder world path canonicalizes to capacities. A player or spectator
+cannot cause Play to render under a Build URL; the Builder shows an explicit
+access boundary and offers a deliberate transition to Play.
 
 `dnd.selected-user` stores the selected local-development user UUID. The API
 client sends it as `X-DND-User-ID`. The root choice bypasses identity selection
@@ -94,8 +90,8 @@ an identity adapter, not production authentication.
 
 ## World library
 
-Both libraries request only `GET /api/worlds`; neither enumerates rulesets. The
-Build library filters to owner/editor memberships, offers world creation, and
+Both libraries request `GET /api/worlds`. The Build library filters to
+owner/editor memberships, offers world creation, and
 opens the capacity editor. The Play library shows every admitted world and
 emphasizes role, player readiness, table size, and last activity. Neither
 library exposes actions belonging to the other area.
@@ -137,9 +133,9 @@ builds the same-origin URL, offers a clipboard action, and warns that the token
 will not be listed again. Existing invite rows show creator, role, use count,
 expiry/revocation state, and an explicit revoke command.
 
-Redeeming a link creates matching world and game membership rows. Returning to
-the same valid link as an existing active member is idempotent and does not
-silently escalate the existing role.
+Redeeming a link creates or reactivates one world membership. Returning to the
+same valid link as an existing active member is idempotent and does not silently
+escalate the existing role.
 
 ## Play surface
 
@@ -147,12 +143,12 @@ The live table has three regions on wide screens: roster, current problem and
 history, and selected entity sheet. It collapses to a single-column flow on
 narrow screens.
 
-An editor/facilitator creates generic entities, assigns active player
+An editor/facilitator creates world entities, assigns active player
 controllers, edits profiles, and makes direct setup sheet changes in the
 Builder roster. Every active capacity and capability appears automatically on
 the generated sheet, with configured defaults. Play renders those sheets
 read-only; during a ruling a facilitator can apply effects only to active
-definitions whose `mutable_during_play` flag permits it.
+mechanics whose `mutable_during_play` flag permits it.
 
 The roster labels entities controlled by the current membership as “Your
 character” and otherwise names active controllers. The selected entity panel
@@ -165,11 +161,10 @@ the roster collection.
 A player who has no controlled entity sees a waiting screen. A player whose
 controlled entities are all incomplete sees only the onboarding profile UI,
 including completion counts and every field they are authorized to fill. The
-client does not request game, mechanics, interactions, or the event stream
-until `play_status` becomes `ready`; it polls the world/entity summaries so a
-DM assignment or profile save transitions into the live table. If requirements
-later make the player incomplete, a stream close/reconnect also triggers the
-same authoritative reload.
+client does not request live interactions or the event stream until
+`play_status` becomes `ready`; onboarding uses world/entity/profile resources.
+If requirements later make the player incomplete, stream reconnect also
+triggers an authoritative reload.
 
 The interaction lifecycle is:
 
@@ -186,11 +181,11 @@ The interaction lifecycle is:
 8. resolved narration and before/after effects appear in world history.
 
 There is deliberately no problem-template catalog, problem editor, or
-pre-game problem route.
+pre-authored problem route.
 
-`useGameEvents` holds the authorized SSE stream and also refreshes every three
-seconds as a compatibility fallback. Event data is treated as invalidation;
-the client reloads authoritative game, entity, and interaction resources rather
+`useWorldEvents` holds the authorized SSE stream and reconnects with its last
+cursor when the connection ends. Event data is treated as invalidation; the
+client reloads authoritative world, entity, and interaction resources rather
 than reconstructing state from the event payload.
 
 ## Client state and errors

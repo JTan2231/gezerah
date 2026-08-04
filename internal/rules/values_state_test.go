@@ -5,186 +5,128 @@ import (
 	"testing"
 )
 
-func TestValidateStateVariableDefinitionAndValues(t *testing.T) {
+func TestValidateMechanicDefinitionAndValues(t *testing.T) {
 	t.Parallel()
-	schemas := testSchemas()
-	entities := testEntities()
 	definition := testNumberDefinition()
-	defaultValue := NewSingleValue(NewNumberValue(MustDecimal("1.25")))
-	definition.MissingKind = MissingDefault
-	definition.DefaultValue = &defaultValue
-	definition.OmitDefaultWhenStored = true
-	definition.NumberMinimum = decimalPointer(MustDecimal("1"))
-	definition.NumberMaximum = decimalPointer(MustDecimal("2"))
-	definition.NumberStep = decimalPointer(MustDecimal("0.25"))
+	definition.DefaultValue = NewNumberValue(MustDecimal("1.25"))
+	definition.Minimum = decimalPointer(MustDecimal("1"))
+	definition.Maximum = decimalPointer(MustDecimal("2"))
+	definition.Step = decimalPointer(MustDecimal("0.25"))
 
-	if errs := ValidateStateVariableDefinition(definition, schemas, entities); len(errs) != 0 {
+	if errs := ValidateMechanicDefinition(definition); len(errs) != 0 {
 		t.Fatalf("valid definition rejected: %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewNumberValue(MustDecimal("1.5"))), entities); len(errs) != 0 {
+	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("1.5"))); len(errs) != 0 {
 		t.Fatalf("valid number rejected: %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewNumberValue(MustDecimal("1.6"))), entities); !hasValidationCode(errs, "step_mismatch") {
+	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("1.6"))); !hasValidationCode(errs, "step_mismatch") {
 		t.Fatalf("expected step_mismatch, got %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewNumberValue(MustDecimal("2.25"))), entities); !hasValidationCode(errs, "above_maximum") {
+	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("2.25"))); !hasValidationCode(errs, "above_maximum") {
 		t.Fatalf("expected above_maximum, got %v", errs)
 	}
 
 	invalidUnion := NewNumberValue(MustDecimal("1.5"))
-	text := "unexpected"
-	invalidUnion.Text = &text
-	if errs := ValidateStateValue(definition, NewSingleValue(invalidUnion), entities); !hasValidationCode(errs, "invalid_typed_value") {
+	unexpected := true
+	invalidUnion.Boolean = &unexpected
+	if errs := ValidateStateValue(definition, invalidUnion); !hasValidationCode(errs, "invalid_typed_value") {
 		t.Fatalf("expected invalid_typed_value, got %v", errs)
 	}
 }
 
-func TestManyValuesUseNormalizedSetSemantics(t *testing.T) {
+func TestMechanicDefinitionsRequireScalarDefaultsAndMatchingMetadata(t *testing.T) {
 	t.Parallel()
-	definition := StateVariableDefinition{
-		ID:                      "tags",
-		RuleSetID:               "rs",
-		Key:                     "world.tags",
-		Label:                   "Tags",
-		OwnerSchemaIDs:          []ID{"owner"},
-		ValueKind:               ValueText,
-		Cardinality:             CardinalityMany,
-		MissingKind:             MissingUnknown,
-		AllowedEffectOperations: []EffectOperation{EffectSet, EffectClear, EffectAddValue, EffectRemoveValue},
+	boolean := testBooleanDefinition()
+	if errs := ValidateMechanicDefinition(boolean); len(errs) != 0 {
+		t.Fatalf("valid Boolean definition rejected: %v", errs)
 	}
-	duplicate := NewManyValue(NewTextValue("a"), NewTextValue("a"))
-	if errs := ValidateStateValue(definition, duplicate, testEntities()); !hasValidationCode(errs, "duplicate_value") {
-		t.Fatalf("expected duplicate_value, got %v", errs)
-	}
-	left := NewManyValue(NewTextValue("a"), NewTextValue("b"))
-	right := NewManyValue(NewTextValue("b"), NewTextValue("a"))
-	if !StateValuesEqual(left, right) {
-		t.Fatal("many-valued logical equality must ignore order")
-	}
-
-	fallbackA, fallbackB := "A", "B"
-	referenceDefinition := definition
-	referenceDefinition.ID = "refs"
-	referenceDefinition.ValueKind = ValueReference
-	referenceDefinition.ReferenceTargetOwnerSchemaIDs = []ID{"owner"}
-	references := NewManyValue(
-		NewReferenceValue("e1", &fallbackA),
-		NewReferenceValue("e1", &fallbackB),
-	)
-	if errs := ValidateStateValue(referenceDefinition, references, testEntities()); !hasValidationCode(errs, "duplicate_value") {
-		t.Fatalf("same referenced entity must be a normalized duplicate, got %v", errs)
-	}
-}
-
-func TestReferenceEligibilityAndRulesetBoundary(t *testing.T) {
-	t.Parallel()
-	definition := StateVariableDefinition{
-		ID:                            "friend",
-		RuleSetID:                     "rs",
-		Key:                           "world.friend",
-		Label:                         "Friend",
-		OwnerSchemaIDs:                []ID{"owner"},
-		ValueKind:                     ValueReference,
-		Cardinality:                   CardinalityOne,
-		MissingKind:                   MissingUnknown,
-		ReferenceTargetOwnerSchemaIDs: []ID{"target"},
-	}
-	entities := testEntities()
-	entities["other-ruleset"] = Entity{ID: "other-ruleset", RuleSetID: "other", DisplayName: "Other", OwnerSchemaIDs: []ID{"target"}}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewReferenceValue("e2", nil)), entities); len(errs) != 0 {
-		t.Fatalf("eligible reference rejected: %v", errs)
-	}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewReferenceValue("e1", nil)), entities); !hasValidationCode(errs, "ineligible_reference_entity") {
-		t.Fatalf("expected ineligible reference, got %v", errs)
-	}
-	if errs := ValidateStateValue(definition, NewSingleValue(NewReferenceValue("other-ruleset", nil)), entities); !hasValidationCode(errs, "cross_ruleset_reference") {
-		t.Fatalf("expected ruleset rejection, got %v", errs)
-	}
-}
-
-func TestEveryScalarKindValidatesAgainstItsMetadata(t *testing.T) {
-	t.Parallel()
-	schemas := testSchemas()
-	entities := testEntities()
 	minimum := MustDecimal("0")
-	maximum := MustDecimal("10")
-	step := MustDecimal("0.5")
-	definitionsAndValues := []struct {
-		definition StateVariableDefinition
-		value      StateValue
-	}{
-		{
-			definition: StateVariableDefinition{ID: "text", RuleSetID: "rs", Key: "world.text", Label: "Text", OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueText, Cardinality: CardinalityOne, MissingKind: MissingUnknown},
-			value:      NewSingleValue(NewTextValue("hello")),
-		},
-		{
-			definition: StateVariableDefinition{ID: "boolean", RuleSetID: "rs", Key: "world.boolean", Label: "Boolean", OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueBoolean, Cardinality: CardinalityOne, MissingKind: MissingUnknown},
-			value:      NewSingleValue(NewBooleanValue(false)),
-		},
-		{
-			definition: StateVariableDefinition{
-				ID: "choice", RuleSetID: "rs", Key: "world.choice", Label: "Choice", OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueChoice, Cardinality: CardinalityOne, MissingKind: MissingUnknown,
-				ChoiceOptions: []ChoiceOption{{ID: "red", Key: "red", Label: "Red", Position: 0}},
-			},
-			value: NewSingleValue(NewChoiceValue("red")),
-		},
-		{
-			definition: StateVariableDefinition{
-				ID: "measurement", RuleSetID: "rs", Key: "world.measurement", Label: "Measurement", OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueMeasurement, Cardinality: CardinalityOne, MissingKind: MissingUnknown,
-				MeasurementUnits: []MeasurementUnit{{ID: "meter", Unit: "m", Position: 0}}, MeasurementMinimum: &minimum, MeasurementMaximum: &maximum, MeasurementStep: &step,
-			},
-			value: NewSingleValue(NewMeasurementValue(MustDecimal("2.5"), "meter")),
-		},
-		{
-			definition: StateVariableDefinition{
-				ID: "reference", RuleSetID: "rs", Key: "world.reference", Label: "Reference", OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueReference, Cardinality: CardinalityOne, MissingKind: MissingUnknown,
-				ReferenceTargetOwnerSchemaIDs: []ID{"target"},
-			},
-			value: NewSingleValue(NewReferenceValue("e2", nil)),
-		},
+	boolean.Minimum = &minimum
+	if errs := ValidateMechanicDefinition(boolean); !hasValidationCode(errs, "invalid_metadata") {
+		t.Fatalf("expected invalid_metadata, got %v", errs)
 	}
-	for _, test := range definitionsAndValues {
-		if errs := ValidateStateVariableDefinition(test.definition, schemas, entities); len(errs) != 0 {
-			t.Errorf("%s definition rejected: %v", test.definition.ValueKind, errs)
-			continue
-		}
-		if errs := ValidateStateValue(test.definition, test.value, entities); len(errs) != 0 {
-			t.Errorf("%s value rejected: %v", test.definition.ValueKind, errs)
-		}
+
+	missingDefault := testNumberDefinition()
+	missingDefault.DefaultValue = StateValue{}
+	if errs := ValidateMechanicDefinition(missingDefault); !hasValidationCode(errs, "value_kind_mismatch") {
+		t.Fatalf("expected invalid default, got %v", errs)
+	}
+
+	invalidStep := testNumberDefinition()
+	invalidStep.Step = decimalPointer(MustDecimal("0"))
+	if errs := ValidateMechanicDefinition(invalidStep); !hasValidationCode(errs, "invalid_step") {
+		t.Fatalf("expected invalid_step, got %v", errs)
 	}
 }
 
-func TestLogicalDefaultsUnknownsAndNormalization(t *testing.T) {
+func TestNumberAndBooleanTaggedValues(t *testing.T) {
 	t.Parallel()
-	defaultDefinition := testNumberDefinition()
-	defaultValue := NewSingleValue(NewNumberValue(MustDecimal("3")))
-	defaultDefinition.MissingKind = MissingDefault
-	defaultDefinition.DefaultValue = &defaultValue
-	defaultDefinition.OmitDefaultWhenStored = true
-	unknownDefinition := StateVariableDefinition{
-		ID: "flag", RuleSetID: "rs", Key: "world.flag", Label: "Flag",
-		OwnerSchemaIDs: []ID{"owner"}, ValueKind: ValueBoolean, Cardinality: CardinalityOne, MissingKind: MissingUnknown,
+	number := NewNumberValue(MustDecimal("9007199254740993.25"))
+	if errs := ValidateStateValue(testNumberDefinition(), number); len(errs) != 0 {
+		t.Fatalf("number rejected: %v", errs)
 	}
-	definitions := map[ID]StateVariableDefinition{defaultDefinition.ID: defaultDefinition, unknownDefinition.ID: unknownDefinition}
-	record := StateRecord{OwnerEntityID: "e1", Revision: 2, Values: map[ID]StateValue{}}
+	boolean := NewBooleanValue(false)
+	if errs := ValidateStateValue(testBooleanDefinition(), boolean); len(errs) != 0 {
+		t.Fatalf("Boolean rejected: %v", errs)
+	}
+	if StateValuesEqual(number, boolean) {
+		t.Fatal("different value kinds compared equal")
+	}
+	if !StateValuesEqual(number, CloneStateValue(number)) || !StateValuesEqual(boolean, CloneStateValue(boolean)) {
+		t.Fatal("cloned scalar did not preserve equality")
+	}
+}
+
+func TestLogicalDefaultsAndSparseNormalization(t *testing.T) {
+	t.Parallel()
+	number := testNumberDefinition()
+	number.DefaultValue = NewNumberValue(MustDecimal("3"))
+	boolean := testBooleanDefinition()
+	definitions := map[ID]MechanicDefinition{number.ID: number, boolean.ID: boolean}
+	record := StateRecord{EntityID: "e1", Revision: 2, Values: map[ID]StateValue{}}
 	logical := MaterializeLogicalState(testEntities()["e1"], record, definitions)
-	if got := logical.Values[defaultDefinition.ID].Values[0].Number.String(); got != "3" {
-		t.Fatalf("default = %s", got)
+	if got := logical.Values[number.ID].Number.String(); got != "3" {
+		t.Fatalf("number default = %s", got)
 	}
-	if len(logical.DefaultedDefinitionIDs) != 1 || logical.DefaultedDefinitionIDs[0] != defaultDefinition.ID {
-		t.Fatalf("defaulted IDs = %v", logical.DefaultedDefinitionIDs)
+	if got := *logical.Values[boolean.ID].Boolean; got {
+		t.Fatal("Boolean default = true, want false")
 	}
-	if len(logical.UnknownDefinitionIDs) != 1 || logical.UnknownDefinitionIDs[0] != unknownDefinition.ID {
-		t.Fatalf("unknown IDs = %v", logical.UnknownDefinitionIDs)
+	if len(logical.DefaultedMechanicIDs) != 2 || logical.DefaultedMechanicIDs[0] != boolean.ID || logical.DefaultedMechanicIDs[1] != number.ID {
+		t.Fatalf("defaulted IDs = %v", logical.DefaultedMechanicIDs)
 	}
 
-	record.Values[defaultDefinition.ID] = CloneStateValue(defaultValue)
-	if errs := ValidateStateRecord(record, testEntities()["e1"], definitions, testEntities()); !hasValidationCode(errs, "unnormalized_default") {
-		t.Fatalf("expected unnormalized default, got %v", errs)
+	record.Values[number.ID] = CloneStateValue(number.DefaultValue)
+	if errs := ValidateStateRecord(record, testEntities()["e1"], definitions); !hasValidationCode(errs, "unnormalized_default") {
+		t.Fatalf("expected unnormalized_default, got %v", errs)
 	}
 	normalized := NormalizeStateRecord(record, definitions)
-	if _, exists := normalized.Values[defaultDefinition.ID]; exists {
-		t.Fatal("omitted default remained persisted")
+	if _, exists := normalized.Values[number.ID]; exists {
+		t.Fatal("default remained persisted")
+	}
+	if _, exists := record.Values[number.ID]; !exists {
+		t.Fatal("normalization mutated the caller-owned record")
+	}
+}
+
+func TestStateValidationEnforcesWorldAndRecordIdentity(t *testing.T) {
+	t.Parallel()
+	definition := testNumberDefinition()
+	otherWorld := definition
+	otherWorld.ID = "other-mechanic"
+	otherWorld.WorldID = "other-world"
+	record := StateRecord{
+		EntityID: "wrong-entity",
+		Revision: -1,
+		Values: map[ID]StateValue{
+			otherWorld.ID: NewNumberValue(MustDecimal("1")),
+			"missing":     NewNumberValue(MustDecimal("1")),
+		},
+	}
+	errs := ValidateStateRecord(record, testEntities()["e1"], map[ID]MechanicDefinition{otherWorld.ID: otherWorld})
+	for _, code := range []string{"entity_mismatch", "invalid_revision", "cross_world_reference", "unknown_mechanic"} {
+		if !hasValidationCode(errs, code) {
+			t.Errorf("expected %s, got %v", code, errs)
+		}
 	}
 }
 
@@ -196,33 +138,41 @@ func TestDomainErrorSupportsErrorsIs(t *testing.T) {
 	}
 }
 
-func testSchemas() map[ID]OwnerSchema {
-	return map[ID]OwnerSchema{
-		"owner":  {ID: "owner", RuleSetID: "rs", Key: "owner", Label: "Owner"},
-		"target": {ID: "target", RuleSetID: "rs", Key: "target", Label: "Target"},
-	}
-}
-
 func testEntities() map[ID]Entity {
 	return map[ID]Entity{
-		"e1":   {ID: "e1", RuleSetID: "rs", DisplayName: "One", OwnerSchemaIDs: []ID{"owner"}},
-		"e2":   {ID: "e2", RuleSetID: "rs", DisplayName: "Two", OwnerSchemaIDs: []ID{"owner", "target"}},
-		"inst": {ID: "inst", RuleSetID: "rs", DisplayName: "Instance", OwnerSchemaIDs: []ID{}},
+		"e1":       {ID: "e1", WorldID: "world", DisplayName: "One"},
+		"e2":       {ID: "e2", WorldID: "world", DisplayName: "Two"},
+		"archived": {ID: "archived", WorldID: "world", DisplayName: "Archived", Archived: true},
+		"other":    {ID: "other", WorldID: "other-world", DisplayName: "Other"},
 	}
 }
 
-func testNumberDefinition() StateVariableDefinition {
-	return StateVariableDefinition{
-		ID:                      "score",
-		RuleSetID:               "rs",
-		Key:                     "world.score",
-		Label:                   "Score",
-		OwnerSchemaIDs:          []ID{"owner"},
-		ValueKind:               ValueNumber,
-		Cardinality:             CardinalityOne,
-		MissingKind:             MissingUnknown,
-		ConditionAddressable:    true,
-		AllowedEffectOperations: []EffectOperation{EffectSet, EffectClear, EffectAdjustNumber},
+func testNumberDefinition() MechanicDefinition {
+	return MechanicDefinition{
+		ID:           "score",
+		WorldID:      "world",
+		ValueKind:    ValueNumber,
+		DefaultValue: NewNumberValue(MustDecimal("0")),
+		Mutable:      true,
+	}
+}
+
+func testBooleanDefinition() MechanicDefinition {
+	return MechanicDefinition{
+		ID:           "flag",
+		WorldID:      "world",
+		ValueKind:    ValueBoolean,
+		DefaultValue: NewBooleanValue(false),
+		Mutable:      true,
+	}
+}
+
+func numberRecord(entityID, mechanicID ID, value string) StateRecord {
+	return StateRecord{
+		EntityID: entityID,
+		Values: map[ID]StateValue{
+			mechanicID: NewNumberValue(MustDecimal(value)),
+		},
 	}
 }
 

@@ -18,8 +18,9 @@ interface WorldResponse extends IdentifiedResource {
   name: string;
   role: "owner" | "editor" | "player" | "spectator";
   membership_id: string;
-  primary_game_id: string;
-  play_status: "waiting-for-character" | "setup-required" | "ready";
+  table_revision: number;
+  play_status:
+    "waiting-for-character" | "setup-required" | "ready" | "unavailable";
 }
 
 interface InviteResponse extends IdentifiedResource {
@@ -336,13 +337,6 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     spectator.id,
   );
 
-  expect(
-    await getJSON<unknown[]>(
-      request,
-      `${baseURL}/api/rule-sets/${world.id}/problem-definitions`,
-    ),
-  ).toEqual([]);
-
   const ownerContext = await worldContext(browser, owner.id);
   const playerContext = await worldContext(browser, player.id);
   try {
@@ -362,11 +356,11 @@ test("a problem is improvised at the table, answered, and resolved with a state 
       playerPage.getByRole("button", { name: "New problem" }),
     ).toHaveCount(0);
     await expect(playerPage.getByText("Waiting for a character")).toBeVisible();
-    const gameBeforeSetup = await request.get(
-      `${baseURL}/api/games/${world.primary_game_id}`,
+    const liveBeforeSetup = await request.get(
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       { headers: identityHeaders(player.id) },
     );
-    expect(gameBeforeSetup.status()).toBe(403);
+    expect(liveBeforeSetup.status()).toBe(403);
 
     await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
     await ownerPage
@@ -385,11 +379,11 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     await playerPage.getByRole("button", { name: "Save character" }).click();
     await expect(playerPage.getByText("profile r1")).toBeVisible();
     await expect(playerPage.getByText("Setup required").first()).toBeVisible();
-    const gameAfterPartialSetup = await request.get(
-      `${baseURL}/api/games/${world.primary_game_id}`,
+    const liveAfterPartialSetup = await request.get(
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       { headers: identityHeaders(player.id) },
     );
-    expect(gameAfterPartialSetup.status()).toBe(403);
+    expect(liveAfterPartialSetup.status()).toBe(403);
     const controlledStateDuringSetup = await request.get(
       `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
       { headers: identityHeaders(player.id) },
@@ -484,7 +478,7 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     await expect(playerPage.getByText(prompt)).toBeVisible();
     const openInteractions = await getJSON<InteractionResponse[]>(
       request,
-      `${baseURL}/api/games/${world.primary_game_id}/interactions`,
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       player.id,
     );
     const openInteraction = required(
@@ -503,7 +497,7 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     );
     expect(schemaChangeDuringProblem.status()).toBe(409);
     const uncontrolledAction = await request.post(
-      `${baseURL}/api/games/${world.primary_game_id}/interactions/${openInteraction.id}/actions`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${openInteraction.id}/actions`,
       {
         headers: identityHeaders(player.id),
         data: {
@@ -565,11 +559,11 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     );
     expect(expandedCharacterFields.revision).toBe(2);
     await expect(playerPage.getByText("Setup required").first()).toBeVisible();
-    const gameAfterRequirementChange = await request.get(
-      `${baseURL}/api/games/${world.primary_game_id}`,
+    const liveAfterRequirementChange = await request.get(
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       { headers: identityHeaders(player.id) },
     );
-    expect(gameAfterRequirementChange.status()).toBe(403);
+    expect(liveAfterRequirementChange.status()).toBe(403);
   } finally {
     await Promise.all([ownerContext.close(), playerContext.close()]);
   }

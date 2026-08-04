@@ -257,11 +257,7 @@ export function BuildWorkspace({
           />
         ) : null}
         {section === "roster" ? (
-          <RosterWorkspace
-            world={world}
-            user={user}
-            onWorldChanged={resource.reload}
-          />
+          <RosterWorkspace world={world} onWorldChanged={resource.reload} />
         ) : null}
         {section === "people" ? <PeopleWorkspace world={world} /> : null}
         {section === "settings" ? (

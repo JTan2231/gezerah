@@ -48,10 +48,6 @@ world settings. **Play** is the separate live table: complete player onboarding,
 present an ad-hoc problem, collect player actions, preview a narrative ruling
 and its effects, then commit an immutable resolution receipt.
 
-The generic configured-problem API remains as an engine compatibility surface,
-but it is not part of the product UI and new worlds do not create configured
-problems.
-
 Useful process commands:
 
 ```sh
@@ -63,11 +59,13 @@ Useful process commands:
 ./run.sh stop
 ```
 
-To remove all locally authored data and return to an empty application while
-preserving the migrated schema, run `./reset-db.sh`. It accepts the same
-database URL variables as the application, but refuses non-local databases and
-requires the database name as confirmation. Use `./reset-db.sh --yes` only when
-the same safety checks are sufficient for automation.
+To remove all locally authored data and rebuild the current schema from its
+clean baseline, run `./reset-db.sh`. If the managed backend was running, the
+script restarts it and installs the baseline; otherwise, start the backend
+afterward. The reset accepts the same database URL variables as the application,
+refuses non-local and system databases, and requires the database name as
+confirmation. Use `./reset-db.sh --yes` only when the same safety checks are
+sufficient for automation.
 
 The production-style local path builds the frontend before starting Go:
 
@@ -89,7 +87,7 @@ concurrent starts serialize schema upgrades.
 | `DATABASE_URL`     | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset. |
 | `DND_LOG_LEVEL`    | `info`                                          | `debug`, `info`, `warn`, or `error`.               |
 
-Game roles, statuses, visibility, and mutation permissions are enforced by the
+World roles, statuses, visibility, and mutation permissions are enforced by the
 server. Authentication is not: the current development UI stores a selected
 user UUID and sends it as `X-DND-User-ID`. Any client can forge that header.
 This is intentionally a trusted-development identity adapter, so do not expose
@@ -98,9 +96,9 @@ replaced by real session or identity-provider authentication. Command bodies do
 not choose their acting user or membership.
 
 Player-safe live responses omit facilitator private notes and reject entities,
-references, actions, or effects outside the requested game's mapping. Generic
-builder endpoints remain authoring tools for the trusted environment; they are
-not a public player API.
+actions, or effects outside the requested world. World configuration endpoints
+enforce membership and roles, but those checks
+remain only as strong as the forgeable development identity header.
 
 ## Validation
 
