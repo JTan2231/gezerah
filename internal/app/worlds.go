@@ -281,16 +281,19 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 			(select count(*)::int from world_mechanics where world_id = world.id and kind = 'capacity' and not archived),
 			(select count(*)::int from world_mechanics where world_id = world.id and kind = 'capability' and not archived),
 			(select count(*)::int from world_character_fields where world_id = world.id and not archived),
+			rules.revision,
 			world.created_at, world.updated_at,
 			(select max(created_at) from interactions where world_id = world.id)
 		from worlds world
+		join world_rule_sets rules on rules.world_id = world.id
 		join world_memberships membership on membership.world_id = world.id and membership.user_id = $2
 		where world.id = $1`, worldID, userID,
 	).Scan(
 		&item.ID, &item.Name, &item.Description, &item.Status,
 		&item.Revision, &item.TableRevision, &item.Role, &item.MembershipID,
 		&membershipStatus, &item.MemberCount, &item.CapacityCount, &item.CapabilityCount,
-		&item.CharacterFieldCount, &item.CreatedAt, &item.UpdatedAt, &item.LastInteractionAt,
+		&item.CharacterFieldCount, &item.RulesRevision,
+		&item.CreatedAt, &item.UpdatedAt, &item.LastInteractionAt,
 	)
 	if err != nil {
 		return item, err

@@ -11,6 +11,7 @@ var (
 	ErrInvalidState      = errors.New("invalid state")
 	ErrInvalidTransition = errors.New("invalid transition")
 	ErrEffectApplication = errors.New("effect application failed")
+	ErrEvaluation        = errors.New("evaluation failed")
 )
 
 type ValidationError struct {

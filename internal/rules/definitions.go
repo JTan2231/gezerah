@@ -27,19 +27,40 @@ func ValidateMechanicDefinition(definition MechanicDefinition) ValidationErrors 
 	if !validValueKind(definition.ValueKind) {
 		errs = append(errs, validation("unsupported", "value_kind", "mechanic must be number or boolean"))
 	}
-
-	switch definition.ValueKind {
-	case ValueNumber:
-		errs = append(errs, validateBounds(definition.Minimum, definition.Maximum, definition.Step, "")...)
-	case ValueBoolean:
-		if definition.Minimum != nil || definition.Maximum != nil || definition.Step != nil {
-			errs = append(errs, validation("invalid_metadata", "value_kind", "boolean mechanics cannot declare numeric bounds or a step"))
-		}
+	if !validSourceKind(definition.SourceKind) {
+		errs = append(errs, validation("unsupported", "source_kind", "mechanic source must be input or derived"))
 	}
 
-	for _, item := range ValidateStateValue(definition, definition.DefaultValue) {
-		item.Path = pathForNestedValidation("default_value", item.Path)
-		errs = append(errs, item)
+	switch definition.SourceKind {
+	case SourceInput:
+		if definition.Expression != nil {
+			errs = append(errs, validation("invalid_source", "expression", "input mechanics cannot declare a derived expression"))
+		}
+		switch definition.ValueKind {
+		case ValueNumber:
+			errs = append(errs, validateBounds(definition.Minimum, definition.Maximum, definition.Step, "")...)
+		case ValueBoolean:
+			if definition.Minimum != nil || definition.Maximum != nil || definition.Step != nil {
+				errs = append(errs, validation("invalid_metadata", "value_kind", "boolean mechanics cannot declare numeric bounds or a step"))
+			}
+		}
+		for _, item := range ValidateStateValue(definition, definition.DefaultValue) {
+			item.Path = pathForNestedValidation("default_value", item.Path)
+			errs = append(errs, item)
+		}
+	case SourceDerived:
+		if definition.Expression == nil {
+			errs = append(errs, validation("required", "expression", "derived mechanics require an expression"))
+		}
+		if !stateValueEmpty(definition.DefaultValue) {
+			errs = append(errs, validation("invalid_source", "default_value", "derived mechanics cannot declare a stored default"))
+		}
+		if definition.Minimum != nil || definition.Maximum != nil || definition.Step != nil {
+			errs = append(errs, validation("invalid_source", "source_kind", "derived mechanics cannot declare storage bounds or a step"))
+		}
+		if definition.Mutable {
+			errs = append(errs, validation("invalid_source", "mutable", "derived mechanics cannot be directly mutable"))
+		}
 	}
 	return errs
 }
@@ -69,4 +90,12 @@ func validateBounds(minimum, maximum, step *Decimal, path string) ValidationErro
 
 func validValueKind(kind ValueKind) bool {
 	return kind == ValueNumber || kind == ValueBoolean
+}
+
+func validSourceKind(kind SourceKind) bool {
+	return kind == SourceInput || kind == SourceDerived
+}
+
+func stateValueEmpty(value StateValue) bool {
+	return value.Kind == "" && value.Number == nil && value.Boolean == nil
 }

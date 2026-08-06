@@ -34,6 +34,12 @@ describe("application routes", () => {
     });
   });
 
+  test("rejects the removed global status catalog route", () => {
+    expect(readLocation("/build/world-1/statuses")).toEqual({
+      type: "not-found",
+    });
+  });
+
   test("keeps invitations in their intended application", () => {
     const path = inviteURL("play", "token value");
     expect(path).toBe("/play/invite/token%20value");

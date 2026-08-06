@@ -97,11 +97,18 @@ Files under `internal/rules/*_test.go` construct storage-neutral domain maps and
 snapshots. Coverage includes:
 
 - exact decimal canonicalization, arithmetic, and JSON;
-- numeric/Boolean definition and value validation;
-- authored-default logical state and normalization;
-- ordered effects observing earlier effects;
-- atomic failure and default behavior;
-- concrete live transition target/world-scope validation.
+- input/derived numeric/Boolean definition and value validation;
+- authored-default input state and normalization;
+- recursive expression type inference with precise field paths;
+- self/multi-node cycle rejection, deterministic dependency ordering, and
+  defensive runtime cycle handling;
+- exact numeric, Boolean, comparison, and conditional expression evaluation;
+- intrinsic/effective evaluation, dependency propagation, and deterministic
+  status modifier ordering;
+- ordered scalar effects observing earlier logical base mutations;
+- atomic failure and default behavior across scalar/status transitions;
+- inline status apply, exact-instance removal, automatic application order,
+  same-name coexistence, and target/world-scope validation.
 
 These are the preferred tests for mechanical semantics because they are fast,
 deterministic, and independent of SQL/HTTP.
@@ -121,7 +128,17 @@ PostgreSQL integration fixture. They cover:
 - development identity vocabulary and live effect validation;
 - world creation, invite token hashing, capacity/capability mapping,
   character-field/profile validation, and semantic no-op comparison;
+- recursive expression transport/storage reconstruction, derived-source
+  validation, cycle field mapping, inline status modifier normalization, exact
+  remove-target validation, and active derived-dependency guards;
 - denial of removed route families with `404 endpoint_not_found`.
+
+Migration contract tests also require the forward `002` graph/status tables,
+existing-world/entity backfill statements, root-creation triggers, normalized
+storage (no JSON/JSONB aggregate), resolution-owned inline status modifiers,
+status source-provenance columns, expanded receipt tables, and immutable
+receipt triggers. They assert that status authoring rows are owned by the
+resolution rather than world configuration.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -131,8 +148,8 @@ Playwright rather than a dedicated Go handler/database suite.
 Bun tests under `web/frontend/src/domain/*.test.ts` cover pure helpers:
 
 - human-readable API vocabulary and past/future relative timestamps;
-- invite/world route parsing, URL encoding, default sections, and selected
-  mechanic round trips.
+- invite/world route parsing, URL encoding, default sections, selected mechanic
+  round trips, and unknown-route rejection.
 
 There are no current component-rendering unit tests.
 
@@ -143,6 +160,13 @@ There are no current component-rendering unit tests.
 - development identity, world creation, capacity/capability authoring, generated
   entity sheets, character-field publishing, direct setup state, world-list
   isolation, and role denial.
+
+`test/specs/state-graph.spec.ts` exercises:
+
+- mechanic rules publication, typed derived evaluation, stale graph revisions,
+  and atomic rejection of invalid graphs;
+- inline problem-status preview/application, source provenance, exact-instance
+  removal, effective-value propagation, and immutable receipts.
 
 `test/specs/play.spec.ts` exercises:
 
@@ -158,9 +182,11 @@ There are no current component-rendering unit tests.
 - rejection of requirement-set changes during an open problem and return to
   onboarding when a new requirement is published after resolution;
 - controlled acting-entity attribution with a server-captured display name;
-- player action submission, private adjudication, action selection, effect
+- player action submission, private adjudication, action selection, Consequence
   construction, advisory preview, atomic resolve, receipt/history display, and
-  generated-sheet state refresh.
+  generated-sheet state refresh;
+- inline status authoring, source-problem provenance, exact-instance removal,
+  same-name independence, and direct/transitive effective-value refresh.
 
 ## E2E harness lifecycle
 
@@ -248,11 +274,20 @@ Add a table-driven or focused test in `internal/rules`. Assert both successful
 output and validation error code/path. Include atomic input preservation when
 the operation can fail after partial progress.
 
+For graph changes, cover inferred result kind, arity, unknown/cross-world and
+archived references, concrete cycle paths, deterministic topological order, and
+runtime defensive failure. For status changes, cover literal kind, stable
+modifier ordering, distinct instances per apply target, exact active-instance
+removal, same-name coexistence, and snapshot preservation. Resolve idempotency,
+rather than a name/definition lookup, must prevent duplicate lifecycle
+mutations.
+
 ### Transport or persistence mapping
 
 Test strict tagged shapes, generated/preserved IDs, exact numeric conversion,
-archived references, and round-trip response form. Add database-backed browser
-coverage if a constraint/transaction is essential to correctness.
+inline apply specifications, exact remove targets, source provenance, and
+round-trip response form. Add database-backed browser coverage if a
+constraint/transaction is essential to correctness.
 
 ### Frontend behavior
 
@@ -284,5 +319,5 @@ only to a database that can be destroyed or modified without consequence.
 - no coverage threshold/report in the root validator;
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;
-- no migration downgrade/upgrade-from-fixture matrix;
+- no migration downgrade or automated upgrade-from-populated-fixture matrix;
 - no load, long-duration SSE, fault-injection, or backup/restore tests.

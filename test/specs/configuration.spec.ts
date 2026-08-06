@@ -17,7 +17,13 @@ interface WorldMechanicResponse {
   id: string;
   kind: "capacity" | "capability";
   mode: "score" | "pool" | "binary" | "rating";
+  source_kind: "input" | "derived";
   name: string;
+}
+
+interface WorldMechanicCollectionResponse {
+  revision: number;
+  mechanics: WorldMechanicResponse[];
 }
 
 interface WorldEntityResponse {
@@ -130,21 +136,25 @@ test("an author creates a world whose entity sheets stem from capacities and cap
   });
   const world = worlds[0];
   expect(world).toBeDefined();
-  const mechanics = await getJSON<WorldMechanicResponse[]>(
+  const mechanicCollection = await getJSON<WorldMechanicCollectionResponse>(
     page,
     `${baseURL}/api/worlds/${world?.id}/mechanics`,
     authorID,
   );
+  const mechanics = mechanicCollection.mechanics;
+  expect(mechanicCollection.revision).toBe(2);
   expect(mechanics).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
         kind: "capacity",
         mode: "pool",
+        source_kind: "input",
         name: "Resolve",
       }),
       expect.objectContaining({
         kind: "capability",
         mode: "binary",
+        source_kind: "input",
         name: "Climbing",
       }),
     ]),

@@ -71,3 +71,28 @@ func TestParseDecimalRejectsInvalidAndJSONIsLossless(t *testing.T) {
 		t.Fatalf("round trip = %s, want %s", roundTrip, value)
 	}
 }
+
+func TestDecimalSubtractMultiplyAndNegateRemainExact(t *testing.T) {
+	t.Parallel()
+	difference, err := MustDecimal("1.0000000000000001").Subtract(MustDecimal("0.9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if difference.String() != "0.1000000000000001" {
+		t.Fatalf("difference = %s", difference)
+	}
+	product, err := MustDecimal("0.0000000000000003").Multiply(MustDecimal("0.2"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if product.String() != "0.00000000000000006" {
+		t.Fatalf("product = %s", product)
+	}
+	negated, err := MustDecimal("-42.010").Negate()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if negated.String() != "42.01" {
+		t.Fatalf("negated = %s", negated)
+	}
+}

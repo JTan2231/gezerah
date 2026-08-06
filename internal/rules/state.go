@@ -43,6 +43,10 @@ func ValidateStateRecord(record StateRecord, entity Entity, definitions map[ID]M
 			errs = append(errs, validation("cross_world_reference", path, "mechanic belongs to another world"))
 			continue
 		}
+		if definition.SourceKind == SourceDerived {
+			errs = append(errs, validation("derived_state_value", path, "derived mechanics cannot own stored state"))
+			continue
+		}
 		for _, item := range ValidateStateValue(definition, value) {
 			item.Path = pathForNestedValidation(path, item.Path)
 			errs = append(errs, item)
@@ -75,7 +79,7 @@ func MaterializeLogicalState(entity Entity, record StateRecord, definitions map[
 	sort.Slice(mechanicIDs, func(i, j int) bool { return mechanicIDs[i] < mechanicIDs[j] })
 	for _, id := range mechanicIDs {
 		definition := definitions[id]
-		if definition.WorldID != entity.WorldID {
+		if definition.WorldID != entity.WorldID || definition.SourceKind == SourceDerived {
 			continue
 		}
 		logical := LogicalStateValue(record, definition)
@@ -91,7 +95,7 @@ func NormalizeStateRecord(record StateRecord, definitions map[ID]MechanicDefinit
 	result := CloneStateRecord(record)
 	for id, value := range result.Values {
 		definition, ok := definitions[id]
-		if ok && StateValuesEqual(value, definition.DefaultValue) {
+		if ok && definition.SourceKind != SourceDerived && StateValuesEqual(value, definition.DefaultValue) {
 			delete(result.Values, id)
 		}
 	}

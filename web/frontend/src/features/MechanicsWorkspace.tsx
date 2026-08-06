@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
+  MechanicExpression,
   MechanicKind,
   MechanicMode,
+  StateValue,
   World,
   WorldMechanic,
+  WorldMechanicCollection,
+  WorldMechanicMutation,
 } from "../api/types";
 import {
   EmptyState,
@@ -15,8 +19,9 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 import { humanize } from "../domain/display";
-import { useCollection } from "../hooks/useCollection";
+import { changeMechanicMode } from "../domain/mechanics";
 import { useDraft } from "../hooks/useDraft";
+import { useResource } from "../hooks/useResource";
 import { buildWorldURL, type Navigate } from "../worldRoutes";
 
 export function MechanicsWorkspace({
@@ -33,16 +38,19 @@ export function MechanicsWorkspace({
   onWorldChanged: () => void;
 }) {
   const plural = kind === "capacity" ? "capacities" : "capabilities";
-  const items = useCollection<WorldMechanic>(
-    worldPath(world.id, `mechanics?kind=${kind}`),
+  const resource = useResource<WorldMechanicCollection>(
+    worldPath(world.id, "mechanics"),
   );
+  const allMechanics = resource.value?.mechanics ?? [];
+  const items = allMechanics.filter((item) => item.kind === kind);
   const [search, setSearch] = useState("");
   const [showArchived, setShowArchived] = useState(false);
+  const newItem = useMemo(() => newMechanic(kind), [kind]);
   const selected =
     selectedId === "new"
-      ? newMechanic(kind)
-      : items.items.find((item) => item.id === selectedId);
-  const filtered = items.items.filter((item) => {
+      ? newItem
+      : items.find((item) => item.id === selectedId);
+  const filtered = items.filter((item) => {
     if (!showArchived && item.archived) return false;
     const query = search.trim().toLowerCase();
     return (
@@ -102,11 +110,11 @@ export function MechanicsWorkspace({
               <span>Show archived</span>
             </label>
           </div>
-          {items.loading && items.items.length === 0 ? (
+          {resource.loading && items.length === 0 ? (
             <LoadingState label={`Loading ${plural}`} />
           ) : null}
-          {items.error === null ? null : (
-            <ErrorMessage error={items.error} onRetry={items.reload} />
+          {resource.error === null ? null : (
+            <ErrorMessage error={resource.error} onRetry={resource.reload} />
           )}
           <div className="catalog-list">
             {filtered.map((item) => (
@@ -138,7 +146,7 @@ export function MechanicsWorkspace({
               </button>
             ))}
           </div>
-          {!items.loading && filtered.length === 0 ? (
+          {!resource.loading && filtered.length === 0 ? (
             <div className="catalog-empty">
               <span aria-hidden="true">{search === "" ? "—" : "⌕"}</span>
               <p>
@@ -155,7 +163,7 @@ export function MechanicsWorkspace({
             <EmptyState
               symbol={kind === "capacity" ? "◇" : "✦"}
               title={
-                items.items.length === 0
+                items.length === 0
                   ? `Define your first ${kind}`
                   : `Choose a ${kind}`
               }
@@ -179,14 +187,16 @@ export function MechanicsWorkspace({
               key={selected.id}
               world={world}
               source={selected}
+              allMechanics={allMechanics}
+              rulesRevision={resource.value?.revision ?? world.rules_revision}
               creating={selectedId === "new"}
               onSaved={(saved) => {
-                items.replaceItem(saved, (item) => item.id);
+                resource.reload();
                 onWorldChanged();
-                select(saved.id);
+                select(saved.mechanic.id);
               }}
-              onArchived={(saved) => {
-                items.replaceItem(saved, (item) => item.id);
+              onArchived={() => {
+                resource.reload();
                 onWorldChanged();
               }}
               onCancel={() => select()}
@@ -201,6 +211,8 @@ export function MechanicsWorkspace({
 function MechanicEditor({
   world,
   source,
+  allMechanics,
+  rulesRevision,
   creating,
   onSaved,
   onArchived,
@@ -208,9 +220,11 @@ function MechanicEditor({
 }: {
   world: World;
   source: WorldMechanic;
+  allMechanics: WorldMechanic[];
+  rulesRevision: number;
   creating: boolean;
-  onSaved: (mechanic: WorldMechanic) => void;
-  onArchived: (mechanic: WorldMechanic) => void;
+  onSaved: (mechanic: WorldMechanicMutation) => void;
+  onArchived: (mechanic: WorldMechanicMutation) => void;
   onCancel: () => void;
 }) {
   const draft = useDraft(source);
@@ -218,7 +232,9 @@ function MechanicEditor({
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const item = draft.draft;
-  const numeric = !(item.kind === "capability" && item.mode === "binary");
+  const input = item.source_kind === "input";
+  const numericKind = item.mode !== "binary";
+  const numeric = input && numericKind;
   const previewName = item.name.trim();
   const previewDescription = item.description?.trim();
 
@@ -234,11 +250,11 @@ function MechanicEditor({
       const path = creating
         ? worldPath(world.id, "mechanics")
         : worldPath(world.id, `mechanics/${item.id}`);
-      const saved = await api<WorldMechanic>(path, {
+      const saved = await api<WorldMechanicMutation>(path, {
         method: creating ? "POST" : "PUT",
-        ...jsonBody(mechanicPayload(item, creating)),
+        ...jsonBody(mechanicPayload(item, creating, rulesRevision)),
       });
-      draft.accept(saved);
+      draft.accept(saved.mechanic);
       onSaved(saved);
     } catch (reason) {
       setError(
@@ -261,11 +277,14 @@ function MechanicEditor({
     setArchiving(true);
     setError(null);
     try {
-      const saved = await api<WorldMechanic>(
+      const saved = await api<WorldMechanicMutation>(
         worldPath(world.id, `mechanics/${item.id}/archive`),
-        { method: "POST" },
+        {
+          method: "POST",
+          ...jsonBody({ expected_rules_revision: rulesRevision }),
+        },
       );
-      draft.accept(saved);
+      draft.accept(saved.mechanic);
       onArchived(saved);
     } catch (reason) {
       setError(
@@ -345,6 +364,65 @@ function MechanicEditor({
               </div>
             </div>
             <div
+              className="source-kind-cards"
+              role="radiogroup"
+              aria-label={`${humanize(item.kind)} value source`}
+            >
+              <label
+                className={
+                  input ? "source-kind-card selected" : "source-kind-card"
+                }
+              >
+                <input
+                  type="radio"
+                  name="source-kind"
+                  value="input"
+                  checked={input}
+                  onChange={() =>
+                    patch({
+                      source_kind: "input",
+                      expression: undefined,
+                      default_number: numericKind
+                        ? (item.default_number ?? 0)
+                        : undefined,
+                      step: numericKind ? (item.step ?? 1) : undefined,
+                    })
+                  }
+                />
+                <span aria-hidden="true">●</span>
+                <strong>Input value</strong>
+                <small>Stored on each entity and editable during setup.</small>
+              </label>
+              <label
+                className={
+                  !input ? "source-kind-card selected" : "source-kind-card"
+                }
+              >
+                <input
+                  type="radio"
+                  name="source-kind"
+                  value="derived"
+                  checked={!input}
+                  onChange={() =>
+                    patch({
+                      source_kind: "derived",
+                      expression:
+                        item.expression ??
+                        defaultExpression(mechanicValueKind(item)),
+                      minimum: undefined,
+                      maximum: undefined,
+                      step: undefined,
+                      default_number: undefined,
+                      mutable_during_play: false,
+                    })
+                  }
+                />
+                <span aria-hidden="true">ƒ</span>
+                <strong>Derived value</strong>
+                <small>Calculated from other values in this world.</small>
+              </label>
+            </div>
+            <div
               className="mode-cards"
               role="radiogroup"
               aria-label={`${humanize(item.kind)} representation`}
@@ -365,17 +443,7 @@ function MechanicEditor({
                     value={mode}
                     checked={item.mode === mode}
                     onChange={() =>
-                      patch({
-                        mode: mode as MechanicMode,
-                        minimum: mode === "binary" ? undefined : item.minimum,
-                        maximum: mode === "binary" ? undefined : item.maximum,
-                        step: mode === "binary" ? undefined : (item.step ?? 1),
-                        default_number:
-                          mode === "binary"
-                            ? undefined
-                            : (item.default_number ?? 0),
-                        unit: mode === "binary" ? undefined : item.unit,
-                      })
+                      patch(changeMechanicMode(item, mode as MechanicMode))
                     }
                   />
                   <span aria-hidden="true">
@@ -466,7 +534,59 @@ function MechanicEditor({
               </div>
             ) : null}
 
-            <label className="switch-row">
+            {!input ? (
+              <div className="derived-expression-section">
+                <div className="derived-expression-heading">
+                  <div>
+                    <strong>Calculation</strong>
+                    <small>
+                      References use stable mechanic identities. The server
+                      checks types and rejects dependency cycles when you save.
+                    </small>
+                  </div>
+                  <span>{humanize(mechanicValueKind(item))} result</span>
+                </div>
+                <ExpressionEditor
+                  expression={
+                    item.expression ??
+                    defaultExpression(mechanicValueKind(item))
+                  }
+                  expectedKind={mechanicValueKind(item)}
+                  mechanics={allMechanics.filter(
+                    (mechanic) =>
+                      mechanic.id !== item.id &&
+                      (!mechanic.archived ||
+                        expressionReferences(item.expression).has(mechanic.id)),
+                  )}
+                  onChange={(expression) => patch({ expression })}
+                />
+                {numericKind ? (
+                  <Field
+                    label="Unit"
+                    hint="Optional display text, such as HP or points."
+                  >
+                    <input
+                      value={item.unit ?? ""}
+                      onChange={(event) =>
+                        patch({ unit: event.currentTarget.value || undefined })
+                      }
+                      placeholder="points"
+                    />
+                  </Field>
+                ) : null}
+                {expressionFieldError(error) === undefined ? null : (
+                  <p className="expression-error" role="alert">
+                    {expressionFieldError(error)}
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            <label
+              className={
+                input ? "switch-row" : "switch-row switch-row-disabled"
+              }
+            >
               <span>
                 <strong>May change during play</strong>
                 <small>
@@ -477,6 +597,7 @@ function MechanicEditor({
                 aria-label="May change during play"
                 type="checkbox"
                 checked={item.mutable_during_play}
+                disabled={!input}
                 onChange={(event) =>
                   patch({ mutable_during_play: event.currentTarget.checked })
                 }
@@ -587,6 +708,8 @@ function MechanicEditor({
 }
 
 function PreviewValue({ mechanic }: { mechanic: WorldMechanic }) {
+  if (mechanic.source_kind === "derived")
+    return <span className="preview-check">Calculated</span>;
   if (mechanic.mode === "binary")
     return <span className="preview-check">Not trained</span>;
   const value = mechanic.default_number ?? 0;
@@ -613,6 +736,7 @@ function newMechanic(kind: MechanicKind): WorldMechanic {
     id: "new",
     kind,
     mode: kind === "capacity" ? "score" : "binary",
+    source_kind: "input",
     name: "",
     description: undefined,
     step: kind === "capacity" ? 1 : undefined,
@@ -624,11 +748,16 @@ function newMechanic(kind: MechanicKind): WorldMechanic {
   };
 }
 
-function mechanicPayload(item: WorldMechanic, creating: boolean) {
+function mechanicPayload(
+  item: WorldMechanic,
+  creating: boolean,
+  rulesRevision: number,
+) {
   return {
     id: creating ? undefined : item.id,
     kind: item.kind,
     mode: item.mode,
+    source_kind: item.source_kind,
     name: item.name.trim(),
     description:
       item.description === undefined || item.description.trim() === ""
@@ -643,8 +772,409 @@ function mechanicPayload(item: WorldMechanic, creating: boolean) {
         ? undefined
         : item.unit.trim(),
     mutable_during_play: item.mutable_during_play,
+    expression: item.source_kind === "derived" ? item.expression : undefined,
     archived: item.archived,
+    expected_rules_revision: rulesRevision,
   };
+}
+
+type ValueKind = StateValue["kind"];
+type ExpressionOperation = MechanicExpression["operation"];
+
+interface ExpressionOperationOption {
+  operation: ExpressionOperation;
+  label: string;
+  result?: ValueKind | undefined;
+}
+
+const expressionOperations: ExpressionOperationOption[] = [
+  { operation: "mechanic-reference", label: "Value reference" },
+  { operation: "literal", label: "Literal value" },
+  { operation: "add-number", label: "Add", result: "number" },
+  { operation: "subtract-number", label: "Subtract", result: "number" },
+  { operation: "multiply-number", label: "Multiply", result: "number" },
+  { operation: "min-number", label: "Minimum of", result: "number" },
+  { operation: "max-number", label: "Maximum of", result: "number" },
+  { operation: "negate-number", label: "Negate", result: "number" },
+  { operation: "equal", label: "Equals", result: "boolean" },
+  { operation: "less-than", label: "Less than", result: "boolean" },
+  {
+    operation: "less-than-or-equal",
+    label: "Less than or equal",
+    result: "boolean",
+  },
+  { operation: "greater-than", label: "Greater than", result: "boolean" },
+  {
+    operation: "greater-than-or-equal",
+    label: "Greater than or equal",
+    result: "boolean",
+  },
+  { operation: "and", label: "All are true", result: "boolean" },
+  { operation: "or", label: "Any is true", result: "boolean" },
+  { operation: "not", label: "Not", result: "boolean" },
+  { operation: "if", label: "If / then / otherwise" },
+];
+
+function ExpressionEditor({
+  expression,
+  expectedKind,
+  mechanics,
+  onChange,
+  depth = 0,
+  label = "Result",
+}: {
+  expression: MechanicExpression;
+  expectedKind?: ValueKind | undefined;
+  mechanics: WorldMechanic[];
+  onChange: (expression: MechanicExpression) => void;
+  depth?: number;
+  label?: string;
+}) {
+  const operationOptions = expressionOperations.filter(
+    (option) =>
+      expectedKind === undefined ||
+      option.result === undefined ||
+      option.result === expectedKind,
+  );
+  const referenceOptions = mechanics.filter(
+    (mechanic) =>
+      expectedKind === undefined ||
+      mechanicValueKind(mechanic) === expectedKind,
+  );
+  const operands = "operands" in expression ? expression.operands : [];
+  const variadic = [
+    "add-number",
+    "multiply-number",
+    "min-number",
+    "max-number",
+    "and",
+    "or",
+  ].includes(expression.operation);
+
+  function chooseOperation(operation: ExpressionOperation) {
+    onChange(newExpression(operation, expectedKind, referenceOptions));
+  }
+
+  return (
+    <div className={`expression-node expression-depth-${Math.min(depth, 4)}`}>
+      <div className="expression-node-bar">
+        <span>{label}</span>
+        <select
+          aria-label={`${label} calculation`}
+          value={expression.operation}
+          onChange={(event) =>
+            chooseOperation(event.currentTarget.value as ExpressionOperation)
+          }
+        >
+          {operationOptions.map((option) => (
+            <option key={option.operation} value={option.operation}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {expression.operation === "literal" ? (
+        expression.value.kind === "boolean" ? (
+          <select
+            aria-label={`${label} literal value`}
+            value={String(expression.value.value)}
+            onChange={(event) =>
+              onChange({
+                operation: "literal",
+                value: {
+                  kind: "boolean",
+                  value: event.currentTarget.value === "true",
+                },
+              })
+            }
+          >
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        ) : (
+          <input
+            aria-label={`${label} literal value`}
+            type="number"
+            step="any"
+            value={expression.value.value}
+            onChange={(event) =>
+              onChange({
+                operation: "literal",
+                value: {
+                  kind: "number",
+                  value: event.currentTarget.valueAsNumber || 0,
+                },
+              })
+            }
+          />
+        )
+      ) : null}
+
+      {expression.operation === "mechanic-reference" ? (
+        referenceOptions.length === 0 ? (
+          <p className="expression-empty-reference">
+            No saved {expectedKind ?? "compatible"} values are available yet.
+          </p>
+        ) : (
+          <select
+            aria-label={`${label} referenced value`}
+            value={expression.mechanic_id}
+            onChange={(event) =>
+              onChange({
+                operation: "mechanic-reference",
+                mechanic_id: event.currentTarget.value,
+              })
+            }
+          >
+            {referenceOptions.map((mechanic) => (
+              <option
+                key={mechanic.id}
+                value={mechanic.id}
+                disabled={
+                  mechanic.archived && mechanic.id !== expression.mechanic_id
+                }
+              >
+                {mechanic.name} · {humanize(mechanicValueKind(mechanic))}
+                {mechanic.archived ? " · archived" : ""}
+              </option>
+            ))}
+          </select>
+        )
+      ) : null}
+
+      {operands.length > 0 ? (
+        <div className="expression-operands">
+          {operands.map((operand, index) => {
+            const childExpected = operandExpectedKind(
+              expression,
+              index,
+              expectedKind,
+              mechanics,
+            );
+            return (
+              <div className="expression-operand" key={index}>
+                <ExpressionEditor
+                  expression={operand}
+                  expectedKind={childExpected}
+                  mechanics={mechanics}
+                  depth={depth + 1}
+                  label={operandLabel(expression.operation, index)}
+                  onChange={(next) => {
+                    if (!("operands" in expression)) return;
+                    const nextOperands = [...expression.operands];
+                    nextOperands[index] = next;
+                    onChange({
+                      ...expression,
+                      operands: nextOperands,
+                    } as MechanicExpression);
+                  }}
+                />
+                {variadic && operands.length > 2 ? (
+                  <button
+                    className="expression-remove"
+                    type="button"
+                    aria-label={`Remove ${operandLabel(expression.operation, index)}`}
+                    onClick={() => {
+                      if (!("operands" in expression)) return;
+                      onChange({
+                        ...expression,
+                        operands: expression.operands.filter(
+                          (_candidate, candidateIndex) =>
+                            candidateIndex !== index,
+                        ),
+                      } as MechanicExpression);
+                    }}
+                  >
+                    Remove
+                  </button>
+                ) : null}
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+
+      {variadic && "operands" in expression ? (
+        <button
+          className="expression-add"
+          type="button"
+          onClick={() => {
+            const kind = operandExpectedKind(
+              expression,
+              expression.operands.length,
+              expectedKind,
+              mechanics,
+            );
+            onChange({
+              ...expression,
+              operands: [
+                ...expression.operands,
+                defaultExpression(kind ?? "number"),
+              ],
+            } as MechanicExpression);
+          }}
+        >
+          ＋ Add operand
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function newExpression(
+  operation: ExpressionOperation,
+  expectedKind: ValueKind | undefined,
+  mechanics: WorldMechanic[],
+): MechanicExpression {
+  if (operation === "literal")
+    return defaultExpression(expectedKind ?? "number");
+  if (operation === "mechanic-reference")
+    return {
+      operation,
+      mechanic_id:
+        mechanics.find(
+          (mechanic) =>
+            expectedKind === undefined ||
+            mechanicValueKind(mechanic) === expectedKind,
+        )?.id ?? "",
+    };
+  const count = operation === "if" ? 3 : unaryOperation(operation) ? 1 : 2;
+  const placeholder = {
+    operation,
+    operands: [],
+  } as Extract<MechanicExpression, { operands: MechanicExpression[] }>;
+  const operands = Array.from({ length: count }, (_value, index) =>
+    defaultExpression(
+      operandExpectedKind(placeholder, index, expectedKind, mechanics) ??
+        "number",
+    ),
+  );
+  return { operation, operands } as MechanicExpression;
+}
+
+function defaultExpression(kind: ValueKind): MechanicExpression {
+  return {
+    operation: "literal",
+    value:
+      kind === "boolean"
+        ? { kind: "boolean", value: false }
+        : { kind: "number", value: 0 },
+  };
+}
+
+function unaryOperation(operation: ExpressionOperation): boolean {
+  return operation === "negate-number" || operation === "not";
+}
+
+function mechanicValueKind(mechanic: Pick<WorldMechanic, "mode">): ValueKind {
+  return mechanic.mode === "binary" ? "boolean" : "number";
+}
+
+function expressionResultKind(
+  expression: MechanicExpression,
+  mechanics: WorldMechanic[],
+): ValueKind | undefined {
+  if (expression.operation === "literal") return expression.value.kind;
+  if (expression.operation === "mechanic-reference")
+    return mechanicValueKind(
+      mechanics.find((mechanic) => mechanic.id === expression.mechanic_id) ?? {
+        mode: "score",
+      },
+    );
+  if (
+    [
+      "equal",
+      "less-than",
+      "less-than-or-equal",
+      "greater-than",
+      "greater-than-or-equal",
+      "and",
+      "or",
+      "not",
+    ].includes(expression.operation)
+  )
+    return "boolean";
+  if (expression.operation === "if")
+    return expression.operands[1] === undefined
+      ? undefined
+      : expressionResultKind(expression.operands[1], mechanics);
+  return "number";
+}
+
+function operandExpectedKind(
+  expression: MechanicExpression,
+  index: number,
+  resultKind: ValueKind | undefined,
+  mechanics: WorldMechanic[],
+): ValueKind | undefined {
+  switch (expression.operation) {
+    case "add-number":
+    case "subtract-number":
+    case "multiply-number":
+    case "min-number":
+    case "max-number":
+    case "negate-number":
+    case "less-than":
+    case "less-than-or-equal":
+    case "greater-than":
+    case "greater-than-or-equal":
+      return "number";
+    case "and":
+    case "or":
+    case "not":
+      return "boolean";
+    case "equal":
+      return index === 0
+        ? undefined
+        : expression.operands[0] === undefined
+          ? undefined
+          : expressionResultKind(expression.operands[0], mechanics);
+    case "if":
+      if (index === 0) return "boolean";
+      if (index === 1) return resultKind;
+      return (
+        resultKind ??
+        (expression.operands[1] === undefined
+          ? undefined
+          : expressionResultKind(expression.operands[1], mechanics))
+      );
+    default:
+      return resultKind;
+  }
+}
+
+function operandLabel(operation: ExpressionOperation, index: number): string {
+  if (operation === "if")
+    return ["Condition", "Then", "Otherwise"][index] ?? `Value ${index + 1}`;
+  if (
+    operation === "subtract-number" ||
+    operation.includes("than") ||
+    operation === "equal"
+  )
+    return index === 0 ? "Left value" : "Right value";
+  if (unaryOperation(operation)) return "Value";
+  return `Value ${index + 1}`;
+}
+
+function expressionFieldError(error: ApiError | null): string | undefined {
+  if (error === null) return undefined;
+  return Object.entries(error.fields).find(([path]) =>
+    path.includes("expression"),
+  )?.[1];
+}
+
+function expressionReferences(
+  expression: MechanicExpression | undefined,
+  result = new Set<string>(),
+): Set<string> {
+  if (expression === undefined) return result;
+  if (expression.operation === "mechanic-reference")
+    result.add(expression.mechanic_id);
+  if ("operands" in expression)
+    for (const operand of expression.operands)
+      expressionReferences(operand, result);
+  return result;
 }
 
 function optionalNumber(value: string): number | undefined {
@@ -654,6 +1184,8 @@ function optionalNumber(value: string): number | undefined {
 }
 
 function mechanicSummary(item: WorldMechanic): string {
+  if (item.source_kind === "derived")
+    return `${humanize(item.mode)} · calculated`;
   if (item.mode === "binary") return "Possessed or not";
   const bounds =
     item.minimum === undefined && item.maximum === undefined

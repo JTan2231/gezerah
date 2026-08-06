@@ -2,15 +2,17 @@
 
 This directory is the canonical guide to Worldwright. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
-entry points, a static capacity/capability editor, generated entity sheets,
-player-controlled characters with world-authored onboarding fields, and a
-multiplayer table where facilitators create every problem ad hoc.
+entry points, a typed input/derived mechanic graph, problem-authored persistent
+status layers, generated entity sheets, player-controlled characters with
+world-authored onboarding fields, and a multiplayer table where facilitators
+create every problem ad hoc.
 
 The application intentionally has no built-in entity classes, privileged
 configured keys, seed vocabulary, or canonical JSON document model. World
-authors supply the mechanical vocabulary through world configuration. The
-server stores that vocabulary in relational, world-scoped structures and
-enforces its declared constraints.
+authors supply mechanic vocabulary through world configuration, while
+facilitators name problem-specific statuses in live Consequences. The server
+stores both in relational, world-scoped structures and enforces their declared
+constraints.
 
 ## Documentation map
 
@@ -51,11 +53,13 @@ route. During development, Vite serves the frontend on port `5173` and proxies
 
 ## Product path
 
-A world author defines capacities and capabilities, generates sheets for
-stateful subjects, admits participants by invite link, and runs improvised
-interactions at the table. Live effects become an ordered concrete transition
-plan. State changes, the immutable resolution receipt, and the world event
-commit in one transaction.
+A world author defines input and derived capacities/capabilities, generates
+sheets for stateful subjects, admits participants by invite link, and runs
+improvised interactions at the table. For each resolved problem, the
+facilitator authors one prose Consequence summary plus ordered targeted effects;
+an apply-status effect defines its status inline, while a later Consequence may
+remove an exact active instance. Base-state changes, status lifecycle changes,
+effective-value receipts, and the world event commit in one transaction.
 
 ## Core invariants
 
@@ -72,12 +76,20 @@ commit in one transaction.
 - Typed state is stored relationally; the database does not use a canonical
   JSON document as its source of truth.
 - Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic.
-- Missing stored state materializes from the mechanic's authored default.
-- Effects execute in authored order and observe earlier effects in the same
-  transition.
+- Missing stored input state materializes from the mechanic's authored default.
+- Derived expressions are type-checked as a complete world graph; unknown,
+  cross-world, archived, mismatched, or cyclic dependencies reject publication.
+- Effective values evaluate each mechanic's intrinsic value and then its
+  deterministic active-status modifiers; derived references consume dependency
+  effective values.
+- Scalar effects execute in authored order over logical base inputs and observe
+  earlier scalar mutations. Status effects create inline-authored instances or
+  remove exact active instances. Active modifiers are never baked into scalar
+  storage.
 - Failed transitions do not partially mutate state.
-- State, memberships, the world table, interactions, and action submissions
-  use revision guards where concurrent commands could overwrite one another.
+- State, status sets, the world mechanic graph, memberships, the world table,
+  interactions, and action submissions use revision guards or transaction
+  locks where concurrent commands could overwrite one another.
 - A committed live resolution, its applied-effect receipt, and its world event
   are immutable audit history.
 
@@ -94,10 +106,14 @@ commit in one transaction.
 | Character          | Product view of a world entity controlled by one or more active player memberships.                    |
 | Character field    | Ordered, world-authored required text prompt shared by every controlled character.                     |
 | Entity profile     | One entity's values for the world's active character fields, separate from typed mechanical state.     |
-| State definition   | Normalized numeric or Boolean schema underlying a capacity or capability.                              |
-| Logical state      | Stored overrides combined with the mechanic's authored default.                                        |
-| Interaction        | An ad-hoc facilitator prompt with its audience, responders, actions, ruling, and effects.              |
-| Resolution receipt | Immutable record of a committed ruling, requested effects, applied before/after values, and narrative. |
+| State definition   | World-scoped numeric or Boolean input/derived mechanic underlying a capacity or capability.           |
+| Logical state      | Stored input overrides combined with input defaults; derived mechanics do not own logical storage.    |
+| Intrinsic value    | An input's logical value or a derived expression's result before modifiers on that mechanic.           |
+| Effective value    | A mechanic's intrinsic value after active status modifiers, and the value consumed by dependents.      |
+| Status instance    | Durable condition created by one problem effect, with source provenance and immutable modifier snapshots. |
+| Interaction        | An ad-hoc facilitator-authored problem with its audience, responders, actions, and Consequence.          |
+| Consequence        | One prose summary plus ordered targeted effects authored while the facilitator adjudicates a problem.   |
+| Resolution receipt | Immutable record of a committed Consequence, requested effects, applications, and effective changes.     |
 
 ## Sources of truth
 

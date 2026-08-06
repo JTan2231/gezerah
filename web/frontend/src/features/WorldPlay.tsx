@@ -2,15 +2,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
-  ConcreteEffect,
   Interaction,
   InteractionAction,
   InteractionResolutionResult,
   StateValue,
+  StatusModifierOperation,
   User,
   World,
   WorldEntity,
   WorldMechanic,
+  WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
 import {
@@ -22,8 +23,14 @@ import {
   Modal,
 } from "../components/StudioUI";
 import { formatRelativeDate, humanize } from "../domain/display";
+import {
+  effectToAPI,
+  type EffectDraft,
+  type StatusModifierDraft,
+} from "../domain/consequences";
 import { useCollection } from "../hooks/useCollection";
-import { useWorldEvents } from "../hooks/useWorldEvents";
+import { useResource } from "../hooks/useResource";
+import { useWorldEvents, type WorldEvent } from "../hooks/useWorldEvents";
 import { EntityProfilePanel } from "./EntityProfilePanel";
 import { EntityDetail } from "./EntityDetail";
 
@@ -41,7 +48,7 @@ export function WorldPlay({
     playReady ? worldPath(world.id, "members") : null,
   );
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
-  const mechanics = useCollection<WorldMechanic>(
+  const mechanics = useResource<WorldMechanicCollection>(
     playReady ? worldPath(world.id, "mechanics") : null,
   );
   const interactions = useCollection<Interaction>(
@@ -56,14 +63,52 @@ export function WorldPlay({
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
 
-  const refresh = useCallback(() => {
-    reloadMembers();
-    reloadEntities();
-    reloadInteractions();
-    onWorldChanged();
-    setProfileRefreshToken((value) => value + 1);
-  }, [onWorldChanged, reloadEntities, reloadInteractions, reloadMembers]);
+  const reloadMechanics = mechanics.reload;
+  const refresh = useCallback(
+    (event?: WorldEvent) => {
+      reloadMembers();
+      reloadEntities();
+      reloadInteractions();
+      if (event === undefined || event.type === "rules-updated") {
+        reloadMechanics();
+      }
+      onWorldChanged();
+      setProfileRefreshToken((value) => value + 1);
+    },
+    [
+      onWorldChanged,
+      reloadEntities,
+      reloadInteractions,
+      reloadMechanics,
+      reloadMembers,
+    ],
+  );
   useWorldEvents(playReady ? world.id : undefined, refresh);
+
+  useEffect(() => {
+    const mechanicsRevision = mechanics.value?.revision;
+    if (
+      !playReady ||
+      mechanicsRevision === undefined ||
+      mechanics.loading ||
+      entities.loading
+    )
+      return;
+    const mismatched = entities.items.some(
+      (entity) => entity.state.rules_revision !== mechanicsRevision,
+    );
+    if (!mismatched) return;
+    reloadMechanics();
+    reloadEntities();
+  }, [
+    entities.items,
+    entities.loading,
+    mechanics.loading,
+    mechanics.value?.revision,
+    playReady,
+    reloadEntities,
+    reloadMechanics,
+  ]);
 
   useEffect(() => {
     if (playReady) return undefined;
@@ -91,10 +136,28 @@ export function WorldPlay({
       />
     );
 
-  if (members.loading && members.items.length === 0)
+  if (
+    (members.loading && members.items.length === 0) ||
+    (mechanics.loading && mechanics.value === null)
+  )
     return <LoadingState label="Setting the table" />;
-  if (members.error !== null)
-    return <ErrorMessage error={members.error} onRetry={members.reload} />;
+  if (members.error !== null || mechanics.error !== null)
+    return (
+      <ErrorMessage
+        error={(members.error ?? mechanics.error) as ApiError}
+        onRetry={() => refresh()}
+      />
+    );
+
+  const mechanicItems = mechanics.value?.mechanics ?? [];
+  const rulesRevision = mechanics.value?.revision ?? world.rules_revision;
+  const rulesReady =
+    !mechanics.loading &&
+    !entities.loading &&
+    entities.error === null &&
+    entities.items.every(
+      (entity) => entity.state.rules_revision === rulesRevision,
+    );
 
   const membership = members.items.find(
     (item) => item.id === world.membership_id && item.status === "active",
@@ -206,7 +269,7 @@ export function WorldPlay({
                     <small>
                       {entitySubtitle(
                         entity,
-                        mechanics.items,
+                        mechanicItems,
                         members.items,
                         membership.id,
                       )}
@@ -271,7 +334,9 @@ export function WorldPlay({
               world={world}
               membership={membership}
               entities={entities.items}
-              mechanics={mechanics.items}
+              mechanics={mechanicItems}
+              rulesRevision={rulesRevision}
+              rulesReady={rulesReady}
               facilitator={facilitator}
               onChanged={refresh}
             />
@@ -288,7 +353,7 @@ export function WorldPlay({
                   key={interaction.id}
                   interaction={interaction}
                   entities={entities.items}
-                  mechanics={mechanics.items}
+                  mechanics={mechanicItems}
                 />
               ))}
             </section>
@@ -303,9 +368,9 @@ export function WorldPlay({
             />
           ) : (
             <EntityDetail
-              key={`${selectedEntity.id}:${selectedEntity.state.revision}:${mechanics.items.map((mechanic) => mechanic.id).join(":")}`}
+              key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
               entity={selectedEntity}
-              mechanics={mechanics.items}
+              mechanics={mechanicItems}
               mechanicsEditable={false}
               controlledByCurrentMember={controlledEntityIDs.includes(
                 selectedEntity.id,
@@ -669,6 +734,8 @@ function LiveInteraction({
   membership,
   entities,
   mechanics,
+  rulesRevision,
+  rulesReady,
   facilitator,
   onChanged,
 }: {
@@ -677,6 +744,8 @@ function LiveInteraction({
   membership: WorldMember;
   entities: WorldEntity[];
   mechanics: WorldMechanic[];
+  rulesRevision: number;
+  rulesReady: boolean;
   facilitator: boolean;
   onChanged: () => void;
 }) {
@@ -774,6 +843,8 @@ function LiveInteraction({
           world={world}
           entities={entities}
           mechanics={mechanics}
+          rulesRevision={rulesRevision}
+          rulesReady={rulesReady}
           onResolved={onChanged}
         />
       ) : null}
@@ -1006,26 +1077,21 @@ function OpenProblem({
   );
 }
 
-interface EffectDraft {
-  id: string;
-  entityId: string;
-  mechanicId: string;
-  operation: "adjust-number" | "set";
-  amount: number;
-  booleanValue: boolean;
-}
-
 function RulingEditor({
   interaction,
   world,
   entities,
   mechanics,
+  rulesRevision,
+  rulesReady,
   onResolved,
 }: {
   interaction: Interaction;
   world: World;
   entities: WorldEntity[];
   mechanics: WorldMechanic[];
+  rulesRevision: number;
+  rulesReady: boolean;
   onResolved: () => void;
 }) {
   const mutable = mechanics.filter(
@@ -1037,14 +1103,38 @@ function RulingEditor({
   const [selectedActionId, setSelectedActionId] = useState("");
   const [narrative, setNarrative] = useState("");
   const [effects, setEffects] = useState<EffectDraft[]>([]);
-  const [preview, setPreview] = useState<InteractionResolutionResult | null>(
-    null,
-  );
+  const [preview, setPreview] = useState<{
+    key: string;
+    result: InteractionResolutionResult;
+  } | null>(null);
   const [saving, setSaving] = useState<"preview" | "resolve" | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const requestBody = {
+    expected_revision: interaction.revision,
+    expected_rules_revision: rulesRevision,
+    selected_action_id: selectedActionId || undefined,
+    narrative: narrative.trim(),
+    effects: effects.map(effectToAPI),
+  };
+  const previewKey = JSON.stringify({
+    ...requestBody,
+    entity_versions: entities.map((entity) => [
+      entity.id,
+      entity.archived,
+      entity.character_status,
+      entity.state.revision,
+      entity.state.status_revision,
+      entity.state.rules_revision,
+    ]),
+  });
+  const visiblePreview = preview?.key === previewKey ? preview.result : null;
+  const effectsCurrent = effects.every((effect) =>
+    effectDraftIsCurrent(effect, entities, mechanics),
+  );
 
   async function adjudicate(mode: "preview" | "resolve") {
+    const requestKey = previewKey;
     setSaving(mode);
     setError(null);
     try {
@@ -1053,15 +1143,12 @@ function RulingEditor({
         {
           method: "POST",
           ...jsonBody({
-            expected_revision: interaction.revision,
+            ...requestBody,
             idempotency_key: mode === "resolve" ? idempotencyKey : undefined,
-            selected_action_id: selectedActionId || undefined,
-            narrative: narrative.trim(),
-            effects: effects.map((effect) => effectToAPI(effect, mechanics)),
           }),
         },
       );
-      setPreview(result);
+      setPreview({ key: requestKey, result });
       if (mode === "resolve") onResolved();
     } catch (reason) {
       setError(
@@ -1094,7 +1181,10 @@ function RulingEditor({
               type="radio"
               name="selected-action"
               checked={selectedActionId === ""}
-              onChange={() => setSelectedActionId("")}
+              onChange={() => {
+                setSelectedActionId("");
+                setPreview(null);
+              }}
             />
             <span>No single action</span>
           </label>
@@ -1107,7 +1197,10 @@ function RulingEditor({
                 type="radio"
                 name="selected-action"
                 checked={selectedActionId === action.id}
-                onChange={() => setSelectedActionId(action.id)}
+                onChange={() => {
+                  setSelectedActionId(action.id);
+                  setPreview(null);
+                }}
               />
               <span>
                 <strong>
@@ -1122,10 +1215,13 @@ function RulingEditor({
           ))}
         </fieldset>
       ) : null}
-      <Field label="Public outcome">
+      <Field label="Consequence summary">
         <textarea
           value={narrative}
-          onChange={(event) => setNarrative(event.currentTarget.value)}
+          onChange={(event) => {
+            setNarrative(event.currentTarget.value);
+            setPreview(null);
+          }}
           rows={4}
           maxLength={20_000}
           placeholder="The rope catches, hard. Aria swings beneath the bridge, bruised but still holding on…"
@@ -1133,23 +1229,43 @@ function RulingEditor({
       </Field>
       <EffectBuilder
         entities={entities}
-        mechanics={mutable}
+        mechanics={mechanics.filter((mechanic) => !mechanic.archived)}
+        mutableMechanics={mutable}
         effects={effects}
-        onChange={setEffects}
+        onChange={(nextEffects) => {
+          setEffects(nextEffects);
+          setPreview(null);
+        }}
       />
-      {preview === null ? null : (
+      {visiblePreview === null ? null : (
         <RulingPreview
-          result={preview}
+          result={visiblePreview}
           entities={entities}
           mechanics={mechanics}
         />
+      )}
+      {!rulesReady ? (
+        <p className="ruling-sync-notice" role="status">
+          Refreshing the current rules and entity state before this Consequence
+          can be previewed or resolved.
+        </p>
+      ) : effectsCurrent ? null : (
+        <p className="ruling-sync-notice" role="status">
+          The table changed after an effect was added. Remove or rebuild the
+          outdated effect before continuing.
+        </p>
       )}
       {error === null ? null : <ErrorMessage error={error} />}
       <footer className="ruling-actions">
         <button
           className="button button-quiet"
           type="button"
-          disabled={saving !== null || narrative.trim() === ""}
+          disabled={
+            saving !== null ||
+            narrative.trim() === "" ||
+            !rulesReady ||
+            !effectsCurrent
+          }
           onClick={() => void adjudicate("preview")}
         >
           {saving === "preview" ? "Previewing…" : "Preview changes"}
@@ -1157,7 +1273,12 @@ function RulingEditor({
         <button
           className="button button-play"
           type="button"
-          disabled={saving !== null || narrative.trim() === ""}
+          disabled={
+            saving !== null ||
+            narrative.trim() === "" ||
+            !rulesReady ||
+            !effectsCurrent
+          }
           onClick={() => void adjudicate("resolve")}
         >
           {saving === "resolve" ? "Resolving…" : "Resolve problem"}
@@ -1170,11 +1291,13 @@ function RulingEditor({
 function EffectBuilder({
   entities,
   mechanics,
+  mutableMechanics,
   effects,
   onChange,
 }: {
   entities: WorldEntity[];
   mechanics: WorldMechanic[];
+  mutableMechanics: WorldMechanic[];
   effects: EffectDraft[];
   onChange: (effects: EffectDraft[]) => void;
 }) {
@@ -1182,35 +1305,85 @@ function EffectBuilder({
     (entity) =>
       !entity.archived && entity.character_status !== "setup-required",
   );
-  const firstMechanic = mechanics[0];
+  const eligibleEntityIDs = new Set(
+    eligibleEntities.map((entity) => entity.id),
+  );
+  const activeStatusOptions = eligibleEntities.flatMap((entity) =>
+    entity.state.active_statuses.map((status) => ({
+      key: `${entity.id}:${status.id}`,
+      entity,
+      status,
+    })),
+  );
+  const queuedRemovalIDs = new Set(
+    effects
+      .filter((effect) => effect.kind === "remove-status")
+      .flatMap((effect) =>
+        effect.targets.map((target) => target.statusInstanceId),
+      ),
+  );
+  const removableStatusOptions = activeStatusOptions.filter(
+    ({ status }) => !queuedRemovalIDs.has(status.id),
+  );
+  const firstMechanic = mutableMechanics[0];
   const [entityId, setEntityId] = useState(eligibleEntities[0]?.id ?? "");
+  const [effectKind, setEffectKind] = useState<
+    "mechanic" | "apply-status" | "remove-status"
+  >(firstMechanic === undefined ? "apply-status" : "mechanic");
   const [mechanicId, setMechanicId] = useState(firstMechanic?.id ?? "");
   const [operation, setOperation] = useState<"adjust-number" | "set">(
     firstMechanic?.mode === "binary" ? "set" : "adjust-number",
   );
   const [amount, setAmount] = useState(0);
   const [booleanValue, setBooleanValue] = useState(true);
+  const [statusName, setStatusName] = useState("");
+  const [statusDescription, setStatusDescription] = useState("");
+  const [statusTargetIds, setStatusTargetIds] = useState<string[]>(
+    eligibleEntities[0] === undefined ? [] : [eligibleEntities[0].id],
+  );
+  const [statusModifiers, setStatusModifiers] = useState<StatusModifierDraft[]>(
+    [],
+  );
+  const [removalKey, setRemovalKey] = useState(
+    removableStatusOptions[0]?.key ?? "",
+  );
   const effectiveEntityId =
-    entityId !== "" ? entityId : (eligibleEntities[0]?.id ?? "");
+    entityId !== "" && eligibleEntityIDs.has(entityId)
+      ? entityId
+      : (eligibleEntities[0]?.id ?? "");
   const effectiveMechanicId =
     mechanicId !== "" ? mechanicId : (firstMechanic?.id ?? "");
-  const mechanic = mechanics.find((item) => item.id === effectiveMechanicId);
+  const mechanic = mutableMechanics.find(
+    (item) => item.id === effectiveMechanicId,
+  );
+  const effectiveRemoval =
+    removableStatusOptions.find((option) => option.key === removalKey) ??
+    removableStatusOptions[0];
+  const currentStatusTargetIds = statusTargetIds.filter((id) =>
+    eligibleEntityIDs.has(id),
+  );
+  const statusModifiersCurrent = statusModifiers.every((modifier) =>
+    statusModifierIsCurrent(modifier, mechanics),
+  );
 
   function chooseMechanic(id: string) {
     setMechanicId(id);
-    const selected = mechanics.find((item) => item.id === id);
+    const selected = mutableMechanics.find((item) => item.id === id);
     setOperation(selected?.mode === "binary" ? "set" : "adjust-number");
     setAmount(0);
   }
 
-  function add() {
-    if (effectiveEntityId === "" || mechanic === undefined) return;
+  function addMechanicEffect() {
+    if (effectiveEntityId === "") return;
+    if (mechanic === undefined) return;
     onChange([
       ...effects,
       {
         id: crypto.randomUUID(),
         entityId: effectiveEntityId,
+        kind: "mechanic",
         mechanicId: effectiveMechanicId,
+        valueKind: mechanic.mode === "binary" ? "boolean" : "number",
         operation: mechanic.mode === "binary" ? "set" : operation,
         amount,
         booleanValue,
@@ -1219,104 +1392,376 @@ function EffectBuilder({
     setAmount(0);
   }
 
+  function addStatusEffect() {
+    if (
+      statusName.trim() === "" ||
+      currentStatusTargetIds.length === 0 ||
+      !statusModifiersCurrent
+    )
+      return;
+    onChange([
+      ...effects,
+      {
+        id: crypto.randomUUID(),
+        kind: "apply-status",
+        entityIds: currentStatusTargetIds,
+        status: {
+          name: statusName.trim(),
+          description: statusDescription.trim(),
+          modifiers: statusModifiers,
+        },
+      },
+    ]);
+    setStatusName("");
+    setStatusDescription("");
+    setStatusModifiers([]);
+  }
+
+  function addRemovalEffect() {
+    if (effectiveRemoval === undefined) return;
+    onChange([
+      ...effects,
+      {
+        id: crypto.randomUUID(),
+        kind: "remove-status",
+        targets: [
+          {
+            entityId: effectiveRemoval.entity.id,
+            statusInstanceId: effectiveRemoval.status.id,
+            statusName: effectiveRemoval.status.name,
+          },
+        ],
+      },
+    ]);
+    setRemovalKey("");
+  }
+
+  function toggleStatusTarget(id: string) {
+    setStatusTargetIds((current) =>
+      current.includes(id)
+        ? current.filter((candidate) => candidate !== id)
+        : [...current, id],
+    );
+  }
+
+  function setModifier(index: number, modifier: StatusModifierDraft) {
+    setStatusModifiers((current) =>
+      current.map((candidate, candidateIndex) =>
+        candidateIndex === index ? modifier : candidate,
+      ),
+    );
+  }
+
   return (
     <section className="effect-builder">
       <header>
         <div>
-          <p className="eyebrow">Mechanical effects</p>
-          <h4>What changed?</h4>
+          <p className="eyebrow">Consequence effects</p>
+          <h4>What becomes true mechanically?</h4>
         </div>
         <span>
           {effects.length} {effects.length === 1 ? "effect" : "effects"}
         </span>
       </header>
-      {mechanics.length === 0 || eligibleEntities.length === 0 ? (
+      {eligibleEntities.length === 0 ? (
         <p className="effect-empty">
-          Create a mutable mechanic and at least one entity to apply mechanical
-          effects. Narrative-only rulings are always valid.
+          At least one play-ready entity is required for a mechanical
+          consequence. Narrative-only rulings are always valid.
         </p>
       ) : (
-        <div className="effect-composer">
+        <>
           <select
-            value={effectiveEntityId}
-            onChange={(event) => setEntityId(event.currentTarget.value)}
-            aria-label="Effect entity"
+            className="consequence-kind-select"
+            value={effectKind}
+            onChange={(event) =>
+              setEffectKind(event.currentTarget.value as typeof effectKind)
+            }
+            aria-label="Consequence effect kind"
           >
-            {eligibleEntities.map((entity) => (
-              <option key={entity.id} value={entity.id}>
-                {entity.display_name}
-              </option>
-            ))}
+            {mutableMechanics.length > 0 ? (
+              <option value="mechanic">Change a value</option>
+            ) : null}
+            <option value="apply-status">Create a lasting status</option>
+            {activeStatusOptions.length > 0 ? (
+              <option value="remove-status">End an active status</option>
+            ) : null}
           </select>
-          <select
-            value={effectiveMechanicId}
-            onChange={(event) => chooseMechanic(event.currentTarget.value)}
-            aria-label="Effect mechanic"
-          >
-            {mechanics.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-          {mechanic?.mode === "binary" ? (
-            <select
-              value={String(booleanValue)}
-              onChange={(event) =>
-                setBooleanValue(event.currentTarget.value === "true")
-              }
-              aria-label="Capability change"
-            >
-              <option value="true">Grant</option>
-              <option value="false">Remove</option>
-            </select>
-          ) : (
-            <>
+          {effectKind === "mechanic" ? (
+            <div className="effect-composer">
               <select
-                value={operation}
-                onChange={(event) =>
-                  setOperation(
-                    event.currentTarget.value as "adjust-number" | "set",
-                  )
-                }
-                aria-label="Effect operation"
+                value={effectiveEntityId}
+                onChange={(event) => setEntityId(event.currentTarget.value)}
+                aria-label="Effect entity"
               >
-                <option value="adjust-number">Adjust by</option>
-                <option value="set">Set to</option>
+                {eligibleEntities.map((entity) => (
+                  <option key={entity.id} value={entity.id}>
+                    {entity.display_name}
+                  </option>
+                ))}
               </select>
-              <input
-                type="number"
-                value={amount}
-                onChange={(event) =>
-                  setAmount(event.currentTarget.valueAsNumber || 0)
+              <select
+                value={effectiveMechanicId}
+                onChange={(event) => chooseMechanic(event.currentTarget.value)}
+                aria-label="Effect mechanic"
+              >
+                {mutableMechanics.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+              {mechanic?.mode === "binary" ? (
+                <select
+                  value={String(booleanValue)}
+                  onChange={(event) =>
+                    setBooleanValue(event.currentTarget.value === "true")
+                  }
+                  aria-label="Capability change"
+                >
+                  <option value="true">Grant</option>
+                  <option value="false">Remove</option>
+                </select>
+              ) : (
+                <>
+                  <select
+                    value={operation}
+                    onChange={(event) =>
+                      setOperation(
+                        event.currentTarget.value as "adjust-number" | "set",
+                      )
+                    }
+                    aria-label="Effect operation"
+                  >
+                    <option value="adjust-number">Adjust by</option>
+                    <option value="set">Set to</option>
+                  </select>
+                  <input
+                    type="number"
+                    value={amount}
+                    onChange={(event) =>
+                      setAmount(event.currentTarget.valueAsNumber || 0)
+                    }
+                    step="any"
+                    aria-label="Effect amount"
+                  />
+                </>
+              )}
+              <button
+                className="button button-ink"
+                type="button"
+                onClick={addMechanicEffect}
+                disabled={mechanic === undefined}
+              >
+                Add effect
+              </button>
+            </div>
+          ) : effectKind === "apply-status" ? (
+            <div className="status-consequence-composer">
+              <div className="status-consequence-fields">
+                <label>
+                  <span>Status name</span>
+                  <input
+                    value={statusName}
+                    maxLength={200}
+                    onChange={(event) =>
+                      setStatusName(event.currentTarget.value)
+                    }
+                    placeholder="Shaken"
+                  />
+                </label>
+                <label>
+                  <span>
+                    Description <small>Optional</small>
+                  </span>
+                  <textarea
+                    value={statusDescription}
+                    maxLength={2000}
+                    rows={2}
+                    onChange={(event) =>
+                      setStatusDescription(event.currentTarget.value)
+                    }
+                    placeholder="What this consequence means in the fiction."
+                  />
+                </label>
+              </div>
+              <fieldset className="consequence-targets">
+                <legend>Targets</legend>
+                <div>
+                  {eligibleEntities.map((entity) => (
+                    <label
+                      className={
+                        statusTargetIds.includes(entity.id) ? "selected" : ""
+                      }
+                      key={entity.id}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={statusTargetIds.includes(entity.id)}
+                        onChange={() => toggleStatusTarget(entity.id)}
+                      />
+                      <span>{entity.display_name}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+              <section className="status-consequence-modifiers">
+                <header>
+                  <div>
+                    <strong>Typed modifiers</strong>
+                    <small>
+                      Optional. Lower priorities run first; ties follow this
+                      order.
+                    </small>
+                  </div>
+                  <button
+                    className="button button-quiet"
+                    type="button"
+                    disabled={mechanics.length === 0}
+                    onClick={() => {
+                      const target = mechanics[0];
+                      if (target === undefined) return;
+                      setStatusModifiers((current) => [
+                        ...current,
+                        newStatusModifier(target),
+                      ]);
+                    }}
+                  >
+                    ＋ Add modifier
+                  </button>
+                </header>
+                {statusModifiers.length === 0 ? (
+                  <p className="status-modifier-empty">
+                    This can remain a named fictional condition with no numeric
+                    modifier.
+                  </p>
+                ) : (
+                  <ol className="status-modifier-list">
+                    {statusModifiers.map((modifier, index) => (
+                      <li key={modifier.id}>
+                        <StatusModifierEditor
+                          modifier={modifier}
+                          mechanics={mechanics}
+                          onChange={(next) => setModifier(index, next)}
+                        />
+                        <div className="modifier-order-actions">
+                          <button
+                            type="button"
+                            aria-label={`Move modifier ${index + 1} up`}
+                            disabled={index === 0}
+                            onClick={() =>
+                              setStatusModifiers((current) =>
+                                moveItem(current, index, index - 1),
+                              )
+                            }
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            aria-label={`Move modifier ${index + 1} down`}
+                            disabled={index === statusModifiers.length - 1}
+                            onClick={() =>
+                              setStatusModifiers((current) =>
+                                moveItem(current, index, index + 1),
+                              )
+                            }
+                          >
+                            ↓
+                          </button>
+                          <button
+                            className="danger-text"
+                            type="button"
+                            onClick={() =>
+                              setStatusModifiers((current) =>
+                                current.filter(
+                                  (_candidate, candidateIndex) =>
+                                    candidateIndex !== index,
+                                ),
+                              )
+                            }
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                )}
+              </section>
+              <button
+                className="button button-ink status-consequence-add"
+                type="button"
+                onClick={addStatusEffect}
+                disabled={
+                  statusName.trim() === "" ||
+                  currentStatusTargetIds.length === 0 ||
+                  !statusModifiersCurrent
                 }
-                step="any"
-                aria-label="Effect amount"
-              />
-            </>
+              >
+                Add status effect
+              </button>
+              {statusModifiersCurrent ? null : (
+                <p className="field-message" role="status">
+                  A modifier has an unavailable target, a mismatched literal, or
+                  a non-whole priority. Review it before adding this effect.
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="effect-composer remove-status-composer">
+              <select
+                value={effectiveRemoval?.key ?? ""}
+                onChange={(event) => setRemovalKey(event.currentTarget.value)}
+                aria-label="Active status instance"
+              >
+                {removableStatusOptions.length === 0 ? (
+                  <option value="">No unplanned active statuses</option>
+                ) : null}
+                {removableStatusOptions.map(({ key, entity, status }) => (
+                  <option key={key} value={key}>
+                    {entity.display_name} · {status.name} · applied{" "}
+                    {formatRelativeDate(status.applied_at)} · instance{" "}
+                    {shortIdentifier(status.id)}
+                  </option>
+                ))}
+              </select>
+              <button
+                className="button button-ink"
+                type="button"
+                onClick={addRemovalEffect}
+                disabled={effectiveRemoval === undefined}
+              >
+                Add effect
+              </button>
+            </div>
           )}
-          <button className="button button-ink" type="button" onClick={add}>
-            Add
-          </button>
-        </div>
+        </>
       )}
       {effects.length > 0 ? (
         <ol className="effect-list">
           {effects.map((effect) => {
-            const entity = entities.find((item) => item.id === effect.entityId);
-            const item = mechanics.find(
-              (candidate) => candidate.id === effect.mechanicId,
-            );
+            const item =
+              effect.kind === "mechanic"
+                ? mechanics.find(
+                    (candidate) => candidate.id === effect.mechanicId,
+                  )
+                : undefined;
             return (
               <li key={effect.id}>
                 <span
-                  className={`effect-kind effect-${item?.kind}`}
+                  className={`effect-kind effect-${
+                    effect.kind === "mechanic" ? item?.kind : "status"
+                  }`}
                   aria-hidden="true"
                 >
-                  {item?.kind === "capacity" ? "◇" : "✦"}
+                  {effect.kind === "mechanic"
+                    ? item?.kind === "capacity"
+                      ? "◇"
+                      : "✦"
+                    : "◈"}
                 </span>
                 <div>
-                  <strong>{entity?.display_name}</strong>
+                  <strong>{effectTargetLabel(effect, entities)}</strong>
                   <span>{effectDescription(effect, item)}</span>
                 </div>
                 <button
@@ -1340,6 +1785,143 @@ function EffectBuilder({
   );
 }
 
+function StatusModifierEditor({
+  modifier,
+  mechanics,
+  onChange,
+}: {
+  modifier: StatusModifierDraft;
+  mechanics: WorldMechanic[];
+  onChange: (modifier: StatusModifierDraft) => void;
+}) {
+  const mechanic = mechanics.find((item) => item.id === modifier.mechanic_id);
+  const numeric = mechanic?.mode !== "binary";
+  return (
+    <div className="status-modifier">
+      <label>
+        <span>Target value</span>
+        <select
+          value={modifier.mechanic_id}
+          onChange={(event) => {
+            const nextMechanic = mechanics.find(
+              (candidate) => candidate.id === event.currentTarget.value,
+            );
+            if (nextMechanic === undefined) return;
+            const nextNumeric = nextMechanic.mode !== "binary";
+            onChange({
+              ...modifier,
+              mechanic_id: nextMechanic.id,
+              operation: nextNumeric ? "add-number" : "set",
+              value: nextNumeric
+                ? { kind: "number", value: 0 }
+                : { kind: "boolean", value: true },
+            });
+          }}
+        >
+          {mechanics.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.name}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        <span>Operation</span>
+        <select
+          value={modifier.operation}
+          onChange={(event) =>
+            onChange({
+              ...modifier,
+              operation: event.currentTarget.value as StatusModifierOperation,
+            })
+          }
+        >
+          <option value="set">Set to</option>
+          {numeric ? <option value="add-number">Add</option> : null}
+          {numeric ? (
+            <option value="multiply-number">Multiply by</option>
+          ) : null}
+        </select>
+      </label>
+      <label>
+        <span>Literal value</span>
+        {numeric ? (
+          <input
+            type="number"
+            step="any"
+            value={modifier.value.kind === "number" ? modifier.value.value : 0}
+            onChange={(event) =>
+              onChange({
+                ...modifier,
+                value: {
+                  kind: "number",
+                  value: event.currentTarget.valueAsNumber || 0,
+                },
+              })
+            }
+          />
+        ) : (
+          <select
+            value={
+              modifier.value.kind === "boolean"
+                ? String(modifier.value.value)
+                : "true"
+            }
+            onChange={(event) =>
+              onChange({
+                ...modifier,
+                operation: "set",
+                value: {
+                  kind: "boolean",
+                  value: event.currentTarget.value === "true",
+                },
+              })
+            }
+          >
+            <option value="true">True</option>
+            <option value="false">False</option>
+          </select>
+        )}
+      </label>
+      <label>
+        <span>Priority</span>
+        <input
+          type="number"
+          step="1"
+          value={modifier.priority}
+          onChange={(event) =>
+            onChange({
+              ...modifier,
+              priority: event.currentTarget.valueAsNumber || 0,
+            })
+          }
+        />
+      </label>
+    </div>
+  );
+}
+
+function newStatusModifier(mechanic: WorldMechanic): StatusModifierDraft {
+  const numeric = mechanic.mode !== "binary";
+  return {
+    id: crypto.randomUUID(),
+    mechanic_id: mechanic.id,
+    operation: numeric ? "add-number" : "set",
+    value: numeric
+      ? { kind: "number", value: 0 }
+      : { kind: "boolean", value: true },
+    priority: 0,
+  };
+}
+
+function moveItem<T>(items: T[], from: number, to: number): T[] {
+  if (to < 0 || to >= items.length) return items;
+  const next = [...items];
+  const [item] = next.splice(from, 1);
+  if (item !== undefined) next.splice(to, 0, item);
+  return next;
+}
+
 function RulingPreview({
   result,
   entities,
@@ -1350,7 +1932,7 @@ function RulingPreview({
   mechanics: WorldMechanic[];
 }) {
   return (
-    <div className="ruling-preview">
+    <div className="ruling-preview" role="status" aria-live="polite">
       <header>
         <span aria-hidden="true">✓</span>
         <div>
@@ -1371,12 +1953,41 @@ function RulingPreview({
                   ?.display_name ?? "Entity"}
               </strong>
               <span>
+                {effect.type === "apply-status"
+                  ? `Applied ${effect.status_name ?? "status"}`
+                  : effect.type === "remove-status"
+                    ? `Removed ${effect.status_name ?? "status"}`
+                    : (mechanics.find(
+                        (mechanic) => mechanic.id === effect.mechanic_id,
+                      )?.name ?? "Mechanic")}
+              </span>
+              {effect.type === "apply-status" ||
+              effect.type === "remove-status" ? (
+                <em>{effect.changed ? "changed" : "already current"}</em>
+              ) : (
+                <em>
+                  {displayValue(effect.before)} → {displayValue(effect.after)}
+                </em>
+              )}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {result.effective_changes.length > 0 ? (
+        <div className="effective-change-list">
+          <strong>Final calculated changes</strong>
+          {result.effective_changes.map((change) => (
+            <p key={`${change.entity_id}:${change.mechanic_id}`}>
+              <span>
+                {entities.find((entity) => entity.id === change.entity_id)
+                  ?.display_name ?? "Entity"}
+                {" · "}
                 {mechanics.find(
-                  (mechanic) => mechanic.id === effect.mechanic_id,
+                  (mechanic) => mechanic.id === change.mechanic_id,
                 )?.name ?? "Mechanic"}
               </span>
               <em>
-                {displayValue(effect.before)} → {displayValue(effect.after)}
+                {displayValue(change.before)} → {displayValue(change.after)}
               </em>
             </p>
           ))}
@@ -1423,17 +2034,38 @@ function HistoryCard({
               {resolution.applied_effects.map((effect, index) => (
                 <span key={`${effect.effect_id}-${effect.entity_id}-${index}`}>
                   <i aria-hidden="true">
-                    {mechanics.find((item) => item.id === effect.mechanic_id)
-                      ?.kind === "capacity"
-                      ? "◇"
-                      : "✦"}
+                    {effect.type === "apply-status" ||
+                    effect.type === "remove-status"
+                      ? "◈"
+                      : mechanics.find((item) => item.id === effect.mechanic_id)
+                            ?.kind === "capacity"
+                        ? "◇"
+                        : "✦"}
                   </i>
                   {entities.find((entity) => entity.id === effect.entity_id)
                     ?.display_name ?? "Entity"}
                   :{" "}
-                  {mechanics.find((item) => item.id === effect.mechanic_id)
-                    ?.name ?? "mechanic"}{" "}
-                  {displayValue(effect.before)} → {displayValue(effect.after)}
+                  {effect.type === "apply-status"
+                    ? `applied ${effect.status_name ?? "status"}`
+                    : effect.type === "remove-status"
+                      ? `removed ${effect.status_name ?? "status"}`
+                      : `${mechanics.find((item) => item.id === effect.mechanic_id)?.name ?? "mechanic"} ${displayValue(effect.before)} → ${displayValue(effect.after)}`}
+                </span>
+              ))}
+            </div>
+          ) : null}
+          {resolution.effective_changes.length > 0 ? (
+            <div className="history-effective-changes">
+              <strong>Final values</strong>
+              {resolution.effective_changes.map((change) => (
+                <span key={`${change.entity_id}:${change.mechanic_id}`}>
+                  {entities.find((entity) => entity.id === change.entity_id)
+                    ?.display_name ?? "Entity"}
+                  :{" "}
+                  {mechanics.find(
+                    (mechanic) => mechanic.id === change.mechanic_id,
+                  )?.name ?? "mechanic"}{" "}
+                  {displayValue(change.before)} → {displayValue(change.after)}
                 </span>
               ))}
             </div>
@@ -1444,44 +2076,115 @@ function HistoryCard({
   );
 }
 
-function effectToAPI(
+function effectDraftIsCurrent(
   effect: EffectDraft,
+  entities: WorldEntity[],
   mechanics: WorldMechanic[],
-): ConcreteEffect {
-  const mechanic = mechanics.find((item) => item.id === effect.mechanicId);
-  if (mechanic?.mode === "binary")
-    return {
-      id: effect.id,
-      type: "set",
-      entity_ids: [effect.entityId],
-      mechanic_id: effect.mechanicId,
-      value: { kind: "boolean", value: effect.booleanValue },
-    };
-  if (effect.operation === "set")
-    return {
-      id: effect.id,
-      type: "set",
-      entity_ids: [effect.entityId],
-      mechanic_id: effect.mechanicId,
-      value: { kind: "number", value: effect.amount },
-    };
-  return {
-    id: effect.id,
-    type: "adjust-number",
-    entity_ids: [effect.entityId],
-    mechanic_id: effect.mechanicId,
-    amount: effect.amount,
-  };
+): boolean {
+  const eligibleEntityIDs = new Set(
+    entities
+      .filter(
+        (entity) =>
+          !entity.archived && entity.character_status !== "setup-required",
+      )
+      .map((entity) => entity.id),
+  );
+  if (effect.kind === "mechanic") {
+    const mechanic = mechanics.find(
+      (candidate) => candidate.id === effect.mechanicId,
+    );
+    return (
+      eligibleEntityIDs.has(effect.entityId) &&
+      mechanic !== undefined &&
+      !mechanic.archived &&
+      mechanic.mutable_during_play &&
+      effect.valueKind ===
+        (mechanic.mode === "binary" ? "boolean" : "number") &&
+      (effect.valueKind === "boolean" || Number.isFinite(effect.amount))
+    );
+  }
+  if (effect.kind === "apply-status")
+    return (
+      effect.entityIds.length > 0 &&
+      effect.entityIds.every((id) => eligibleEntityIDs.has(id)) &&
+      effect.status.modifiers.every((modifier) =>
+        statusModifierIsCurrent(modifier, mechanics),
+      )
+    );
+  return (
+    effect.targets.length > 0 &&
+    effect.targets.every((target) => {
+      if (!eligibleEntityIDs.has(target.entityId)) return false;
+      return (
+        entities
+          .find((entity) => entity.id === target.entityId)
+          ?.state.active_statuses.some(
+            (status) => status.id === target.statusInstanceId,
+          ) ?? false
+      );
+    })
+  );
+}
+
+function statusModifierIsCurrent(
+  modifier: StatusModifierDraft,
+  mechanics: WorldMechanic[],
+): boolean {
+  const mechanic = mechanics.find(
+    (candidate) => candidate.id === modifier.mechanic_id,
+  );
+  if (
+    mechanic === undefined ||
+    mechanic.archived ||
+    !Number.isInteger(modifier.priority)
+  )
+    return false;
+  const numeric = mechanic.mode !== "binary";
+  if (modifier.operation === "set")
+    return (
+      modifier.value.kind === (numeric ? "number" : "boolean") &&
+      (modifier.value.kind === "boolean" ||
+        Number.isFinite(modifier.value.value))
+    );
+  return (
+    numeric &&
+    modifier.value.kind === "number" &&
+    Number.isFinite(modifier.value.value)
+  );
 }
 
 function effectDescription(
   effect: EffectDraft,
   mechanic?: WorldMechanic,
 ): string {
+  if (effect.kind === "apply-status") {
+    const count = effect.status.modifiers.length;
+    return `Apply ${effect.status.name}${count === 0 ? "" : ` · ${count} ${count === 1 ? "modifier" : "modifiers"}`}`;
+  }
+  if (effect.kind === "remove-status")
+    return `Remove ${effect.targets[0]?.statusName ?? "status"} · instance ${shortIdentifier(effect.targets[0]?.statusInstanceId ?? "unknown")}`;
   if (mechanic === undefined) return "Unknown mechanic";
-  if (mechanic.mode === "binary")
+  if (effect.valueKind === "boolean")
     return `${effect.booleanValue ? "Grant" : "Remove"} ${mechanic.name}`;
   return `${effect.operation === "set" ? "Set" : "Adjust"} ${mechanic.name} ${effect.operation === "adjust-number" && effect.amount >= 0 ? "+" : ""}${effect.amount}`;
+}
+
+function effectTargetLabel(
+  effect: EffectDraft,
+  entities: WorldEntity[],
+): string {
+  const ids =
+    effect.kind === "mechanic"
+      ? [effect.entityId]
+      : effect.kind === "apply-status"
+        ? effect.entityIds
+        : effect.targets.map((target) => target.entityId);
+  const names = ids.map(
+    (id) =>
+      entities.find((entity) => entity.id === id)?.display_name ?? "Entity",
+  );
+  if (names.length <= 2) return names.join(" & ");
+  return `${names[0]} + ${names.length - 1} others`;
 }
 
 function displayValue(value?: StateValue): string {
@@ -1491,6 +2194,10 @@ function displayValue(value?: StateValue): string {
     : value.value
       ? "yes"
       : "no";
+}
+
+function shortIdentifier(id: string): string {
+  return id.slice(0, 8);
 }
 
 function entitySubtitle(
@@ -1527,5 +2234,8 @@ function entitySubtitle(
     (mechanic) => mechanic.kind === "capacity" && !mechanic.archived,
   );
   if (capacity === undefined) return "Sheet ready";
-  return `${capacity.name} ${displayValue(entity.state.values[capacity.id])}`;
+  return `${capacity.name} ${displayValue(
+    entity.state.effective_values[capacity.id] ??
+      entity.state.values[capacity.id],
+  )}`;
 }

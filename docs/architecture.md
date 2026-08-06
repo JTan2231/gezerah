@@ -10,9 +10,12 @@ authored as reusable configuration.
 The world is the sole product and data boundary. It owns:
 
 - owner/editor/player/spectator memberships and expiring bearer invitations;
-- numeric/Boolean capacity and capability definitions;
-- entities, scalar state, character fields, profiles, and player control;
-- improvised interactions, actions, rulings, and immutable receipts;
+- numeric/Boolean input and derived capacity/capability definitions plus their
+  typed dependency graph;
+- problem-authored persistent status instances with immutable modifier
+  snapshots and source-resolution provenance;
+- entities, base/effective state, character fields, profiles, and player control;
+- improvised interactions, actions, Consequences, and immutable receipts;
 - one append-only event cursor for live invalidation;
 - separate Play and Build browser surfaces over the same resources.
 
@@ -74,7 +77,7 @@ paths in both topologies.
 flowchart TD
     UI[React features and components]
     HTTP[HTTP DTOs, handlers, authorization, errors]
-    Rules[Pure scalar transition engine]
+    Rules[Pure graph evaluation and transition engine]
     Store[Relational queries and transactions]
     PG[(PostgreSQL constraints)]
 
@@ -91,9 +94,11 @@ Build owns the owner/editor world library and configuration studio. Play owns
 the admitted-world table picker, player onboarding, and live table. Both areas
 share identity, API types, fetch helpers, route helpers, and UI primitives.
 
-World configuration is a master-detail editor for capacities/capabilities plus
-character fields, roster setup, people, and settings. Build never mounts the
-event stream; Play does not render configuration or direct setup-state inputs.
+World configuration is a master-detail editor for capacities/capabilities,
+their derived expressions, character fields, roster setup, people, and
+settings. Build never mounts the event stream; Play does not render
+configuration or direct setup-state inputs. Statuses are authored only in a
+problem's Consequence during Play.
 A player who is not ready sees only controlled-character onboarding and does
 not request live interactions or events.
 
@@ -113,8 +118,12 @@ and reconnects after a stream ends.
 - handlers validate path, query, body, identity, membership, and role;
 - world-scoped queries load relational aggregates;
 - command transactions lock mutable roots and recheck revisions;
-- live rulings call the pure transition engine and persist state/history
-  atomically;
+- mechanic publication validates the proposed complete dependency graph and
+  advances its world-rules revision;
+- state reads call the pure evaluator to separate intrinsic and effective
+  values with modifier explanations;
+- live Consequences call the pure runtime transition/evaluation engine and
+  persist base state, status lifecycle, and history atomically;
 - visibility filtering removes private fields before serialization.
 
 The application layer does not put SQL, HTTP, authentication, clocks, or UUID
@@ -123,9 +132,12 @@ generation into the rules engine.
 ### Rules engine
 
 `internal/rules` is pure Go and storage-neutral. Stable IDs are strings. It
-validates numeric/Boolean mechanic definitions, materialized state snapshots,
-and ordered `set`/`adjust-number` effects. It applies a transition to a cloned
-snapshot and returns before/after applications plus changed record IDs.
+type-checks the world mechanic dependency graph, reports concrete cycle paths,
+compiles a dependency order, evaluates intrinsic/effective values, validates
+inline status specifications and active snapshots, and applies ordered
+scalar/status effects to cloned runtime snapshots. Results include
+scalar/status applications, changed state-record IDs, and evaluation
+explanations.
 
 The engine does not increment revisions, acquire locks, write receipts, or
 commit transactions. Those remain adapter responsibilities.
@@ -135,8 +147,9 @@ commit transactions. Those remain adapter responsibilities.
 PostgreSQL is authoritative. The clean baseline is normalized around
 `world_id`; there are no secondary configuration or live-play containers.
 Composite foreign keys make cross-world relationships structurally invalid.
-Checks enforce scalar tagged shapes, numeric bounds metadata, roles, statuses,
-and lifecycle shapes. Triggers protect final receipts and event rows.
+Checks enforce scalar tagged shapes, expression-node shapes, numeric bounds
+metadata, roles, statuses, and lifecycle shapes. Triggers protect status
+modifier snapshots, final receipts, and event rows.
 
 JSON is a transport format, not canonical storage.
 
@@ -152,7 +165,7 @@ sequenceDiagram
 
     UI->>H: POST /api/worlds
     H->>DB: Begin transaction
-    H->>DB: Insert world
+    H->>DB: Insert world; trigger creates rules revision root
     H->>DB: Insert owner membership
     H->>DB: Insert character-field revision root
     H->>DB: Insert world-created event
@@ -160,7 +173,8 @@ sequenceDiagram
     H-->>UI: 201 World
 ```
 
-No additional container, generated vocabulary, or seed row is created.
+The revision roots contain no vocabulary and do not create a second ruleset
+scope; the world remains the sole configuration boundary.
 
 ### Authoring a mechanic
 
@@ -171,12 +185,14 @@ sequenceDiagram
     participant R as Rules validator
     participant DB as PostgreSQL
 
-    UI->>H: POST or PUT world mechanic
+    UI->>H: Definition + expected_rules_revision
     H->>H: Check active owner/editor
-    H->>R: Validate kind, mode, default, bounds, step
-    R-->>H: Valid mechanic or field errors
-    H->>DB: Persist normalized world_mechanics row
-    H-->>UI: Saved mechanic
+    H->>DB: Lock the world's rules revision
+    H->>R: Validate proposed complete typed graph
+    R-->>H: Valid graph or path-indexed type/cycle errors
+    H->>DB: Persist mechanic and normalized expression nodes
+    H->>DB: Advance mechanic-rules revision and append rules-updated event
+    H-->>UI: revision + saved mechanic
 ```
 
 Archiving is explicit and retains stored values and receipt references.
@@ -191,30 +207,33 @@ sequenceDiagram
     participant R as Transition engine
     participant E as SSE clients
 
-    F->>H: Resolve ruling + revision + idempotency key
-    H->>DB: Lock world, interaction, mechanics, entities, state
+    F->>H: Resolve Consequence summary + ordered effects + revisions + idempotency key
+    H->>DB: Lock mechanic rules, interaction, entities, state/status roots
     H->>DB: Recheck facilitator, lifecycle, revisions, selected action
-    H->>R: Apply ordered concrete effects
-    R-->>H: Before/after applications or atomic failure
-    H->>DB: Persist changed state revisions
-    H->>DB: Insert immutable ruling and applications
+    H->>R: Evaluate before; validate/apply inline statuses and exact removals; evaluate after
+    R-->>H: Applications and effective changes or atomic failure
+    H->>DB: Persist changed state, status snapshots/provenance, and status revisions
+    H->>DB: Insert immutable Consequence, applications, and effective changes
     H->>DB: Finalize interaction/actions and append world event
     H->>DB: Commit
     H-->>F: Resolution result
     DB-->>E: Cursor becomes visible to event polling
 ```
 
-State, the receipt, selected/declined action statuses, interaction lifecycle,
-and event either all commit or all roll back. Equivalent idempotent replay
-returns the immutable ruling with `replayed: true`; different content conflicts.
+Base state, status instances and snapshots, source problem/resolution/effect
+provenance, the receipt, selected/declined action statuses, interaction
+lifecycle, and event either all commit or all roll back. Equivalent idempotent
+replay returns the immutable Consequence with
+`replayed: true`; different content conflicts.
 
 ## Consistency and concurrency
 
 The system combines:
 
-1. **Optimistic revisions.** Settings, the world table, character fields,
-   profiles, entity state, memberships, interactions, and actions reject stale
-   expected revisions.
+1. **Optimistic revisions.** Settings, the world table, the world mechanic graph,
+   character fields, profiles, entity state, memberships, interactions, and
+   actions reject stale expected revisions. Entity status-set roots version
+   actual status lifecycle changes.
 2. **Row locks and stable ordering.** Mutation transactions lock aggregate roots
    first and sort mechanic/entity IDs where lock order matters.
 3. **Database constraints.** Uniqueness, world-scoped foreign keys, tagged
@@ -222,18 +241,21 @@ The system combines:
 
 `worlds.revision` protects settings and lifecycle. `worlds.table_revision`
 protects complete controller-set replacements and other table-scoped authority.
-The two counters advance independently.
+`world_rule_sets.revision` protects the mechanic graph independently of both.
+Its value is embedded in evaluated state and applied resolution receipts.
 
 Read paths that assemble several tables may use read-only `REPEATABLE READ` so
 a response cannot combine different revisions.
 
 ## Events and freshness
 
-Live mutations append `world_events`. The browser opens
+Live and rules-configuration mutations append `world_events`. The browser opens
 `GET /api/worlds/{world_id}/events` with an `after` cursor or `Last-Event-ID`.
 The server emits monotonic IDs and compact resource references, plus keep-alive
 comments. Events are invalidation hints; clients reload authoritative world
-resources instead of reconstructing state from event payloads.
+resources instead of reconstructing state from event payloads. A
+`rules-updated` event causes Play to reload the mechanic catalog and evaluated
+entity state before enabling a Consequence based on them.
 
 There is no broker. Each open handler polls PostgreSQL, so capacity planning
 must account for one request and recurring event queries per connected table
@@ -245,7 +267,7 @@ with their last cursor.
 | Path                            | Responsibility                                                               |
 | ------------------------------- | ---------------------------------------------------------------------------- |
 | `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                                  |
-| `internal/rules/`               | Pure scalar definition/state validation and transitions.                     |
+| `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions.    |
 | `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                   |
 | `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                          |
 | `web/frontend/`                 | React/Vite Build and Play SPA.                                               |
@@ -256,14 +278,20 @@ with their last cursor.
 
 ## Design constraints for future changes
 
-- Keep fictional vocabulary in user-authored world configuration, not Go
-  constants, migrations, or seed data.
+- Keep mechanic vocabulary in user-authored world configuration and status
+  vocabulary in user-authored Consequences, not Go constants, migrations, or
+  seed data.
 - Do not make a configured key, entity name, or mechanic name privileged.
 - Keep `world_id` as the single configuration, authorization, and live scope.
 - Preserve normalized relational storage; JSON may be transport, never the
   canonical aggregate.
 - Keep rules functions deterministic and independent of HTTP, SQL, clocks, or
   authentication.
+- Reject graph type errors and cycles before advancing the mechanic rules
+  revision; retain runtime cycle detection as a defensive invariant.
+- Keep problem-authored status modifiers literal and persist their source IDs
+  and instance snapshots so later changes cannot rewrite active or historical
+  meaning.
 - Validate at both application and database boundaries.
 - Route every live mechanical mutation through one concrete transition path.
 - Treat receipts and events as history; add new facts instead of rewriting

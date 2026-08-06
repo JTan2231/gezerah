@@ -43,17 +43,21 @@ Executable and process lifecycle only.
 
 ### `internal/rules`
 
-Pure scalar mechanics:
+Pure graph evaluation and runtime transitions:
 
-| File             | Responsibility                                                               |
-| ---------------- | -----------------------------------------------------------------------------|
-| `types.go`       | World/mechanic/entity/state/effect domain types and enum vocabulary.          |
-| `definitions.go` | Numeric/Boolean mechanic and entity validation.                              |
-| `values.go`      | Scalar construction, equality, and definition-aware validation.              |
-| `state.go`       | Authored defaults, sparse overrides, materialization, normalization, cloning. |
-| `effects.go`     | Ordered `set`/`adjust-number` transition validation and application.         |
-| `decimal.go`     | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.    |
-| `errors.go`      | Validation paths and domain error categories.                                |
+| File                     | Responsibility                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------- |
+| `types.go`               | Mechanic graph, status, state, effect, evaluation, and receipt domain types.       |
+| `definitions.go`         | Input/derived numeric/Boolean mechanic and entity validation.                      |
+| `expressions.go`         | Recursive type inference, dependency extraction, cycle paths, graph compilation.  |
+| `evaluation.go`          | Intrinsic/effective evaluation and transparent modifier/expression traces.         |
+| `statuses.go`            | Inline status specification, literal modifier, and active-instance validation.     |
+| `values.go`              | Scalar construction, equality, and definition-aware validation.                   |
+| `state.go`               | Input defaults, sparse overrides, materialization, normalization, cloning.         |
+| `effects.go`             | Backward-compatible ordered scalar transition validation/application.              |
+| `runtime_transitions.go` | Combined scalar and persistent-status lifecycle transition.                        |
+| `decimal.go`             | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.         |
+| `errors.go`              | Validation paths and domain error categories.                                     |
 
 The package takes fully loaded maps/snapshots and returns values. It must not
 query PostgreSQL, inspect HTTP/environment, log, generate IDs, or mutate a
@@ -63,12 +67,18 @@ caller-owned snapshot.
 
 HTTP and persistence adapter:
 
-- request/response DTOs encode only current world resources and scalar unions;
+- request/response DTOs encode current world resources, recursive expression
+  trees, and typed scalar unions;
 - authorization helpers derive one world membership from the identity header;
 - route handlers perform validation, visibility filtering, and transaction
   orchestration;
 - SQL loaders/savers use `world_id` on every scoped aggregate;
-- receipt persistence records ordered requested effects and scalar applications;
+- mechanic publication locks the world rules revision and validates the
+  proposed complete graph before writing normalized rows;
+- evaluated-state loaders combine sparse input, compiled expressions, and
+  immutable active-status snapshots;
+- receipt persistence records ordered scalar/status applications and effective
+  changes;
 - server/JSON/config files provide cross-cutting infrastructure.
 
 There is one membership/role vocabulary. Owners and editors receive
@@ -76,9 +86,10 @@ facilitator authority directly; there is no parallel live membership model.
 
 ### `internal/migrations`
 
-`001_worldwright.sql` is the one clean baseline. The runner remains available
-for future migrations but does not upgrade databases created by an earlier
-schema. See [Database](database.md).
+`001_worldwright.sql` is the clean world-native baseline;
+`002_rules_graph_statuses.sql` is its supported forward upgrade for typed
+derived mechanics, problem-sourced persistent statuses, and expanded receipts. See
+[Database](database.md).
 
 ### `web`
 
@@ -185,25 +196,64 @@ Top-level authoring commands remain explicit and relational. A save normally:
 Owned rows commonly cascade from their root; historical references use
 `ON DELETE RESTRICT`. Product APIs archive rather than hard delete.
 
-### Scalar state
+### Base and evaluated state
 
 Each entity has exactly one `state_records` root. `state_values` stores at most
 one numeric or Boolean override per mechanic.
 
 Reading state:
 
-1. load the world entity, active/retained mechanics, state root, and overrides;
-2. rebuild typed scalar values;
-3. materialize missing values from mechanic defaults;
-4. validate the snapshot;
-5. return `values`, `defaulted_mechanic_ids`, and revision.
+1. load the world entity, complete mechanic graph, state root, and input
+   overrides;
+2. load the entity status-set revision, active instances, and their immutable
+   modifier snapshots;
+3. materialize missing input values from mechanic defaults;
+4. compile/validate the graph and recursively evaluate derived references;
+5. apply status modifiers in deterministic order;
+6. return input `values`, all `effective_values`, per-mechanic `evaluations`,
+   active status snapshots, and state/status/rules revisions.
 
-Replacing state treats the request map as complete logical state. Values equal
-to defaults normalize to absent override rows. A semantic no-op keeps the
-revision; a changed sparse map rewrites affected rows and increments the root.
+Replacing state treats the request map as complete logical input state and
+rejects derived IDs. It locks both the mechanic rules revision and entity state
+root. Values equal to defaults normalize to absent override rows.
 
 Resolution persistence updates only entity records reported changed by the
-pure transition engine, in the same transaction as the receipt.
+pure transition engine. Status lifecycle changes increment the independent
+entity status-set root. Both happen in the same transaction as the receipt.
+
+### Mechanic publication
+
+The mechanic catalog is read in `REPEATABLE READ` and returned as a
+`{revision,...}` wrapper. Every publishing create/update or first archive:
+
+1. locks `world_rule_sets` and compares `expected_rules_revision`;
+2. loads all world mechanics;
+3. substitutes the proposed mechanic into the in-memory graph;
+4. type-checks every expression and rejects dependency cycles with
+   path-indexed fields;
+5. persists the normalized mechanic/expression rows;
+6. increments the mechanic rules revision and appends `rules-updated`;
+7. returns the new revision with the saved mechanic.
+
+An active mechanic archive is rejected while another active derived mechanic
+depends on it. Database constraints preserve tagged and world-scoped shapes,
+while graph-wide type and cycle checks remain application and pure-rule
+responsibilities.
+
+### Persistent status snapshots
+
+Statuses are authored inline in an adjudicating problem's apply effect, not in
+world configuration. The effect supplies a name, optional description, ordered
+literal modifiers, and ordered entity targets. Resolve inserts one durable
+instance per target, snapshots the status prose and modifiers into
+instance-owned rows, and records source interaction, resolution, and effect
+IDs. Evaluation reads those immutable snapshots rather than a reusable catalog.
+
+Modifier order is priority, application order, instance ID, modifier position,
+then modifier ID. Same-name instances from different Consequences may coexist.
+A remove effect names the exact active status instance for each entity target;
+unknown, removed, cross-world, or mismatched targets fail validation. Resolve
+idempotency handles equivalent retries before the transition is applied.
 
 ### Character profiles
 
@@ -221,20 +271,39 @@ same world, replaces rows, increments `table_revision`, and appends an event.
 
 ## Rules execution
 
-Live rulings map concrete effect DTOs to:
+State reads compile definitions and evaluate one entity with:
 
 ```go
-rules.ApplyTransition(plan, entities, mechanics, snapshot)
+rules.EvaluateEntityState(entity, record, mechanics, statusSnapshots, activeStatuses)
 ```
 
-The function validates the plan/snapshot, clones input, applies effects by
-position, and returns applications plus changed entity IDs. A failure returns
-no partially usable snapshot. PostgreSQL supplies transactional atomicity
-around the pure in-memory atomicity.
+Input intrinsic values come from stored/defaulted logical state. Derived
+intrinsic values recursively consume referenced mechanics' effective values.
+Each mechanic's literal status modifiers then transform intrinsic to effective.
+The evaluator returns no partial result on graph, status, or arithmetic failure.
 
-Only `set` and `adjust-number` exist. Every target and mechanic must belong to
-the request world. Numeric results must satisfy bounds/step; Boolean mechanics
-accept only Boolean `set`.
+Live Consequences map concrete effect DTOs to:
+
+```go
+rules.ApplyRuntimeTransition(plan, entities, mechanics, statuses, snapshot)
+```
+
+The function validates and clones both base state and active statuses, applies
+effects by position, and returns scalar applications, status applications,
+changed record IDs, and the resulting runtime snapshot. The application
+evaluates before and after to derive transitive effective changes. A failure
+returns no partially usable snapshot. PostgreSQL supplies transactional
+atomicity around the pure in-memory atomicity.
+
+`set` and `adjust-number` retain `entity_ids` and target only mutable inputs.
+`apply-status` uses ordered entity targets plus one inline status specification;
+`remove-status` uses ordered entity/instance targets and no status
+specification. Both status variants carry no scalar operands. Every target and
+mechanic must belong to the request world. Numeric base results must satisfy
+bounds/step; Boolean mechanics accept only Boolean `set`. Scalar operations
+read/write logical base input and never use an active status-modified effective
+value as their operand. Status layers are reapplied only when the application
+evaluates the post-transition runtime snapshot.
 
 ## Transaction patterns
 
@@ -245,17 +314,20 @@ response cannot combine a root at one revision with children/state from another.
 
 ### Optimistic commands
 
-World settings, world table, character-field set, profile, state, membership,
-interaction, and action roots compare expected revisions after loading/locking.
-Conflicts return 409 rather than overwriting newer state.
+World settings, world table, mechanic rules, character-field set, profile,
+state, membership, interaction, and action roots compare expected revisions
+after loading/locking. Conflicts return 409 rather than overwriting newer state.
 
 ### Live resolution
 
-Resolve locks the active world/facilitator boundary, interaction, referenced
-mechanics/entities/state roots, and selected action in stable order. It rechecks
-idempotency and revisions, applies the transition, then persists state,
-resolution, requested effects, targets, applications, action statuses,
-interaction status, and world event in one transaction.
+Resolve locks the active world/facilitator boundary, mechanic rules revision,
+interaction, referenced entities, state/status roots, and selected action in
+stable order. It rechecks idempotency and revisions; evaluates before; applies
+the combined transition; persists base state and status snapshots with source
+provenance; evaluates after; and stores the resolution, requested effects,
+inline status-effect modifiers, exact remove targets, scalar/status
+applications, effective changes, action statuses, interaction status, and
+world event in one transaction.
 
 An equivalent idempotent replay loads the immutable receipt and current state,
 and still checks current identity, facilitator authority, and active world.

@@ -34,6 +34,7 @@ type worldResponse struct {
 	CapacityCount       int        `json:"capacity_count"`
 	CapabilityCount     int        `json:"capability_count"`
 	CharacterFieldCount int        `json:"character_field_count"`
+	RulesRevision       int64      `json:"rules_revision"`
 	PlayStatus          string     `json:"play_status"`
 	CreatedAt           time.Time  `json:"created_at"`
 	UpdatedAt           time.Time  `json:"updated_at"`
@@ -96,35 +97,54 @@ type worldInvitePreviewResponse struct {
 }
 
 type worldMechanicResponse struct {
-	ID                string       `json:"id"`
-	Kind              string       `json:"kind"`
-	Mode              string       `json:"mode"`
-	Name              string       `json:"name"`
-	Description       *string      `json:"description,omitempty"`
-	Minimum           *json.Number `json:"minimum,omitempty"`
-	Maximum           *json.Number `json:"maximum,omitempty"`
-	Step              *json.Number `json:"step,omitempty"`
-	DefaultNumber     *json.Number `json:"default_number,omitempty"`
-	Unit              *string      `json:"unit,omitempty"`
-	MutableDuringPlay bool         `json:"mutable_during_play"`
-	Archived          bool         `json:"archived"`
-	CreatedAt         time.Time    `json:"created_at"`
-	UpdatedAt         time.Time    `json:"updated_at"`
+	ID                string         `json:"id"`
+	Kind              string         `json:"kind"`
+	Mode              string         `json:"mode"`
+	SourceKind        string         `json:"source_kind"`
+	Name              string         `json:"name"`
+	Description       *string        `json:"description,omitempty"`
+	Minimum           *json.Number   `json:"minimum,omitempty"`
+	Maximum           *json.Number   `json:"maximum,omitempty"`
+	Step              *json.Number   `json:"step,omitempty"`
+	DefaultNumber     *json.Number   `json:"default_number,omitempty"`
+	Unit              *string        `json:"unit,omitempty"`
+	MutableDuringPlay bool           `json:"mutable_during_play"`
+	Expression        *expressionDTO `json:"expression,omitempty"`
+	Archived          bool           `json:"archived"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
 }
 
 type saveWorldMechanicRequest struct {
-	ID                string       `json:"id,omitempty"`
-	Kind              string       `json:"kind"`
-	Mode              string       `json:"mode"`
-	Name              string       `json:"name"`
-	Description       *string      `json:"description,omitempty"`
-	Minimum           *json.Number `json:"minimum,omitempty"`
-	Maximum           *json.Number `json:"maximum,omitempty"`
-	Step              *json.Number `json:"step,omitempty"`
-	DefaultNumber     *json.Number `json:"default_number,omitempty"`
-	Unit              *string      `json:"unit,omitempty"`
-	MutableDuringPlay bool         `json:"mutable_during_play"`
-	Archived          bool         `json:"archived"`
+	ID                    string         `json:"id,omitempty"`
+	Kind                  string         `json:"kind"`
+	Mode                  string         `json:"mode"`
+	SourceKind            string         `json:"source_kind"`
+	Name                  string         `json:"name"`
+	Description           *string        `json:"description,omitempty"`
+	Minimum               *json.Number   `json:"minimum,omitempty"`
+	Maximum               *json.Number   `json:"maximum,omitempty"`
+	Step                  *json.Number   `json:"step,omitempty"`
+	DefaultNumber         *json.Number   `json:"default_number,omitempty"`
+	Unit                  *string        `json:"unit,omitempty"`
+	MutableDuringPlay     bool           `json:"mutable_during_play"`
+	Expression            *expressionDTO `json:"expression,omitempty"`
+	Archived              bool           `json:"archived"`
+	ExpectedRulesRevision *int64         `json:"expected_rules_revision"`
+}
+
+type archiveWorldRuleResourceRequest struct {
+	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
+}
+
+type worldMechanicCollectionResponse struct {
+	Revision  int64                   `json:"revision"`
+	Mechanics []worldMechanicResponse `json:"mechanics"`
+}
+
+type worldMechanicMutationResponse struct {
+	Revision int64                 `json:"revision"`
+	Mechanic worldMechanicResponse `json:"mechanic"`
 }
 
 type stateValueDTO struct {
@@ -212,16 +232,22 @@ func decodeStrictBytes(data []byte, target any) error {
 }
 
 type stateRecordResponse struct {
-	EntityID             string                   `json:"entity_id"`
-	Revision             int64                    `json:"revision"`
-	Values               map[string]stateValueDTO `json:"values"`
-	DefaultedMechanicIDs []string                 `json:"defaulted_mechanic_ids"`
-	UpdatedAt            time.Time                `json:"updated_at"`
+	EntityID             string                               `json:"entity_id"`
+	Revision             int64                                `json:"revision"`
+	StatusRevision       int64                                `json:"status_revision"`
+	RulesRevision        int64                                `json:"rules_revision"`
+	Values               map[string]stateValueDTO             `json:"values"`
+	EffectiveValues      map[string]stateValueDTO             `json:"effective_values"`
+	Evaluations          map[string]evaluatedMechanicResponse `json:"evaluations"`
+	ActiveStatuses       []activeStatusResponse               `json:"active_statuses"`
+	DefaultedMechanicIDs []string                             `json:"defaulted_mechanic_ids"`
+	UpdatedAt            time.Time                            `json:"updated_at"`
 }
 
 type replaceStateRequest struct {
-	ExpectedRevision *int64                   `json:"expected_revision"`
-	Values           map[string]stateValueDTO `json:"values"`
+	ExpectedRevision      *int64                   `json:"expected_revision"`
+	ExpectedRulesRevision *int64                   `json:"expected_rules_revision"`
+	Values                map[string]stateValueDTO `json:"values"`
 }
 
 type createWorldEntityRequest struct {
@@ -241,6 +267,7 @@ type worldEntityResponse struct {
 	DisplayName         string              `json:"display_name"`
 	Archived            bool                `json:"archived"`
 	StateRevision       int64               `json:"state_revision"`
+	StatusRevision      int64               `json:"status_revision"`
 	State               stateRecordResponse `json:"state"`
 	CharacterStatus     string              `json:"character_status"`
 	RequiredFieldCount  int                 `json:"required_field_count"`
@@ -353,22 +380,25 @@ type withdrawInteractionActionRequest struct {
 }
 
 type concreteEffectDTO struct {
-	ID         string         `json:"id,omitempty"`
-	Type       string         `json:"type"`
-	EntityIDs  []string       `json:"entity_ids"`
-	MechanicID string         `json:"mechanic_id"`
-	Value      *stateValueDTO `json:"value,omitempty"`
-	Amount     *json.Number   `json:"amount,omitempty"`
+	ID         string                  `json:"id,omitempty"`
+	Type       string                  `json:"type"`
+	EntityIDs  []string                `json:"entity_ids,omitempty"`
+	Targets    []statusEffectTargetDTO `json:"targets,omitempty"`
+	MechanicID string                  `json:"mechanic_id,omitempty"`
+	Status     *statusEffectSpecDTO    `json:"status,omitempty"`
+	Value      *stateValueDTO          `json:"value,omitempty"`
+	Amount     *json.Number            `json:"amount,omitempty"`
 }
 
 type adjudicateInteractionRequest struct {
-	ExpectedRevision *int64              `json:"expected_revision"`
-	IdempotencyKey   string              `json:"idempotency_key,omitempty"`
-	SelectedActionID *string             `json:"selected_action_id,omitempty"`
-	ActionSummary    *string             `json:"action_summary,omitempty"`
-	Narrative        string              `json:"narrative"`
-	PrivateNotes     *string             `json:"private_notes,omitempty"`
-	Effects          []concreteEffectDTO `json:"effects"`
+	ExpectedRevision      *int64              `json:"expected_revision"`
+	ExpectedRulesRevision *int64              `json:"expected_rules_revision"`
+	IdempotencyKey        string              `json:"idempotency_key,omitempty"`
+	SelectedActionID      *string             `json:"selected_action_id,omitempty"`
+	ActionSummary         *string             `json:"action_summary,omitempty"`
+	Narrative             string              `json:"narrative"`
+	PrivateNotes          *string             `json:"private_notes,omitempty"`
+	Effects               []concreteEffectDTO `json:"effects"`
 }
 
 type interactionActionResponse struct {
@@ -387,12 +417,17 @@ type interactionActionResponse struct {
 }
 
 type concreteAppliedEffectResponse struct {
-	EffectID   string         `json:"effect_id"`
-	EntityID   string         `json:"entity_id"`
-	MechanicID string         `json:"mechanic_id"`
-	Before     *stateValueDTO `json:"before,omitempty"`
-	After      *stateValueDTO `json:"after,omitempty"`
-	Changed    bool           `json:"changed"`
+	Type             string         `json:"type"`
+	EffectID         string         `json:"effect_id"`
+	EntityID         string         `json:"entity_id"`
+	MechanicID       string         `json:"mechanic_id,omitempty"`
+	StatusInstanceID string         `json:"status_instance_id,omitempty"`
+	StatusName       string         `json:"status_name,omitempty"`
+	ActiveBefore     *bool          `json:"active_before,omitempty"`
+	ActiveAfter      *bool          `json:"active_after,omitempty"`
+	Before           *stateValueDTO `json:"before,omitempty"`
+	After            *stateValueDTO `json:"after,omitempty"`
+	Changed          bool           `json:"changed"`
 }
 
 type interactionResolutionResponse struct {
@@ -402,8 +437,10 @@ type interactionResolutionResponse struct {
 	Narrative              string                          `json:"narrative"`
 	PrivateNotes           *string                         `json:"private_notes,omitempty"`
 	ResolvedByMembershipID string                          `json:"resolved_by_membership_id"`
+	RulesRevision          int64                           `json:"rules_revision"`
 	Effects                []concreteEffectDTO             `json:"effects"`
 	AppliedEffects         []concreteAppliedEffectResponse `json:"applied_effects"`
+	EffectiveChanges       []effectiveChangeResponse       `json:"effective_changes"`
 	ResolvedAt             time.Time                       `json:"resolved_at"`
 }
 
@@ -433,8 +470,10 @@ type interactionResolutionResultResponse struct {
 	Replayed            bool                            `json:"replayed,omitempty"`
 	InteractionID       string                          `json:"interaction_id"`
 	InteractionRevision int64                           `json:"interaction_revision"`
+	RulesRevision       int64                           `json:"rules_revision"`
 	Narrative           string                          `json:"narrative"`
 	AppliedEffects      []concreteAppliedEffectResponse `json:"applied_effects"`
+	EffectiveChanges    []effectiveChangeResponse       `json:"effective_changes"`
 	State               transitionStateResponse         `json:"state"`
 }
 

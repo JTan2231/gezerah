@@ -285,11 +285,29 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
+	required := map[string]string{}
 	if request.ExpectedRevision == nil {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", map[string]string{"expected_revision": "is required"})
+		required["expected_revision"] = "is required"
+	}
+	if request.ExpectedRulesRevision == nil {
+		required["expected_rules_revision"] = "is required"
+	}
+	if len(required) > 0 {
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", required)
 		return
 	}
-	mechanics, err := loadWorldMechanics(r.Context(), s.db, member.WorldID, "")
+
+	tx, err := s.db.Begin(r.Context())
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+	if _, err := lockRulesRevision(r.Context(), tx, member.WorldID, request.ExpectedRulesRevision); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	mechanics, err := loadWorldMechanics(r.Context(), tx, member.WorldID, "")
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -301,6 +319,10 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		definition, exists := definitions[rules.ID(mechanicID)]
 		if !exists {
 			fields["values["+mechanicID+"]"] = "mechanic does not exist in this world"
+			continue
+		}
+		if definition.SourceKind != rules.SourceInput {
+			fields["values["+mechanicID+"]"] = "derived mechanics are calculated and cannot be stored"
 			continue
 		}
 		converted, err := stateValueDTOToDomain(value)
@@ -318,7 +340,11 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	proposed := rules.NormalizeStateRecord(rules.StateRecord{EntityID: rules.ID(entityID), Revision: *request.ExpectedRevision, Values: values}, definitions)
-	entity := rules.Entity{ID: rules.ID(entityID), WorldID: rules.ID(member.WorldID), DisplayName: "entity"}
+	entity, err := loadEntityForRules(r.Context(), tx, member.WorldID, entityID)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
 	if validation := rules.ValidateStateRecord(proposed, entity, definitions); len(validation) > 0 {
 		for _, item := range validation {
 			fields[item.Path] = item.Message
@@ -326,12 +352,6 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", fields)
 		return
 	}
-	tx, err := s.db.Begin(r.Context())
-	if err != nil {
-		handleAppError(w, err)
-		return
-	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
 	var actual int64
 	if err := tx.QueryRow(r.Context(), `
 		select revision from state_records where world_id = $1 and entity_id = $2 for update`, member.WorldID, entityID).Scan(&actual); err != nil {
@@ -499,12 +519,13 @@ func requireEntityStateReadAccess(ctx context.Context, db queryer, member author
 func loadWorldEntityResponse(ctx context.Context, db queryer, worldID, entityID string) (worldEntityResponse, error) {
 	var item worldEntityResponse
 	err := db.QueryRow(ctx, `
-		select entity.id::text, entity.display_name, entity.archived, state.revision,
-			entity.created_at, entity.updated_at
-		from entities entity
-		join state_records state on state.entity_id = entity.id and state.world_id = entity.world_id
-		where entity.world_id = $1 and entity.id = $2`, worldID, entityID,
-	).Scan(&item.ID, &item.DisplayName, &item.Archived, &item.StateRevision, &item.CreatedAt, &item.UpdatedAt)
+			select entity.id::text, entity.display_name, entity.archived, state.revision, statuses.revision,
+				entity.created_at, entity.updated_at
+			from entities entity
+			join state_records state on state.entity_id = entity.id and state.world_id = entity.world_id
+			join entity_status_sets statuses on statuses.entity_id = entity.id and statuses.world_id = entity.world_id
+			where entity.world_id = $1 and entity.id = $2`, worldID, entityID,
+	).Scan(&item.ID, &item.DisplayName, &item.Archived, &item.StateRevision, &item.StatusRevision, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return item, err
 	}
@@ -517,25 +538,7 @@ func loadWorldEntityResponse(ctx context.Context, db queryer, worldID, entityID 
 }
 
 func loadLogicalStateResponse(ctx context.Context, db queryer, worldID, entityID string) (stateRecordResponse, error) {
-	var response stateRecordResponse
-	mechanics, err := loadWorldMechanics(ctx, db, worldID, "")
-	if err != nil {
-		return response, err
-	}
-	definitions := mechanicDefinitions(mechanics)
-	record, err := loadStoredStateRecord(ctx, db, worldID, entityID)
-	if err != nil {
-		return response, err
-	}
-	logical := rules.MaterializeLogicalState(rules.Entity{ID: rules.ID(entityID), WorldID: rules.ID(worldID)}, record, definitions)
-	response = stateRecordResponse{EntityID: entityID, Revision: record.Revision, Values: make(map[string]stateValueDTO, len(logical.Values)), DefaultedMechanicIDs: make([]string, len(logical.DefaultedMechanicIDs)), UpdatedAt: record.UpdatedAt}
-	for id, value := range logical.Values {
-		response.Values[string(id)] = stateValueDomainToDTO(value)
-	}
-	for index, id := range logical.DefaultedMechanicIDs {
-		response.DefaultedMechanicIDs[index] = string(id)
-	}
-	return response, nil
+	return loadEvaluatedStateResponse(ctx, db, worldID, entityID)
 }
 
 func loadStoredStateRecord(ctx context.Context, db queryer, worldID, entityID string) (rules.StateRecord, error) {

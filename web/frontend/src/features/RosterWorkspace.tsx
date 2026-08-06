@@ -1,10 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { worldPath } from "../api/client";
 import type {
   World,
   WorldEntity,
-  WorldMechanic,
+  WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
 import {
@@ -14,6 +14,7 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 import { useCollection } from "../hooks/useCollection";
+import { useResource } from "../hooks/useResource";
 import { EntityDetail } from "./EntityDetail";
 import { ManageControllersModal, NewEntityModal } from "./RosterModals";
 
@@ -25,7 +26,7 @@ export function RosterWorkspace({
   onWorldChanged: () => void;
 }) {
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
-  const mechanics = useCollection<WorldMechanic>(
+  const mechanics = useResource<WorldMechanicCollection>(
     worldPath(world.id, "mechanics"),
   );
   const members = useCollection<WorldMember>(worldPath(world.id, "members"));
@@ -44,6 +45,11 @@ export function RosterWorkspace({
 
   const reloadEntities = entities.reload;
   const reloadMembers = members.reload;
+  const reloadMechanics = mechanics.reload;
+  const entityItems = entities.items;
+  const entitiesLoading = entities.loading;
+  const mechanicsLoading = mechanics.loading;
+  const mechanicCollection = mechanics.value;
   const refresh = useCallback(() => {
     reloadEntities();
     reloadMembers();
@@ -51,9 +57,31 @@ export function RosterWorkspace({
     setProfileRefreshToken((value) => value + 1);
   }, [onWorldChanged, reloadEntities, reloadMembers]);
 
+  useEffect(() => {
+    const rulesRevision = mechanicCollection?.revision;
+    if (
+      rulesRevision === undefined ||
+      mechanicsLoading ||
+      entitiesLoading ||
+      !entityItems.some(
+        (entity) => entity.state.rules_revision !== rulesRevision,
+      )
+    )
+      return;
+    reloadMechanics();
+    reloadEntities();
+  }, [
+    entitiesLoading,
+    entityItems,
+    mechanicCollection?.revision,
+    mechanicsLoading,
+    reloadEntities,
+    reloadMechanics,
+  ]);
+
   if (
     (entities.loading && entities.items.length === 0) ||
-    (mechanics.loading && mechanics.items.length === 0) ||
+    (mechanics.loading && mechanics.value === null) ||
     (members.loading && members.items.length === 0)
   )
     return <LoadingState label="Preparing the roster" />;
@@ -62,6 +90,7 @@ export function RosterWorkspace({
     (membership) => membership.id === world.membership_id,
   );
   const firstError = entities.error ?? mechanics.error ?? members.error;
+  const mechanicItems = mechanics.value?.mechanics ?? [];
 
   return (
     <section className="roster-workspace content-narrow">
@@ -152,9 +181,9 @@ export function RosterWorkspace({
           <div className="builder-entity-detail">
             {selectedEntity === undefined ? null : (
               <EntityDetail
-                key={`${selectedEntity.id}:${selectedEntity.state.revision}:${mechanics.items.map((mechanic) => mechanic.id).join(":")}`}
+                key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
                 entity={selectedEntity}
-                mechanics={mechanics.items}
+                mechanics={mechanicItems}
                 mechanicsEditable={world.status === "active"}
                 controlledByCurrentMember={false}
                 facilitator

@@ -14,6 +14,7 @@ export interface World {
   capacity_count: number;
   capability_count: number;
   character_field_count: number;
+  rules_revision: number;
   play_status: PlayStatus;
   created_at: string;
   updated_at: string;
@@ -56,11 +57,38 @@ export interface WorldInvitePreview {
 
 export type MechanicKind = "capacity" | "capability";
 export type MechanicMode = "score" | "pool" | "binary" | "rating";
+export type MechanicSourceKind = "input" | "derived";
+
+export type MechanicExpression =
+  | { operation: "literal"; value: StateValue }
+  | { operation: "mechanic-reference"; mechanic_id: string }
+  | {
+      operation:
+        | "add-number"
+        | "subtract-number"
+        | "multiply-number"
+        | "min-number"
+        | "max-number"
+        | "equal"
+        | "less-than"
+        | "less-than-or-equal"
+        | "greater-than"
+        | "greater-than-or-equal"
+        | "and"
+        | "or"
+        | "if";
+      operands: MechanicExpression[];
+    }
+  | {
+      operation: "negate-number" | "not";
+      operands: [MechanicExpression];
+    };
 
 export interface WorldMechanic {
   id: string;
   kind: MechanicKind;
   mode: MechanicMode;
+  source_kind: MechanicSourceKind;
   name: string;
   description?: string | undefined;
   minimum?: number | undefined;
@@ -69,9 +97,45 @@ export interface WorldMechanic {
   default_number?: number | undefined;
   unit?: string | undefined;
   mutable_during_play: boolean;
+  expression?: MechanicExpression | undefined;
   archived: boolean;
   created_at: string;
   updated_at: string;
+}
+
+export interface WorldMechanicCollection {
+  revision: number;
+  mechanics: WorldMechanic[];
+}
+
+export interface WorldMechanicMutation {
+  revision: number;
+  mechanic: WorldMechanic;
+}
+
+export type StatusModifierOperation = "set" | "add-number" | "multiply-number";
+
+interface StatusModifier {
+  id: string;
+  mechanic_id: string;
+  operation: StatusModifierOperation;
+  value: StateValue;
+  priority: number;
+  position: number;
+}
+
+export interface StatusModifierInput {
+  id?: string | undefined;
+  mechanic_id: string;
+  operation: StatusModifierOperation;
+  value: StateValue;
+  priority: number;
+}
+
+export interface InlineStatus {
+  name: string;
+  description?: string | undefined;
+  modifiers: StatusModifierInput[];
 }
 
 export interface WorldEntity {
@@ -79,6 +143,7 @@ export interface WorldEntity {
   display_name: string;
   archived: boolean;
   state_revision: number;
+  status_revision: number;
   state: StateRecordResponse;
   character_status: CharacterStatus;
   required_field_count: number;
@@ -116,6 +181,17 @@ export type ConcreteEffect =
       entity_ids: string[];
       mechanic_id: string;
       amount: number;
+    }
+  | {
+      id?: string | undefined;
+      type: "apply-status";
+      targets: { entity_id: string }[];
+      status: InlineStatus;
+    }
+  | {
+      id?: string | undefined;
+      type: "remove-status";
+      targets: { entity_id: string; status_instance_id: string }[];
     };
 
 type InteractionStatus =
@@ -183,14 +259,30 @@ export interface EntityProfileField {
   updated_at?: string | undefined;
 }
 
-interface ConcreteAppliedEffect {
+interface ScalarAppliedEffect {
   effect_id: string;
   entity_id: string;
   mechanic_id: string;
-  before?: StateValue | undefined;
-  after?: StateValue | undefined;
+  before: StateValue;
+  after: StateValue;
   changed: boolean;
 }
+
+interface StatusAppliedEffect {
+  effect_id: string;
+  entity_id: string;
+  status_instance_id: string;
+  status_name: string;
+  active_before: boolean;
+  active_after: boolean;
+  changed: boolean;
+}
+
+export type ConcreteAppliedEffect =
+  | (ScalarAppliedEffect & { type: "set" })
+  | (ScalarAppliedEffect & { type: "adjust-number" })
+  | (StatusAppliedEffect & { type: "apply-status" })
+  | (StatusAppliedEffect & { type: "remove-status" });
 
 interface InteractionResolution {
   id: string;
@@ -199,8 +291,10 @@ interface InteractionResolution {
   narrative: string;
   private_notes?: string | undefined;
   resolved_by_membership_id: string;
+  rules_revision: number;
   effects: ConcreteEffect[];
   applied_effects: ConcreteAppliedEffect[];
+  effective_changes: EffectiveChange[];
   resolved_at?: string | undefined;
 }
 
@@ -230,15 +324,61 @@ export interface InteractionResolutionResult {
   replayed?: boolean | undefined;
   interaction_id: string;
   interaction_revision: number;
+  rules_revision: number;
   narrative: string;
   applied_effects: ConcreteAppliedEffect[];
+  effective_changes: EffectiveChange[];
   state: { records: Record<string, StateRecordResponse> };
 }
 
-interface StateRecordResponse {
+export interface ActiveStatus {
+  id: string;
+  name: string;
+  description?: string | undefined;
+  source_interaction_id: string;
+  // A hypothetical status in a preview has not acquired a durable resolution yet.
+  source_resolution_id?: string | undefined;
+  source_effect_id: string;
+  applied_order: number;
+  applied_at: string;
+  modifiers: StatusModifier[];
+}
+
+interface AppliedModifier {
+  status_instance_id: string;
+  status_name: string;
+  modifier_id: string;
+  operation: StatusModifierOperation;
+  priority: number;
+  operand: StateValue;
+  before: StateValue;
+  after: StateValue;
+}
+
+interface EvaluatedMechanic {
+  source_kind: MechanicSourceKind;
+  presence: "stored" | "defaulted" | "derived";
+  intrinsic: StateValue;
+  effective: StateValue;
+  modifiers: AppliedModifier[];
+}
+
+export interface EffectiveChange {
+  entity_id: string;
+  mechanic_id: string;
+  before: StateValue;
+  after: StateValue;
+}
+
+export interface StateRecordResponse {
   entity_id: string;
   revision: number;
+  status_revision: number;
+  rules_revision: number;
   values: Record<string, StateValue>;
+  effective_values: Record<string, StateValue>;
+  evaluations: Record<string, EvaluatedMechanic>;
+  active_statuses: ActiveStatus[];
   defaulted_mechanic_ids: string[];
   updated_at: string;
 }

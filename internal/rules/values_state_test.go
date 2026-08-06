@@ -130,6 +130,35 @@ func TestStateValidationEnforcesWorldAndRecordIdentity(t *testing.T) {
 	}
 }
 
+func TestDerivedMechanicsCannotOwnDefaultsBoundsOrStoredState(t *testing.T) {
+	t.Parallel()
+	derived := namedDerived("calculated", ValueNumber, numberLiteral("2"))
+	derived.DefaultValue = NewNumberValue(MustDecimal("1"))
+	derived.Minimum = decimalPointer(MustDecimal("0"))
+	derived.Mutable = true
+	errs := ValidateMechanicDefinition(derived)
+	if !hasValidationAt(errs, "invalid_source", "default_value") ||
+		!hasValidationAt(errs, "invalid_source", "source_kind") ||
+		!hasValidationAt(errs, "invalid_source", "mutable") {
+		t.Fatalf("derived source errors = %v", errs)
+	}
+
+	derived.DefaultValue = StateValue{}
+	derived.Minimum = nil
+	derived.Mutable = false
+	record := StateRecord{EntityID: "e1", Values: map[ID]StateValue{
+		derived.ID: NewNumberValue(MustDecimal("2")),
+	}}
+	errs = ValidateStateRecord(record, testEntities()["e1"], definitionMap(derived))
+	if !hasValidationAt(errs, "derived_state_value", "values[calculated]") {
+		t.Fatalf("derived storage errors = %v", errs)
+	}
+	logical := MaterializeLogicalState(testEntities()["e1"], StateRecord{EntityID: "e1"}, definitionMap(derived))
+	if len(logical.Values) != 0 || len(logical.DefaultedMechanicIDs) != 0 {
+		t.Fatalf("derived mechanic leaked into writable logical state: %+v", logical)
+	}
+}
+
 func TestDomainErrorSupportsErrorsIs(t *testing.T) {
 	t.Parallel()
 	err := domainError(ErrInvalidState, ValidationErrors{{Code: "bad", Message: "bad state"}})
@@ -151,6 +180,7 @@ func testNumberDefinition() MechanicDefinition {
 	return MechanicDefinition{
 		ID:           "score",
 		WorldID:      "world",
+		SourceKind:   SourceInput,
 		ValueKind:    ValueNumber,
 		DefaultValue: NewNumberValue(MustDecimal("0")),
 		Mutable:      true,
@@ -161,6 +191,7 @@ func testBooleanDefinition() MechanicDefinition {
 	return MechanicDefinition{
 		ID:           "flag",
 		WorldID:      "world",
+		SourceKind:   SourceInput,
 		ValueKind:    ValueBoolean,
 		DefaultValue: NewBooleanValue(false),
 		Mutable:      true,

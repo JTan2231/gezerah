@@ -166,6 +166,45 @@ func (d Decimal) Add(other Decimal) (Decimal, error) {
 	return ParseDecimal(new(big.Rat).Add(left, right).FloatString(scale))
 }
 
+func (d Decimal) Subtract(other Decimal) (Decimal, error) {
+	left, err := d.rat()
+	if err != nil {
+		return Decimal{}, err
+	}
+	right, err := other.rat()
+	if err != nil {
+		return Decimal{}, err
+	}
+	scale := decimalScale(d.canonical)
+	if otherScale := decimalScale(other.canonical); otherScale > scale {
+		scale = otherScale
+	}
+	return ParseDecimal(new(big.Rat).Sub(left, right).FloatString(scale))
+}
+
+func (d Decimal) Multiply(other Decimal) (Decimal, error) {
+	left, err := d.rat()
+	if err != nil {
+		return Decimal{}, err
+	}
+	right, err := other.rat()
+	if err != nil {
+		return Decimal{}, err
+	}
+	// The product of two finite base-10 decimals is finite, and the sum of
+	// their scales is sufficient to render it exactly.
+	scale := decimalScale(d.canonical) + decimalScale(other.canonical)
+	return ParseDecimal(new(big.Rat).Mul(left, right).FloatString(scale))
+}
+
+func (d Decimal) Negate() (Decimal, error) {
+	value, err := d.rat()
+	if err != nil {
+		return Decimal{}, err
+	}
+	return ParseDecimal(new(big.Rat).Neg(value).FloatString(decimalScale(d.canonical)))
+}
+
 // AlignsTo reports whether (d-base)/step is an integer. Callers conventionally
 // use the declared minimum as base and zero when no minimum is declared.
 func (d Decimal) AlignsTo(step, base Decimal) bool {

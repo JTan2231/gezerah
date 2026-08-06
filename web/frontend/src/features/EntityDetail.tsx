@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
+  ActiveStatus,
   StateValue,
   World,
   WorldEntity,
   WorldMechanic,
 } from "../api/types";
 import { ErrorMessage } from "../components/StudioUI";
+import { formatRelativeDate } from "../domain/display";
 import { EntityProfilePanel } from "./EntityProfilePanel";
 
 export function EntityDetail({
@@ -108,13 +110,18 @@ function EntitySheet({
   onSaved: () => void;
 }) {
   const activeMechanics = mechanics.filter((mechanic) => !mechanic.archived);
+  const inputMechanics = mechanics.filter(
+    (mechanic) => mechanic.source_kind === "input",
+  );
   const initial = useMemo(
     () =>
       Object.fromEntries(
-        activeMechanics.map((mechanic) => [
-          mechanic.id,
-          mechanicValue(entity.state.values[mechanic.id], mechanic),
-        ]),
+        activeMechanics
+          .filter((mechanic) => mechanic.source_kind === "input")
+          .map((mechanic) => [
+            mechanic.id,
+            mechanicValue(entity.state.values[mechanic.id], mechanic),
+          ]),
       ),
     [activeMechanics, entity],
   );
@@ -127,8 +134,14 @@ function EntitySheet({
     event.preventDefault();
     setSaving(true);
     setError(null);
-    const stateValues = { ...entity.state.values };
-    for (const mechanic of activeMechanics) {
+    const stateValues: Record<string, StateValue> = {};
+    for (const mechanic of inputMechanics) {
+      const current = entity.state.values[mechanic.id];
+      if (current !== undefined) stateValues[mechanic.id] = current;
+    }
+    for (const mechanic of activeMechanics.filter(
+      (candidate) => candidate.source_kind === "input",
+    )) {
       const value = values[mechanic.id];
       stateValues[mechanic.id] =
         mechanic.mode === "binary"
@@ -140,6 +153,7 @@ function EntitySheet({
         method: "PUT",
         ...jsonBody({
           expected_revision: entity.state.revision,
+          expected_rules_revision: entity.state.rules_revision,
           values: stateValues,
         }),
       });
@@ -164,9 +178,34 @@ function EntitySheet({
         <div>
           <p className="eyebrow">Entity sheet</p>
           <h2>{entity.display_name}</h2>
-          <span>state r{entity.state.revision}</span>
+          <span>
+            state r{entity.state.revision} · statuses r
+            {entity.state.status_revision} · rules r
+            {entity.state.rules_revision}
+          </span>
         </div>
       </header>
+      {entity.state.active_statuses.length > 0 ? (
+        <section className="active-statuses" aria-label="Active statuses">
+          <p className="eyebrow">Active statuses</p>
+          <div>
+            {entity.state.active_statuses.map((status) => (
+              <span
+                className="active-status-chip"
+                key={status.id}
+                title={activeStatusDetails(status)}
+                aria-label={`${status.name}. ${activeStatusDetails(status)}`}
+              >
+                <i aria-hidden="true">◈</i>
+                <span>
+                  <strong>{status.name}</strong>
+                  <small>{activeStatusDetails(status)}</small>
+                </span>
+              </span>
+            ))}
+          </div>
+        </section>
+      ) : null}
       {activeMechanics.length === 0 ? (
         <p className="sheet-empty">
           Configure a capacity or capability to generate this sheet.
@@ -181,18 +220,28 @@ function EntitySheet({
           <section className="sheet-group" key={kind}>
             <h3>{kind === "capacity" ? "Capacities" : "Capabilities"}</h3>
             {group.map((mechanic) => (
-              <label
+              <div
                 key={mechanic.id}
-                className={`sheet-field sheet-${mechanic.mode}`}
+                className={`sheet-field sheet-${mechanic.mode} sheet-source-${mechanic.source_kind}`}
               >
                 <span>
-                  <strong>{mechanic.name}</strong>
+                  <strong>
+                    {mechanic.name}
+                    <small className="mechanic-source-pill">
+                      {mechanic.source_kind === "derived"
+                        ? "Calculated"
+                        : "Input"}
+                    </small>
+                  </strong>
                   {mechanic.description === undefined ? null : (
                     <small>{mechanic.description}</small>
                   )}
                 </span>
-                {mechanic.mode === "binary" ? (
+                {mechanic.source_kind === "input" &&
+                editable &&
+                mechanic.mode === "binary" ? (
                   <input
+                    aria-label={mechanic.name}
                     type="checkbox"
                     checked={Boolean(values[mechanic.id])}
                     onChange={(event) => {
@@ -202,11 +251,11 @@ function EntitySheet({
                         [mechanic.id]: checked,
                       }));
                     }}
-                    disabled={!editable}
                   />
-                ) : (
+                ) : mechanic.source_kind === "input" && editable ? (
                   <span className="sheet-number">
                     <input
+                      aria-label={mechanic.name}
                       type="number"
                       value={Number(values[mechanic.id] ?? 0)}
                       min={mechanic.minimum}
@@ -219,7 +268,6 @@ function EntitySheet({
                           [mechanic.id]: value,
                         }));
                       }}
-                      disabled={!editable}
                     />
                     <em>
                       {mechanic.mode === "pool" &&
@@ -228,14 +276,60 @@ function EntitySheet({
                         : (mechanic.unit ?? "")}
                     </em>
                   </span>
+                ) : (
+                  <output
+                    className="sheet-effective-value"
+                    aria-label={`${mechanic.name} effective value`}
+                  >
+                    {formatMechanicValue(
+                      entity.state.effective_values[mechanic.id] ??
+                        entity.state.evaluations[mechanic.id]?.effective ??
+                        entity.state.values[mechanic.id],
+                      mechanic,
+                    )}
+                  </output>
                 )}
-              </label>
+                {mechanic.source_kind === "input" && editable ? (
+                  <span className="sheet-effective-summary">
+                    Effective:{" "}
+                    <strong>
+                      {formatMechanicValue(
+                        entity.state.effective_values[mechanic.id] ??
+                          entity.state.evaluations[mechanic.id]?.effective ??
+                          entity.state.values[mechanic.id],
+                        mechanic,
+                      )}
+                    </strong>
+                  </span>
+                ) : null}
+                {(entity.state.evaluations[mechanic.id]?.modifiers.length ??
+                  0) > 0 ? (
+                  <ol className="modifier-explanation">
+                    {entity.state.evaluations[mechanic.id]?.modifiers.map(
+                      (modifier) => (
+                        <li
+                          key={`${modifier.status_instance_id}:${modifier.modifier_id}`}
+                        >
+                          <span>{modifier.status_name}</span>
+                          <small>
+                            {modifierOperationLabel(modifier.operation)}{" "}
+                            {formatStateValue(modifier.operand)} ·{" "}
+                            {formatStateValue(modifier.before)} →{" "}
+                            {formatStateValue(modifier.after)}
+                          </small>
+                        </li>
+                      ),
+                    )}
+                  </ol>
+                ) : null}
+              </div>
             ))}
           </section>
         );
       })}
       {error === null ? null : <ErrorMessage error={error} />}
-      {editable && activeMechanics.length > 0 ? (
+      {editable &&
+      activeMechanics.some((mechanic) => mechanic.source_kind === "input") ? (
         <footer>
           <span>Direct setup edit</span>
           <button className="button button-ink" type="submit" disabled={saving}>
@@ -256,4 +350,45 @@ function mechanicValue(
   if (value.kind === "boolean") return value.value;
   if (value.kind === "number") return value.value;
   return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
+}
+
+function formatMechanicValue(
+  value: StateValue | undefined,
+  mechanic: WorldMechanic,
+): string {
+  const rendered = formatStateValue(value);
+  if (value?.kind !== "number") return rendered;
+  if (mechanic.mode === "pool" && mechanic.maximum !== undefined)
+    return `${rendered} / ${mechanic.maximum}${mechanic.unit === undefined ? "" : ` ${mechanic.unit}`}`;
+  return `${rendered}${mechanic.unit === undefined ? "" : ` ${mechanic.unit}`}`;
+}
+
+function formatStateValue(value: StateValue | undefined): string {
+  if (value === undefined) return "Unavailable";
+  return value.kind === "number"
+    ? String(value.value)
+    : value.value
+      ? "Yes"
+      : "No";
+}
+
+function modifierOperationLabel(operation: string): string {
+  switch (operation) {
+    case "add-number":
+      return "add";
+    case "multiply-number":
+      return "multiply by";
+    default:
+      return "set to";
+  }
+}
+
+function activeStatusDetails(status: ActiveStatus): string {
+  const description =
+    status.description === undefined ? "" : `${status.description} · `;
+  return `${description}Problem ${shortID(status.source_interaction_id)} · applied ${formatRelativeDate(status.applied_at)} · instance ${shortID(status.id)}`;
+}
+
+function shortID(id: string): string {
+  return id.slice(0, 8);
 }

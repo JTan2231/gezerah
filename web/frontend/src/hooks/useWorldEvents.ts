@@ -4,7 +4,7 @@ import { readSelectedUserId, worldPath } from "../api/client";
 
 export function useWorldEvents(
   worldId: string | undefined,
-  onRefresh: () => void,
+  onRefresh: (event?: WorldEvent) => void,
 ): void {
   useEffect(() => {
     if (worldId === undefined) return undefined;
@@ -39,16 +39,17 @@ export function useWorldEvents(
           const frames = buffer.split("\n\n");
           buffer = frames.pop() ?? "";
           for (const frame of frames) {
-            let hasData = false;
+            const dataLines: string[] = [];
             for (const rawLine of frame.split("\n")) {
               const line = rawLine.endsWith("\r")
                 ? rawLine.slice(0, -1)
                 : rawLine;
               if (line.startsWith("id:")) cursor = line.slice(3).trim();
-              if (line.startsWith("data:") && line.slice(5).trim() !== "")
-                hasData = true;
+              if (line.startsWith("data:"))
+                dataLines.push(line.slice(5).trim());
             }
-            if (hasData) onRefresh();
+            const data = dataLines.join("\n");
+            if (data !== "") onRefresh(parseWorldEvent(data));
           }
         }
       } catch {
@@ -66,4 +67,24 @@ export function useWorldEvents(
       if (reconnectTimer !== undefined) window.clearTimeout(reconnectTimer);
     };
   }, [worldId, onRefresh]);
+}
+
+export interface WorldEvent {
+  type: string;
+}
+
+function parseWorldEvent(data: string): WorldEvent | undefined {
+  try {
+    const value: unknown = JSON.parse(data);
+    if (
+      typeof value === "object" &&
+      value !== null &&
+      "type" in value &&
+      typeof value.type === "string"
+    )
+      return { type: value.type };
+  } catch {
+    // Invalid event data is still an authoritative invalidation signal.
+  }
+  return undefined;
 }

@@ -51,9 +51,11 @@ postgres://localhost:5432/dnd?sslmode=disable
 ```
 
 Migrations run automatically when the backend starts. The repository has no
-seed step; create all world vocabulary through the application/API. The clean
-baseline requires an empty database; databases created by the removed schema
-must be discarded rather than started with this release.
+seed step; create all world vocabulary through the application/API. New
+databases install the `001` baseline and then the `002` derived-graph and
+problem-status upgrade. Existing databases at the recorded `001` prefix
+upgrade forward; databases created by the removed pre-baseline schema remain
+unsupported.
 
 ## Resetting local data
 
@@ -72,10 +74,10 @@ bypass the target safety checks.
 
 The reset drops and recreates the entire `public` schema. This removes every
 object in that schema, along with dependent extension objects and the migration
-record, so the next backend start installs the current clean baseline. Reset and
+record, so the next backend start installs the current migration chain. Reset and
 startup serialize on the same PostgreSQL advisory lock. A managed backend is
 stopped before the transaction and restarted afterward if it was running,
-installing the baseline immediately; otherwise the schema stays empty until the
+installing the chain immediately; otherwise the schema stays empty until the
 next start. If a backend on port 8080 is reachable without managed PID state,
 the script leaves it alone and refuses the reset; stop that process explicitly
 first.

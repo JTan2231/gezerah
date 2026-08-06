@@ -19,6 +19,7 @@ interface WorldResponse extends IdentifiedResource {
   role: "owner" | "editor" | "player" | "spectator";
   membership_id: string;
   table_revision: number;
+  rules_revision: number;
   play_status:
     "waiting-for-character" | "setup-required" | "ready" | "unavailable";
 }
@@ -33,6 +34,12 @@ interface InviteResponse extends IdentifiedResource {
 interface MechanicResponse extends IdentifiedResource {
   name: string;
   kind: "capacity" | "capability";
+  source_kind: "input" | "derived";
+}
+
+interface MechanicMutationResponse {
+  revision: number;
+  mechanic: MechanicResponse;
 }
 
 interface EntityResponse extends IdentifiedResource {
@@ -278,21 +285,26 @@ test("a problem is improvised at the table, answered, and resolved with a state 
       visibility: "table",
     },
   ];
-  const resolve = await postJSON<MechanicResponse>(
+  const resolveMutation = await postJSON<MechanicMutationResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/mechanics`,
     {
       kind: "capacity",
       mode: "score",
+      source_kind: "input",
       name: "Resolve",
       minimum: 0,
       maximum: 10,
       step: 1,
       default_number: 8,
       mutable_during_play: true,
+      archived: false,
+      expected_rules_revision: world.rules_revision,
     },
     owner.id,
   );
+  const resolve = resolveMutation.mechanic;
+  expect(resolveMutation.revision).toBe(world.rules_revision + 1);
   const entity = await postJSON<EntityResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/entities`,
@@ -525,16 +537,20 @@ test("a problem is improvised at the table, answered, and resolved with a state 
     await ownerPage.getByRole("button", { name: "Begin ruling" }).click();
     await ownerPage.getByRole("radio", { name: new RegExp(unique) }).check();
     const outcome = `Aria catches the post, but the rope burns through her gloves ${unique}.`;
-    await ownerPage.getByLabel("Public outcome").fill(outcome);
+    await ownerPage.getByLabel("Consequence summary").fill(outcome);
     await ownerPage.getByLabel("Effect amount").fill("-2");
-    await ownerPage.getByRole("button", { name: "Add", exact: true }).click();
+    await ownerPage
+      .getByRole("button", { name: "Add effect", exact: true })
+      .click();
     await ownerPage.getByRole("button", { name: "Preview changes" }).click();
     await expect(ownerPage.getByText("Preview is valid")).toBeVisible();
     await ownerPage.getByRole("button", { name: "Resolve problem" }).click();
 
     await expect(ownerPage.getByText(outcome)).toBeVisible();
     await expect(playerPage.getByText(outcome)).toBeVisible();
-    await expect(playerPage.getByText("8 → 6")).toBeVisible();
+    await expect(
+      playerPage.getByText("Aria Vale: Resolve 8 → 6", { exact: true }),
+    ).toBeVisible();
 
     const savedEntities = await getJSON<EntityResponse[]>(
       request,

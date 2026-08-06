@@ -209,10 +209,12 @@ buffering/timeouts before increasing replicas.
 Migrations are automatic and forward-only. Deployment is therefore also the
 schema-change mechanism.
 
-The current `001_worldwright.sql` release is a clean baseline, not an in-place
-upgrade. Deploy it with a newly provisioned empty database. Do not attach a
-database whose `schema_migrations` contains any other baseline or whose public
-schema contains application tables. If data must be retained, use separately
+`001_worldwright.sql` remains the clean supported baseline rather than an
+upgrade from the removed schema. New databases apply `001` and then
+`002_rules_graph_statuses.sql`; a database whose ledger is exactly the `001`
+prefix upgrades in place, including mechanic-rules/status-set root backfills.
+Do not attach a database with a different migration history or unledgered
+application tables. If unsupported data must be retained, use separately
 reviewed one-time export/transform/import tooling outside the running service,
 verify the new database, and retire that tooling.
 
@@ -250,8 +252,10 @@ be unsafe because migrations do not roll back. Options are:
 
 Never run ad hoc destructive SQL against the only production database. Preserve
 the incident database for analysis, stop writers when consistency requires it,
-and verify worlds, logical state, receipts, revisions, and event cursors after
-recovery. See [Database](database.md) for a logical backup example.
+and verify worlds, rules graphs, status instances/snapshots and their source
+problem provenance, base and effective state, receipts, revisions, and event
+cursors after recovery. See
+[Database](database.md) for a logical backup example.
 
 ## Runbooks
 
@@ -295,8 +299,8 @@ with a replaced revision.
 ### Ambiguous live resolve
 
 Retry the identical resolve body with the same world-scoped idempotency key. A
-matching committed ruling returns `replayed:true`; different content must be
-treated as an idempotency conflict and investigated rather than forced.
+matching committed Consequence returns `replayed:true`; different content must
+be treated as an idempotency conflict and investigated rather than forced.
 
 ### SSE freshness issue
 

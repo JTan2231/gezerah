@@ -100,6 +100,9 @@ func ValidateTransitionPlan(plan TransitionPlan, entities map[ID]Entity, definit
 		if !definition.Mutable {
 			errs = append(errs, validation("mechanic_not_mutable", path+".mechanic_id", "mechanic is not mutable during play"))
 		}
+		if definition.SourceKind != SourceInput {
+			errs = append(errs, validation("derived_mechanic", path+".mechanic_id", "derived mechanics cannot be directly changed"))
+		}
 		if !operationAllowed(effect.Operation, definition) {
 			errs = append(errs, validation("operation_not_allowed", path+".operation", "operation is not allowed for the mechanic"))
 		}
@@ -143,6 +146,9 @@ func ValidateTransitionPlan(plan TransitionPlan, entities map[ID]Entity, definit
 
 func validateEffectOperand(effect ConcreteEffect, definition MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
+	if effect.Status != nil || len(effect.StatusInstanceIDs) > 0 || len(effect.StatusInstances) > 0 {
+		errs = append(errs, validation("invalid_effect_operand", "", "scalar effects cannot declare status operands"))
+	}
 	switch effect.Operation {
 	case EffectSet:
 		if effect.Value == nil || effect.AdjustmentAmount != nil {
@@ -164,6 +170,9 @@ func validateEffectOperand(effect ConcreteEffect, definition MechanicDefinition)
 }
 
 func operationAllowed(operation EffectOperation, definition MechanicDefinition) bool {
+	if definition.SourceKind != SourceInput {
+		return false
+	}
 	switch operation {
 	case EffectSet:
 		return validValueKind(definition.ValueKind)

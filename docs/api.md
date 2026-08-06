@@ -86,15 +86,27 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 | `expected_character_fields_revision` on profile replacement| Field schema used to build the profile draft. |
 | `expected_revision` on interaction command/action creation | Interaction.                                  |
 | `expected_revision` on action withdrawal                   | Action submission.                            |
+| `expected_rules_revision` on mechanic mutation             | World mechanic dependency graph.               |
+| `expected_rules_revision` on state replacement             | Rule schema used to construct the input map.  |
+| `expected_rules_revision` on preview/resolve                | Exact graph used to evaluate the Consequence. |
 
 Preview does not reserve a revision. Use the latest authoritative response
 before a consequential write.
 
-### Archive filters
+### Mechanic collection filters and wrappers
 
-Mechanic collections accept `?archived=true|false`: `true` returns archived,
-`false` returns active, and absence returns both. The optional `kind` filter is
-`capacity` or `capability`.
+The optional mechanic `kind` filter is `capacity` or `capability`; collections
+include active and archived resources. Mechanic reads are wrapped with the
+world rules revision so clients never have to combine a catalog with a revision
+from a separate request:
+
+```json
+{ "revision": 7, "mechanics": [] }
+{ "revision": 7, "mechanic": { "id": "..." } }
+```
+
+Create/update/archive commands require the wrapper's revision as
+`expected_rules_revision`; their response contains the advanced revision.
 
 ## Route catalog
 
@@ -113,7 +125,7 @@ Path placeholders are UUIDs unless noted otherwise.
 | Method and path                              | Authority                  | Request/response                                                                    |
 | -------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
 | `GET /api/worlds`                            | Known user                 | Active memberships only; role/count/activity and derived `play_status`.             |
-| `POST /api/worlds`                           | Known user                 | Name/description; creates world, owner membership, field root, and event.            |
+| `POST /api/worlds`                           | Known user                 | Name/description; creates world, owner membership, field/rules roots, and event.      |
 | `GET /api/worlds/{world_id}`                 | Active world member        | World summary for the current member.                                               |
 | `PATCH /api/worlds/{world_id}`               | Owner/editor, active world | Name, nullable description, and `expected_revision`.                                |
 | `POST /api/worlds/{world_id}/archive`        | Owner                      | `expected_revision`; rejects unfinished interactions.                               |
@@ -123,20 +135,22 @@ World creation is transactional and returns role `owner`. Owners and editors
 have facilitator authority; there is no separate facilitator membership.
 
 `revision` protects world settings/archive. `table_revision` protects
-controller changes and is returned on every `World` response.
+controller changes. `rules_revision` protects the world mechanic graph; all
+three are returned on every `World` response.
 
 ### Capacities and capabilities
 
-| Method and path                                                  | Authority                  | Notes                                          |
-| ---------------------------------------------------------------- | -------------------------- | ---------------------------------------------- |
-| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | Active/archived scalar mechanics.              |
-| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates one user-authored mechanic.            |
-| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | Reads one mechanic.                            |
-| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces the author-facing definition.         |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives while retaining state/history.        |
+| Method and path                                                  | Authority                  | Notes                                                        |
+| ---------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ |
+| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.      |
+| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision. |
+| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                       |
+| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision. |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency remains.             |
 
-Mechanics are scalar only. Capacity `score`/`pool` and capability `rating` are
-numeric; capability `binary` is Boolean. Every mechanic applies to every entity.
+Capacity `score`/`pool` and capability `rating` are numeric; capability
+`binary` is Boolean. Each is either a stored/defaulted `input` or a calculated
+`derived` mechanic. Every mechanic applies to every entity.
 
 ### Character fields, entities, profiles, and state
 
@@ -149,8 +163,8 @@ numeric; capability `binary` is Boolean. Every mechanic applies to every entity.
 | `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                      |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.     |
 | `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Archives the entity.                                                   |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Materialized scalar state.                                             |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full logical values plus `expected_revision`.                          |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.                  |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                       |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete controller set using `expected_table_revision`.               |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                      |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions.    |
@@ -186,7 +200,7 @@ escalates an already-active role.
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Owner/editor facilitator     | Any unfinished state → cancelled.                                           |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible player              | Creates action; optional ready controlled acting entity.                    |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player                | Withdraws submitted action using action revision.                           |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator     | Advisory ruling; no idempotency key required.                               |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator     | Advisory Consequence; no idempotency key required.                          |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Owner/editor facilitator     | Atomic state, immutable receipt, lifecycle, and world event.                |
 
 ### World events (SSE)
@@ -212,10 +226,13 @@ client reconnects with its cursor. Events are invalidation signals only.
 
 ### Mechanic
 
+An input mechanic request is a normal stored/defaulted definition:
+
 ```json
 {
   "kind": "capacity",
   "mode": "pool",
+  "source_kind": "input",
   "name": "Resolve",
   "description": "Composure under pressure.",
   "minimum": 0,
@@ -224,12 +241,55 @@ client reconnects with its cursor. Events are invalidation signals only.
   "default_number": 8,
   "unit": "grit",
   "mutable_during_play": true,
-  "archived": false
+  "archived": false,
+  "expected_rules_revision": 6
 }
 ```
 
 Capacities accept `score`/`pool`; capabilities accept `binary`/`rating`.
-Binary mechanics omit numeric fields and default logically to false.
+Binary inputs omit numeric fields and default logically to false.
+
+A derived mechanic replaces defaults/bounds/step/mutability with a recursive
+typed expression:
+
+```json
+{
+  "kind": "capacity",
+  "mode": "score",
+  "source_kind": "derived",
+  "name": "Guard",
+  "unit": "points",
+  "mutable_during_play": false,
+  "expression": {
+    "operation": "add-number",
+    "operands": [
+      { "operation": "mechanic-reference", "mechanic_id": "armor UUID" },
+      { "operation": "literal", "value": { "kind": "number", "value": 10 } }
+    ]
+  },
+  "archived": false,
+  "expected_rules_revision": 6
+}
+```
+
+Expression nodes use one of these shapes:
+
+- `literal` with a typed `value`;
+- `mechanic-reference` with `mechanic_id`;
+- an operation with recursive `operands`.
+
+Numeric operations are `add-number`, `subtract-number`, `multiply-number`,
+`min-number`, `max-number`, and `negate-number`. Boolean operations are `and`,
+`or`, and `not`. `equal` accepts two operands of the same kind. Numeric
+comparisons are `less-than`, `less-than-or-equal`, `greater-than`, and
+`greater-than-or-equal`. `if` takes a Boolean condition and two same-kind
+branches. The server infers node types and rejects bad arity, type mismatches,
+unknown/cross-world references, active references to archived dependencies, and
+dependency cycles without advancing the revision.
+
+List responses are `{revision,mechanics}`. Single-resource reads and every
+mutation return `{revision,mechanic}`. Archival accepts only
+`{"expected_rules_revision":6}`.
 
 ### State
 
@@ -245,8 +305,9 @@ Replacement:
 ```json
 {
   "expected_revision": 3,
+  "expected_rules_revision": 7,
   "values": {
-    "mechanic UUID": { "kind": "number", "value": 6 }
+    "input mechanic UUID": { "kind": "number", "value": 6 }
   }
 }
 ```
@@ -257,17 +318,77 @@ Response:
 {
   "entity_id": "entity UUID",
   "revision": 4,
+  "status_revision": 2,
+  "rules_revision": 7,
   "values": {
-    "mechanic UUID": { "kind": "number", "value": 6 },
-    "binary mechanic UUID": { "kind": "boolean", "value": false }
+    "input mechanic UUID": { "kind": "number", "value": 6 }
   },
-  "defaulted_mechanic_ids": ["binary mechanic UUID"],
+  "effective_values": {
+    "input mechanic UUID": { "kind": "number", "value": 8 },
+    "derived mechanic UUID": { "kind": "number", "value": 18 }
+  },
+  "evaluations": {
+    "input mechanic UUID": {
+      "source_kind": "input",
+      "presence": "stored",
+      "intrinsic": { "kind": "number", "value": 6 },
+      "effective": { "kind": "number", "value": 8 },
+      "modifiers": [
+        {
+          "status_instance_id": "instance UUID",
+          "status_name": "Inspired",
+          "modifier_id": "snapshotted modifier UUID",
+          "operation": "add-number",
+          "priority": 10,
+          "operand": { "kind": "number", "value": 2 },
+          "before": { "kind": "number", "value": 6 },
+          "after": { "kind": "number", "value": 8 }
+        }
+      ]
+    },
+    "derived mechanic UUID": {
+      "source_kind": "derived",
+      "presence": "derived",
+      "intrinsic": { "kind": "number", "value": 18 },
+      "effective": { "kind": "number", "value": 18 },
+      "modifiers": []
+    }
+  },
+  "active_statuses": [
+    {
+      "id": "instance UUID",
+      "name": "Inspired",
+      "description": "A surge of confidence after the rescue.",
+      "source_interaction_id": "problem UUID",
+      "source_resolution_id": "resolution UUID",
+      "source_effect_id": "apply-status effect UUID",
+      "applied_order": 12,
+      "applied_at": "2026-01-01T00:00:00Z",
+      "modifiers": [
+        {
+          "id": "snapshotted modifier UUID",
+          "mechanic_id": "input mechanic UUID",
+          "operation": "add-number",
+          "value": { "kind": "number", "value": 2 },
+          "priority": 10,
+          "position": 0
+        }
+      ]
+    }
+  ],
+  "defaulted_mechanic_ids": [],
   "updated_at": "2026-01-01T00:00:00Z"
 }
 ```
 
-`values` is the complete logical map. Values equal to defaults normalize out
-of `state_values` while remaining materialized in the response.
+`values` is the complete writable logical input map. Derived IDs are rejected
+on replacement. `effective_values` contains every calculated mechanic;
+`evaluations` explains intrinsic-to-effective calculation, and
+`active_statuses` exposes persistent snapshotted layers with the problem,
+resolution, and apply effect that created each one. Status names are
+presentation only; the instance UUID is the removal identity. Values equal to
+input defaults normalize out of `state_values` while remaining materialized in
+the response.
 
 ### Controller replacement
 
@@ -339,7 +460,7 @@ Draft replacement adds `expected_revision`. Audience/responders/entities must
 belong to the same world; responders must be active ready players in the
 audience, and context entities must be active and eligible.
 
-### Action and ruling
+### Action and Consequence
 
 ```json
 {
@@ -352,18 +473,63 @@ audience, and context entities must be active and eligible.
 The acting entity is optional but, when supplied, must be active, ready, and
 controlled by the player. The server snapshots its display name.
 
-Live effects are exactly:
+The problem's Consequence is transported by the existing resolution request.
+Its required `narrative` field is the single public prose summary, followed by
+an ordered `effects` array. Live effects are exactly these four tagged shapes:
 
 ```json
 { "id": "optional UUID", "type": "set", "entity_ids": ["UUID"], "mechanic_id": "UUID", "value": { "kind": "boolean", "value": true } }
 { "id": "optional UUID", "type": "adjust-number", "entity_ids": ["UUID"], "mechanic_id": "UUID", "amount": -2 }
+{
+  "id": "optional UUID",
+  "type": "apply-status",
+  "targets": [{ "entity_id": "UUID" }],
+  "status": {
+    "name": "Shaken",
+    "description": "The fall leaves Aria unsteady.",
+    "modifiers": [
+      {
+        "id": "optional modifier UUID",
+        "mechanic_id": "Resolve UUID",
+        "operation": "add-number",
+        "value": { "kind": "number", "value": -2 },
+        "priority": 10
+      }
+    ]
+  }
+}
+{
+  "id": "optional UUID",
+  "type": "remove-status",
+  "targets": [
+    { "entity_id": "UUID", "status_instance_id": "active instance UUID" }
+  ]
+}
 ```
 
-Ruling:
+Scalar operations keep `entity_ids` and can target only active mutable inputs.
+Status operations instead use ordered `targets` and carry no scalar
+mechanic/value/amount fields. Every apply target omits `status_instance_id` and
+creates a distinct instance from the effect's inline status. Every remove target
+requires the exact active instance belonging to that entity and omits `status`;
+an unknown, already removed, cross-world, or mismatched instance is a validation
+failure. Equal status names from independent effects are allowed because name
+is never identity.
+
+Inline modifier operations are `set`, `add-number`, and `multiply-number`.
+`set` matches the target mechanic's scalar kind; the other operations require
+a numeric target and value. Request order becomes the zero-based snapshot
+position, and an empty modifier list is valid for a named condition with no
+mechanical adjustment. `set`/`adjust-number` effects always mutate logical base
+input; an active status's effective adjustment is not included in their stored
+operand or baked back into state.
+
+Consequence request:
 
 ```json
 {
   "expected_revision": 4,
+  "expected_rules_revision": 7,
   "idempotency_key": "client-generated unique key",
   "selected_action_id": "optional submitted action UUID",
   "action_summary": "Aria catches the rope.",
@@ -375,15 +541,57 @@ Ruling:
       "entity_ids": ["Aria UUID"],
       "mechanic_id": "Resolve UUID",
       "amount": -2
+    },
+    {
+      "type": "apply-status",
+      "targets": [{ "entity_id": "Aria UUID" }],
+      "status": {
+        "name": "Shaken",
+        "description": "The collision leaves Aria unsteady.",
+        "modifiers": [
+          {
+            "mechanic_id": "Resolve UUID",
+            "operation": "add-number",
+            "value": { "kind": "number", "value": -2 },
+            "priority": 10
+          }
+        ]
+      }
     }
   ]
 }
 ```
 
 Preview permits an empty idempotency key and never writes. Resolve requires a
-non-empty key up to 200 characters. The response includes interaction revision,
-narrative, ordered applied before/after effects, and affected state records.
-Equivalent replay adds `replayed:true`.
+non-empty key up to 200 characters. Both require the current mechanic rules
+revision. The result contains `rules_revision`, ordered scalar/status
+`applied_effects`, `effective_changes`, and evaluated state records for target
+entities. A status shown only in preview omits `source_resolution_id`, because
+no durable resolution exists yet; resolved state always includes it. Each
+`apply-status` or `remove-status` application has exactly these fields (an
+apply example follows):
+
+```json
+{
+  "type": "apply-status",
+  "effect_id": "effect UUID",
+  "entity_id": "entity UUID",
+  "status_instance_id": "instance UUID",
+  "status_name": "Shaken",
+  "active_before": false,
+  "active_after": true,
+  "changed": true
+}
+```
+
+Source provenance appears on active state rather than being repeated in an
+application receipt. Effective changes report every before/after calculated
+mechanic that moved, including derived values changed transitively by a scalar
+or status effect. Equivalent replay adds `replayed:true`; the embedded applied
+receipt retains the original rules revision and effective-change list. The
+resulting active status reports `source_interaction_id`,
+`source_resolution_id`, and `source_effect_id`, tying the persistent instance
+to the problem that created it.
 
 ## Limits and notable validation rules
 
@@ -393,10 +601,11 @@ Equivalent replay adds `replayed:true`.
 | Names/labels/display names                     | Usually 200 characters               |
 | Interaction title                              | 200 characters                       |
 | Interaction prompt/action text                 | 10,000 characters                    |
-| Interaction/ruling private notes and narrative | 20,000 characters                    |
+| Interaction/Consequence private notes and summary | 20,000 characters                 |
 | Character fields                               | 50 active; label 200/guidance 2,000  |
 | Character-field value                          | 20,000 characters                    |
-| Live ruling effects                            | 100                                  |
+| Consequence effects                            | 100                                  |
+| Inline status description                      | 2,000 characters                     |
 | Entity/user/world lists                        | 500–1000 depending on resource       |
 | SSE batch                                      | 100 events                           |
 

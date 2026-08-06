@@ -16,7 +16,7 @@ UUID into authentication.
 
 ## Endpoint trust matrix
 
-| Surface                                      | Current gate                                      | Consequence                                                               |
+| Surface                                      | Current gate                                      | Exposure                                                                  |
 | -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
 | SPA/static assets                            | None                                              | Public content.                                                           |
 | `/api/health`                                | None                                              | Reveals service/database readiness.                                       |
@@ -55,7 +55,7 @@ Within the trusted identity assumption, the server enforces:
 - invite tokens are stored only as SHA-256 digests, expire, can be revoked, and
   count one redemption per invite/user;
 - live interaction/event access requires readiness for players;
-- only owners/editors facilitate interactions and rulings;
+- only owners/editors facilitate interactions and Consequences;
 - only eligible players submit, with at most one current action each;
 - acting-entity attribution requires a ready controlled world entity and stores
   a server-captured display name;
@@ -108,7 +108,7 @@ gate and character eligibility requirement.
 
 ### Private data
 
-Facilitator-private fields include interaction/ruling private notes and any
+Facilitator-private fields include interaction/Consequence private notes and any
 facilitator-only context. Filtering happens in server query/mapping paths;
 frontend hiding is secondary.
 
@@ -151,7 +151,7 @@ Impact: complete impersonation of any user and all world roles.
 ### Privileged writes and audit
 
 - impersonation can assume owner/editor authority;
-- direct Builder state corrections do not create live ruling receipts;
+- direct Builder state corrections do not create live Consequence receipts;
 - configuration/state changes lack a complete actor-attributed audit history.
 
 Impact: a reachable client can alter world configuration/state as another user,
