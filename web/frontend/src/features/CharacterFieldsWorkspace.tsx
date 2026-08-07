@@ -138,6 +138,7 @@ function CharacterFieldsEditor({
           }),
         },
       );
+      draft.accept(draft.draft);
       onSaved();
     } catch (reason) {
       setError(

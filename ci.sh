@@ -1,6 +1,32 @@
 #!/bin/sh
 set -u
 
+clock_milliseconds() {
+	if command -v perl >/dev/null 2>&1; then
+		perl -MTime::HiRes=time -e 'printf "%.0f\n", time * 1000'
+		return
+	fi
+	if command -v python3 >/dev/null 2>&1; then
+		python3 -c 'import time; print(time.time_ns() // 1_000_000)'
+		return
+	fi
+	seconds="$(date +%s)" || return 1
+	printf '%s000\n' "$seconds"
+}
+
+case "${DND_CI_STARTED_MS:-}" in
+"" | *[!0-9]*)
+	ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
+	;;
+*)
+	if [ "${DND_CI_IN_WORKTREE:-}" = "1" ]; then
+		ci_invocation_started_ms="$DND_CI_STARTED_MS"
+	else
+		ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
+	fi
+	;;
+esac
+
 cd "$(dirname "$0")"
 
 section() {
@@ -14,9 +40,53 @@ require_command() {
 	fi
 }
 
+report_timing() {
+	timing_name="$1"
+	timing_started_ms="$2"
+	timing_finished_ms="$3"
+	timing_elapsed_ms=$((timing_finished_ms - timing_started_ms))
+	awk -v name="$timing_name" -v elapsed="$timing_elapsed_ms" \
+		'BEGIN { printf "==> Timing: %s %.3fs\n", name, elapsed / 1000 }'
+}
+
+run_timed_stage() {
+	timed_stage_name="$1"
+	shift
+	timed_stage_started_ms="$(clock_milliseconds)" || return 1
+	"$@"
+	timed_stage_status=$?
+	timed_stage_finished_ms="$(clock_milliseconds)" || return 1
+	report_timing \
+		"$timed_stage_name" \
+		"$timed_stage_started_ms" \
+		"$timed_stage_finished_ms"
+	return "$timed_stage_status"
+}
+
 cleanup() {
 	status=$?
 	trap - EXIT INT TERM
+	cleanup_started_ms="$(clock_milliseconds)" || cleanup_started_ms=""
+
+	for background_pid in \
+		"${frontend_checks_pid:-}" \
+		"${backend_checks_pid:-}" \
+		"${test_install_pid:-}" \
+		"${frontend_format_pid:-}" \
+		"${frontend_lint_pid:-}" \
+		"${frontend_css_pid:-}" \
+		"${frontend_test_pid:-}" \
+		"${frontend_dead_pid:-}" \
+		"${frontend_type_pid:-}" \
+		"${test_format_pid:-}" \
+		"${test_type_pid:-}" \
+		"${test_scenario_pid:-}" \
+		"${production_builds_pid:-}"; do
+		if [ "$background_pid" != "" ] && kill -0 "$background_pid" >/dev/null 2>&1; then
+			kill "$background_pid" >/dev/null 2>&1 || true
+			wait "$background_pid" >/dev/null 2>&1 || true
+		fi
+	done
 
 	if [ "${smoke_pid:-}" != "" ] && kill -0 "$smoke_pid" >/dev/null 2>&1; then
 		kill "$smoke_pid" >/dev/null 2>&1 || true
@@ -34,6 +104,28 @@ cleanup() {
 		chmod -R u+w "$tmp_dir" >/dev/null 2>&1 || true
 		rm -rf "$tmp_dir"
 	fi
+
+	cleanup_finished_ms="$(clock_milliseconds)" || cleanup_finished_ms=""
+	if [ "$cleanup_started_ms" != "" ] && [ "$cleanup_finished_ms" != "" ]; then
+		report_timing "cleanup" "$cleanup_started_ms" "$cleanup_finished_ms"
+	fi
+
+	if [ "${enforce_e2e_budget:-0}" = "1" ]; then
+		whole_finished_ms="$(clock_milliseconds)" || whole_finished_ms=""
+		if [ "$whole_finished_ms" = "" ]; then
+			printf 'Could not read the final clock for the E2E runtime gate\n' >&2
+			status=1
+		else
+			whole_elapsed_ms=$((whole_finished_ms - ci_invocation_started_ms))
+			awk -v elapsed="$whole_elapsed_ms" \
+				'BEGIN { printf "==> Timing: whole ./ci.sh e2e %.3fs (required: <30.000s)\n", elapsed / 1000 }'
+			if [ "$status" -eq 0 ] && [ "$whole_elapsed_ms" -ge 30000 ]; then
+				printf 'E2E runtime budget exceeded: %dms is not under 30000ms\n' \
+					"$whole_elapsed_ms" >&2
+				status=1
+			fi
+		fi
+	fi
 	exit "$status"
 }
 
@@ -47,6 +139,7 @@ EOF
 
 run_in_isolated_worktree() {
 	require_command git || return 1
+	worktree_preparation_started_ms="$(clock_milliseconds)" || return 1
 
 	base_commit="$(git rev-parse --verify HEAD)" || return 1
 	tmp_index="$tmp_dir/snapshot.index"
@@ -66,13 +159,43 @@ run_in_isolated_worktree() {
 	)" || return 1
 
 	git worktree add --detach "$ci_worktree_path" "$snapshot_commit" || return 1
+	worktree_preparation_finished_ms="$(clock_milliseconds)" || return 1
+	report_timing \
+		"isolated-worktree preparation" \
+		"$worktree_preparation_started_ms" \
+		"$worktree_preparation_finished_ms"
+
+	if [ "${DND_CI_CACHE_DIR:-}" = "" ]; then
+		shared_cache_dir="$(pwd -P)/.dnd/cache/ci"
+	else
+		case "$DND_CI_CACHE_DIR" in
+		/*)
+			shared_cache_dir="$DND_CI_CACHE_DIR"
+			;;
+		*)
+			shared_cache_dir="$(pwd -P)/$DND_CI_CACHE_DIR"
+			;;
+		esac
+	fi
+	mkdir -p "$shared_cache_dir" || return 1
 
 	section "CI: running checks in isolated worktree"
-	DND_CI_IN_WORKTREE=1 "$ci_worktree_path/ci.sh" "$@"
+	worktree_checks_started_ms="$(clock_milliseconds)" || return 1
+	DND_CI_CACHE_DIR="$shared_cache_dir" \
+		DND_CI_STARTED_MS="$ci_invocation_started_ms" \
+		DND_CI_IN_WORKTREE=1 \
+		"$ci_worktree_path/ci.sh" "$@"
+	worktree_checks_status=$?
+	worktree_checks_finished_ms="$(clock_milliseconds)" || return 1
+	report_timing \
+		"isolated-worktree checks" \
+		"$worktree_checks_started_ms" \
+		"$worktree_checks_finished_ms"
+	return "$worktree_checks_status"
 }
 
 configure_ci_caches() {
-	ci_cache_dir="$tmp_dir/cache"
+	ci_cache_dir="${DND_CI_CACHE_DIR:-$tmp_dir/cache}"
 	playwright_browsers_path="${PLAYWRIGHT_BROWSERS_PATH:-}"
 
 	if [ "$playwright_browsers_path" = "" ]; then
@@ -120,31 +243,102 @@ bun_ci() {
 }
 
 run_frontend() {
+	run_frontend_checks || return 1
+	run_frontend_build || return 1
+}
+
+run_frontend_checks() {
 	require_command bun || return 1
 
 	section "Frontend: installing locked dependencies"
 	(cd web/frontend && bun_ci) || return 1
 
-	section "Frontend: checking formatting"
-	(cd web/frontend && bun run format:check) || return 1
+	frontend_format_log="$tmp_dir/frontend-format.log"
+	frontend_lint_log="$tmp_dir/frontend-lint.log"
+	frontend_css_log="$tmp_dir/frontend-css.log"
+	frontend_test_log="$tmp_dir/frontend-test.log"
+	frontend_dead_log="$tmp_dir/frontend-dead.log"
+	frontend_type_log="$tmp_dir/frontend-type.log"
 
-	section "Frontend: linting TypeScript and React"
-	(cd web/frontend && bun run lint) || return 1
+	(
+		section "Frontend: checking formatting"
+		cd web/frontend && bun run format:check
+	) >"$frontend_format_log" 2>&1 &
+	frontend_format_pid=$!
+	(
+		section "Frontend: linting TypeScript and React"
+		cd web/frontend && bun run lint
+	) >"$frontend_lint_log" 2>&1 &
+	frontend_lint_pid=$!
+	(
+		section "Frontend: linting CSS"
+		cd web/frontend && bun run lint:css
+	) >"$frontend_css_log" 2>&1 &
+	frontend_css_pid=$!
+	(
+		section "Frontend: running unit tests"
+		cd web/frontend && bun run test
+	) >"$frontend_test_log" 2>&1 &
+	frontend_test_pid=$!
+	(
+		section "Frontend: checking unused code"
+		cd web/frontend && bun run check:dead
+	) >"$frontend_dead_log" 2>&1 &
+	frontend_dead_pid=$!
+	(
+		section "Frontend: type checking"
+		cd web/frontend && bun run check
+	) >"$frontend_type_log" 2>&1 &
+	frontend_type_pid=$!
 
-	section "Frontend: linting CSS"
-	(cd web/frontend && bun run lint:css) || return 1
+	wait "$frontend_format_pid"
+	frontend_format_status=$?
+	frontend_format_pid=""
+	wait "$frontend_lint_pid"
+	frontend_lint_status=$?
+	frontend_lint_pid=""
+	wait "$frontend_css_pid"
+	frontend_css_status=$?
+	frontend_css_pid=""
+	wait "$frontend_test_pid"
+	frontend_test_status=$?
+	frontend_test_pid=""
+	wait "$frontend_dead_pid"
+	frontend_dead_status=$?
+	frontend_dead_pid=""
+	wait "$frontend_type_pid"
+	frontend_type_status=$?
+	frontend_type_pid=""
 
-	section "Frontend: running unit tests"
-	(cd web/frontend && bun run test) || return 1
+	cat \
+		"$frontend_format_log" \
+		"$frontend_lint_log" \
+		"$frontend_css_log" \
+		"$frontend_test_log" \
+		"$frontend_dead_log" \
+		"$frontend_type_log"
 
-	section "Frontend: checking unused code"
-	(cd web/frontend && bun run check:dead) || return 1
+	for frontend_status in \
+		"$frontend_format_status" \
+		"$frontend_lint_status" \
+		"$frontend_css_status" \
+		"$frontend_test_status" \
+		"$frontend_dead_status" \
+		"$frontend_type_status"; do
+		if [ "$frontend_status" -ne 0 ]; then
+			printf 'Parallel frontend validation failed\n' >&2
+			return 1
+		fi
+	done
 
-	section "Frontend: type checking"
-	(cd web/frontend && bun run check) || return 1
+	return 0
+}
+
+run_frontend_build() {
+	require_command bun || return 1
 
 	section "Frontend: building production assets"
-	(cd web/frontend && bun run build) || return 1
+	(cd web/frontend && bunx vite build)
 }
 
 run_database_smoke() {
@@ -194,11 +388,18 @@ run_database_smoke() {
 }
 
 run_backend() {
+	run_backend_checks || return 1
+	run_backend_build || return 1
+}
+
+run_backend_checks() {
 	require_command go || return 1
 	go_packages="$(go list ./... | grep -v '/web/frontend/node_modules/')" || return 1
 
 	section "Backend: checking Go formatting"
-	find . -type f -name '*.go' ! -path './.git/*' ! -path './web/frontend/node_modules/*' -print |
+	find . \
+		\( -path './.git' -o -path './web/frontend/node_modules' \) -prune -o \
+		-type f -name '*.go' -print |
 		sort |
 		while IFS= read -r file; do
 			gofmt -l "$file"
@@ -216,15 +417,189 @@ run_backend() {
 	go vet $go_packages || return 1
 
 	section "Backend: running tests"
-	go test $go_packages || return 1
-
-	section "Backend: building dnd binary"
-	go build -trimpath -o "$tmp_dir/dnd" ./cmd/dnd || return 1
+	mkdir -p test/artifacts || return 1
+	go_test_results="test/artifacts/go-test-results.jsonl"
+	if ! go test -json $go_packages >"$go_test_results"; then
+		cat "$go_test_results" >&2
+		return 1
+	fi
 
 	section "Developer tooling: checking shell syntax"
 	sh -n ci.sh run.sh reset-db.sh || return 1
 
+	return 0
+}
+
+run_backend_build() {
+	require_command go || return 1
+
+	section "Backend: building dnd binary"
+	go build -trimpath -o "$tmp_dir/dnd" ./cmd/dnd || return 1
+
 	run_database_smoke || return 1
+}
+
+run_parallel_validation() {
+	frontend_checks_log="$tmp_dir/frontend-checks.log"
+	backend_checks_log="$tmp_dir/backend-checks.log"
+	test_install_log="$tmp_dir/test-install.log"
+	parallel_checks_started_ms="$(clock_milliseconds)" || return 1
+
+	(
+		run_timed_stage "frontend validation" run_frontend_checks
+	) >"$frontend_checks_log" 2>&1 &
+	frontend_checks_pid=$!
+	(
+		run_timed_stage "backend validation" run_backend_checks
+	) >"$backend_checks_log" 2>&1 &
+	backend_checks_pid=$!
+	(
+		run_timed_stage "E2E dependency install" run_test_install
+	) >"$test_install_log" 2>&1 &
+	test_install_pid=$!
+
+	wait "$frontend_checks_pid"
+	frontend_checks_status=$?
+	frontend_checks_pid=""
+	wait "$backend_checks_pid"
+	backend_checks_status=$?
+	backend_checks_pid=""
+	wait "$test_install_pid"
+	test_install_status=$?
+	test_install_pid=""
+
+	section "Frontend validation log"
+	cat "$frontend_checks_log"
+	section "Backend validation log"
+	cat "$backend_checks_log"
+	section "E2E dependency install log"
+	cat "$test_install_log"
+
+	parallel_checks_finished_ms="$(clock_milliseconds)" || return 1
+	report_timing \
+		"parallel frontend/backend validation" \
+		"$parallel_checks_started_ms" \
+		"$parallel_checks_finished_ms"
+
+	if [ "$frontend_checks_status" -ne 0 ] || \
+		[ "$backend_checks_status" -ne 0 ] || \
+		[ "$test_install_status" -ne 0 ]; then
+		printf 'Parallel validation failed: frontend=%d backend=%d e2e-install=%d\n' \
+			"$frontend_checks_status" "$backend_checks_status" \
+			"$test_install_status" >&2
+		return 1
+	fi
+}
+
+run_production_builds() {
+	run_frontend_build || return 1
+	run_backend_build || return 1
+}
+
+run_test_install() {
+	(cd test && bun_ci)
+}
+
+run_test_format_check() {
+	(cd test && bun run format:check)
+}
+
+run_test_type_check() {
+	(cd test && bun run check)
+}
+
+run_test_scenario_checks() {
+	(
+		cd test || exit 1
+		mkdir -p artifacts || exit 1
+		bun test src/scenario/architecture-tests \
+			--reporter=junit \
+			--reporter-outfile artifacts/scenario-architecture-results.xml || exit 1
+		bun run verify:scenarios
+	)
+}
+
+run_parallel_test_validation() {
+	test_format_log="$tmp_dir/test-format.log"
+	test_type_log="$tmp_dir/test-type.log"
+	test_scenario_log="$tmp_dir/test-scenario.log"
+	(
+		run_timed_stage "E2E formatting" run_test_format_check
+	) >"$test_format_log" 2>&1 &
+	test_format_pid=$!
+	(
+		run_timed_stage "E2E type checking" run_test_type_check
+	) >"$test_type_log" 2>&1 &
+	test_type_pid=$!
+	(
+		run_timed_stage "E2E scenario architecture" run_test_scenario_checks
+	) >"$test_scenario_log" 2>&1 &
+	test_scenario_pid=$!
+
+	wait "$test_format_pid"
+	test_format_status=$?
+	test_format_pid=""
+	wait "$test_type_pid"
+	test_type_status=$?
+	test_type_pid=""
+	wait "$test_scenario_pid"
+	test_scenario_status=$?
+	test_scenario_pid=""
+
+	section "E2E formatting log"
+	cat "$test_format_log"
+	section "E2E type-check log"
+	cat "$test_type_log"
+	section "E2E scenario-runtime log"
+	cat "$test_scenario_log"
+
+	if [ "$test_format_status" -ne 0 ] || \
+		[ "$test_type_status" -ne 0 ] || \
+		[ "$test_scenario_status" -ne 0 ]; then
+		printf 'Parallel E2E validation failed: format=%d type=%d scenario=%d\n' \
+			"$test_format_status" "$test_type_status" \
+			"$test_scenario_status" >&2
+		return 1
+	fi
+}
+
+run_parallel_build_and_test_validation() {
+	production_builds_log="$tmp_dir/production-builds.log"
+	(
+		run_timed_stage "production artifact builds" run_production_builds
+	) >"$production_builds_log" 2>&1 &
+	production_builds_pid=$!
+
+	run_parallel_test_validation
+	test_validation_status=$?
+	wait "$production_builds_pid"
+	production_builds_status=$?
+	production_builds_pid=""
+
+	section "Production artifact build log"
+	cat "$production_builds_log"
+
+	if [ "$test_validation_status" -ne 0 ] || \
+		[ "$production_builds_status" -ne 0 ]; then
+		printf 'Parallel build/E2E validation failed: validation=%d builds=%d\n' \
+			"$test_validation_status" "$production_builds_status" >&2
+		return 1
+	fi
+}
+
+run_browser_scenarios() {
+	if [ ! -x "$tmp_dir/dnd" ]; then
+		printf 'The verified E2E application binary is missing or not executable: %s\n' \
+			"$tmp_dir/dnd" >&2
+		return 1
+	fi
+	(
+		cd test &&
+			DND_E2E_APP_BINARY="$tmp_dir/dnd" \
+			DND_E2E_DIAGNOSTICS=0 \
+			DND_E2E_REQUIRE_COMPLETE_COVERAGE=1 \
+			bun run e2e
+	)
 }
 
 run_e2e() {
@@ -236,22 +611,27 @@ run_e2e() {
 	require_command bun || return 1
 	require_command go || return 1
 
-	section "E2E: installing locked dependencies"
-	(cd test && bun_ci) || return 1
-
-	section "E2E: checking formatting"
-	(cd test && bun run format:check) || return 1
-
-	section "E2E: type checking"
-	(cd test && bun run check) || return 1
-
 	section "E2E: running browser scenarios"
-	(cd test && bun run e2e) || return 1
+	run_timed_stage "E2E browser scenarios" run_browser_scenarios || return 1
 }
 
 tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dnd-ci.XXXXXX")" || exit 1
 ci_worktree_path=""
 smoke_pid=""
+frontend_checks_pid=""
+backend_checks_pid=""
+test_install_pid=""
+frontend_format_pid=""
+frontend_lint_pid=""
+frontend_css_pid=""
+frontend_test_pid=""
+frontend_dead_pid=""
+frontend_type_pid=""
+test_format_pid=""
+test_type_pid=""
+test_scenario_pid=""
+production_builds_pid=""
+enforce_e2e_budget=0
 trap cleanup EXIT INT TERM
 
 target="all"
@@ -259,6 +639,7 @@ if [ "$#" -gt 1 ]; then
 	usage >&2
 	exit 2
 fi
+
 if [ "$#" -eq 1 ]; then
 	case "$1" in
 	all | --all)
@@ -285,6 +666,10 @@ if [ "$#" -eq 1 ]; then
 	esac
 fi
 
+if [ "$target" = "e2e" ] && [ "${DND_CI_IN_WORKTREE:-}" != "1" ]; then
+	enforce_e2e_budget=1
+fi
+
 if [ "${DND_CI_IN_WORKTREE:-}" != "1" ]; then
 	run_in_isolated_worktree "$@"
 	exit $?
@@ -294,8 +679,8 @@ configure_ci_caches || exit 1
 
 case "$target" in
 all)
-	run_frontend || exit 1
-	run_backend || exit 1
+	run_parallel_validation || exit 1
+	run_parallel_build_and_test_validation || exit 1
 	run_e2e || exit 1
 	;;
 frontend)
@@ -305,8 +690,8 @@ backend)
 	run_backend || exit 1
 	;;
 e2e)
-	run_frontend || exit 1
-	run_backend || exit 1
+	run_parallel_validation || exit 1
+	run_parallel_build_and_test_validation || exit 1
 	run_e2e || exit 1
 	;;
 esac

@@ -199,7 +199,27 @@ func (s *Server) handlePutWorldEntity(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "entity is invalid", fields)
 		return
 	}
-	command, err := s.db.Exec(r.Context(), `
+	tx, err := s.db.Begin(r.Context())
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	defer tx.Rollback(r.Context()) //nolint:errcheck
+	var archived bool
+	if err := tx.QueryRow(r.Context(), `
+		select archived from entities where world_id = $1 and id = $2 for update`,
+		member.WorldID, entityID).Scan(&archived); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if archived {
+		handleAppError(w, &statusError{
+			Status: http.StatusConflict, Code: "entity_archived",
+			Message: "archived entities cannot be changed",
+		})
+		return
+	}
+	command, err := tx.Exec(r.Context(), `
 		update entities set display_name = $3, archived = $4 where world_id = $1 and id = $2`,
 		member.WorldID, entityID, strings.TrimSpace(request.DisplayName), request.Archived)
 	if err != nil {
@@ -210,8 +230,12 @@ func (s *Server) handlePutWorldEntity(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, pgx.ErrNoRows)
 		return
 	}
-	item, err := loadWorldEntityResponse(r.Context(), s.db, member.WorldID, entityID)
+	item, err := loadWorldEntityResponse(r.Context(), tx, member.WorldID, entityID)
 	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
 		handleAppError(w, err)
 		return
 	}

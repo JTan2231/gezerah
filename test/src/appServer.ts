@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { createWriteStream, type WriteStream } from "node:fs";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { constants, createWriteStream, type WriteStream } from "node:fs";
+import { access, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,7 @@ import { createDisposableDatabase, type DisposableDatabase } from "./database";
 
 export interface AppServer {
   baseURL: string;
+  controlledTimeDatabaseURL: string;
   logPath: string;
   stop: () => Promise<void>;
 }
@@ -17,28 +18,11 @@ export interface AppServer {
 export async function startAppServer(options: {
   repoRoot: string;
   artifactsDir: string;
+  prebuiltBinaryPath?: string;
 }): Promise<AppServer> {
+  const startupStartedAt = Date.now();
   await mkdir(options.artifactsDir, { recursive: true });
-  process.stdout.write("\n==> E2E: building frontend\n");
-  await runCommand("bun", ["run", "build"], {
-    cwd: path.join(options.repoRoot, "web/frontend"),
-  });
-
-  const buildDir = await mkdtemp(path.join(os.tmpdir(), "dnd-e2e-bin-"));
-  const binaryPath = path.join(buildDir, "dnd");
-  try {
-    process.stdout.write("\n==> E2E: building application\n");
-    await runCommand(
-      "go",
-      ["build", "-trimpath", "-o", binaryPath, "./cmd/dnd"],
-      {
-        cwd: options.repoRoot,
-      },
-    );
-  } catch (error) {
-    await rm(buildDir, { recursive: true, force: true });
-    throw error;
-  }
+  const preparedBinary = await prepareApplication(options);
 
   let database: DisposableDatabase | undefined;
   let child: ChildProcess | undefined;
@@ -50,7 +34,7 @@ export async function startAppServer(options: {
     const baseURL = `http://127.0.0.1:${port}`;
     const logPath = path.join(options.artifactsDir, "app-server.log");
     logStream = createWriteStream(logPath, { flags: "w" });
-    child = spawn(binaryPath, [], {
+    child = spawn(preparedBinary.path, [], {
       cwd: options.repoRoot,
       detached: process.platform !== "win32",
       env: {
@@ -64,6 +48,7 @@ export async function startAppServer(options: {
     child.stdout?.pipe(logStream, { end: false });
     child.stderr?.pipe(logStream, { end: false });
     await waitForHealth(baseURL, child);
+    reportTiming("database and application startup", startupStartedAt);
 
     const runningChild = child;
     const runningLog = logStream;
@@ -71,30 +56,99 @@ export async function startAppServer(options: {
     let stopped = false;
     return {
       baseURL,
+      controlledTimeDatabaseURL: runningDatabase.url,
       logPath,
       stop: async () => {
         if (stopped) return;
         stopped = true;
-        await stopProcess(runningChild).catch(() => undefined);
-        await endStream(runningLog);
-        await runningDatabase.drop();
-        await rm(buildDir, { recursive: true, force: true });
+        const cleanupStartedAt = Date.now();
+        try {
+          await stopProcess(runningChild).catch(() => undefined);
+          try {
+            await endStream(runningLog);
+          } finally {
+            await runningDatabase.drop();
+          }
+        } finally {
+          await preparedBinary.cleanup();
+          reportTiming("application and database cleanup", cleanupStartedAt);
+        }
       },
     };
   } catch (error) {
     if (child !== undefined) await stopProcess(child).catch(() => undefined);
-    if (logStream !== undefined) await endStream(logStream);
+    if (logStream !== undefined)
+      await endStream(logStream).catch(() => undefined);
     if (database !== undefined) await database.drop().catch(() => undefined);
+    await preparedBinary.cleanup().catch(() => undefined);
+    throw error;
+  }
+}
+
+interface PreparedBinary {
+  path: string;
+  cleanup: () => Promise<void>;
+}
+
+async function prepareApplication(options: {
+  repoRoot: string;
+  prebuiltBinaryPath?: string;
+}): Promise<PreparedBinary> {
+  if (options.prebuiltBinaryPath !== undefined) {
+    const binaryPath = path.resolve(
+      options.repoRoot,
+      options.prebuiltBinaryPath,
+    );
+    const binaryStat = await stat(binaryPath).catch(() => undefined);
+    if (binaryStat?.isFile() !== true) {
+      throw new Error(`prebuilt E2E application is not a file: ${binaryPath}`);
+    }
+    if (process.platform !== "win32") {
+      await access(binaryPath, constants.X_OK);
+    }
+    process.stdout.write(
+      `\n==> E2E: using verified application artifact ${binaryPath}\n`,
+    );
+    return { path: binaryPath, cleanup: async () => undefined };
+  }
+
+  process.stdout.write("\n==> E2E: building frontend (direct-run fallback)\n");
+  const frontendStartedAt = Date.now();
+  await runCommand("bun", ["run", "build"], {
+    cwd: path.join(options.repoRoot, "web/frontend"),
+  });
+  reportTiming("fallback frontend build", frontendStartedAt);
+
+  const buildDir = await mkdtemp(path.join(os.tmpdir(), "dnd-e2e-bin-"));
+  const binaryPath = path.join(buildDir, "dnd");
+  try {
+    process.stdout.write(
+      "\n==> E2E: building application (direct-run fallback)\n",
+    );
+    const backendStartedAt = Date.now();
+    await runCommand(
+      "go",
+      ["build", "-trimpath", "-o", binaryPath, "./cmd/dnd"],
+      {
+        cwd: options.repoRoot,
+      },
+    );
+    reportTiming("fallback application build", backendStartedAt);
+  } catch (error) {
     await rm(buildDir, { recursive: true, force: true });
     throw error;
   }
+  return {
+    path: binaryPath,
+    cleanup: async () => rm(buildDir, { recursive: true, force: true }),
+  };
 }
 
 async function waitForHealth(
   baseURL: string,
   child: ChildProcess,
 ): Promise<void> {
-  const deadline = Date.now() + 60_000;
+  const deadline = Date.now() + 10_000;
   while (Date.now() < deadline) {
     if (child.exitCode !== null || child.signalCode !== null) {
       throw new Error(
@@ -107,15 +161,15 @@ async function waitForHealth(
     } catch {
       // Startup and migrations are still in progress.
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 50));
   }
-  throw new Error("application did not become healthy within 60 seconds");
+  throw new Error("application did not become healthy within 10 seconds");
 }
 
 async function stopProcess(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) return;
   await new Promise<void>((resolve) => {
-    const timer = setTimeout(() => signalProcess(child, "SIGKILL"), 5_000);
+    const timer = setTimeout(() => signalProcess(child, "SIGKILL"), 2_000);
     child.once("exit", () => {
       clearTimeout(timer);
       resolve();
@@ -139,6 +193,12 @@ function signalProcess(child: ChildProcess, signal: NodeJS.Signals): void {
 
 async function endStream(stream: WriteStream): Promise<void> {
   await new Promise<void>((resolve) => stream.end(resolve));
+}
+
+function reportTiming(name: string, startedAt: number): void {
+  process.stdout.write(
+    `==> Timing: E2E ${name} ${((Date.now() - startedAt) / 1000).toFixed(3)}s\n`,
+  );
 }
 
 async function freePort(): Promise<number> {

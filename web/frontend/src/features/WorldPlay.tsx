@@ -371,6 +371,7 @@ export function WorldPlay({
               key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
               entity={selectedEntity}
               mechanics={mechanicItems}
+              rulesRevision={rulesRevision}
               mechanicsEditable={false}
               controlledByCurrentMember={controlledEntityIDs.includes(
                 selectedEntity.id,
@@ -913,6 +914,7 @@ function OpenProblem({
       );
       setText("");
       onChanged();
+      setSaving(false);
     } catch (reason) {
       setError(
         reason instanceof ApiError
@@ -939,6 +941,7 @@ function OpenProblem({
         },
       );
       onChanged();
+      setSaving(false);
     } catch (reason) {
       setError(
         reason instanceof ApiError

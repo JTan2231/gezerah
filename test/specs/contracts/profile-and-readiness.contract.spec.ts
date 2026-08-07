@@ -1,0 +1,522 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+} from "@playwright/test";
+
+import { readBaseURL } from "../../src/runtime";
+import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+
+interface IdentifiedResource {
+  id: string;
+}
+
+interface WorldResponse extends IdentifiedResource {
+  membership_id: string;
+  rules_revision: number;
+  play_status:
+    "waiting-for-character" | "setup-required" | "ready" | "unavailable";
+}
+
+interface InviteResponse extends IdentifiedResource {
+  join_path?: string;
+}
+
+interface CharacterFieldSetResponse {
+  revision: number;
+  fields: Array<{
+    id: string;
+    label: string;
+    help_text?: string;
+    visibility: "table" | "controllers-and-facilitators";
+  }>;
+}
+
+interface MechanicMutationResponse {
+  revision: number;
+  mechanic: IdentifiedResource;
+}
+
+interface EntityResponse extends IdentifiedResource {
+  state: {
+    revision: number;
+    values: Record<string, unknown>;
+  };
+}
+
+interface EntityProfileResponse {
+  entity_id: string;
+  revision: number;
+  character_fields_revision: number;
+  character_status: "not-controlled" | "setup-required" | "ready";
+  required_field_count: number;
+  completed_field_count: number;
+  can_edit: boolean;
+  fields: Array<{
+    id: string;
+    label: string;
+    value?: string;
+    visibility: "table" | "controllers-and-facilitators";
+  }>;
+}
+
+interface InteractionResponse extends IdentifiedResource {
+  revision: number;
+  status: "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
+}
+
+test("contract: readiness and profile projections preserve authority and privacy", async ({
+  request,
+}) => {
+  const baseURL = await readBaseURL();
+  const unique = randomUUID().slice(0, 8);
+  const owner = await createUser(request, baseURL, `Profile Owner ${unique}`);
+  const player = await createUser(request, baseURL, `Profile Player ${unique}`);
+  const spectator = await createUser(
+    request,
+    baseURL,
+    `Profile Spectator ${unique}`,
+  );
+  const world = await postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds`,
+    { name: `Profile World ${unique}` },
+    owner.id,
+  );
+
+  const emptyFields = await getJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    owner.id,
+  );
+  const fields = await putJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    {
+      expected_revision: emptyFields.revision,
+      fields: [
+        {
+          label: `Public story ${unique}`,
+          help_text: "What may the whole table know?",
+          visibility: "table",
+        },
+        {
+          label: `Private oath ${unique}`,
+          help_text: "What is reserved for controllers and facilitators?",
+          visibility: "controllers-and-facilitators",
+        },
+      ],
+    },
+    owner.id,
+  );
+  const publicField = required(fields.fields[0], "public field");
+  const privateField = required(fields.fields[1], "private field");
+
+  const mechanic = await postJSON<MechanicMutationResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/mechanics`,
+    {
+      kind: "capacity",
+      mode: "score",
+      source_kind: "input",
+      name: `Bearing ${unique}`,
+      minimum: 0,
+      maximum: 10,
+      step: 1,
+      default_number: 8,
+      mutable_during_play: true,
+      archived: false,
+      expected_rules_revision: world.rules_revision,
+    },
+    owner.id,
+  );
+  expect(mechanic.revision).toBe(world.rules_revision + 1);
+
+  const joinedPlayer = await redeemInvite(
+    request,
+    baseURL,
+    world.id,
+    owner.id,
+    player.id,
+    "player",
+  );
+  await redeemInvite(
+    request,
+    baseURL,
+    world.id,
+    owner.id,
+    spectator.id,
+    "spectator",
+  );
+  expect(joinedPlayer.play_status).toBe("waiting-for-character");
+
+  const controlled = await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    {
+      display_name: `Controlled Courier ${unique}`,
+      controller_world_membership_ids: [joinedPlayer.membership_id],
+    },
+    owner.id,
+  );
+  const uncontrolled = await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    { display_name: `Uncontrolled Sentinel ${unique}` },
+    owner.id,
+  );
+
+  const beforeProfile = await getJSON<EntityProfileResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    player.id,
+  );
+  expect(beforeProfile).toMatchObject({
+    revision: 0,
+    character_status: "setup-required",
+    required_field_count: 2,
+    completed_field_count: 0,
+    can_edit: true,
+  });
+  await expectAPIError(
+    await request.get(`${baseURL}/api/worlds/${world.id}/interactions`, {
+      headers: identityHeaders(player.id),
+    }),
+    403,
+    "character_setup_required",
+  );
+
+  const publicStory = `Raised beside the salt lamps ${unique}.`;
+  const privateStory = `Carries the unbroken seal ${unique}.`;
+  const partial = await putJSON<EntityProfileResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    {
+      expected_revision: beforeProfile.revision,
+      expected_character_fields_revision: fields.revision,
+      values: [{ field_id: publicField.id, value: publicStory }],
+    },
+    player.id,
+  );
+  expect(partial).toMatchObject({
+    revision: 1,
+    character_status: "setup-required",
+    completed_field_count: 1,
+  });
+  expect(
+    (
+      await getJSON<WorldResponse>(
+        request,
+        `${baseURL}/api/worlds/${world.id}`,
+        player.id,
+      )
+    ).play_status,
+  ).toBe("setup-required");
+  expect(
+    (
+      await request.get(
+        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/state`,
+        { headers: identityHeaders(player.id) },
+      )
+    ).status(),
+  ).toBe(200);
+  expect(
+    (
+      await request.get(
+        `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/state`,
+        { headers: identityHeaders(player.id) },
+      )
+    ).status(),
+  ).toBe(403);
+
+  const complete = await putJSON<EntityProfileResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    {
+      expected_revision: partial.revision,
+      expected_character_fields_revision: fields.revision,
+      values: [
+        { field_id: publicField.id, value: publicStory },
+        { field_id: privateField.id, value: privateStory },
+      ],
+    },
+    player.id,
+  );
+  expect(complete).toMatchObject({
+    revision: 2,
+    character_status: "ready",
+    completed_field_count: 2,
+  });
+  expect(
+    (
+      await getJSON<WorldResponse>(
+        request,
+        `${baseURL}/api/worlds/${world.id}`,
+        player.id,
+      )
+    ).play_status,
+  ).toBe("ready");
+
+  await test.step("AUT-V03 omits restricted profile definitions and values", async () => {
+    const spectatorProjection = await getJSON<EntityProfileResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+      spectator.id,
+    );
+    expect(spectatorProjection).toMatchObject({
+      entity_id: controlled.id,
+      revision: 2,
+      character_status: "ready",
+      required_field_count: 2,
+      completed_field_count: 2,
+      can_edit: false,
+    });
+    expect(spectatorProjection.fields).toEqual([
+      expect.objectContaining({
+        id: publicField.id,
+        value: publicStory,
+        visibility: "table",
+      }),
+    ]);
+    expect(JSON.stringify(spectatorProjection)).not.toContain(privateStory);
+    expect(JSON.stringify(spectatorProjection)).not.toContain(privateField.id);
+  });
+
+  expect(
+    (
+      await request.put(
+        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+        {
+          headers: identityHeaders(spectator.id),
+          data: {
+            expected_revision: complete.revision,
+            expected_character_fields_revision: fields.revision,
+            values: [],
+          },
+        },
+      )
+    ).status(),
+  ).toBe(403);
+  await expectAPIError(
+    await request.put(
+      `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+      {
+        headers: identityHeaders(player.id),
+        data: {
+          expected_revision: 0,
+          expected_character_fields_revision: fields.revision,
+          values: [
+            { field_id: publicField.id, value: publicStory },
+            { field_id: privateField.id, value: privateStory },
+          ],
+        },
+      },
+    ),
+    409,
+    "revision_conflict",
+  );
+  const unchangedProfile = await getJSON<EntityProfileResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    player.id,
+  );
+  expect(unchangedProfile).toMatchObject({
+    revision: complete.revision,
+    character_fields_revision: fields.revision,
+    character_status: "ready",
+    completed_field_count: 2,
+  });
+  expect(unchangedProfile.fields).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: publicField.id, value: publicStory }),
+      expect.objectContaining({ id: privateField.id, value: privateStory }),
+    ]),
+  );
+  expect(
+    (
+      await getJSON<EntityResponse[]>(
+        request,
+        `${baseURL}/api/worlds/${world.id}/entities`,
+        player.id,
+      )
+    ).find((entity) => entity.id === controlled.id)?.state.revision,
+  ).toBe(0);
+
+  const openInteraction = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
+    {
+      present: true,
+      prompt: `The profile contract remains in use ${unique}.`,
+      eligible_responder_membership_ids: [joinedPlayer.membership_id],
+      entity_ids: [controlled.id],
+    },
+    owner.id,
+  );
+  expect(openInteraction).toMatchObject({ status: "open", revision: 1 });
+
+  const expandedFieldRequest = {
+    expected_revision: fields.revision,
+    fields: [
+      ...fields.fields.map((field) => ({
+        id: field.id,
+        label: field.label,
+        help_text: field.help_text,
+        visibility: field.visibility,
+      })),
+      {
+        label: `New bond ${unique}`,
+        help_text: "What now binds this character to the table?",
+        visibility: "table" as const,
+      },
+    ],
+  };
+  await test.step("CHF-V01 blocks requirement-set changes during unfinished play", async () => {
+    await expectAPIError(
+      await request.put(`${baseURL}/api/worlds/${world.id}/character-fields`, {
+        headers: identityHeaders(owner.id),
+        data: expandedFieldRequest,
+      }),
+      409,
+      "character_fields_in_use",
+    );
+    const fieldsAfterDenial = await getJSON<CharacterFieldSetResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/character-fields`,
+      owner.id,
+    );
+    expect(fieldsAfterDenial).toEqual(fields);
+  });
+  await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${openInteraction.id}/cancel`,
+    { expected_revision: openInteraction.revision },
+    owner.id,
+  );
+
+  const expandedFields = await putJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    expandedFieldRequest,
+    owner.id,
+  );
+  expect(expandedFields.revision).toBe(fields.revision + 1);
+  expect(
+    (
+      await getJSON<WorldResponse>(
+        request,
+        `${baseURL}/api/worlds/${world.id}`,
+        player.id,
+      )
+    ).play_status,
+  ).toBe("setup-required");
+  await expectAPIError(
+    await request.get(`${baseURL}/api/worlds/${world.id}/interactions`, {
+      headers: identityHeaders(player.id),
+    }),
+    403,
+    "character_setup_required",
+  );
+});
+
+async function createUser(
+  request: APIRequestContext,
+  baseURL: string,
+  displayName: string,
+): Promise<IdentifiedResource> {
+  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
+    display_name: displayName,
+  });
+}
+
+async function redeemInvite(
+  request: APIRequestContext,
+  baseURL: string,
+  worldID: string,
+  ownerID: string,
+  userID: string,
+  role: "player" | "spectator",
+): Promise<WorldResponse> {
+  const invite = await postJSON<InviteResponse>(
+    request,
+    `${baseURL}/api/worlds/${worldID}/invites`,
+    { role, expires_in_days: 7 },
+    ownerID,
+  );
+  const token = required(invite.join_path?.split("/").at(-1), `${role} token`);
+  return postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/world-invites/${token}/redeem`,
+    undefined,
+    userID,
+  );
+}
+
+function identityHeaders(userID: string): Record<string, string> {
+  return { "X-DND-User-ID": userID };
+}
+
+async function getJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  userID?: string,
+): Promise<T> {
+  const response = await request.get(url, {
+    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
+  });
+  return expectJSON<T>(response, url);
+}
+
+async function postJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  userID?: string,
+): Promise<T> {
+  const response = await request.post(url, {
+    ...(data === undefined ? {} : { data }),
+    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
+  });
+  return expectJSON<T>(response, url);
+}
+
+async function putJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  userID?: string,
+): Promise<T> {
+  const response = await request.put(url, {
+    data,
+    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
+  });
+  return expectJSON<T>(response, url);
+}
+
+async function expectJSON<T>(response: APIResponse, url: string): Promise<T> {
+  const body = await response.text();
+  expect(
+    response.ok(),
+    `${response.status()} ${sanitizeURL(url)}: ${sanitizeDiagnosticBody(body)}`,
+  ).toBe(true);
+  return JSON.parse(body) as T;
+}
+
+async function expectAPIError(
+  response: APIResponse,
+  status: number,
+  code: string,
+): Promise<void> {
+  const body = await response.text();
+  expect(response.status(), sanitizeDiagnosticBody(body)).toBe(status);
+  const decoded = JSON.parse(body) as { error?: { code?: string } };
+  expect(decoded.error?.code).toBe(code);
+}
+
+function required<T>(value: T | undefined, label: string): T {
+  expect(value, `${label} is present`).toBeDefined();
+  return value as T;
+}

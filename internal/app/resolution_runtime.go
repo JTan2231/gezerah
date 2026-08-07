@@ -189,6 +189,7 @@ func loadResolutionRuntimeInput(
 	}
 	sort.Slice(result.TargetIDs, func(i, j int) bool { return result.TargetIDs[i] < result.TargetIDs[j] })
 	result.Entities = make(map[rules.ID]rules.Entity, len(result.TargetIDs))
+	characterStatuses := make(map[rules.ID]string, len(result.TargetIDs))
 	result.StatusSets = make(map[rules.ID]loadedStatusSet, len(result.TargetIDs))
 	result.Snapshot = rules.RuntimeSnapshot{
 		State:          rules.StateSnapshot{Records: make(map[rules.ID]rules.StateRecord, len(result.TargetIDs))},
@@ -203,6 +204,13 @@ func loadResolutionRuntimeInput(
 			return result, entityErr
 		}
 		result.Entities[entityID] = entity
+		if !entity.Archived {
+			status, _, _, statusErr := entityCharacterStatus(ctx, db, worldID, string(entityID))
+			if statusErr != nil {
+				return result, statusErr
+			}
+			characterStatuses[entityID] = status
+		}
 		record, recordErr := loadStoredStateRecord(ctx, db, worldID, string(entityID))
 		if recordErr != nil {
 			return result, recordErr
@@ -218,7 +226,30 @@ func loadResolutionRuntimeInput(
 			result.Statuses.Snapshots[sourceEffectID] = snapshot
 		}
 	}
+	if err := resolutionTargetEligibilityError(result.Plan, characterStatuses); err != nil {
+		return result, err
+	}
 	return result, nil
+}
+
+func resolutionTargetEligibilityError(plan rules.TransitionPlan, characterStatuses map[rules.ID]string) error {
+	errs := make(rules.ValidationErrors, 0)
+	for effectIndex, effect := range plan.Effects {
+		for entityIndex, entityID := range effect.EntityIDs {
+			if characterStatuses[entityID] != "setup-required" {
+				continue
+			}
+			errs = append(errs, rules.ValidationError{
+				Code:    "incomplete_entity",
+				Path:    fmt.Sprintf("effects[%d].entity_ids[%d]", effectIndex, entityIndex),
+				Message: "controlled character setup must be complete",
+			})
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return domainTransitionError(&rules.DomainError{Kind: rules.ErrInvalidTransition, Errors: errs})
 }
 
 func statusReceipts(

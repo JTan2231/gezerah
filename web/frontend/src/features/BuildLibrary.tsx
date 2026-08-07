@@ -258,7 +258,7 @@ function CreateWorldModal({
           <button
             className="button button-primary"
             type="submit"
-            disabled={saving || name.trim() === ""}
+            disabled={saving}
           >
             {saving ? "Creating…" : "Create world"}
           </button>

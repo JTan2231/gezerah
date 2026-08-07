@@ -9,6 +9,7 @@ import (
 	"path"
 	"runtime/debug"
 	"strings"
+	"sync"
 	"time"
 
 	"dnd/web"
@@ -21,6 +22,9 @@ type Server struct {
 	api      *http.ServeMux
 	static   http.Handler
 	staticFS fs.FS
+
+	worldEventWakeMu sync.Mutex
+	worldEventWake   chan struct{}
 }
 
 func NewServer(_ context.Context, db *pgxpool.Pool, _ Config) (*Server, error) {
@@ -34,10 +38,11 @@ func NewServer(_ context.Context, db *pgxpool.Pool, _ Config) (*Server, error) {
 // NewServerWithStaticFS is the test seam for serving a synthetic frontend.
 func NewServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	server := &Server{
-		db:       db,
-		api:      http.NewServeMux(),
-		static:   http.FileServer(http.FS(staticFS)),
-		staticFS: staticFS,
+		db:             db,
+		api:            http.NewServeMux(),
+		static:         http.FileServer(http.FS(staticFS)),
+		staticFS:       staticFS,
+		worldEventWake: make(chan struct{}),
 	}
 	server.api.HandleFunc("GET /api/health", server.handleHealth)
 	server.registerResourceRoutes()
@@ -127,8 +132,8 @@ func (s *Server) withRecovery(next http.Handler) http.Handler {
 			if recovered := recover(); recovered != nil {
 				slog.Error("request panic",
 					"method", r.Method,
-					"path", r.URL.Path,
-					"panic", recovered,
+					"path", requestLogPath(r),
+					"panic_type", fmt.Sprintf("%T", recovered),
 					"stack", string(debug.Stack()),
 				)
 				if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
@@ -147,14 +152,104 @@ func (s *Server) withRequestLog(next http.Handler) http.Handler {
 		started := time.Now()
 		response := &responseRecorder{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(response, r)
+		if successfulAPIMutation(r, response.status) {
+			s.notifyWorldEventWaiters()
+		}
 		slog.Info("request",
 			"method", r.Method,
-			"path", r.URL.Path,
+			"path", requestLogPath(r),
 			"status", response.status,
 			"bytes", response.bytes,
 			"duration", time.Since(started),
 		)
 	})
+}
+
+func successfulAPIMutation(r *http.Request, status int) bool {
+	if r == nil || status < http.StatusOK || status >= http.StatusBadRequest {
+		return false
+	}
+	if r.URL == nil || (r.URL.Path != "/api" && !strings.HasPrefix(r.URL.Path, "/api/")) {
+		return false
+	}
+	switch r.Method {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// currentWorldEventWake returns a broadcast generation. Event handlers capture
+// it before querying PostgreSQL: a mutation either commits before that query and
+// is observed by it, or closes the captured generation afterward and wakes the
+// handler. The ticker remains the cross-process and lost-wakeup fallback.
+func (s *Server) currentWorldEventWake() <-chan struct{} {
+	s.worldEventWakeMu.Lock()
+	defer s.worldEventWakeMu.Unlock()
+	return s.worldEventWake
+}
+
+func (s *Server) notifyWorldEventWaiters() {
+	s.worldEventWakeMu.Lock()
+	close(s.worldEventWake)
+	s.worldEventWake = make(chan struct{})
+	s.worldEventWakeMu.Unlock()
+}
+
+const redactedRequestPathSegment = "[REDACTED]"
+
+// requestLogPath returns only a safe path: query parameters are never included,
+// and opaque invitation bearer tokens are replaced with a stable route marker.
+// Redacting the entire remainder of a frontend invitation path also protects
+// encoded slashes or malformed suffixes from leaking part of a token. The
+// cleaned-path check covers request paths that ServeMux will canonicalize.
+func requestLogPath(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return ""
+	}
+
+	requestPath := r.URL.Path
+	if redacted, ok := redactedRequestLogPath(requestPath); ok {
+		return redacted
+	}
+	cleanPath := path.Clean(requestPath)
+	if cleanPath != requestPath {
+		if redacted, ok := redactedRequestLogPath(cleanPath); ok {
+			return redacted
+		}
+	}
+	return requestPath
+}
+
+func redactedRequestLogPath(requestPath string) (string, bool) {
+	for _, prefix := range []string{"/play/invite", "/build/invite"} {
+		if redacted, ok := redactRequestBearerPath(requestPath, prefix, false); ok {
+			return redacted, true
+		}
+	}
+	if redacted, ok := redactRequestBearerPath(requestPath, "/api/world-invites", true); ok {
+		return redacted, true
+	}
+	return "", false
+}
+
+func redactRequestBearerPath(requestPath, prefix string, preserveRedeem bool) (string, bool) {
+	if !strings.HasPrefix(requestPath, prefix+"/") {
+		return "", false
+	}
+
+	remainder := strings.TrimPrefix(requestPath, prefix+"/")
+	if remainder == "" {
+		return requestPath, false
+	}
+	if preserveRedeem && strings.HasSuffix(remainder, "/redeem") {
+		token := strings.TrimSuffix(remainder, "/redeem")
+		if token != "" {
+			return prefix + "/" + redactedRequestPathSegment + "/redeem", true
+		}
+	}
+	return prefix + "/" + redactedRequestPathSegment, true
 }
 
 type responseRecorder struct {

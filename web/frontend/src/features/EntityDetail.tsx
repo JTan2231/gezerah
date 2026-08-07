@@ -10,11 +10,13 @@ import type {
 } from "../api/types";
 import { ErrorMessage } from "../components/StudioUI";
 import { formatRelativeDate } from "../domain/display";
+import { confirmDiscardDraft, useDirtyGuard } from "../hooks/useDraft";
 import { EntityProfilePanel } from "./EntityProfilePanel";
 
 export function EntityDetail({
   entity,
   mechanics,
+  rulesRevision,
   mechanicsEditable,
   controlledByCurrentMember,
   facilitator,
@@ -26,6 +28,7 @@ export function EntityDetail({
 }: {
   entity: WorldEntity;
   mechanics: WorldMechanic[];
+  rulesRevision: number;
   mechanicsEditable: boolean;
   controlledByCurrentMember: boolean;
   facilitator: boolean;
@@ -38,6 +41,12 @@ export function EntityDetail({
   const [tab, setTab] = useState<"story" | "sheet">(
     controlledByCurrentMember && !facilitator ? "story" : "sheet",
   );
+
+  function selectTab(nextTab: "story" | "sheet") {
+    if (nextTab === tab || !confirmDiscardDraft()) return;
+    setTab(nextTab);
+  }
+
   return (
     <div className="entity-detail">
       <div className="entity-detail-toolbar">
@@ -51,7 +60,7 @@ export function EntityDetail({
             role="tab"
             aria-selected={tab === "story"}
             className={tab === "story" ? "active" : ""}
-            onClick={() => setTab("story")}
+            onClick={() => selectTab("story")}
           >
             Character
           </button>
@@ -60,7 +69,7 @@ export function EntityDetail({
             role="tab"
             aria-selected={tab === "sheet"}
             className={tab === "sheet" ? "active" : ""}
-            onClick={() => setTab("sheet")}
+            onClick={() => selectTab("sheet")}
           >
             Sheet
           </button>
@@ -87,6 +96,7 @@ export function EntityDetail({
         <EntitySheet
           entity={entity}
           mechanics={mechanics}
+          rulesRevision={rulesRevision}
           editable={mechanicsEditable}
           world={world}
           onSaved={onSaved}
@@ -99,12 +109,14 @@ export function EntityDetail({
 function EntitySheet({
   entity,
   mechanics,
+  rulesRevision,
   editable,
   world,
   onSaved,
 }: {
   entity: WorldEntity;
   mechanics: WorldMechanic[];
+  rulesRevision: number;
   editable: boolean;
   world: World;
   onSaved: () => void;
@@ -129,6 +141,8 @@ function EntitySheet({
     useState<Record<string, number | boolean>>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const clearDirtyGuard = useDirtyGuard(dirty);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -153,10 +167,11 @@ function EntitySheet({
         method: "PUT",
         ...jsonBody({
           expected_revision: entity.state.revision,
-          expected_rules_revision: entity.state.rules_revision,
+          expected_rules_revision: rulesRevision,
           values: stateValues,
         }),
       });
+      clearDirtyGuard();
       onSaved();
     } catch (reason) {
       setError(
@@ -180,8 +195,7 @@ function EntitySheet({
           <h2>{entity.display_name}</h2>
           <span>
             state r{entity.state.revision} · statuses r
-            {entity.state.status_revision} · rules r
-            {entity.state.rules_revision}
+            {entity.state.status_revision} · rules r{rulesRevision}
           </span>
         </div>
       </header>

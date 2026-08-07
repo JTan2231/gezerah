@@ -1,6 +1,7 @@
 package migrations
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -8,7 +9,11 @@ import (
 func TestMigrationHistoryMatches(t *testing.T) {
 	t.Parallel()
 
-	available := []string{"001_worldwright.sql", "002_rules_graph_statuses.sql"}
+	available := []string{
+		"001_worldwright.sql",
+		"002_rules_graph_statuses.sql",
+		"003_interaction_audience_invalidations.sql",
+	}
 	tests := []struct {
 		name    string
 		applied []string
@@ -16,6 +21,7 @@ func TestMigrationHistoryMatches(t *testing.T) {
 	}{
 		{name: "empty history", want: true},
 		{name: "prefix", applied: []string{"001_worldwright.sql"}, want: true},
+		{name: "two-version prefix", applied: available[:2], want: true},
 		{name: "complete", applied: available, want: true},
 		{name: "missing predecessor", applied: []string{"002_rules_graph_statuses.sql"}, want: false},
 		{name: "unknown version", applied: []string{"001_removed.sql"}, want: false},
@@ -30,6 +36,60 @@ func TestMigrationHistoryMatches(t *testing.T) {
 				t.Fatalf("migrationHistoryMatches(%v, %v) = %t, want %t", available, test.applied, got, test.want)
 			}
 		})
+	}
+}
+
+func TestInteractionAudienceInvalidationMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("003_interaction_audience_invalidations.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"add column invalidates_interaction_audience boolean not null default false",
+		"world_events_audience_invalidation_shape",
+		"not invalidates_interaction_audience",
+		"interaction_id is not null",
+		"submission_id is null",
+		"resolution_id is null",
+		"event_type in ('interaction-adjudicating', 'interaction-cancelled')",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing contract fragment %q", fragment)
+		}
+	}
+}
+
+func TestWorldInvitePersistenceStoresOnlyTokenDigests(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("001_worldwright.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	start := strings.Index(sql, "create table world_invites (")
+	if start < 0 {
+		t.Fatal("migration has no world_invites table")
+	}
+	end := strings.Index(sql[start:], "\n);")
+	if end < 0 {
+		t.Fatal("world_invites table has no closing delimiter")
+	}
+	table := sql[start : start+end]
+	if !strings.Contains(table, "token_hash text not null unique") {
+		t.Error("world_invites must persist a unique token digest")
+	}
+	for _, rawColumn := range []*regexp.Regexp{
+		regexp.MustCompile(`(?m)^\s*token\s+`),
+		regexp.MustCompile(`(?m)^\s*invite_token\s+`),
+		regexp.MustCompile(`(?m)^\s*raw_token\s+`),
+	} {
+		if rawColumn.MatchString(table) {
+			t.Errorf("world_invites persists a raw bearer column matching %s", rawColumn)
+		}
 	}
 }
 

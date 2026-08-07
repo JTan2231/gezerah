@@ -137,7 +137,7 @@ function EntityProfileEditor({
     (characterField) =>
       (values[characterField.id] ?? "") !== (characterField.value ?? ""),
   );
-  useDirtyGuard(dirty);
+  const clearDirtyGuard = useDirtyGuard(dirty);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -159,6 +159,7 @@ function EntityProfileEditor({
           }),
         },
       );
+      clearDirtyGuard();
       onSaved();
     } catch (reason) {
       setError(

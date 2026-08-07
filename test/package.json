@@ -8,6 +8,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check": "tsc --noEmit",
+    "test:scenarios": "bun test src/scenario/architecture-tests",
+    "verify:scenarios": "bun src/scenario/verify.ts",
     "e2e": "tsx src/e2e.ts"
   },
   "devDependencies": {

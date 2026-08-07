@@ -629,12 +629,29 @@ func inviteNotFound() error {
 }
 
 func appendWorldEvent(ctx context.Context, tx pgx.Tx, worldID, eventType, actorMembershipID string, interactionID, submissionID, resolutionID *string) error {
+	return appendWorldEventWithAudienceInvalidation(
+		ctx, tx, worldID, eventType, actorMembershipID,
+		interactionID, submissionID, resolutionID, false,
+	)
+}
+
+func appendWorldEventWithAudienceInvalidation(
+	ctx context.Context,
+	tx pgx.Tx,
+	worldID, eventType, actorMembershipID string,
+	interactionID, submissionID, resolutionID *string,
+	invalidatesInteractionAudience bool,
+) error {
 	var actor any
 	if actorMembershipID != "" {
 		actor = actorMembershipID
 	}
 	_, err := tx.Exec(ctx, `
-		insert into world_events (world_id, event_type, actor_membership_id, interaction_id, submission_id, resolution_id)
-		values ($1, $2, $3, $4, $5, $6)`, worldID, eventType, actor, interactionID, submissionID, resolutionID)
+		insert into world_events (
+			world_id, event_type, actor_membership_id, interaction_id,
+			submission_id, resolution_id, invalidates_interaction_audience
+		) values ($1, $2, $3, $4, $5, $6, $7)`,
+		worldID, eventType, actor, interactionID, submissionID, resolutionID,
+		invalidatesInteractionAudience)
 	return err
 }

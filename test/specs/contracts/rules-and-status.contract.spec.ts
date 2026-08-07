@@ -7,7 +7,8 @@ import {
   type APIResponse,
 } from "@playwright/test";
 
-import { readBaseURL } from "../src/runtime";
+import { readBaseURL } from "../../src/runtime";
+import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
 
 type TaggedValue =
   { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
@@ -107,6 +108,7 @@ interface EffectiveChange {
 
 interface ResolutionResult {
   preview?: boolean;
+  replayed?: boolean;
   interaction_id: string;
   interaction_revision: number;
   rules_revision: number;
@@ -115,11 +117,10 @@ interface ResolutionResult {
   state: { records: Record<string, StateResponse> };
 }
 
-test("typed rules publish atomically and statuses change effective state with receipts", async ({
-  page,
+test("contract: typed rules publish atomically and statuses change effective state with receipts", async ({
+  request,
 }) => {
   const baseURL = await readBaseURL();
-  const request = page.request;
   const unique = randomUUID().slice(0, 8);
   const owner = await postJSON<IdentifiedResource>(
     request,
@@ -267,56 +268,60 @@ test("typed rules publish atomically and statuses change effective state with re
     [impact.id]: numberValue(20),
   });
 
-  const staleStateWrite = await request.put(
-    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
-    {
-      headers: identityHeaders(owner.id),
-      data: {
-        expected_revision: entity.state.revision,
-        expected_rules_revision: rulesRevision - 1,
-        values: { [vigor.id]: numberValue(6) },
-      },
-    },
-  );
-  await expectAPIError(staleStateWrite, 409, "revision_conflict");
+  const authoredState =
+    await test.step("CCY-V03 rejects a stale state/rules save and accepts the authoritative retry", async () => {
+      const staleStateWrite = await request.put(
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+        {
+          headers: identityHeaders(owner.id),
+          data: {
+            expected_revision: entity.state.revision,
+            expected_rules_revision: rulesRevision - 1,
+            values: { [vigor.id]: numberValue(6) },
+          },
+        },
+      );
+      await expectAPIError(staleStateWrite, 409, "revision_conflict");
 
-  const authoredState = await putJSON<StateResponse>(
-    request,
-    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
-    {
-      expected_revision: entity.state.revision,
-      expected_rules_revision: rulesRevision,
-      values: { [vigor.id]: numberValue(6) },
-    },
-    owner.id,
-  );
-  expect(authoredState).toMatchObject({
-    revision: 1,
-    status_revision: 0,
-    rules_revision: rulesRevision,
-    values: { [vigor.id]: numberValue(6) },
-    effective_values: {
-      [vigor.id]: numberValue(6),
-      [impact.id]: numberValue(12),
-    },
-    evaluations: {
-      [vigor.id]: {
-        source_kind: "input",
-        presence: "stored",
-        intrinsic: numberValue(6),
-        effective: numberValue(6),
-        modifiers: [],
-      },
-      [impact.id]: {
-        source_kind: "derived",
-        presence: "derived",
-        intrinsic: numberValue(12),
-        effective: numberValue(12),
-        modifiers: [],
-      },
-    },
-  });
-  expect(Object.keys(authoredState.values)).toEqual([vigor.id]);
+      const result = await putJSON<StateResponse>(
+        request,
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+        {
+          expected_revision: entity.state.revision,
+          expected_rules_revision: rulesRevision,
+          values: { [vigor.id]: numberValue(6) },
+        },
+        owner.id,
+      );
+      expect(result).toMatchObject({
+        revision: 1,
+        status_revision: 0,
+        rules_revision: rulesRevision,
+        values: { [vigor.id]: numberValue(6) },
+        effective_values: {
+          [vigor.id]: numberValue(6),
+          [impact.id]: numberValue(12),
+        },
+        evaluations: {
+          [vigor.id]: {
+            source_kind: "input",
+            presence: "stored",
+            intrinsic: numberValue(6),
+            effective: numberValue(6),
+            modifiers: [],
+          },
+          [impact.id]: {
+            source_kind: "derived",
+            presence: "derived",
+            intrinsic: numberValue(12),
+            effective: numberValue(12),
+            modifiers: [],
+          },
+        },
+      });
+      expect(Object.keys(result.values)).toEqual([vigor.id]);
+      return result;
+    });
 
   const applyInteraction = await createAdjudicatingInteraction(
     request,
@@ -412,10 +417,11 @@ test("typed rules publish atomically and statuses change effective state with re
     active_statuses: [],
   });
 
+  const applyIdempotencyKey = randomUUID();
   const applyResult = await postJSON<ResolutionResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
-    { ...applyPayload, idempotency_key: randomUUID() },
+    { ...applyPayload, idempotency_key: applyIdempotencyKey },
     owner.id,
   );
   expect(applyResult).toMatchObject({
@@ -439,6 +445,34 @@ test("typed rules publish atomically and statuses change effective state with re
       effectiveChange(entity.id, vigor.id, 6, 4),
       effectiveChange(entity.id, impact.id, 12, 8),
     ]),
+  );
+
+  const replayedApply = await postJSON<ResolutionResult>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
+    { ...applyPayload, idempotency_key: applyIdempotencyKey },
+    owner.id,
+  );
+  expect(replayedApply).toMatchObject({
+    replayed: true,
+    interaction_id: applyResult.interaction_id,
+    interaction_revision: applyResult.interaction_revision,
+    applied_effects: applyResult.applied_effects,
+  });
+  await expectAPIError(
+    await request.post(
+      `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
+      {
+        headers: identityHeaders(owner.id),
+        data: {
+          ...applyPayload,
+          narrative: `${applyPayload.narrative} changed`,
+          idempotency_key: applyIdempotencyKey,
+        },
+      },
+    ),
+    409,
+    "idempotency_conflict",
   );
 
   const weakenedState = await getJSON<StateResponse>(
@@ -593,6 +627,49 @@ test("typed rules publish atomically and statuses change effective state with re
     },
     active_statuses: [],
   });
+
+  const competingInteraction = await createAdjudicatingInteraction(
+    request,
+    baseURL,
+    world.id,
+    entity.id,
+    owner.id,
+    `Competing resolution ${unique}`,
+  );
+  const competingPayload = {
+    expected_revision: competingInteraction.revision,
+    expected_rules_revision: rulesRevision,
+    narrative: `Only one ruling wins ${unique}`,
+    effects: [],
+  };
+  const competingResponses = await Promise.all([
+    request.post(
+      `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
+      {
+        headers: identityHeaders(owner.id),
+        data: { ...competingPayload, idempotency_key: randomUUID() },
+      },
+    ),
+    request.post(
+      `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
+      {
+        headers: identityHeaders(owner.id),
+        data: { ...competingPayload, idempotency_key: randomUUID() },
+      },
+    ),
+  ]);
+  expect(
+    competingResponses.map((response) => response.status()).sort(),
+  ).toEqual([200, 409]);
+  const loser = competingResponses.find(
+    (response) => response.status() === 409,
+  );
+  expect(loser).toBeDefined();
+  await expectAPIError(
+    loser as APIResponse,
+    409,
+    "interaction_lifecycle_conflict",
+  );
 });
 
 async function expectPublishedRules(
@@ -710,7 +787,10 @@ async function putJSON<T>(
 
 async function expectJSON<T>(response: APIResponse, url: string): Promise<T> {
   const body = await response.text();
-  expect(response.ok(), `${response.status()} ${url}: ${body}`).toBe(true);
+  expect(
+    response.ok(),
+    `${response.status()} ${sanitizeURL(url)}: ${sanitizeDiagnosticBody(body)}`,
+  ).toBe(true);
   return JSON.parse(body) as T;
 }
 
@@ -720,7 +800,7 @@ async function expectAPIError(
   code: string,
 ): Promise<unknown> {
   const body = await response.text();
-  expect(response.status(), body).toBe(status);
+  expect(response.status(), sanitizeDiagnosticBody(body)).toBe(status);
   const decoded = JSON.parse(body) as { error?: { code?: string } };
   expect(decoded.error?.code).toBe(code);
   return decoded;

@@ -16,6 +16,26 @@ import (
 
 const worldEventWaitInterval = 1500 * time.Millisecond
 
+const (
+	interactionAdjudicatingEventType    = "interaction-adjudicating"
+	interactionFeedInvalidatedEventType = "interaction-feed-invalidated"
+
+	// A transition away from an audience-visible state still needs a safe
+	// invalidation so an open prompt disappears without a reconnect.
+	visibleWorldEventsAudiencePolicyQuery = `
+				exists (
+					select 1
+					from interaction_audience_members audience
+					where audience.interaction_id = event.interaction_id
+						and audience.world_id = event.world_id
+						and audience.membership_id = $4
+				)
+				and (
+					interaction.status in ('open', 'resolved')
+					or event.invalidates_interaction_audience
+				)`
+)
+
 type interactionAudience struct {
 	AudienceIDs  []string
 	ResponderIDs []string
@@ -450,7 +470,7 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 			update interactions
 			set status = 'adjudicating', revision = revision + 1
 			where world_id = $1 and id = $2`, worldID, interactionID)
-		eventType = "interaction-adjudicating"
+		eventType = interactionAdjudicatingEventType
 	case "cancel":
 		if status == "resolved" || status == "cancelled" {
 			handleAppError(w, interactionLifecycleConflict("final interactions cannot be cancelled"))
@@ -468,8 +488,9 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	if err := appendWorldEvent(
+	if err := appendWorldEventWithAudienceInvalidation(
 		r.Context(), tx, worldID, eventType, actor.ID, &interactionID, nil, nil,
+		interactionLifecycleInvalidatesAudience(command, status),
 	); err != nil {
 		handleAppError(w, err)
 		return
@@ -485,6 +506,10 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func interactionLifecycleInvalidatesAudience(command, priorStatus string) bool {
+	return priorStatus == "open" && (command == "adjudicate" || command == "cancel")
 }
 
 func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Request) {
@@ -852,6 +877,7 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(worldEventWaitInterval)
 	defer ticker.Stop()
 	for {
+		wake := s.currentWorldEventWake()
 		member, err = requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
 		if err != nil {
 			return
@@ -884,6 +910,7 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		select {
 		case <-r.Context().Done():
 			return
+		case <-wake:
 		case <-ticker.C:
 		}
 	}
@@ -1070,6 +1097,7 @@ func validateInteractionRequest(
 	if request.PrivateNotes != nil && len([]rune(*request.PrivateNotes)) > 20000 {
 		fields["private_notes"] = "must be 20000 characters or fewer"
 	}
+	audienceOmitted := request.AudienceMembershipIDs == nil
 	request.AudienceMembershipIDs = uniqueSorted(request.AudienceMembershipIDs)
 	request.EligibleResponderMembershipIDs = uniqueSorted(request.EligibleResponderMembershipIDs)
 	request.EntityIDs = uniqueInOrder(request.EntityIDs)
@@ -1127,7 +1155,7 @@ func validateInteractionRequest(
 		}
 	}
 
-	if defaultAudience && len(request.AudienceMembershipIDs) == 0 {
+	if shouldDefaultInteractionAudience(defaultAudience, audienceOmitted) {
 		request.AudienceMembershipIDs = make([]string, 0, len(memberRoles))
 		for membershipID := range memberRoles {
 			request.AudienceMembershipIDs = append(request.AudienceMembershipIDs, membershipID)
@@ -1185,6 +1213,10 @@ func validateInteractionRequest(
 		ResponderIDs: request.EligibleResponderMembershipIDs,
 		EntityIDs:    request.EntityIDs,
 	}, fields, nil
+}
+
+func shouldDefaultInteractionAudience(defaultAudience, audienceOmitted bool) bool {
+	return defaultAudience && audienceOmitted
 }
 
 func validateStoredInteractionForPresentation(
@@ -1285,10 +1317,12 @@ func loadVisibleWorldEvents(
 	member authorizedWorldMember,
 	after int64,
 ) ([]worldEventResponse, error) {
+	facilitator := interactionFacilitator(member.Role)
 	rows, err := db.Query(ctx, `
 		select event.id, event.event_type, event.interaction_id::text,
 			event.submission_id::text, event.resolution_id::text,
-			event.actor_membership_id::text, event.created_at
+			event.actor_membership_id::text, event.created_at,
+			event.invalidates_interaction_audience
 		from world_events event
 		left join interactions interaction
 			on interaction.world_id = event.world_id and interaction.id = event.interaction_id
@@ -1297,18 +1331,11 @@ func loadVisibleWorldEvents(
 				event.interaction_id is null
 				or $3
 				or (
-					interaction.status in ('open', 'resolved')
-					and exists (
-						select 1
-						from interaction_audience_members audience
-						where audience.interaction_id = event.interaction_id
-							and audience.world_id = event.world_id
-							and audience.membership_id = $4
-					)
+					`+visibleWorldEventsAudiencePolicyQuery+`
 				)
 			)
 		order by event.id
-		limit 100`, worldID, after, interactionFacilitator(member.Role), member.ID)
+		limit 100`, worldID, after, facilitator, member.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -1316,15 +1343,34 @@ func loadVisibleWorldEvents(
 	result := make([]worldEventResponse, 0)
 	for rows.Next() {
 		var item worldEventResponse
+		var invalidatesInteractionAudience bool
 		if err := rows.Scan(
 			&item.ID, &item.Type, &item.InteractionID, &item.SubmissionID,
 			&item.ResolutionID, &item.ActorMembershipID, &item.CreatedAt,
+			&invalidatesInteractionAudience,
 		); err != nil {
 			return nil, err
 		}
-		result = append(result, item)
+		result = append(result, projectVisibleWorldEvent(
+			item, facilitator, invalidatesInteractionAudience,
+		))
 	}
 	return result, rows.Err()
+}
+
+func projectVisibleWorldEvent(
+	item worldEventResponse,
+	facilitator, invalidatesInteractionAudience bool,
+) worldEventResponse {
+	if facilitator || !invalidatesInteractionAudience {
+		return item
+	}
+	item.Type = interactionFeedInvalidatedEventType
+	item.InteractionID = nil
+	item.SubmissionID = nil
+	item.ResolutionID = nil
+	item.ActorMembershipID = nil
+	return item
 }
 
 func requirePlayReadyWorldMember(

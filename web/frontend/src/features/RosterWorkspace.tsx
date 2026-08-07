@@ -14,6 +14,7 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 import { useCollection } from "../hooks/useCollection";
+import { confirmDiscardDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
 import { EntityDetail } from "./EntityDetail";
 import { ManageControllersModal, NewEntityModal } from "./RosterModals";
@@ -56,6 +57,16 @@ export function RosterWorkspace({
     onWorldChanged();
     setProfileRefreshToken((value) => value + 1);
   }, [onWorldChanged, reloadEntities, reloadMembers]);
+
+  function selectEntity(entityId: string) {
+    if (!confirmDiscardDraft()) return;
+    setSelectedEntityId(entityId);
+  }
+
+  function startAddingEntity() {
+    if (!confirmDiscardDraft()) return;
+    setAddingEntity(true);
+  }
 
   useEffect(() => {
     const rulesRevision = mechanicCollection?.revision;
@@ -103,7 +114,7 @@ export function RosterWorkspace({
             <button
               className="button button-primary"
               type="button"
-              onClick={() => setAddingEntity(true)}
+              onClick={startAddingEntity}
             >
               <span aria-hidden="true">＋</span> Create entity
             </button>
@@ -131,7 +142,7 @@ export function RosterWorkspace({
                 <button
                   className="button button-primary"
                   type="button"
-                  onClick={() => setAddingEntity(true)}
+                  onClick={startAddingEntity}
                 >
                   Create the first entity
                 </button>
@@ -157,7 +168,7 @@ export function RosterWorkspace({
                   className={entity.id === selectedEntity?.id ? "active" : ""}
                   type="button"
                   key={entity.id}
-                  onClick={() => setSelectedEntityId(entity.id)}
+                  onClick={() => selectEntity(entity.id)}
                 >
                   <span className="entity-token" aria-hidden="true">
                     {entity.display_name.slice(0, 1).toUpperCase()}
@@ -184,6 +195,9 @@ export function RosterWorkspace({
                 key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
                 entity={selectedEntity}
                 mechanics={mechanicItems}
+                rulesRevision={
+                  mechanicCollection?.revision ?? world.rules_revision
+                }
                 mechanicsEditable={world.status === "active"}
                 controlledByCurrentMember={false}
                 facilitator

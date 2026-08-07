@@ -8,7 +8,7 @@ import {
   PageIntro,
   RolePill,
 } from "../components/StudioUI";
-import { useDirtyGuard } from "../hooks/useDraft";
+import { confirmDiscardDraft, useDirtyGuard } from "../hooks/useDraft";
 import type { Navigate } from "../worldRoutes";
 
 export function SettingsWorkspace({
@@ -29,7 +29,7 @@ export function SettingsWorkspace({
     () => name !== world.name || description !== (world.description ?? ""),
     [description, name, world.description, world.name],
   );
-  useDirtyGuard(dirty);
+  const clearDirtyGuard = useDirtyGuard(dirty);
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
@@ -44,6 +44,7 @@ export function SettingsWorkspace({
           expected_revision: world.revision,
         }),
       });
+      clearDirtyGuard();
       onWorldChanged();
     } catch (reason) {
       setError(
@@ -57,6 +58,7 @@ export function SettingsWorkspace({
   }
 
   async function archive() {
+    if (!confirmDiscardDraft()) return;
     if (
       !window.confirm(
         `Archive ${world.name}? No new problems can be presented afterward.`,
@@ -70,6 +72,7 @@ export function SettingsWorkspace({
         method: "POST",
         ...jsonBody({ expected_revision: world.revision }),
       });
+      clearDirtyGuard();
       navigate("/build");
     } catch (reason) {
       setError(

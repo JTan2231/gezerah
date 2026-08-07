@@ -211,6 +211,12 @@ func (s *Server) saveWorldMechanic(ctx context.Context, worldID, mechanicID, act
 		if !exists {
 			return zero, pgx.ErrNoRows
 		}
+		if current.Definition.Archived {
+			return zero, &statusError{
+				Status: http.StatusConflict, Code: "mechanic_archived",
+				Message: "archived mechanics cannot be changed",
+			}
+		}
 		if request.Kind != current.Response.Kind {
 			return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_kind_fixed", Message: "a mechanic cannot move between capacities and capabilities"}
 		}

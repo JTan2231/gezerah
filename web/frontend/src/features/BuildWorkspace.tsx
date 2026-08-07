@@ -34,9 +34,13 @@ export function BuildWorkspace({
   const world = resource.value;
   const canEdit = world?.role === "owner" || world?.role === "editor";
 
-  function go(next: BuildSection, selected?: string) {
+  const guardedNavigate: Navigate = (path, options) => {
     if (!confirmDiscardDraft()) return;
-    navigate(buildWorldURL(worldId, next, selected));
+    navigate(path, options);
+  };
+
+  function go(next: BuildSection, selected?: string) {
+    guardedNavigate(buildWorldURL(worldId, next, selected));
   }
 
   if (resource.loading && world === null)
@@ -94,13 +98,13 @@ export function BuildWorkspace({
         <button
           className="sidebar-brand-button"
           type="button"
-          onClick={() => navigate("/")}
+          onClick={() => guardedNavigate("/")}
           aria-label="Return home"
         >
           <Brand compact />
         </button>
         <div className="world-identity">
-          <button type="button" onClick={() => navigate("/build")}>
+          <button type="button" onClick={() => guardedNavigate("/build")}>
             <span className="world-avatar" aria-hidden="true">
               {world.name.slice(0, 1).toUpperCase()}
             </span>
@@ -211,7 +215,7 @@ export function BuildWorkspace({
       <div className="world-mobile-bar">
         <button
           type="button"
-          onClick={() => navigate("/build")}
+          onClick={() => guardedNavigate("/build")}
           aria-label="Builder worlds"
         >
           ←
@@ -237,7 +241,7 @@ export function BuildWorkspace({
             world={world}
             kind="capacity"
             selectedId={resourceId}
-            navigate={navigate}
+            navigate={guardedNavigate}
             onWorldChanged={resource.reload}
           />
         ) : null}
@@ -246,7 +250,7 @@ export function BuildWorkspace({
             world={world}
             kind="capability"
             selectedId={resourceId}
-            navigate={navigate}
+            navigate={guardedNavigate}
             onWorldChanged={resource.reload}
           />
         ) : null}
@@ -263,7 +267,7 @@ export function BuildWorkspace({
         {section === "settings" ? (
           <SettingsWorkspace
             world={world}
-            navigate={navigate}
+            navigate={guardedNavigate}
             onWorldChanged={resource.reload}
           />
         ) : null}
