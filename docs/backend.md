@@ -45,19 +45,19 @@ Executable and process lifecycle only.
 
 Pure graph evaluation and runtime transitions:
 
-| File                     | Responsibility                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------- |
-| `types.go`               | Mechanic graph, status, state, effect, evaluation, and receipt domain types.       |
-| `definitions.go`         | Input/derived numeric/Boolean mechanic and entity validation.                      |
-| `expressions.go`         | Recursive type inference, dependency extraction, cycle paths, graph compilation.  |
-| `evaluation.go`          | Intrinsic/effective evaluation and transparent modifier/expression traces.         |
-| `statuses.go`            | Inline status specification, literal modifier, and active-instance validation.     |
-| `values.go`              | Scalar construction, equality, and definition-aware validation.                   |
-| `state.go`               | Input defaults, sparse overrides, materialization, normalization, cloning.         |
-| `effects.go`             | Backward-compatible ordered scalar transition validation/application.              |
-| `runtime_transitions.go` | Combined scalar and persistent-status lifecycle transition.                        |
-| `decimal.go`             | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.         |
-| `errors.go`              | Validation paths and domain error categories.                                     |
+| File                     | Responsibility                                                                   |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `types.go`               | Mechanic graph, status, state, effect, evaluation, and receipt domain types.     |
+| `definitions.go`         | Input/derived numeric/Boolean mechanic and entity validation.                    |
+| `expressions.go`         | Recursive type inference, dependency extraction, cycle paths, graph compilation. |
+| `evaluation.go`          | Intrinsic/effective evaluation and transparent modifier/expression traces.       |
+| `statuses.go`            | Inline status specification, literal modifier, and active-instance validation.   |
+| `values.go`              | Scalar construction, equality, and definition-aware validation.                  |
+| `state.go`               | Input defaults, sparse overrides, materialization, normalization, cloning.       |
+| `effects.go`             | Backward-compatible ordered scalar transition validation/application.            |
+| `runtime_transitions.go` | Combined scalar and persistent-status lifecycle transition.                      |
+| `decimal.go`             | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.       |
+| `errors.go`              | Validation paths and domain error categories.                                    |
 
 The package takes fully loaded maps/snapshots and returns values. It must not
 query PostgreSQL, inspect HTTP/environment, log, generate IDs, or mutate a
@@ -362,6 +362,10 @@ The world event endpoint:
 - parses `after`, falling back to `Last-Event-ID`;
 - disables buffering/caching and flushes `retry: 1500`;
 - rechecks membership and queries up to 100 visible events per batch;
+- wakes every local stream immediately after a successful mutating API handler
+  returns, which is after its transaction has committed;
+- retains the 1.5-second database poll as a lost-wakeup and cross-replica
+  fallback;
 - sends keep-alive comments when empty;
 - advances the cursor only after writing an event;
 - exits on cancellation, revoked authority, query error, or flush failure.

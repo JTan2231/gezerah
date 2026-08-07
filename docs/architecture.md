@@ -257,24 +257,27 @@ resources instead of reconstructing state from event payloads. A
 `rules-updated` event causes Play to reload the mechanic catalog and evaluated
 entity state before enabling a Consequence based on them.
 
-There is no broker. Each open handler polls PostgreSQL, so capacity planning
-must account for one request and recurring event queries per connected table
-client. The HTTP server's write deadline can close a stream; clients reconnect
-with their last cursor.
+There is no broker. A successful mutation broadcasts an in-process wakeup so
+streams on the same server query PostgreSQL immediately after commit. Each open
+handler also polls PostgreSQL every 1.5 seconds, preserving correctness after a
+lost wakeup and across replicas. Capacity planning must therefore account for
+one request and recurring fallback queries per connected table client. The HTTP
+server's write deadline can close a stream; clients reconnect with their last
+cursor.
 
 ## Repository layout
 
-| Path                            | Responsibility                                                               |
-| ------------------------------- | ---------------------------------------------------------------------------- |
-| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                                  |
-| `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions.    |
-| `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                   |
-| `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                          |
-| `web/frontend/`                 | React/Vite Build and Play SPA.                                               |
-| `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.           |
-| `test/`                         | Playwright harness and clean-database acceptance scenarios.                  |
-| `ci.sh`, `run.sh`               | Validation and managed local development.                                    |
-| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                  |
+| Path                            | Responsibility                                                             |
+| ------------------------------- | -------------------------------------------------------------------------- |
+| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                               |
+| `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions. |
+| `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                 |
+| `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                        |
+| `web/frontend/`                 | React/Vite Build and Play SPA.                                             |
+| `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.         |
+| `test/`                         | Playwright harness and clean-database acceptance scenarios.                |
+| `ci.sh`, `run.sh`               | Validation and managed local development.                                  |
+| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                |
 
 ## Design constraints for future changes
 

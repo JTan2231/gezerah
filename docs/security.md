@@ -185,7 +185,8 @@ and some privileged changes cannot be reconstructed from durable history.
 ### Abuse and denial of service
 
 - public identity creation and forgeable-identity world creation have no quota;
-- SSE holds requests and polls PostgreSQL per client;
+- SSE holds requests and polls PostgreSQL per client as a 1.5-second fallback;
+  successful local mutations also wake every local stream immediately;
 - no per-user/IP command throttles;
 - request/effect/text limits exist, but aggregate counts and event retention do
   not;

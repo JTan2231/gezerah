@@ -195,7 +195,9 @@ horizontal scaling:
 - migrations serialize through a database advisory lock;
 - the application has no server-local session state;
 - any replica can answer normal queries/commands;
-- SSE handlers poll shared PostgreSQL and can reconnect to another replica;
+- successful commands wake SSE handlers on the same replica immediately;
+- SSE handlers retain a 1.5-second shared-PostgreSQL poll, so events committed
+  by another replica remain visible and clients can reconnect anywhere;
 - every connected Play client holds a streaming HTTP request; the fixed
   30-second server write timeout can force stream reconnection;
 - event delivery is at-least-observed through cursor replay, but it is an
