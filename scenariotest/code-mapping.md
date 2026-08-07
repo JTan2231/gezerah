@@ -679,38 +679,36 @@ executions still run.
 | `GLO-008` immutable final history          | receipt/event/final-interaction triggers and migration tests                                       | post-resolution lifecycle contracts try authorized mutation paths and re-read immutable receipts/history                                            |
 | `GLO-009` eventual live convergence        | two-browser prompt/action/outcome checks; SSE cursor/reload implementation                         | a convergence validator waits on each actor's visible authoritative state and records event cursors, without reload unless the scenario requires it |
 | `GLO-010` accessible interaction           | semantic JSX, accessibility ESLint rules, focus/skip/reduced-motion CSS                            | keyboard journeys plus an automated accessibility scan at named milestones; exceptions must be scoped and documented                                |
-| `GLO-011` deterministic waits/isolation    | disposable database, one worker, Playwright auto-waits, unique test names                          | ban arbitrary sleeps and order dependence; actor contexts and generated data belong to one journey context                                          |
+| `GLO-011` deterministic waits/isolation    | disposable database, two bounded workers, Playwright auto-waits, unique aggregate-owned data       | ban arbitrary sleeps, order dependence, shared aggregates, and table-wide assertions; actor contexts and generated data belong to one test context  |
 | `GLO-012` diagnostic evidence              | traces/screenshots/video on failure; `app-server.log`                                              | evidence timeline records actor, behavior/outcome IDs, contract/probe result, URL, revisions/resource IDs, and linked Playwright artifacts          |
 
 ## 7. Existing evidence index
 
-The current baseline is three Playwright spec files containing four tests,
-running in one Desktop Chrome project with one worker, no retries, and a
-90-second per-test timeout. A recent successful browser invocation took about
-25.7 seconds, but that number excludes the full top-level `./ci.sh e2e` wall
-clock and much of the current coverage uses direct API setup. It is therefore a
-diagnostic baseline, not evidence that the target suite meets the required
-under-30-second total.
+The required browser inventory is twelve Playwright files containing twelve
+tests: one serial lifecycle spine, four focused UI-boundary tests, and seven
+direct HTTP/PostgreSQL contract tests. They run in one Desktop
+Chrome/Chromium project with two aggregate-isolated workers, no retries, and a
+20-second per-test timeout. The measured browser invocation after this topology
+change is 20.7 seconds; the authoritative acceptance result remains the full
+top-level `./ci.sh e2e` wall clock, not this component timing.
 
-The current `./ci.sh e2e` path runs all frontend and backend checks/builds before
-the test harness, while `test/src/appServer.ts#startAppServer` builds the
-frontend and Go binary again. The implementation must pass the already verified
-production assets and binary into global setup, retaining a build fallback for
-direct `test/` invocation. Removing duplicated build work changes harness cost,
-not UI-only journey authority.
+`./ci.sh e2e` builds the frontend and Go binary once and passes those verified
+artifacts into global setup. `test/src/appServer.ts#startAppServer` retains a
+build fallback for direct `test/` invocation. Removing duplicate builds changes
+harness cost, not UI-only journey authority.
 
 ### 7.1 Browser and PostgreSQL-backed specifications
 
-| Current test                                                                                                           | Meaningful mapped IDs                                                                                                                                              | Why it is not yet authoritative journey evidence                                                                                                          |
-| ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `test/specs/configuration.spec.ts#an author creates a world whose entity sheets stem from capacities and capabilities` | `IDN-001..002`, `WRL-001`, `MEC-001..002`, `MEC-005`, `CHF-002`, `RST-001..002`, `AUT-001`, `AUT-V01`, partial `JRN-001`                                           | performs UI creation/editing, then reads selected identity with `page.evaluate` and verifies aggregate/privacy with `page.request`                        |
-| `test/specs/play.spec.ts#worlds stay private until an invite link is redeemed`                                         | `AUT-001`, `AUT-V01..002`, `INV-001`, `INV-003`, `INV-005`, `INV-V01`, `RST-V01`                                                                                   | all product setup and assertions use direct HTTP; there is no rendered invite or library journey                                                          |
-| `test/specs/play.spec.ts#a problem is improvised at the table, answered, and resolved with a state receipt`            | `RST-003..005`, `RST-V01..002`, `CHF-004`, `CHF-V01`, `PLY-001..004`, `PLY-006`, `PLY-008`, `CON-003`, `CON-008`, selected `AUT`/`CCY-V05`, partial `JRN-002..003` | the central multiplayer actions are genuine UI interactions, but identities, world, schema, mechanics, memberships, and much validation are HTTP-assisted |
-| `test/specs/state-graph.spec.ts#typed rules publish atomically and statuses change effective state with receipts`      | `MEC-003`, `MEC-005`, `MEC-V02`, `MEC-V04`, `CCY-V02..003`, `CON-004..005`, `CON-007..008`, partial `JRN-004`                                                      | intentionally exercises HTTP contracts rather than the frontend; it should remain valuable observer/integration coverage after reclassification           |
+| Current test region                       | Meaningful mapped IDs                                                                                   | Evidence boundary                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `test/specs/scenarios/lifecycle-spine.*`  | all `JRN-*` plus the representative successful lifecycle behaviors and safe inline ribs                 | all mutable prerequisites and journey actions originate in four isolated actor browsers                     |
+| `test/specs/ui-boundaries/*.ui.spec.ts`   | visible alternate flows, draft protection, narrow/keyboard access, recovery, and lifecycle feedback     | direct setup may establish the precondition; the rendered UI performs and proves the behavior under test    |
+| `test/specs/contracts/*.contract.spec.ts` | authorization, privacy, invalid references, races, idempotency, atomicity, persistence, and exact cases | normal HTTP commands plus PostgreSQL/read projections prove server-only outcomes without claiming a journey |
 
-The migration plan should retain these tests in an HTTP-integration or
-UI-integration layer where appropriate. “UI-only journey” is a new authority,
-not a reason to discard precise protocol, privacy, or transaction checks.
+The removed broad configuration/play/state-graph specs are replaced by these
+explicit evidence tiers. Precise protocol, privacy, transaction, and rules
+coverage remains independently runnable rather than being hidden inside the UI
+spine.
 
 ### 7.2 Frontend lower-layer tests
 
@@ -746,7 +744,7 @@ generated coverage report rather than being inferred from lint success.
 | `internal/migrations/migrations_test.go#TestRulesGraphStatusesMigrationContract` | normalized graph/status storage, backfills, provenance, receipt immutability, absence of JSON aggregate | `MEC`, `CON`, `GLO-007..008`                                          |
 | `test/src/appServer.ts#startAppServer`                                           | builds real production frontend and Go binary, starts disposable app, captures server log               | all `JRN-*`, `GLO-002`, `GLO-012`                                     |
 | `test/src/database.ts#createDisposableDatabase`                                  | unique PostgreSQL database and teardown                                                                 | `GLO-011`                                                             |
-| `test/playwright.config.ts`                                                      | one Desktop Chrome project, one worker, traces/screenshots/video on failure                             | `GLO-011..012`; exposes `NAV-004..005` browser-matrix gaps            |
+| `test/playwright.config.ts`                                                      | one Desktop Chrome project, two aggregate-isolated workers, traces/screenshots/video on failure         | `GLO-011..012`; exposes `NAV-004..005` browser-matrix gaps            |
 | `ci.sh#run_e2e`                                                                  | frontend/backend gates before browser scenarios                                                         | all scenario evidence in CI                                           |
 | `run.sh`                                                                         | managed local Go/Vite runtime and logs                                                                  | manual reproduction and exploratory verification, not automated proof |
 

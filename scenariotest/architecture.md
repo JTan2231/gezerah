@@ -164,8 +164,9 @@ The architecture does not:
 - use API or SQL writes as "setup" for a journey declared frontend-authentic;
 - establish visual-regression baselines, load testing, or a full cross-browser
   matrix in the required suite;
-- parallelize the current shared application/database fixture before isolation
-  boundaries make that safe.
+- parallelize mutable work on the same generated aggregate or add more than
+  the two explicitly bounded workers while the suite shares one application
+  and database.
 
 Direct HTTP tests remain the better authority for server-only properties such
 as forbidden status codes, sensitive-field absence, idempotency conflicts,
@@ -984,8 +985,9 @@ integrated harness must:
   actor sessions, catalog construction, probes, evidence, and cleanup;
 - attach the browser observer before the first page navigation so startup and
   identity errors are captured;
-- preserve one Playwright worker and zero retries while the browser lanes share
-  one application and database;
+- preserve two bounded Playwright workers and zero retries while the browser
+  lanes share one application and database; the lifecycle spine remains one
+  serial test and only independently generated aggregates may overlap;
 - replace the existing 90-second escape hatch with bounded central action,
   propagation, checkpoint, and file budgets that fit inside the 30-second
   whole-command gate;
@@ -1001,12 +1003,14 @@ integrated harness must:
   and avoid serial duplicate formatting, type-check, build, or test work.
 
 The disposable database is shared by the browser and direct-contract lanes.
-The lifecycle spine owns one generated world; boundary and contract tests use
-unique generated values and cannot depend on prior test order. One worker
-prevents concurrent mutation interference. Parallel browser workers are not
-part of the required design; any future use requires one app process and
-database per worker because unique names do not isolate table-wide and event
-assertions.
+The lifecycle spine owns one generated world; boundary and contract tests own
+different generated users, worlds, and resource IDs and cannot depend on prior
+test order. Two workers may overlap those independent aggregates. Assertions
+must remain actor-, world-, or exact-resource-scoped; controlled-time changes
+must target one generated ID; and table-wide counts or event observations are
+forbidden in parallel specs. Increasing the worker count, introducing a
+table-wide observer, or allowing two tests to mutate one aggregate requires one
+application process and database per worker first.
 
 `./ci.sh e2e` remains the sole authoritative entrypoint. Scenario-runtime unit
 tests, architecture checks, every evidence lane, and the runtime gate belong to
@@ -1189,7 +1193,7 @@ limit.
 | Page objects hide the behavior just as much as selectors do.        | Keep screen adapters limited to UI regions; keep behavior intent and ordered steps visible in the driver.                                                                         |
 | Deep SQL checks make tests coupled to migrations.                   | Prefer HTTP read models; use registered SQL probes only for high-value atomicity/history facts and map them explicitly in `code-mapping.md`.                                      |
 | SSE tests become timing-dependent.                                  | Central eventual policies, DOM-based authoritative results, observer evidence, and no arbitrary sleeps or reload synchronization.                                                 |
-| Shared database data leaks between journeys.                        | Unique user-authored values, no order dependence, one worker in the required suite, and database/app per worker before any separate parallel configuration.                       |
+| Shared database data leaks between journeys.                        | Two workers overlap only unique aggregate-owned data; assertions are world/exact-ID scoped; no table-wide observations; broader parallelism requires database/app per worker.     |
 | Outcome contracts accumulate broad exception lists.                 | Scope transport allowances to one action boundary and require exact method/path/status matching.                                                                                  |
 | Traces leak invite bearer tokens or private prose.                  | Redact structured evidence, use disposable data, limit artifact retention, and treat traces as sensitive.                                                                         |
 | The suite grows too slow to be authoritative.                       | Keep a small required journey spine, use system probes selectively, and leave exhaustive mechanics/transport matrices in lower layers.                                            |

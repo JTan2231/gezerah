@@ -261,9 +261,11 @@ browser replaces the configured value; if no bundled or system browser exists,
 the launcher installs Chromium before it can proceed. The variable is therefore
 not a reliable discovery/install bypass in the current harness.
 
-The required configuration runs one Desktop Chrome/Chromium project, one worker,
-no retries, and a 20-second per-test ceiling inside the stricter 30-second
-whole-command budget.
+The required configuration runs one Desktop Chrome/Chromium project, two
+workers, no retries, and a 20-second per-test ceiling inside the stricter
+30-second whole-command budget. The lifecycle spine is still one serial test.
+Only specs that own separate generated aggregates overlap; shared-database
+assertions remain world- or exact-resource-scoped.
 
 ## Artifacts
 
