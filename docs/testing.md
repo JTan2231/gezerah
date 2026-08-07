@@ -29,7 +29,7 @@ On first invocation, `ci.sh`:
    temporary index;
 4. writes a tree and synthetic commit without modifying the real index;
 5. creates a detached temporary worktree;
-6. reinvokes itself there with isolated build and package caches;
+6. reinvokes itself there with the configured shared tool cache;
 7. removes the worktree and temporary files on exit.
 
 This design validates unsaved/untracked source changes while keeping dependency
@@ -37,10 +37,12 @@ installs and generated frontend assets out of the active checkout. Ignored
 files are not copied, so tests must not depend on local `.dnd`, `node_modules`,
 `web/static` output, or test artifacts.
 
-Bun, Go, temporary, and Node compile caches are isolated beneath the temporary
-CI directory. The Playwright browser cache is different: an explicit
-`PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user cache is
-reused on macOS/Linux when one can be resolved.
+Bun, Go, and Node compile caches live under the ignored `.dnd/cache/ci`
+directory by default, or under `DND_CI_CACHE_DIR` when configured. The detached
+worktree still owns dependency installations, build output, and runtime state;
+only content-addressed/download caches survive between invocations. An explicit
+`PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user browser
+cache is reused on macOS/Linux when one can be resolved.
 
 The validator requires a valid Git repository with a `HEAD` commit.
 
@@ -79,12 +81,21 @@ the schema.
 
 ### End to end
 
-`./ci.sh e2e` runs frontend, backend, then:
+`./ci.sh e2e` runs independent frontend and backend validation concurrently,
+builds the production frontend and then the Go binary once, and then runs:
 
 1. frozen install for `test/`;
 2. Prettier check for the harness/specs;
 3. TypeScript check;
-4. Playwright scenarios through the custom launcher.
+4. scenario-runtime unit and architecture verification;
+5. Playwright scenarios through the custom launcher.
+
+The verified Go binary already embeds the verified frontend assets and is passed
+to Playwright global setup. The successful command, including detached-worktree
+preparation, every frontend/backend check, builds, browser and contract tests,
+database/server lifecycle, reporting, and cleanup, has a hard wall-clock budget
+of less than 30 seconds. Stage timings and the final invocation-to-cleanup time
+are printed on every E2E run; exceeding the budget fails the target.
 
 Even without the optional backend smoke variable, E2E requires a reachable
 PostgreSQL admin database.
@@ -125,6 +136,7 @@ PostgreSQL integration fixture. They cover:
 - interaction mappings and generated IDs;
 - archived-mechanic and dependency guards;
 - event cursor parsing and matching;
+- audience-removal event projection and request/panic-log bearer redaction;
 - development identity vocabulary and live effect validation;
 - world creation, invite token hashing, capacity/capability mapping,
   character-field/profile validation, and semantic no-op comparison;
@@ -133,12 +145,13 @@ PostgreSQL integration fixture. They cover:
   remove-target validation, and active derived-dependency guards;
 - denial of removed route families with `404 endpoint_not_found`.
 
-Migration contract tests also require the forward `002` graph/status tables,
-existing-world/entity backfill statements, root-creation triggers, normalized
-storage (no JSON/JSONB aggregate), resolution-owned inline status modifiers,
-status source-provenance columns, expanded receipt tables, and immutable
-receipt triggers. They assert that status authoring rows are owned by the
-resolution rather than world configuration.
+Migration contract tests also require digest-only invitation storage, the
+forward `002` graph/status tables, existing-world/entity backfill statements,
+root-creation triggers, normalized storage (no JSON/JSONB aggregate),
+resolution-owned inline status modifiers, status source-provenance columns,
+expanded receipt tables, immutable receipt triggers, and the `003` constrained
+audience-invalidation event flag. They assert that status authoring rows are
+owned by the resolution rather than world configuration.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -153,58 +166,76 @@ Bun tests under `web/frontend/src/domain/*.test.ts` cover pure helpers:
 
 There are no current component-rendering unit tests.
 
-### Browser acceptance tests
+### Scenario and contract tests
 
-`test/specs/configuration.spec.ts` exercises:
+`test/specs/scenarios/lifecycle-spine.spec.ts` is the one UI-authentic browser
+execution. Four isolated, persistent owner/editor/player/spectator contexts
+carry one user-authored world from identity and configuration through invites,
+waiting/setup/readiness, editor authority, a shared live round, same-name status
+application and exact removal, and owner-authored archive. `JRN-001` through
+`JRN-007` remain separately named Playwright checkpoints inside that one test.
+The spine does not use API writes, storage injection, or prepared state.
 
-- development identity, world creation, capacity/capability authoring, generated
-  entity sheets, character-field publishing, direct setup state, world-list
-  isolation, and role denial.
+Fast PostgreSQL-backed contracts under `test/specs/contracts/` retain the exact
+server evidence that does not need another browser journey:
 
-`test/specs/state-graph.spec.ts` exercises:
+- `access-and-invites.contract.spec.ts` covers world isolation, invitation-token
+  secrecy, admission, role denial, editor archive denial, and revocation;
+- `profile-and-readiness.contract.spec.ts` covers waiting/setup/ready
+  transitions, controlled-state authority, profile privacy projections, stale
+  writes, and readiness regression after a schema change;
+- `rules-and-status.contract.spec.ts` covers typed graph publication and atomic
+  graph rejection, exact state/effective-state/status receipts, preview
+  non-persistence, exact replay/conflicting replay, one-winner resolution, and
+  exact-instance removal;
+- `authorization-matrices.contract.spec.ts` and
+  `resource-lifecycle.contract.spec.ts` cover closed invitation states, role and
+  cross-world matrices, archived/incomplete resources, and atomic rejection;
+- `concurrency-and-status-matrices.contract.spec.ts` covers named status-target
+  and resolution-race/replay matrices;
+- `direct-gap-closures.contract.spec.ts` owns the remaining small authority,
+  lifecycle, cancellation, projection, and no-audience contracts.
 
-- mechanic rules publication, typed derived evaluation, stale graph revisions,
-  and atomic rejection of invalid graphs;
-- inline problem-status preview/application, source provenance, exact-instance
-  removal, effective-value propagation, and immutable receipts.
+Focused browser contracts under `test/specs/ui-boundaries/` cover only behavior
+whose visible UI is itself material: entry/deep-link/accessibility boundaries,
+dirty-draft and stale-screen recovery, authored-profile/control workflows, and
+event-stream reconnection. They use ordinary HTTP fixture setup and do not
+claim lifecycle-journey evidence.
 
-`test/specs/play.spec.ts` exercises:
-
-- membership-filtered world lists and forbidden direct reads;
-- opaque public invite preview, redemption, role assignment, editor-only invite
-  creation, revocation, and closed-link rejection;
-- separate facilitator/player browser contexts receiving an improvised prompt;
-- facilitator character-control assignment, waiting/setup admission states,
-  zero-field readiness, partial profile drafts, live-route denial during
-  onboarding, and transition into play after every configured field is complete;
-- public/restricted configured values, server-side spectator filtering, stale
-  profile conflict, denied spectator writes, and isolation from state revision;
-- rejection of requirement-set changes during an open problem and return to
-  onboarding when a new requirement is published after resolution;
-- controlled acting-entity attribution with a server-captured display name;
-- player action submission, private adjudication, action selection, Consequence
-  construction, advisory preview, atomic resolve, receipt/history display, and
-  generated-sheet state refresh;
-- inline status authoring, source-problem provenance, exact-instance removal,
-  same-name independence, and direct/transitive effective-value refresh.
+The dependency-free runtime under `test/src/scenario/` owns the 131-ID/five-tier
+registry, required named cases, behavior/outcome contracts, checkpoint and
+blocked-by semantics, mutation epochs, observation reuse, redacted evidence,
+and performance records. Its millisecond verification runs before Playwright.
 
 ## E2E harness lifecycle
 
-Playwright global setup:
+When invoked through `./ci.sh e2e`, Playwright global setup:
 
 1. creates `test/artifacts` and removes stale runtime metadata;
-2. builds the production frontend into `web/static` in the current checkout,
-   which is the disposable worktree when invoked through `ci.sh`;
-3. builds a temporary Go binary;
-4. creates a unique database named `dnd_e2e_<timestamp>_<random>`;
-5. selects a free loopback port;
-6. starts the application with debug logging and the disposable URL;
-7. waits up to 60 seconds for `/api/health`;
-8. writes the base URL to runtime metadata for specs.
+2. validates the prebuilt binary supplied by the root validator; that binary
+   already embeds the production frontend from the same invocation;
+3. creates a unique database named `dnd_e2e_<timestamp>_<random>`;
+4. selects a free loopback port;
+5. starts the application with debug logging and the disposable URL;
+6. waits up to 10 seconds for `/api/health`;
+7. writes the base URL and disposable database URL to ignored runtime metadata,
+   created with mode `0600`.
+
+A direct `(cd test && bun run e2e)` invocation has the same application boundary
+but falls back to building the frontend and a temporary Go binary itself.
 
 Teardown terminates the process group on POSIX systems or the child process on
-Windows, closes the log, drops the database, removes the binary directory, and
-removes runtime metadata.
+Windows, closes the log, drops the database, removes any fallback binary
+directory, and removes runtime metadata. Setup also removes stale metadata
+before starting the application.
+
+The disposable database URL is a narrowly scoped controlled-time fixture for
+direct contracts. `INV-V01[expired]` creates its user, world, membership, and
+invite through public HTTP, then a test-only helper validates the invite's
+canonical UUID and uses `psql` to move only that row's `expires_at` into the
+past. Preview, redemption, membership, and use-count evidence still comes from
+public HTTP. The helper is not a product endpoint, is not exported by the
+scenario/journey runtime, and must not be used by the UI-authentic spine.
 
 Database URL precedence is:
 
@@ -230,18 +261,21 @@ browser replaces the configured value; if no bundled or system browser exists,
 the launcher installs Chromium before it can proceed. The variable is therefore
 not a reliable discovery/install bypass in the current harness.
 
-The current configuration runs one Desktop Chrome/Chromium project, one worker,
-no retries, and a 90-second test timeout.
+The required configuration runs one Desktop Chrome/Chromium project, one worker,
+no retries, and a 20-second per-test ceiling inside the stricter 30-second
+whole-command budget.
 
 ## Artifacts
 
 On E2E runs, inspect:
 
-| Path                            | Content                                                                      |
-| ------------------------------- | ---------------------------------------------------------------------------- |
-| `test/artifacts/app-server.log` | Application stdout/stderr for the disposable server.                         |
-| `test/artifacts/playwright/`    | Per-test results, traces, screenshots, and video retained by failure policy. |
-| `test/artifacts/report/`        | HTML report.                                                                 |
+| Path                                        | Content                                                         |
+| ------------------------------------------- | --------------------------------------------------------------- |
+| `test/artifacts/app-server.log`             | Application stdout/stderr for the disposable server.            |
+| `test/artifacts/playwright/`                | Per-test results and screenshots captured on failure.           |
+| `test/artifacts/report/`                    | HTML report.                                                    |
+| `test/artifacts/scenario-test-results.json` | Exact Playwright owner results and durations.                   |
+| `test/artifacts/scenario-coverage.json`     | Final 131-row scenario inventory; root E2E requires all passed. |
 
 The active checkout usually receives no artifacts when invoked through root
 `ci.sh`, because the entire run occurs in the disposable worktree that is
@@ -249,6 +283,10 @@ removed afterward. To preserve artifacts for interactive debugging, run the
 test project directly in the working checkout after installing dependencies.
 A direct run also rebuilds ignored production output under `web/static` in that
 checkout.
+
+Passing required runs do not record trace or video. Set
+`DND_E2E_DIAGNOSTICS=1` on a direct diagnostic run to retain both on failure;
+the root performance-gated target deliberately keeps them off.
 
 ## Fast local iteration
 
@@ -260,6 +298,7 @@ go test ./internal/rules
 go test ./internal/app
 (cd web/frontend && bun test)
 (cd web/frontend && bun run check)
+(cd test && bun run verify:scenarios)
 ```
 
 For browser work, the root E2E target is safest because it verifies all layers.
@@ -316,7 +355,7 @@ only to a database that can be destroyed or modified without consequence.
 - no hosted CI workflow in the repository;
 - no dedicated Go PostgreSQL integration-test fixture;
 - no component-level React tests;
-- no coverage threshold/report in the root validator;
+- no source line/branch coverage threshold in the root validator;
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;
 - no migration downgrade or automated upgrade-from-populated-fixture matrix;

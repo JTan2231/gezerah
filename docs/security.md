@@ -16,22 +16,22 @@ UUID into authentication.
 
 ## Endpoint trust matrix
 
-| Surface                                      | Current gate                                      | Exposure                                                                  |
-| -------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------------------------- |
-| SPA/static assets                            | None                                              | Public content.                                                           |
-| `/api/health`                                | None                                              | Reveals service/database readiness.                                       |
-| `/api/users` GET/POST                        | None                                              | Local identities can be enumerated/created.                               |
-| Invite preview                               | Opaque bearer token                               | Exposes active world, inviter, role, and expiry.                           |
-| Invite redemption                            | Known UUID header + bearer token                   | Creates/reactivates one world membership.                                 |
-| World list/read                              | Known UUID + active membership                     | Returns only worlds for the resolved identity.                            |
-| World configuration/entities/setup state    | Active owner/editor                               | Correct role check only if identity were trustworthy.                     |
-| Character fields                            | Active member read; owner/editor write             | Restricted definitions filtered server-side.                             |
-| Character profiles                          | Owner/editor or active controller                  | Values filtered by field visibility.                                      |
-| Character control                           | Active owner/editor + table revision               | Grants only same-world active-player control.                             |
-| World archive                               | Active owner                                       | Requires no unfinished interaction.                                       |
-| Live reads/events                           | Active, play-ready membership                      | Onboarding players are denied live resources.                             |
-| Facilitator commands                        | Active owner/editor                                | Lifecycle, scope, and revision checks apply.                              |
-| Player actions                              | Active ready player + eligible responder/control   | Server enforces ownership and audience.                                   |
+| Surface                                  | Current gate                                     | Exposure                                              |
+| ---------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
+| SPA/static assets                        | None                                             | Public content.                                       |
+| `/api/health`                            | None                                             | Reveals service/database readiness.                   |
+| `/api/users` GET/POST                    | None                                             | Local identities can be enumerated/created.           |
+| Invite preview                           | Opaque bearer token                              | Exposes active world, inviter, role, and expiry.      |
+| Invite redemption                        | Known UUID header + bearer token                 | Creates/reactivates one world membership.             |
+| World list/read                          | Known UUID + active membership                   | Returns only worlds for the resolved identity.        |
+| World configuration/entities/setup state | Active owner/editor                              | Correct role check only if identity were trustworthy. |
+| Character fields                         | Active member read; owner/editor write           | Restricted definitions filtered server-side.          |
+| Character profiles                       | Owner/editor or active controller                | Values filtered by field visibility.                  |
+| Character control                        | Active owner/editor + table revision             | Grants only same-world active-player control.         |
+| World archive                            | Active owner                                     | Requires no unfinished interaction.                   |
+| Live reads/events                        | Active, play-ready membership                    | Onboarding players are denied live resources.         |
+| Facilitator commands                     | Active owner/editor                              | Lifecycle, scope, and revision checks apply.          |
+| Player actions                           | Active ready player + eligible responder/control | Server enforces ownership and audience.               |
 
 Do not treat network reachability, the React UI, or hidden controls as access
 control.
@@ -93,6 +93,21 @@ the database or invite list. Anyone holding a valid token can preview it and
 redeem the offered role using any selected development identity. There is no
 maximum-use count, email binding, rate limit, or intended-recipient binding.
 Production needs authenticated accounts and an explicit invitation policy.
+
+### Test-only controlled time
+
+The product exposes no clock-control or database-maintenance endpoint. During
+an E2E run only, ignored runtime metadata is created with mode `0600` and holds
+the disposable database URL alongside the loopback application URL. A direct
+contract helper may read that credential, but it first validates a canonical
+invite UUID and its SQL updates only the matching invite's `expires_at`. All
+identity, world, membership, invite, preview, and redemption operations remain
+on the public HTTP surface.
+
+This privileged fixture exists only to cross the real expiry boundary without
+waiting a day. It is outside scenario/journey exports, is forbidden in the
+UI-authentic lifecycle spine, points at the per-run disposable database, and is
+removed with runtime metadata at teardown after that database is dropped.
 
 ### Participant versus entity
 
@@ -174,8 +189,8 @@ and some privileged changes cannot be reconstructed from durable history.
 - no per-user/IP command throttles;
 - request/effect/text limits exist, but aggregate counts and event retention do
   not;
-- no log sampling/retention/redaction policy beyond avoiding bodies in request
-  summaries.
+- no general log sampling/retention/redaction policy beyond avoiding bodies and
+  redacting invitation bearer paths in request summaries and panic records.
 
 ### Audit and privacy operations
 

@@ -99,16 +99,18 @@ Logs are JSON on stdout. Notable records include startup/listening, fatal stop,
 request summaries, and recovered panics with stacks. Request summaries include:
 
 - method;
-- URL path (not query string);
+- URL path (not query string), with invitation bearer segments replaced by
+  `[REDACTED]`;
 - status;
 - response bytes;
 - duration.
 
-The server does not intentionally log request/response bodies or identity
-headers in its standard request log. Database/validation errors returned to
-clients are often generalized. Ordinary handler and database failures are not
-logged with their underlying cause; only the request status remains. Panic
-stacks remain in server logs.
+The server does not intentionally log request/response bodies, identity
+headers, raw invitation bearer tokens, or query strings in its standard request
+or panic log. Database/validation errors returned to clients are often
+generalized. Ordinary handler and database failures are not logged with their
+underlying cause; only the request status remains. Panic stacks remain in
+server logs.
 
 There is currently no:
 
@@ -210,12 +212,14 @@ Migrations are automatic and forward-only. Deployment is therefore also the
 schema-change mechanism.
 
 `001_worldwright.sql` remains the clean supported baseline rather than an
-upgrade from the removed schema. New databases apply `001` and then
-`002_rules_graph_statuses.sql`; a database whose ledger is exactly the `001`
-prefix upgrades in place, including mechanic-rules/status-set root backfills.
-Do not attach a database with a different migration history or unledgered
-application tables. If unsupported data must be retained, use separately
-reviewed one-time export/transform/import tooling outside the running service,
+upgrade from the removed schema. New databases apply `001`,
+`002_rules_graph_statuses.sql`, and
+`003_interaction_audience_invalidations.sql`; a database at a recorded prefix
+upgrades in place, including mechanic-rules/status-set root backfills and the
+audience-invalidation event flag. Do not attach a database with a different
+migration history or unledgered application tables. If unsupported data must
+be retained, use separately reviewed one-time export/transform/import tooling
+outside the running service,
 verify the new database, and retire that tooling.
 
 For each production migration:

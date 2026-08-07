@@ -52,10 +52,10 @@ postgres://localhost:5432/dnd?sslmode=disable
 
 Migrations run automatically when the backend starts. The repository has no
 seed step; create all world vocabulary through the application/API. New
-databases install the `001` baseline and then the `002` derived-graph and
-problem-status upgrade. Existing databases at the recorded `001` prefix
-upgrade forward; databases created by the removed pre-baseline schema remain
-unsupported.
+databases install the `001` baseline, the `002` derived-graph/problem-status
+upgrade, and the `003` audience-invalidation event upgrade. Existing databases
+at a recorded migration prefix upgrade forward; databases created by the
+removed pre-baseline schema remain unsupported.
 
 ## Resetting local data
 
@@ -119,6 +119,9 @@ directly, not when using the managed local workflow.
 | `DND_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
 | `DND_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
 | `DND_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
+| `DND_E2E_DIAGNOSTICS`        | Direct E2E            | Set to `1` to retain trace and video on failure; the root performance-gated run keeps both disabled.                            |
+| `DND_E2E_APP_BINARY`         | E2E harness           | Prebuilt embedded application passed by `ci.sh`; direct test runs normally leave it unset and use the safe build fallback.      |
+| `DND_CI_CACHE_DIR`           | Root validator        | Optional persistent tool-cache directory; defaults to ignored `.dnd/cache/ci`.                                                  |
 | `PLAYWRIGHT_BROWSERS_PATH`   | Playwright/CI         | Browser cache/install location.                                                                                                 |
 
 The E2E admin URL path is rewritten to `/postgres` for database administration.
@@ -261,7 +264,7 @@ from non-facilitator JSON.
 
 | Path                         | Producer/content                                |
 | ---------------------------- | ----------------------------------------------- |
-| `.dnd/`                      | `run.sh` binaries, PIDs, and logs.              |
+| `.dnd/`                      | `run.sh` state plus persistent CI tool caches.  |
 | `out`                        | Production/Railway-style binary.                |
 | `web/frontend/node_modules/` | Frontend install.                               |
 | `web/static/*`               | Vite production assets; placeholder is tracked. |

@@ -57,16 +57,16 @@ the server derives both from the header and world membership.
 
 `fields` is optional. Common status/code pairs include:
 
-| Status | Typical codes                                                                                       | Meaning                                                              |
-| ------ | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                      | Transport, path, or query syntax is malformed.                       |
-| 401    | `authentication_required`, `invalid_identity`                                                       | Development identity is absent, malformed, or unknown.               |
-| 403    | `world_forbidden`, role-required codes, `character_setup_required`, `entity_profile_forbidden`       | Actor lacks world/resource authority or is not ready for live play.  |
-| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                               | Resource, invite, or endpoint is absent or hidden.                   |
-| 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors                      | Current state conflicts with the command.                            |
-| 422    | `validation_failed`, `invalid_reference`, `effect_application_failed`                               | Structurally readable JSON violates a domain/database rule.          |
-| 500    | `internal_error`, `database_error`                                                                  | Unexpected server or database failure.                              |
-| 503    | `database_unavailable`                                                                              | Health check cannot ping PostgreSQL.                                 |
+| Status | Typical codes                                                                                  | Meaning                                                             |
+| ------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                 | Transport, path, or query syntax is malformed.                      |
+| 401    | `authentication_required`, `invalid_identity`                                                  | Development identity is absent, malformed, or unknown.              |
+| 403    | `world_forbidden`, role-required codes, `character_setup_required`, `entity_profile_forbidden` | Actor lacks world/resource authority or is not ready for live play. |
+| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                          | Resource, invite, or endpoint is absent or hidden.                  |
+| 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors                | Current state conflicts with the command.                           |
+| 422    | `validation_failed`, `invalid_reference`, `effect_application_failed`                          | Structurally readable JSON violates a domain/database rule.         |
+| 500    | `internal_error`, `database_error`                                                             | Unexpected server or database failure.                              |
+| 503    | `database_unavailable`                                                                         | Health check cannot ping PostgreSQL.                                |
 
 The standard-library mux may emit its own `405 Method Not Allowed` for a known
 path with the wrong method.
@@ -79,15 +79,15 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 | Request field                                               | Protects                                      |
 | ----------------------------------------------------------- | --------------------------------------------- |
 | `expected_revision` on world update/archive                 | World settings/lifecycle revision.            |
-| `expected_table_revision` on controller replacement        | World table/control revision.                 |
-| `expected_revision` on state replacement                   | Entity state record.                          |
-| `expected_revision` on character-field replacement         | World character-field set.                    |
-| `expected_revision` on profile replacement                 | Entity profile values.                        |
-| `expected_character_fields_revision` on profile replacement| Field schema used to build the profile draft. |
-| `expected_revision` on interaction command/action creation | Interaction.                                  |
-| `expected_revision` on action withdrawal                   | Action submission.                            |
-| `expected_rules_revision` on mechanic mutation             | World mechanic dependency graph.               |
-| `expected_rules_revision` on state replacement             | Rule schema used to construct the input map.  |
+| `expected_table_revision` on controller replacement         | World table/control revision.                 |
+| `expected_revision` on state replacement                    | Entity state record.                          |
+| `expected_revision` on character-field replacement          | World character-field set.                    |
+| `expected_revision` on profile replacement                  | Entity profile values.                        |
+| `expected_character_fields_revision` on profile replacement | Field schema used to build the profile draft. |
+| `expected_revision` on interaction command/action creation  | Interaction.                                  |
+| `expected_revision` on action withdrawal                    | Action submission.                            |
+| `expected_rules_revision` on mechanic mutation              | World mechanic dependency graph.              |
+| `expected_rules_revision` on state replacement              | Rule schema used to construct the input map.  |
 | `expected_rules_revision` on preview/resolve                | Exact graph used to evaluate the Consequence. |
 
 Preview does not reserve a revision. Use the latest authoritative response
@@ -114,22 +114,22 @@ Path placeholders are UUIDs unless noted otherwise.
 
 ### Health and local users
 
-| Method and path   | Authority | Request                  | Response                                                        |
-| ----------------- | --------- | ------------------------ | --------------------------------------------------------------- |
-| `GET /api/health` | Public    | None                     | `{"ok":true,"timestamp":"..."}` after a database ping.     |
-| `GET /api/users`  | Public    | None                     | Up to 1000 local identities.                                    |
-| `POST /api/users` | Public    | `{id?,display_name}`     | Creates a local development identity.                           |
+| Method and path   | Authority | Request              | Response                                               |
+| ----------------- | --------- | -------------------- | ------------------------------------------------------ |
+| `GET /api/health` | Public    | None                 | `{"ok":true,"timestamp":"..."}` after a database ping. |
+| `GET /api/users`  | Public    | None                 | Up to 1000 local identities.                           |
+| `POST /api/users` | Public    | `{id?,display_name}` | Creates a local development identity.                  |
 
 ### Worlds
 
-| Method and path                              | Authority                  | Request/response                                                                    |
-| -------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------- |
-| `GET /api/worlds`                            | Known user                 | Active memberships only; role/count/activity and derived `play_status`.             |
-| `POST /api/worlds`                           | Known user                 | Name/description; creates world, owner membership, field/rules roots, and event.      |
-| `GET /api/worlds/{world_id}`                 | Active world member        | World summary for the current member.                                               |
-| `PATCH /api/worlds/{world_id}`               | Owner/editor, active world | Name, nullable description, and `expected_revision`.                                |
-| `POST /api/worlds/{world_id}/archive`        | Owner                      | `expected_revision`; rejects unfinished interactions.                               |
-| `GET /api/worlds/{world_id}/members`         | Active world member        | Memberships, controls, revisions, and derived readiness.                            |
+| Method and path                       | Authority                  | Request/response                                                                 |
+| ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------- |
+| `GET /api/worlds`                     | Known user                 | Active memberships only; role/count/activity and derived `play_status`.          |
+| `POST /api/worlds`                    | Known user                 | Name/description; creates world, owner membership, field/rules roots, and event. |
+| `GET /api/worlds/{world_id}`          | Active world member        | World summary for the current member.                                            |
+| `PATCH /api/worlds/{world_id}`        | Owner/editor, active world | Name, nullable description, and `expected_revision`.                             |
+| `POST /api/worlds/{world_id}/archive` | Owner                      | `expected_revision`; rejects unfinished interactions.                            |
+| `GET /api/worlds/{world_id}/members`  | Active world member        | Memberships, controls, revisions, and derived readiness.                         |
 
 World creation is transactional and returns role `owner`. Owners and editors
 have facilitator authority; there is no separate facilitator membership.
@@ -140,13 +140,13 @@ three are returned on every `World` response.
 
 ### Capacities and capabilities
 
-| Method and path                                                  | Authority                  | Notes                                                        |
-| ---------------------------------------------------------------- | -------------------------- | ------------------------------------------------------------ |
-| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.      |
+| Method and path                                                  | Authority                  | Notes                                                           |
+| ---------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.        |
 | `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision. |
-| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                       |
+| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                          |
 | `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision. |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency remains.             |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency remains.               |
 
 Capacity `score`/`pool` and capability `rating` are numeric; capability
 `binary` is Boolean. Each is either a stored/defaulted `input` or a calculated
@@ -154,20 +154,20 @@ Capacity `score`/`pool` and capability `rating` are numeric; capability
 
 ### Character fields, entities, profiles, and state
 
-| Method and path                                               | Authority                         | Notes                                                                  |
-| ------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered requirements plus schema revision; visibility-filtered.        |
-| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces active requirements.                               |
-| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Roster with state and character completion.                            |
-| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates entity/state root; optional controller memberships.            |
-| `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                      |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.     |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Archives the entity.                                                   |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.                  |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                       |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete controller set using `expected_table_revision`.               |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                      |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions.    |
+| Method and path                                               | Authority                         | Notes                                                               |
+| ------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered requirements plus schema revision; visibility-filtered.     |
+| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces active requirements.                            |
+| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Roster with state and character completion.                         |
+| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates entity/state root; optional controller memberships.         |
+| `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.  |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Archives the entity.                                                |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.              |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete controller set using `expected_table_revision`.            |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions. |
 
 Onboarding players may read only controlled entities until ready. Direct state
 writes remain owner/editor setup operations; players edit only authorized
@@ -175,13 +175,13 @@ profile text.
 
 ### Invite links
 
-| Method and path                                          | Authority                  | Notes                                                                                  |
-| -------------------------------------------------------- | -------------------------- | -------------------------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                                      |
-| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role and 1–90 expiry days; response alone includes area-scoped `join_path`.            |
-| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                                  |
-| `GET /api/world-invites/{opaque_token}`                  | Public                     | Preview when active, unexpired, and not revoked.                                       |
-| `POST /api/world-invites/{opaque_token}/redeem`          | Known user                 | Creates/reactivates one matching world membership atomically.                          |
+| Method and path                                          | Authority                  | Notes                                                                       |
+| -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
+| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
+| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
+| `GET /api/world-invites/{opaque_token}`                  | Public                     | Preview when active, unexpired, and not revoked.                            |
+| `POST /api/world-invites/{opaque_token}/redeem`          | Known user                 | Creates/reactivates one matching world membership atomically.               |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only their
 SHA-256 digest is stored. Redemption counts once per invite/user and never
@@ -189,25 +189,25 @@ escalates an already-active role.
 
 ### Interactions and actions
 
-| Method and path                                                                          | Authority                    | Notes                                                                       |
-| ---------------------------------------------------------------------------------------- | ---------------------------- | --------------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/interactions`                                                | Play-ready world member      | Visibility-filtered feed.                                                   |
-| `POST /api/worlds/{world_id}/interactions`                                               | Owner/editor facilitator     | Creates draft or creates/presents with `present:true`.                      |
-| `GET /api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member    | One interaction; private data omitted for non-facilitators.                 |
-| `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Owner/editor facilitator     | Replaces editable draft using expected revision.                            |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Owner/editor facilitator     | `draft → open`.                                                             |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Owner/editor facilitator     | `open → adjudicating`.                                                      |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Owner/editor facilitator     | Any unfinished state → cancelled.                                           |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible player              | Creates action; optional ready controlled acting entity.                    |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player                | Withdraws submitted action using action revision.                           |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator     | Advisory Consequence; no idempotency key required.                          |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Owner/editor facilitator     | Atomic state, immutable receipt, lifecycle, and world event.                |
+| Method and path                                                                          | Authority                 | Notes                                                        |
+| ---------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------ |
+| `GET /api/worlds/{world_id}/interactions`                                                | Play-ready world member   | Visibility-filtered feed.                                    |
+| `POST /api/worlds/{world_id}/interactions`                                               | Owner/editor facilitator  | Creates draft or creates/presents with `present:true`.       |
+| `GET /api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member | One interaction; private data omitted for non-facilitators.  |
+| `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Owner/editor facilitator  | Replaces editable draft using expected revision.             |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Owner/editor facilitator  | `draft → open`.                                              |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Owner/editor facilitator  | `open → adjudicating`.                                       |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Owner/editor facilitator  | Any unfinished state → cancelled.                            |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible player           | Creates action; optional ready controlled acting entity.     |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player             | Withdraws submitted action using action revision.            |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator  | Advisory Consequence; no idempotency key required.           |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Owner/editor facilitator  | Atomic state, immutable receipt, lifecycle, and world event. |
 
 ### World events (SSE)
 
-| Method and path                        | Authority               | Request                                               |
-| -------------------------------------- | ----------------------- | ----------------------------------------------------- |
-| `GET /api/worlds/{world_id}/events`    | Play-ready world member | `?after=<non-negative ID>` or `Last-Event-ID`.        |
+| Method and path                     | Authority               | Request                                        |
+| ----------------------------------- | ----------------------- | ---------------------------------------------- |
+| `GET /api/worlds/{world_id}/events` | Play-ready world member | `?after=<non-negative ID>` or `Last-Event-ID`. |
 
 The stream sends `retry: 1500`, keep-alive comments, and compact events:
 
@@ -458,7 +458,11 @@ table-visible values only.
 
 Draft replacement adds `expected_revision`. Audience/responders/entities must
 belong to the same world; responders must be active ready players in the
-audience, and context entities must be active and eligible.
+audience, and context entities must be active and eligible. Omitting
+`audience_membership_ids` preserves the compatible table-audience default;
+supplying an explicit empty array persists an audience-free draft. Such a
+draft remains editable, but `present: true` or a later presentation command is
+rejected atomically until it has at least one audience member.
 
 ### Action and Consequence
 
@@ -595,18 +599,18 @@ to the problem that created it.
 
 ## Limits and notable validation rules
 
-| Item                                           | Limit/rule                           |
-| ---------------------------------------------- | ------------------------------------ |
-| API request body                               | 1 MiB                                |
-| Names/labels/display names                     | Usually 200 characters               |
-| Interaction title                              | 200 characters                       |
-| Interaction prompt/action text                 | 10,000 characters                    |
-| Interaction/Consequence private notes and summary | 20,000 characters                 |
-| Character fields                               | 50 active; label 200/guidance 2,000  |
-| Character-field value                          | 20,000 characters                    |
-| Consequence effects                            | 100                                  |
-| Inline status description                      | 2,000 characters                     |
-| Entity/user/world lists                        | 500–1000 depending on resource       |
-| SSE batch                                      | 100 events                           |
+| Item                                              | Limit/rule                          |
+| ------------------------------------------------- | ----------------------------------- |
+| API request body                                  | 1 MiB                               |
+| Names/labels/display names                        | Usually 200 characters              |
+| Interaction title                                 | 200 characters                      |
+| Interaction prompt/action text                    | 10,000 characters                   |
+| Interaction/Consequence private notes and summary | 20,000 characters                   |
+| Character fields                                  | 50 active; label 200/guidance 2,000 |
+| Character-field value                             | 20,000 characters                   |
+| Consequence effects                               | 100                                 |
+| Inline status description                         | 2,000 characters                    |
+| Entity/user/world lists                           | 500–1000 depending on resource      |
+| SSE batch                                         | 100 events                          |
 
 For mechanical and lifecycle invariants, see [Domain model](domain-model.md).

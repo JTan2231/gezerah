@@ -119,8 +119,12 @@ operations/references by expected kind for guidance; the server remains the
 authority and rejects invalid types or cycles when saved. Only inputs may set
 `mutable_during_play`.
 
-The capacity and capability editors use explicit save, a dirty/unload guard,
-archive rather than delete, and a generated-sheet preview. Archiving removes a
+The Builder's explicit-save editors share one dirty/unload guard. It protects
+section changes, mechanic and roster child selection, Settings, Home, and both
+desktop and mobile exits to the Builder library. Cancelling keeps the current
+draft and destination; accepting discards the draft before navigation. The
+capacity and capability editors archive rather than delete and include a
+generated-sheet preview. Archiving removes a
 mechanic from new use while preserving stored input, active status snapshots,
 and historical receipts. The server explains dependency conflicts when an
 active derived mechanic still needs an archived target. There are no
