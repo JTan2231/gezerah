@@ -74,6 +74,11 @@ The validator requires a valid Git repository with a `HEAD` commit.
 6. shell syntax checking for `ci.sh` and `run.sh`;
 7. optional application-startup/migration smoke test.
 
+Application tests cover the five-minute session-touch boundary, immediate
+continuation after a full SSE event batch, cancellation while waiting, rolling
+write-deadline set/clear behavior, a real stream surviving the ordinary server
+write timeout, and request-context propagation from the process root.
+
 The smoke test runs only when `DND_TEST_DATABASE_URL` is set. It starts the
 built binary against that exact database, waits for the listening log, and
 stops it. The database must be explicitly disposable because startup installs
@@ -189,7 +194,10 @@ that does not need another browser journey:
 
 - `authentication.contract.spec.ts` covers signup/signin, cookie attributes,
   session bootstrap, anonymous and forged-header denial, origin/CSRF failures,
-  logout scopes, password replacement, and revoked-session behavior;
+  logout scopes, password replacement, and revoked-session behavior. It also
+  proves that recent activity does not rewrite session timestamps, activity
+  older than five minutes touches once, subsequent activity is coalesced, and
+  repeated SSE reauthorization does not extend idle expiry;
 - `access-and-invites.contract.spec.ts` covers world isolation, invitation-token
   secrecy, admission, role denial, editor archive denial, and revocation;
 - `profile-and-readiness.contract.spec.ts` covers waiting/setup/ready
@@ -375,4 +383,5 @@ only to a database that can be destroyed or modified without consequence.
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;
 - no migration downgrade or automated upgrade-from-populated-fixture matrix;
-- no load, long-duration SSE, fault-injection, or backup/restore tests.
+- no load, proxy/multi-replica, long-duration SSE soak, fault-injection, or
+  backup/restore tests.

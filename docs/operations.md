@@ -1,10 +1,16 @@
 # Operations
 
-## Production artifact
+> **Current state (2026-08-08):** Worldwright has no hosted deployment,
+> production database, production users, external audience, release
+> commitment, or concerned external party. The deployment material below is a
+> dormant runbook. It creates no current launch work and does not block trusted
+> local development.
 
-Production is one statically built Go application plus PostgreSQL. The browser
-assets are compiled by Vite into `web/static` and embedded in the Go binary.
-That binary:
+## Deployable artifact
+
+If deployed, Worldwright is one statically built Go application plus
+PostgreSQL. The browser assets are compiled by Vite into `web/static` and
+embedded in the Go binary. That binary:
 
 - connects to PostgreSQL;
 - applies all pending migrations before listening;
@@ -39,17 +45,17 @@ binary whose SPA routes return 503.
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
-development; a production process with no database variable will try that local
+development; a deployed process with no database variable would try that local
 address rather than fail configuration parsing. Unknown log-level values also
 silently select `info`.
 
 The default bind address `:8080` listens on all interfaces. Use
 `DND_ADDR=127.0.0.1:8080` for strictly local direct access. `./run.sh` starts the
 Vite-facing backend with `DND_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the
-variable is already set. In production, set `DND_PUBLIC_ORIGIN` to the exact
-external HTTPS origin (scheme and authority, with no path/query/fragment); this
-is required when a reverse proxy changes the request host and ensures the
-`Secure` `__Host-dnd_session` cookie is issued.
+variable is already set. For any HTTPS deployment, set `DND_PUBLIC_ORIGIN` to
+the exact external origin (scheme and authority, with no
+path/query/fragment); this is required when a reverse proxy changes the request
+host and ensures the `Secure` `__Host-dnd_session` cookie is issued.
 
 Treat database URLs as secrets. The application does not read secret files or
 rotate credentials. Supply them through the deployment platform and restrict
@@ -76,27 +82,25 @@ Startup is fail-fast:
 This is both liveness and database readiness. It does not validate every table,
 frontend asset, write permission, disk capacity, or complete schema contents.
 
-Do not send production traffic until startup migrations finish and health is
-green. A long migration delays listening and may exceed platform startup
-deadlines.
+For a future deployment, do not send traffic until startup migrations finish
+and health is green. A long migration delays listening and may exceed platform
+startup deadlines.
 
 ## Shutdown
 
 `SIGINT` or `SIGTERM` cancels the root context and calls HTTP shutdown with a
-ten-second deadline. The server stops accepting new connections and waits for
-handlers. Request contexts are not currently derived from the root context, and
-`http.Server.Shutdown` does not cancel active requests. An open SSE handler can
-therefore remain active until its request disconnects or a write fails, consume
-the full shutdown deadline, and make shutdown return an error.
+ten-second deadline. HTTP request contexts derive from that root, so cancellation
+ends open SSE loops while the server stops accepting new connections and waits
+for other handlers.
 
-The HTTP server also has a fixed 30-second write timeout. That timeout can end
-an SSE stream even though the handler sends keep-alives; the frontend reconnects
-with its last cursor. Configure the platform termination grace
-period to exceed ten seconds, but do not treat the current SSE shutdown as
-graceful. A forced kill can interrupt in-flight requests, but PostgreSQL
-transactions roll back when their connections close. Clients resolving live
-interactions should retry the identical request with the same idempotency key
-after ambiguous failure.
+The ordinary HTTP write timeout remains 30 seconds. SSE overrides that absolute
+deadline: each write/flush gets a five-second deadline, which is cleared after
+a successful flush. Healthy streams can therefore remain open, while a stalled
+client does not block a write indefinitely. If a deployment is ever activated,
+configure its termination grace period to exceed ten seconds. A forced kill can
+still interrupt in-flight requests, but PostgreSQL transactions roll back when
+their connections close. Clients resolving live interactions should retry the
+identical request with the same idempotency key after ambiguous failure.
 
 ## Logging and observability
 
@@ -134,7 +138,8 @@ careful not to add private notes or player action text to telemetry.
 
 ## Railway deployment
 
-The repository's only deployment definition is Railway:
+The repository contains Railway configuration, but no Railway deployment is
+currently running or planned. The checked-in definition is:
 
 - `railpack.json` selects the Go provider and Bun 1.1.42;
 - `railway.toml` performs frozen frontend install/build, then a `CGO_ENABLED=0`
@@ -149,27 +154,41 @@ the application service. Define a reference variable such as
 name, or set `DND_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
 
-The repository does not configure Railway `drainingSeconds`, so the checked-in
-deployment does not establish the greater-than-ten-second termination grace
-required above. Configure that service setting before relying on signal-based
-shutdown. Authentication is installed, but the remaining hardening and
-operational gaps in [Security](security.md) still need review before a public
-launch.
+The repository does not configure Railway `drainingSeconds`. If this target is
+activated, configure that service setting above ten seconds before relying on
+signal-based shutdown. The remaining hardening and operational conditions in
+[Security](security.md) apply only in proportion to the target and its audience.
 
-### Railway release checklist
+### Dormant deployment activation checklist
 
-1. Run the complete `./ci.sh` against the release source.
-2. Review every new migration for data backfill, lock time, and coordinated
-   application/schema rollout.
-3. Take/verify a database backup before a risky migration.
-4. Confirm Bun/Go versions and the build log shows Vite before Go.
-5. Confirm the application service has the PostgreSQL reference variable, exact
-   HTTPS `DND_PUBLIC_ORIGIN`, and expected log level.
-6. Configure a termination/draining grace period greater than ten seconds.
-7. Deploy one instance and watch migration/startup logs.
-8. Verify `/api/health`, an SPA route, and representative authorized API reads.
-9. Verify a non-destructive SSE connection and a safe revision-guarded command.
-10. Monitor errors and database health through the release window.
+Do not run this checklist until a person explicitly proposes a deployment. At
+activation:
+
+1. Record the target, owner, intended audience, data sensitivity, lifetime, and
+   rollback authority. For a public target, start with the release gate closed.
+2. Run the complete `./ci.sh` repeatedly against the exact source to be built;
+   investigate any nondeterminism rather than treating one pass as evidence.
+3. Review every migration for existing-data assumptions, backfill, lock time,
+   and application/schema ordering. Migration `004_password_auth.sql` requires
+   an empty `users` table, so use a fresh database unless a separately reviewed
+   data-transition plan exists.
+4. Define and rehearse backup/restore and cutback when the target will hold any
+   durable data; confirm Bun/Go versions and that Vite builds before Go.
+5. Set the PostgreSQL reference, exact HTTPS `DND_PUBLIC_ORIGIN`, expected log
+   level, TLS/proxy policy, and secret access boundaries.
+6. Configure a termination/draining grace period greater than ten seconds, then
+   deploy one instance and inspect migration, startup, request, and shutdown
+   logs.
+7. Verify `/api/health`, an SPA deep link, signup/signin, `/api/me`, logout
+   revocation, and representative authorized API reads.
+8. In a real HTTPS browser, verify `__Host-dnd_session` is `Secure`, `HttpOnly`,
+   `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
+   missing-CSRF mutations fail.
+9. Keep an SSE connection open beyond 30 seconds; verify prompt session
+   revocation, cursor recovery without event loss, and one safe
+   revision-guarded command.
+10. Establish monitoring and a staffed release window only if the target and
+    its concerned parties actually require them.
 
 ## Other hosting environments
 
@@ -194,8 +213,8 @@ not bake database credentials into an image layer.
 
 ## Scaling characteristics
 
-The configured deployment uses one replica. Important properties for future
-horizontal scaling:
+The checked-in Railway configuration would request one replica. Important
+properties for any future horizontal scaling:
 
 - durable state, events, revisions, and idempotency are in PostgreSQL;
 - migrations serialize through a database advisory lock;
@@ -207,8 +226,9 @@ horizontal scaling:
 - successful commands wake SSE handlers on the same replica immediately;
 - SSE handlers retain a 1.5-second shared-PostgreSQL poll, so events committed
   by another replica remain visible and clients can reconnect anywhere;
-- every connected Play client holds a streaming HTTP request; the fixed
-  30-second server write timeout can force stream reconnection;
+- every connected Play client holds a streaming HTTP request; SSE writes have a
+  five-second deadline that is cleared after each flush, so the ordinary
+  30-second response timeout does not routinely force reconnection;
 - event delivery is at-least-observed through cursor replay, but it is an
   invalidation hint rather than a broker guarantee.
 
@@ -217,7 +237,7 @@ but it has not been load-tested. Evaluate pool sizing, SSE connection limits,
 database event-query load, migration startup behavior, and reverse-proxy
 buffering/timeouts before increasing replicas.
 
-## Database changes in production
+## Database changes for a deployment
 
 Migrations are automatic and forward-only. Deployment is therefore also the
 schema-change mechanism.
@@ -236,7 +256,7 @@ be retained, use separately reviewed one-time export/transform/import tooling
 outside the running service,
 verify the new database, and retire that tooling.
 
-For each production migration:
+For each migration applied to a deployed database:
 
 1. understand the source schema and existing data volume;
 2. coordinate schema and application changes in one release and do not retain
@@ -326,13 +346,18 @@ be treated as an idempotency conflict and investigated rather than forced.
    play-ready membership.
 2. Check proxy buffering and idle timeouts; the response sets no-buffer hints
    and sends keep-alives.
-3. Account for the fixed 30-second server write timeout and expected reconnects.
-4. Verify cursor syntax and inspect recent `world_events`.
-5. Check PostgreSQL/event query health.
+3. Confirm keep-alives continue beyond 30 seconds. Each stream write has a
+   five-second deadline; a stalled proxy/client still causes reconnection.
+4. Verify cursor syntax and inspect recent `world_events`. Full 100-row batches
+   should drain immediately rather than waiting for the next poll.
+5. Check PostgreSQL/event query and read-only session-validation health.
 6. The frontend has a three-second query fallback, so distinguish stream failure
    from general API refresh failure.
 
-## Production-readiness gaps
+## Future deployment gaps
+
+These are not current blockers because no non-local target or audience exists.
+Re-evaluate only the items relevant to an explicitly proposed target:
 
 - no built-in TLS termination; the reverse proxy must enforce HTTPS;
 - authentication throttling is in-memory, per-process, and direct-peer based;
@@ -342,12 +367,11 @@ be treated as an idempotency conflict and investigated rather than forced.
 - no metrics/tracing/alerts or audit trail for configuration changes;
 - no pool tuning or capacity test;
 - no multi-replica/load/SSE soak test;
-- SSE requests are not cancelled by the process root context and use a fixed
-  30-second write timeout;
 - no container/release pipeline beyond Railway configuration;
 - no documented provider-specific incident response or disaster-recovery SLO.
 
-Username/password sessions close the former impersonation gap. Public launch
-still requires deliberate TLS/proxy configuration, backup/restore evidence,
-capacity/abuse testing, monitoring, and an account-support policy for a product
-that intentionally collects no email and provides no password recovery.
+Username/password sessions close the former impersonation gap. If a public
+launch is ever proposed, it will require deliberate TLS/proxy configuration,
+backup/restore evidence, capacity/abuse testing, monitoring, and an
+account-support policy for a product that intentionally collects no email and
+provides no password recovery.

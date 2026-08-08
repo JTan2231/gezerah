@@ -9,6 +9,7 @@ import {
 } from "@playwright/test";
 
 import {
+  ageLatestSessionActivityForDirectContract,
   disableUserForDirectContract,
   expireSessionForDirectContract,
   insertActiveSessionFixturesForDirectContract,
@@ -248,6 +249,69 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
       secure: false,
       sameSite: "Lax",
     });
+  });
+
+  await test.step("recent session activity is touched at most once per five-minute interval", async () => {
+    const fresh = await readAuthPersistenceForDirectContract(
+      firstPersistenceActor.id,
+    );
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
+    const unchanged = await readAuthPersistenceForDirectContract(
+      firstPersistenceActor.id,
+    );
+    expect(unchanged.lastSeenAtMicros).toBe(fresh.lastSeenAtMicros);
+    expect(unchanged.idleExpiresAtMicros).toBe(fresh.idleExpiresAtMicros);
+
+    await ageLatestSessionActivityForDirectContract(firstPersistenceActor.id);
+    const aged = await readAuthPersistenceForDirectContract(
+      firstPersistenceActor.id,
+    );
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
+    const touched = await readAuthPersistenceForDirectContract(
+      firstPersistenceActor.id,
+    );
+    expect(touched.lastSeenAtMicros).toBeGreaterThan(aged.lastSeenAtMicros);
+    expect(touched.idleExpiresAtMicros).toBeGreaterThan(
+      aged.idleExpiresAtMicros,
+    );
+
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
+    const suppressed = await readAuthPersistenceForDirectContract(
+      firstPersistenceActor.id,
+    );
+    expect(suppressed.lastSeenAtMicros).toBe(touched.lastSeenAtMicros);
+    expect(suppressed.idleExpiresAtMicros).toBe(touched.idleExpiresAtMicros);
+  });
+
+  await test.step("SSE reauthorization is read-only and does not extend idle expiry", async () => {
+    const world = await expectJSON<{ id: string }>(
+      await firstPersistenceActor.api.post("/api/worlds", {
+        data: { name: `Read-only session stream ${unique}` },
+      }),
+    );
+    const [before, sessionCookie] = await Promise.all([
+      readAuthPersistenceForDirectContract(firstPersistenceActor.id),
+      actorSessionCookie(firstPersistenceActor.id),
+    ]);
+    const controller = new AbortController();
+    const stream = await fetch(
+      `${baseURL}/api/worlds/${world.id}/events?after=0`,
+      {
+        headers: { Cookie: `${sessionCookie.name}=${sessionCookie.value}` },
+        signal: controller.signal,
+      },
+    );
+    try {
+      expect(stream.status).toBe(200);
+      await new Promise((resolve) => setTimeout(resolve, 3_200));
+      const after = await readAuthPersistenceForDirectContract(
+        firstPersistenceActor.id,
+      );
+      expect(after.lastSeenAtMicros).toBe(before.lastSeenAtMicros);
+      expect(after.idleExpiresAtMicros).toBe(before.idleExpiresAtMicros);
+    } finally {
+      controller.abort();
+    }
   });
 
   await test.step("IDN-V04[response-redaction] never returns stored or presented secrets", async () => {

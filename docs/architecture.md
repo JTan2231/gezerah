@@ -264,9 +264,16 @@ There is no broker. A successful mutation broadcasts an in-process wakeup so
 streams on the same server query PostgreSQL immediately after commit. Each open
 handler also polls PostgreSQL every 1.5 seconds, preserving correctness after a
 lost wakeup and across replicas. Capacity planning must therefore account for
-one request and recurring fallback queries per connected table client. The HTTP
-server's write deadline can close a stream; clients reconnect with their last
-cursor.
+one request and recurring fallback queries per connected table client. A full
+100-event query repeats immediately, with authorization checked again, until
+the backlog is below the batch limit.
+
+The SSE handshake uses ordinary authentication, including a coarse activity
+touch when due; subsequent stream session checks are read-only. Each stream
+write/flush has a five-second deadline that is cleared while waiting, so the
+ordinary 30-second response deadline does not routinely close healthy streams.
+Process cancellation propagates through request contexts. On any disconnect,
+clients reconnect with their last cursor.
 
 ## Repository layout
 

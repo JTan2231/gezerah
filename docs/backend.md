@@ -24,16 +24,20 @@ cache, message broker, code generator, or dependency-injection framework.
 7. listens;
 8. attempts HTTP shutdown with a ten-second deadline.
 
-| Timeout           | Value      |
-| ----------------- | ---------- |
-| Read header       | 5 seconds  |
-| Read request      | 15 seconds |
-| Write response    | 30 seconds |
-| Idle connection   | 60 seconds |
-| Graceful shutdown | 10 seconds |
+| Timeout                   | Value      |
+| ------------------------- | ---------- |
+| Read header               | 5 seconds  |
+| Read request              | 15 seconds |
+| Ordinary response write   | 30 seconds |
+| SSE write/flush           | 5 seconds  |
+| Idle connection           | 60 seconds |
+| Graceful shutdown         | 10 seconds |
 
-SSE uses response-controller flushing, but the configured write deadline can
-still end a stream. Clients reconnect with their last world-event cursor.
+Request contexts inherit the process root, so signal cancellation reaches
+long-lived handlers. SSE uses response-controller flushing and replaces the
+ordinary absolute response deadline with a five-second deadline around each
+write/flush, clearing it while waiting. A healthy stream is long-lived; a
+stalled write ends it, and clients reconnect with their last world-event cursor.
 
 ## Package map
 
@@ -355,6 +359,14 @@ Owner/editor helpers add configuration or facilitator authority. Players must
 also have at least one complete controlled entity before live
 interaction/event access.
 
+Every authenticated request performs a read-only session/account validity
+lookup. If the last activity touch is at least five minutes old, ordinary
+request authentication attempts a database-guarded update of `last_seen_at` and
+the sliding idle expiry; the update repeats the token, revocation, expiry, and
+active-account predicates. A concurrent touch loser revalidates. The SSE
+handshake follows that ordinary path, while subsequent stream reauthorization
+is read-only and therefore does not keep an otherwise idle session alive.
+
 Profile writes allow owner/editor or the entity's current active controller.
 Controller and field-set replacement are owner/editor only. An acting entity on
 an action must be controlled and complete. Interaction context/effect targets
@@ -372,14 +384,17 @@ The world event endpoint:
 - authenticates and checks readiness before headers;
 - parses `after`, falling back to `Last-Event-ID`;
 - disables buffering/caching and flushes `retry: 1500`;
-- rechecks both the session and membership and queries up to 100 visible events
-  per batch;
+- rechecks the session read-only plus membership and queries up to 100 visible
+  events per batch;
+- immediately reauthorizes and queries again after a full 100-event batch,
+  rather than sleeping with a known backlog;
 - wakes every local stream immediately after a successful mutating API handler
   returns, which is after its transaction has committed;
 - retains the 1.5-second database poll as a lost-wakeup and cross-replica
   fallback;
 - sends keep-alive comments when empty;
-- advances the cursor only after writing an event;
+- bounds each write/flush to five seconds and clears the deadline while waiting;
+- advances the cursor only after successfully flushing a batch;
 - exits on cancellation, revoked authority, query error, or flush failure.
 
 Payloads contain identifiers and event types, never aggregate snapshots.

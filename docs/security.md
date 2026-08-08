@@ -2,6 +2,11 @@
 
 ## Current deployment classification
 
+As of 2026-08-08, Worldwright has no hosted deployment, production data or
+users, external audience, release commitment, or concerned external party.
+Trusted local development is the only active target; public-release conditions
+in this document are dormant unless someone proposes that target.
+
 Worldwright now has native username/password authentication and revocable
 server sessions. A caller-supplied user UUID is not an authentication mechanism:
 the former `X-DND-User-ID` adapter and public user directory are gone, and every
@@ -46,6 +51,15 @@ in an HttpOnly cookie. The database stores only the SHA-256 digest of that raw
 token. A session has a seven-day sliding idle expiry, a 30-day absolute expiry,
 and an explicit revocation timestamp. Disabled users cannot authenticate an
 otherwise valid session.
+
+Every authenticated request checks the session and account read-only. Ordinary
+activity attempts a database-guarded touch only when `last_seen_at` is at least
+five minutes old; that update repeats token, revocation, expiry, and
+active-account predicates, so it cannot revive an invalid session. Opening an
+SSE stream follows the ordinary path once. Its subsequent 1.5-second
+reauthorization checks are read-only, so merely holding a stream open does not
+extend idle expiry. Revocation, expiry, or account disablement closes the stream
+on its next reauthorization cycle.
 
 Session creation serializes per account, removes expired/revoked rows, and
 retains at most 20 active sessions including the newly issued one. Crossing the
@@ -195,9 +209,9 @@ lockout. Public or multi-replica deployments need a trusted, shared,
 proxy-aware limiter. World writes, invite use, actions, resolutions, and SSE
 connections still have no general per-user quotas.
 
-## Remaining risks and hardening
+## Future-target risks and hardening
 
-Before a public launch:
+If a public launch is ever proposed:
 
 1. Terminate TLS at a trusted proxy, redirect HTTP to HTTPS, set the exact HTTPS
    `DND_PUBLIC_ORIGIN`, and verify secure-cookie/HSTS behavior end to end.

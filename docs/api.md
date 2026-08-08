@@ -254,10 +254,18 @@ data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id
 
 ```
 
-The handler reauthorizes the session and membership, emits at most 100 visible
-rows per batch, and closes on session revocation/expiry, membership revocation,
-cancellation, query failure, or write failure. The client reconnects with its
-cursor unless authentication has ended. Events are invalidation signals only.
+After the ordinary authenticated handshake, the handler reauthorizes the
+session read-only and rechecks membership on each cycle. It emits at most 100
+visible rows per query and immediately repeats authorization/querying after a
+full batch so a known backlog drains without the 1.5-second wait. Empty streams
+wait for a local mutation wake or the fallback poll.
+
+Each write/flush has a five-second deadline, cleared while the stream waits, so
+the ordinary 30-second response timeout does not end a healthy connection. The
+handler closes on process/request cancellation, session revocation/expiry or
+account disablement, membership revocation, query failure, or write failure.
+The client reconnects with its cursor unless authentication has ended. Events
+are invalidation signals only.
 
 ## Payload reference
 

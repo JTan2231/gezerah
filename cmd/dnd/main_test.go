@@ -1,11 +1,27 @@
 package main
 
 import (
+	"context"
+	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"dnd/internal/app"
 )
+
+func TestHTTPServerDerivesRequestsFromProcessContext(t *testing.T) {
+	root, cancel := context.WithCancel(context.Background())
+	server := newHTTPServer(root, app.Config{Addr: "127.0.0.1:0"}, http.NotFoundHandler())
+	requestContext := server.BaseContext(nil)
+
+	cancel()
+	select {
+	case <-requestContext.Done():
+	case <-time.After(time.Second):
+		t.Fatal("request base context was not cancelled with the process context")
+	}
+}
 
 func TestRunValidatesPublicOriginBeforeDatabaseSetup(t *testing.T) {
 	err := run(app.Config{

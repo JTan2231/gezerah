@@ -14,7 +14,11 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const worldEventWaitInterval = 1500 * time.Millisecond
+const (
+	worldEventWaitInterval = 1500 * time.Millisecond
+	worldEventWriteTimeout = 5 * time.Second
+	worldEventBatchLimit   = 100
+)
 
 const (
 	interactionAdjudicatingEventType    = "interaction-adjudicating"
@@ -870,12 +874,8 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache, no-store")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if _, err := fmt.Fprint(w, "retry: 1500\n\n"); err != nil {
-		return
-	}
 	controller := http.NewResponseController(w)
-	if err := controller.Flush(); err != nil {
+	if err := writeWorldEventStreamChunk(w, controller, "retry: 1500\n\n"); err != nil {
 		return
 	}
 
@@ -896,33 +896,80 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if len(events) == 0 {
-			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
+			if err := writeWorldEventStreamChunk(w, controller, ": keep-alive\n\n"); err != nil {
 				return
 			}
 		} else {
+			var chunk strings.Builder
+			batchAfter := after
 			for _, event := range events {
 				payload, err := json.Marshal(event)
 				if err != nil {
 					return
 				}
-				if _, err := fmt.Fprintf(
-					w, "id: %d\nevent: world-event\ndata: %s\n\n", event.ID, payload,
-				); err != nil {
-					return
-				}
-				after = event.ID
+				fmt.Fprintf(&chunk, "id: %d\nevent: world-event\ndata: %s\n\n", event.ID, payload)
+				batchAfter = event.ID
 			}
+			if err := writeWorldEventStreamChunk(w, controller, chunk.String()); err != nil {
+				return
+			}
+			after = batchAfter
 		}
-		if err := controller.Flush(); err != nil {
+		if !waitForWorldEventRefresh(r.Context(), wake, ticker.C, len(events)) {
 			return
-		}
-		select {
-		case <-r.Context().Done():
-			return
-		case <-wake:
-		case <-ticker.C:
 		}
 	}
+}
+
+func worldEventBatchMayHaveMore(eventCount int) bool {
+	return eventCount >= worldEventBatchLimit
+}
+
+func waitForWorldEventRefresh(
+	ctx context.Context,
+	wake <-chan struct{},
+	fallback <-chan time.Time,
+	eventCount int,
+) bool {
+	if ctx.Err() != nil {
+		return false
+	}
+	if worldEventBatchMayHaveMore(eventCount) {
+		return true
+	}
+	select {
+	case <-ctx.Done():
+		return false
+	case <-wake:
+		return true
+	case <-fallback:
+		return true
+	}
+}
+
+func writeWorldEventStreamChunk(
+	w http.ResponseWriter,
+	controller *http.ResponseController,
+	chunk string,
+) error {
+	if err := setWorldEventWriteDeadline(controller, time.Now().Add(worldEventWriteTimeout)); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprint(w, chunk); err != nil {
+		return err
+	}
+	if err := controller.Flush(); err != nil {
+		return err
+	}
+	return setWorldEventWriteDeadline(controller, time.Time{})
+}
+
+func setWorldEventWriteDeadline(controller *http.ResponseController, deadline time.Time) error {
+	err := controller.SetWriteDeadline(deadline)
+	if errors.Is(err, http.ErrNotSupported) {
+		return nil
+	}
+	return err
 }
 
 func loadInteractionResponse(
@@ -1344,7 +1391,7 @@ func loadVisibleWorldEvents(
 				)
 			)
 		order by event.id
-		limit 100`, worldID, after, facilitator, member.ID)
+		limit $5`, worldID, after, facilitator, member.ID, worldEventBatchLimit)
 	if err != nil {
 		return nil, err
 	}

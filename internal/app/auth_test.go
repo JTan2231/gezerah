@@ -152,6 +152,30 @@ func TestSessionTokenDigestsAndCSRFDerivation(t *testing.T) {
 	}
 }
 
+func TestSessionTouchUsesAFiveMinuteCoarseInterval(t *testing.T) {
+	now := time.Date(2026, time.August, 8, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name       string
+		lastSeenAt time.Time
+		want       bool
+	}{
+		{name: "recent activity", lastSeenAt: now.Add(-sessionTouchInterval + time.Second)},
+		{name: "interval boundary", lastSeenAt: now.Add(-sessionTouchInterval), want: true},
+		{name: "older activity", lastSeenAt: now.Add(-sessionTouchInterval - time.Second), want: true},
+		{name: "future database value", lastSeenAt: now.Add(time.Second)},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := sessionTouchDue(test.lastSeenAt, now); got != test.want {
+				t.Fatalf("sessionTouchDue(%v, %v) = %t, want %t", test.lastSeenAt, now, got, test.want)
+			}
+		})
+	}
+	if sessionTouchInterval != 5*time.Minute {
+		t.Fatalf("sessionTouchInterval = %v, want 5m", sessionTouchInterval)
+	}
+}
+
 func TestAuthThrottleKeysDoNotRetainAttackerInput(t *testing.T) {
 	large := strings.Repeat("attacker-controlled", 60_000)
 	key := authThrottleKey("signin:account", large)

@@ -39,6 +39,7 @@ const (
 
 	sessionIdleLifetime     = 7 * 24 * time.Hour
 	sessionAbsoluteLifetime = 30 * 24 * time.Hour
+	sessionTouchInterval    = 5 * time.Minute
 	maxAuthThrottleEntries  = 8192
 	passwordWorkConcurrency = 4
 	maxActiveUserSessions   = 20
@@ -73,6 +74,12 @@ type authenticatedActor struct {
 	SessionToken      string
 	CSRFToken         string
 	AbsoluteExpiresAt time.Time
+}
+
+type authenticatedSessionLookup struct {
+	Actor       authenticatedActor
+	LastSeenAt  time.Time
+	DatabaseNow time.Time
 }
 
 type actorContextKey struct{}
@@ -384,58 +391,102 @@ func (s *Server) authenticateSession(ctx context.Context, token string) (authent
 	if !validSessionToken(token) {
 		return authenticatedActor{}, authenticationRequired()
 	}
-	var actor authenticatedActor
-	actor.SessionToken = token
-	actor.CSRFToken = deriveCSRFToken(token)
-	err := s.db.QueryRow(ctx, `
-		update auth_sessions session
-		set last_seen_at = now(),
-			idle_expires_at = least(session.absolute_expires_at, now() + interval '7 days')
-		from users app_user
-		where session.token_hash = $1
-			and session.user_id = app_user.id
-			and session.revoked_at is null
-			and session.idle_expires_at > now()
-			and session.absolute_expires_at > now()
-			and app_user.status = 'active'
-		returning session.id::text, session.absolute_expires_at,
-			app_user.id::text, app_user.username, app_user.display_name,
-			app_user.created_at, app_user.updated_at`, hashSessionToken(token),
-	).Scan(
-		&actor.SessionID, &actor.AbsoluteExpiresAt,
-		&actor.User.ID, &actor.User.Username, &actor.User.DisplayName,
-		&actor.User.CreatedAt, &actor.User.UpdatedAt,
-	)
+	lookup, err := s.loadAuthenticatedSession(ctx, token)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return authenticatedActor{}, authenticationRequired()
 	}
 	if err != nil {
 		return authenticatedActor{}, err
 	}
-	return actor, nil
+	if !sessionTouchDue(lookup.LastSeenAt, lookup.DatabaseNow) {
+		return lookup.Actor, nil
+	}
+	touched, err := s.touchAuthenticatedSession(ctx, lookup.Actor)
+	if err != nil {
+		return authenticatedActor{}, err
+	}
+	if touched {
+		return lookup.Actor, nil
+	}
+
+	// A concurrent request may have won the guarded touch. Re-read when no row
+	// changed so a concurrent revocation, expiry, disablement, or session-cap
+	// deletion cannot be mistaken for a harmless activity race.
+	lookup, err = s.loadAuthenticatedSession(ctx, token)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return authenticatedActor{}, authenticationRequired()
+	}
+	if err != nil {
+		return authenticatedActor{}, err
+	}
+	return lookup.Actor, nil
 }
 
-func (s *Server) refreshAuthenticatedSession(ctx context.Context, actor authenticatedActor) (bool, error) {
-	var sessionID string
+func (s *Server) loadAuthenticatedSession(ctx context.Context, token string) (authenticatedSessionLookup, error) {
+	lookup := authenticatedSessionLookup{}
+	lookup.Actor.SessionToken = token
+	lookup.Actor.CSRFToken = deriveCSRFToken(token)
 	err := s.db.QueryRow(ctx, `
+		select session.id::text, session.absolute_expires_at, session.last_seen_at, now(),
+			app_user.id::text, app_user.username, app_user.display_name,
+			app_user.created_at, app_user.updated_at
+		from auth_sessions session
+		join users app_user on app_user.id = session.user_id
+		where session.token_hash = $1
+			and session.revoked_at is null
+			and session.idle_expires_at > now()
+			and session.absolute_expires_at > now()
+			and app_user.status = 'active'`, hashSessionToken(token),
+	).Scan(
+		&lookup.Actor.SessionID, &lookup.Actor.AbsoluteExpiresAt,
+		&lookup.LastSeenAt, &lookup.DatabaseNow,
+		&lookup.Actor.User.ID, &lookup.Actor.User.Username, &lookup.Actor.User.DisplayName,
+		&lookup.Actor.User.CreatedAt, &lookup.Actor.User.UpdatedAt,
+	)
+	return lookup, err
+}
+
+func sessionTouchDue(lastSeenAt, now time.Time) bool {
+	return !lastSeenAt.After(now.Add(-sessionTouchInterval))
+}
+
+func (s *Server) touchAuthenticatedSession(ctx context.Context, actor authenticatedActor) (bool, error) {
+	command, err := s.db.Exec(ctx, `
 		update auth_sessions session
 		set last_seen_at = now(),
 			idle_expires_at = least(session.absolute_expires_at, now() + interval '7 days')
 		from users app_user
 		where session.id = $1 and session.user_id = $2 and session.user_id = app_user.id
+			and session.token_hash = $3
 			and session.revoked_at is null
 			and session.idle_expires_at > now()
 			and session.absolute_expires_at > now()
 			and app_user.status = 'active'
-		returning session.id::text`, actor.SessionID, actor.User.ID,
-	).Scan(&sessionID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
+			and session.last_seen_at <= now() - ($4::double precision * interval '1 second')`,
+		actor.SessionID, actor.User.ID, hashSessionToken(actor.SessionToken), sessionTouchInterval.Seconds(),
+	)
 	if err != nil {
 		return false, err
 	}
-	return sessionID == actor.SessionID, nil
+	return command.RowsAffected() == 1, nil
+}
+
+func (s *Server) refreshAuthenticatedSession(ctx context.Context, actor authenticatedActor) (bool, error) {
+	var valid bool
+	err := s.db.QueryRow(ctx, `
+		select exists (
+			select 1
+			from auth_sessions session
+			join users app_user on app_user.id = session.user_id
+			where session.id = $1 and session.user_id = $2
+				and session.token_hash = $3
+				and session.revoked_at is null
+				and session.idle_expires_at > now()
+				and session.absolute_expires_at > now()
+				and app_user.status = 'active'
+		)`, actor.SessionID, actor.User.ID, hashSessionToken(actor.SessionToken),
+	).Scan(&valid)
+	return valid, err
 }
 
 func actorFromRequest(r *http.Request) (authenticatedActor, bool) {

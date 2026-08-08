@@ -1,11 +1,150 @@
 package app
 
 import (
+	"context"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 )
+
+type worldEventStreamResponseWriter struct {
+	header    http.Header
+	body      strings.Builder
+	deadlines []time.Time
+	flushes   int
+}
+
+func (w *worldEventStreamResponseWriter) Header() http.Header {
+	if w.header == nil {
+		w.header = make(http.Header)
+	}
+	return w.header
+}
+
+func (*worldEventStreamResponseWriter) WriteHeader(int) {}
+
+func (w *worldEventStreamResponseWriter) Write(data []byte) (int, error) {
+	return w.body.Write(data)
+}
+
+func (w *worldEventStreamResponseWriter) Flush() {
+	w.flushes++
+}
+
+func (w *worldEventStreamResponseWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadlines = append(w.deadlines, deadline)
+	return nil
+}
+
+func TestWorldEventRefreshDrainsFullBatchImmediately(t *testing.T) {
+	t.Parallel()
+
+	wake := make(chan struct{})
+	defer close(wake)
+	result := make(chan bool, 1)
+	go func() {
+		result <- waitForWorldEventRefresh(
+			context.Background(), wake, make(chan time.Time), worldEventBatchLimit,
+		)
+	}()
+	select {
+	case refresh := <-result:
+		if !refresh {
+			t.Fatal("full event batch stopped the stream")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("full event batch waited for the fallback interval")
+	}
+}
+
+func TestWorldEventRefreshStopsOnCancellation(t *testing.T) {
+	t.Parallel()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	result := make(chan bool, 1)
+	go func() {
+		result <- waitForWorldEventRefresh(
+			ctx, make(chan struct{}), make(chan time.Time), worldEventBatchLimit-1,
+		)
+	}()
+	cancel()
+	select {
+	case refresh := <-result:
+		if refresh {
+			t.Fatal("cancelled event stream requested another refresh")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("event stream did not stop after cancellation")
+	}
+}
+
+func TestWorldEventStreamChunkResetsBoundedWriteDeadline(t *testing.T) {
+	t.Parallel()
+
+	writer := &worldEventStreamResponseWriter{}
+	controller := http.NewResponseController(writer)
+	started := time.Now()
+	if err := writeWorldEventStreamChunk(writer, controller, ": keep-alive\n\n"); err != nil {
+		t.Fatalf("write stream chunk: %v", err)
+	}
+	if got := writer.body.String(); got != ": keep-alive\n\n" {
+		t.Fatalf("stream body = %q", got)
+	}
+	if writer.flushes != 1 {
+		t.Fatalf("stream flushes = %d, want 1", writer.flushes)
+	}
+	if len(writer.deadlines) != 2 {
+		t.Fatalf("write deadlines = %d, want one bounded deadline and one clear", len(writer.deadlines))
+	}
+	if deadline := writer.deadlines[0]; !deadline.After(started) || deadline.After(started.Add(worldEventWriteTimeout+time.Second)) {
+		t.Errorf("write deadline %s is not bounded by %s", deadline, worldEventWriteTimeout)
+	}
+	if deadline := writer.deadlines[1]; !deadline.IsZero() {
+		t.Errorf("deadline after flush = %s, want cleared deadline", deadline)
+	}
+}
+
+func TestWorldEventStreamChunkOverridesGlobalWriteTimeout(t *testing.T) {
+	t.Parallel()
+
+	const (
+		firstChunk  = "data: first\n\n"
+		secondChunk = "data: second\n\n"
+	)
+	writeResult := make(chan error, 1)
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		controller := http.NewResponseController(w)
+		if err := writeWorldEventStreamChunk(w, controller, firstChunk); err != nil {
+			writeResult <- err
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+		writeResult <- writeWorldEventStreamChunk(w, controller, secondChunk)
+	}))
+	server.Config.WriteTimeout = 10 * time.Millisecond
+	server.Start()
+	defer server.Close()
+
+	response, err := server.Client().Get(server.URL)
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	body, readErr := io.ReadAll(response.Body)
+	response.Body.Close()
+	if readErr != nil {
+		t.Fatalf("read stream: %v", readErr)
+	}
+	if err := <-writeResult; err != nil {
+		t.Fatalf("write delayed stream chunk: %v", err)
+	}
+	if got := string(body); got != firstChunk+secondChunk {
+		t.Fatalf("stream body = %q, want both chunks", got)
+	}
+}
 
 func TestVisibleWorldEventsAudiencePolicyIncludesMarkedInvalidation(t *testing.T) {
 	t.Parallel()

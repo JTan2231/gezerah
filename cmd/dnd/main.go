@@ -54,14 +54,7 @@ func run(config app.Config) error {
 		return fmt.Errorf("build server: %w", err)
 	}
 
-	httpServer := &http.Server{
-		Addr:              config.Addr,
-		Handler:           server.Routes(),
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       15 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
+	httpServer := newHTTPServer(ctx, config, server.Routes())
 	listener, err := net.Listen("tcp", config.Addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", config.Addr, err)
@@ -89,4 +82,18 @@ func run(config app.Config) error {
 		return fmt.Errorf("graceful shutdown: %w", err)
 	}
 	return serveErr
+}
+
+func newHTTPServer(ctx context.Context, config app.Config, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              config.Addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		BaseContext: func(net.Listener) context.Context {
+			return ctx
+		},
+	}
 }

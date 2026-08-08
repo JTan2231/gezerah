@@ -13,6 +13,28 @@ export interface AuthPersistenceRecord {
   readonly passwordHash: string;
   readonly sessionTokenHash: string;
   readonly sessionCount: number;
+  readonly lastSeenAtMicros: number;
+  readonly idleExpiresAtMicros: number;
+}
+
+export async function ageLatestSessionActivityForDirectContract(
+  userID: string,
+): Promise<void> {
+  assertUserID(userID);
+  await executeAuthSQL(`with aged as (
+  update auth_sessions
+  set created_at = now() - interval '7 minutes',
+      last_seen_at = now() - interval '6 minutes',
+      idle_expires_at = now() + interval '1 day'
+  where id = (
+    select id from auth_sessions
+    where user_id = '${userID}'::uuid and revoked_at is null
+    order by created_at desc
+    limit 1
+  )
+  returning id
+)
+select 1 / count(*) from aged`);
 }
 
 export async function expireSessionForDirectContract(
@@ -96,10 +118,12 @@ export async function readAuthPersistenceForDirectContract(
       "-c",
       `select app_user.password_hash,
   latest.token_hash,
-  (select count(*) from auth_sessions where user_id = app_user.id)
+  (select count(*) from auth_sessions where user_id = app_user.id),
+  floor(extract(epoch from latest.last_seen_at) * 1000000)::bigint,
+  floor(extract(epoch from latest.idle_expires_at) * 1000000)::bigint
 from users app_user
 join lateral (
-  select token_hash from auth_sessions
+  select token_hash, last_seen_at, idle_expires_at from auth_sessions
   where user_id = app_user.id
   order by created_at desc
   limit 1
@@ -108,18 +132,32 @@ where app_user.id = '${userID}'::uuid`,
     ],
     { env: environment, encoding: "utf8" },
   );
-  const [passwordHash, sessionTokenHash, sessionCountText] = stdout
-    .trim()
-    .split("\t");
+  const [
+    passwordHash,
+    sessionTokenHash,
+    sessionCountText,
+    lastSeenAtMicrosText,
+    idleExpiresAtMicrosText,
+  ] = stdout.trim().split("\t");
   const sessionCount = Number(sessionCountText);
+  const lastSeenAtMicros = Number(lastSeenAtMicrosText);
+  const idleExpiresAtMicros = Number(idleExpiresAtMicrosText);
   if (
     passwordHash === undefined ||
     sessionTokenHash === undefined ||
-    !Number.isInteger(sessionCount)
+    !Number.isInteger(sessionCount) ||
+    !Number.isSafeInteger(lastSeenAtMicros) ||
+    !Number.isSafeInteger(idleExpiresAtMicros)
   ) {
     throw new Error("authentication persistence query returned invalid data");
   }
-  return { passwordHash, sessionTokenHash, sessionCount };
+  return {
+    passwordHash,
+    sessionTokenHash,
+    sessionCount,
+    lastSeenAtMicros,
+    idleExpiresAtMicros,
+  };
 }
 
 async function executeAuthSQL(sql: string): Promise<void> {

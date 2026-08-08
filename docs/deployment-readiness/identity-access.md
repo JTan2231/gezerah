@@ -3,6 +3,11 @@
 Audit date: 2026-08-07
 Remediation status: **Implemented; deployment controls remain conditional**
 
+There is no hosted deployment, production database, production user base,
+external audience, release commitment, or concerned external party. This audit
+records implementation evidence and future target conditions; it is not the
+status of a running service or an active launch.
+
 ## Conclusion
 
 The original audit found no signup, signin, logout, or server session. A public
@@ -70,8 +75,16 @@ boundary.
 
 Sessions have a seven-day sliding idle lifetime and a 30-day absolute lifetime.
 Each authenticated request revalidates the database row and account status.
-Session creation removes expired/revoked rows and keeps no more than 20 active
-sessions per account.
+Ordinary authenticated activity performs a database-guarded touch only when the
+previous touch is at least five minutes old. The update repeats the token,
+revocation, expiry, and active-account checks, so it cannot revive an invalid
+session; a concurrent touch loser revalidates. Session creation removes
+expired/revoked rows and keeps no more than 20 active sessions per account.
+
+An SSE handshake counts as ordinary activity once. Later 1.5-second stream
+reauthorization checks are read-only, so keeping a stream open does not itself
+extend idle expiry. Revocation, expiry, or account disablement closes it on the
+next cycle.
 
 ### Logout and password change
 
@@ -178,15 +191,18 @@ The UI-authentic lifecycle spine signs up its actors through the browser and
 keeps invitation deep links intact. Direct contract setup still uses public
 signup, then performs protected requests through that actor's cookie context.
 SSE probes use an authenticated cookie and verify stream termination after
-session invalidation.
+session invalidation. Application tests also cover the five-minute activity
+boundary and guarded touches; stream tests cover read-only reauthorization,
+full-batch draining, bounded per-write deadlines, survival beyond the ordinary
+response write timeout, and process-context cancellation.
 
 See [Testing](../testing.md) for suite mechanics and the generated scenario
 evidence.
 
 ## Remaining deployment conditions
 
-Authentication is no longer the public-release blocker, but identity operations
-remain conditional on the following:
+No public-release gate is active. If a public target is proposed,
+identity operations remain conditional on the following:
 
 1. Terminate and redirect HTTPS correctly, set the exact external HTTPS
    `DND_PUBLIC_ORIGIN`, and verify `__Host-dnd_session` in the deployed browser.
@@ -215,8 +231,12 @@ The identity impersonation finding is closed when CI proves that:
   token;
 - logout, logout-all, password change, expiry, and revocation invalidate the
   intended sessions and SSE streams;
+- recent authenticated activity does not rewrite the session row, while a
+  valid session older than five minutes is touched once and cannot be revived
+  after invalidation;
 - existing membership/role/readiness/privacy/world-scope matrices pass through
   isolated authenticated contexts;
 - no password or raw session token is stored or logged.
 
-Public-production readiness remains a broader gate tracked in this directory.
+If public production is proposed, its broader gate starts closed and is tracked
+in this directory. There is no production audience to gate today.
