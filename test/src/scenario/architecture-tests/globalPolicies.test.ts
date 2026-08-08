@@ -21,6 +21,8 @@ const repositoryRoot = fileURLToPath(new URL("../../../../", import.meta.url));
 describe("cross-cutting scenario policies", () => {
   test("GLO-004 aggregates executable atomic-failure evidence", () => {
     const atomicFailureScenarios: readonly ScenarioId[] = [
+      "IDN-V01",
+      "IDN-V05",
       "WRL-V01",
       "MEC-V01",
       "MEC-V02",
@@ -96,6 +98,10 @@ describe("cross-cutting scenario policies", () => {
 
   test("GLO-006 aggregates every sensitive projection and redaction boundary", () => {
     assertExecutableOwners([
+      "IDN-V02",
+      "IDN-V03",
+      "IDN-V04",
+      "IDN-V05",
       "INV-002",
       "INV-V01",
       "AUT-003",
@@ -106,6 +112,7 @@ describe("cross-cutting scenario policies", () => {
       "AUT-V03",
       "AUT-V04",
       "AUT-V05",
+      "AUT-V07",
       "PLY-V05",
       "GLO-012",
     ]);

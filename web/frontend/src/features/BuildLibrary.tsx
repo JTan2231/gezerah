@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import { api, ApiError, jsonBody, selectUserId } from "../api/client";
-import type { User, World } from "../api/types";
+import { api, ApiError, jsonBody } from "../api/client";
+import type { AuthenticatedSession, User, World } from "../api/types";
 import {
   Avatar,
   Brand,
@@ -15,15 +15,20 @@ import {
 import { formatRelativeDate } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { buildWorldURL, type Navigate } from "../worldRoutes";
+import { AccountControls } from "./AccountControls";
 
 export function BuildLibrary({
   user,
   navigate,
-  onSwitchProfile,
+  onLogout,
+  onLogoutAll,
+  onSessionChanged,
 }: {
   user: User;
   navigate: Navigate;
-  onSwitchProfile: () => void;
+  onLogout: () => Promise<void>;
+  onLogoutAll: () => Promise<void>;
+  onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const worlds = useCollection<World>("/api/worlds");
   const [creating, setCreating] = useState(false);
@@ -44,17 +49,16 @@ export function BuildLibrary({
         </button>
         <div className="account-menu">
           <Avatar name={user.display_name} size="small" />
-          <span>{user.display_name}</span>
-          <button
-            className="text-button"
-            type="button"
-            onClick={() => {
-              selectUserId("");
-              onSwitchProfile();
-            }}
-          >
-            Switch
-          </button>
+          <span className="account-copy">
+            <strong>{user.display_name}</strong>
+            <small>@{user.username}</small>
+          </span>
+          <AccountControls
+            user={user}
+            onLogout={onLogout}
+            onLogoutAll={onLogoutAll}
+            onSessionChanged={onSessionChanged}
+          />
         </div>
       </header>
 

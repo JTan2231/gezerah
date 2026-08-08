@@ -21,7 +21,7 @@ The world is the sole product and data boundary. It owns:
 
 The system does not currently own:
 
-- production authentication, sessions, passwords, or an identity provider;
+- email addresses, password recovery, MFA, or a federated identity provider;
 - built-in entity classes, mechanic names, or seeded vocabulary;
 - cross-world inheritance or resource sharing;
 - matchmaking, chat, files, maps, dice, or turn scheduling;
@@ -92,7 +92,8 @@ flowchart TD
 The browser starts with a data-free choice between `/build` and `/play`.
 Build owns the owner/editor world library and configuration studio. Play owns
 the admitted-world table picker, player onboarding, and live table. Both areas
-share identity, API types, fetch helpers, route helpers, and UI primitives.
+share the authenticated account boundary, API types, fetch helpers, route
+helpers, and UI primitives.
 
 World configuration is a master-detail editor for capacities/capabilities,
 their derived expressions, character fields, roster setup, people, and
@@ -105,17 +106,19 @@ not request live interactions or events.
 Routing uses the History API. Only the current `/build/**`, `/play/**`, and
 area-scoped invite URLs are recognized. Unknown paths render not found.
 
-Ordinary JSON calls pass through one fetch adapter that sets JSON headers, maps
-the error envelope, and adds the selected development identity. The world-event
-hook uses streaming `fetch`, adds the identity header, remembers its cursor,
-and reconnects after a stream ends.
+Ordinary JSON calls pass through one credentialed fetch adapter that sets JSON
+headers, maps the error envelope, and attaches the in-memory session CSRF token
+to unsafe methods. The world-event hook uses streaming `fetch`, remembers its
+cursor, and reconnects after a stream ends unless the session has ended.
 
 ### HTTP/application layer
 
 `internal/app` owns transport and persistence orchestration:
 
+- username/password signup and signin, Argon2id verification, opaque session
+  issuance/revocation, same-origin enforcement, and CSRF validation;
 - strict request/response DTOs preserve exact numeric input;
-- handlers validate path, query, body, identity, membership, and role;
+- handlers validate path, query, body, authenticated actor, membership, and role;
 - world-scoped queries load relational aggregates;
 - command transactions lock mutable roots and recheck revisions;
 - mechanic publication validates the proposed complete dependency graph and

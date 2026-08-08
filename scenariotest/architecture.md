@@ -425,15 +425,17 @@ Each actor session owns:
 - one isolated `BrowserContext`;
 - one primary `Page`, with explicit support for a new page only when a behavior
   genuinely opens one;
-- its selected development identity as learned from the UI flow;
+- its authenticated account and opaque server session as established by the
+  visible signup/signin flow;
 - a browser observer for console errors, page exceptions, failed resources,
   responses, main-frame navigations, and SSE connection evidence;
 - an actor-local serial action queue;
 - sensitive values and evidence handles associated with that actor.
 
-Contexts never share local storage. The `dnd.selected-user` value must be
-created or selected through the visible identity gate. Journey setup must not
-inject it with `page.evaluate`, `addInitScript`, or a prepared storage-state
+Contexts never share cookies, CSRF tokens, or browser storage. Accounts and
+sessions in the lifecycle spine must be established through the visible
+authentication gate. Journey setup must not inject cookies with
+`page.evaluate`, `addInitScript`, `addCookies`, or a prepared storage-state
 file.
 
 The current Playwright-provided `page` fixture and ad hoc
@@ -1239,10 +1241,10 @@ true:
   architecture check before browser execution.
 - All state required by an authentic journey is created through the rendered
   UI starting from a clean browser context and the disposable database.
-- Development identities are created or selected through the identity gate;
-  no journey injects `dnd.selected-user`.
+- Accounts and sessions are created through the visible authentication gate;
+  no journey injects a cookie, CSRF token, or caller-selected user ID.
 - Each actor has an isolated browser context, and multi-actor flows do not
-  share local storage.
+  share cookie jars or browser storage.
 - Validators can independently report user-experience and system-state results
   while having no mutation capability.
 - The mutation ledger can show that every application write came from an

@@ -1,41 +1,83 @@
 import { useState } from "react";
 
-import { api, ApiError, jsonBody, selectUserId } from "../api/client";
-import type { User } from "../api/types";
-import { Brand, ErrorMessage, LoadingState } from "../components/StudioUI";
-import { useCollection } from "../hooks/useCollection";
+import { api, ApiError, jsonBody } from "../api/client";
+import type { AuthenticatedSession } from "../api/types";
+import { Brand, ErrorMessage, Field } from "../components/StudioUI";
+
+type AuthenticationMode = "signin" | "signup";
+
+const usernamePattern = "[A-Za-z0-9][A-Za-z0-9._\\-]{2,63}";
 
 export function IdentityGate({
-  onSelected,
+  notice,
+  onAuthenticated,
 }: {
-  onSelected: (user: User) => void;
+  notice?: string | undefined;
+  onAuthenticated: (session: AuthenticatedSession) => void;
 }) {
-  const users = useCollection<User>("/api/users");
-  const [name, setName] = useState("");
+  const [mode, setMode] = useState<AuthenticationMode>("signin");
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const passwordLength = Array.from(password).length;
+  const canSubmit =
+    username.trim() !== "" &&
+    password !== "" &&
+    (mode === "signin" ||
+      (displayName.trim() !== "" &&
+        passwordLength >= 15 &&
+        passwordLength <= 128 &&
+        passwordConfirmation === password));
+  const passwordConfirmationError =
+    mode === "signup" &&
+    passwordConfirmation !== "" &&
+    passwordConfirmation !== password
+      ? "must match the password"
+      : undefined;
 
-  function choose(user: User) {
-    selectUserId(user.id);
-    onSelected(user);
+  function changeMode(nextMode: AuthenticationMode) {
+    setMode(nextMode);
+    setPassword("");
+    setPasswordConfirmation("");
+    setError(null);
   }
 
-  async function create(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (name.trim() === "") return;
+    if (!canSubmit) return;
     setSaving(true);
     setError(null);
     try {
-      const user = await api<User>("/api/users", {
-        method: "POST",
-        ...jsonBody({ display_name: name.trim() }),
-      });
-      choose(user);
+      const session = await api<AuthenticatedSession>(
+        mode === "signup" ? "/api/auth/signup" : "/api/auth/signin",
+        {
+          method: "POST",
+          ...jsonBody(
+            mode === "signup"
+              ? {
+                  username: username.trim(),
+                  display_name: displayName.trim(),
+                  password,
+                }
+              : { username: username.trim(), password },
+          ),
+        },
+      );
+      onAuthenticated(session);
     } catch (reason) {
       setError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not create your profile."),
+          : new ApiError(
+              0,
+              "unknown",
+              mode === "signup"
+                ? "Could not create your account."
+                : "Could not sign you in.",
+            ),
       );
       setSaving(false);
     }
@@ -67,63 +109,134 @@ export function IdentityGate({
       </section>
       <section className="identity-panel" aria-labelledby="identity-title">
         <div className="identity-panel-inner">
-          <p className="eyebrow">Trusted development profile</p>
-          <h2 id="identity-title">Who is opening the book?</h2>
+          <p className="eyebrow">Your Worldwright account</p>
+          <h2 id="identity-title">
+            {mode === "signin" ? "Welcome back." : "Create your account."}
+          </h2>
           <p className="muted-copy">
-            Choose a local profile or make one for this browser.
+            {mode === "signin"
+              ? "Sign in to return to your worlds and tables."
+              : "Choose a username and a strong password. No email is required."}
           </p>
-          {users.loading ? (
-            <LoadingState label="Finding local profiles" />
-          ) : null}
-          {users.error === null ? null : (
-            <ErrorMessage error={users.error} onRetry={users.reload} />
-          )}
-          {users.items.length > 0 ? (
-            <div className="profile-list">
-              {users.items.map((user) => (
-                <button
-                  type="button"
-                  key={user.id}
-                  onClick={() => choose(user)}
-                >
-                  <span className="profile-mark" aria-hidden="true">
-                    {user.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>{user.display_name}</span>
-                  <span aria-hidden="true">→</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <div className="identity-divider">
-            <span>or begin here</span>
+
+          <div className="auth-mode-switch" aria-label="Authentication mode">
+            <button
+              type="button"
+              aria-pressed={mode === "signin"}
+              onClick={() => changeMode("signin")}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === "signup"}
+              onClick={() => changeMode("signup")}
+            >
+              Create account
+            </button>
           </div>
+
+          {notice === undefined ? null : (
+            <div className="notice auth-session-notice" role="status">
+              <p>{notice}</p>
+            </div>
+          )}
+
           <form
             className="identity-form"
-            onSubmit={(event) => void create(event)}
+            onSubmit={(event) => void submit(event)}
           >
-            <label>
-              <span>Your display name</span>
+            <Field
+              label="Username"
+              hint={
+                mode === "signup"
+                  ? "3–64 characters. Use letters, numbers, dots, underscores, or hyphens."
+                  : undefined
+              }
+              error={error?.fields["username"]}
+            >
               <input
-                autoComplete="name"
-                value={name}
-                onChange={(event) => setName(event.currentTarget.value)}
-                placeholder="e.g. Joey"
-                maxLength={200}
+                name="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={username}
+                onChange={(event) => setUsername(event.currentTarget.value)}
+                pattern={mode === "signup" ? usernamePattern : undefined}
+                maxLength={64}
+                required
               />
-            </label>
+            </Field>
+            {mode === "signup" ? (
+              <Field
+                label="Display name"
+                hint="The name other people will see at the table."
+                error={error?.fields["display_name"]}
+              >
+                <input
+                  name="display_name"
+                  autoComplete="name"
+                  value={displayName}
+                  onChange={(event) =>
+                    setDisplayName(event.currentTarget.value)
+                  }
+                  maxLength={200}
+                  required
+                />
+              </Field>
+            ) : null}
+            <Field
+              label="Password"
+              hint={
+                mode === "signup"
+                  ? "Use 15–128 characters. Spaces and passphrases are welcome."
+                  : undefined
+              }
+              error={error?.fields["password"]}
+            >
+              <input
+                name="password"
+                type="password"
+                autoComplete={
+                  mode === "signup" ? "new-password" : "current-password"
+                }
+                value={password}
+                onChange={(event) => setPassword(event.currentTarget.value)}
+                required
+              />
+            </Field>
+            {mode === "signup" ? (
+              <Field label="Confirm password" error={passwordConfirmationError}>
+                <input
+                  name="password_confirmation"
+                  type="password"
+                  autoComplete="new-password"
+                  value={passwordConfirmation}
+                  onChange={(event) =>
+                    setPasswordConfirmation(event.currentTarget.value)
+                  }
+                  aria-invalid={passwordConfirmationError !== undefined}
+                  required
+                />
+              </Field>
+            ) : null}
             {error === null ? null : <ErrorMessage error={error} />}
             <button
               className="button button-primary button-wide"
               type="submit"
-              disabled={saving || name.trim() === ""}
+              disabled={saving || !canSubmit}
             >
-              {saving ? "Creating profile…" : "Create local profile"}
+              {saving
+                ? mode === "signup"
+                  ? "Creating account…"
+                  : "Signing in…"
+                : mode === "signup"
+                  ? "Create account"
+                  : "Sign in"}
             </button>
           </form>
           <p className="identity-footnote">
-            This build uses local development identities. Production
-            authentication remains a separate security boundary.
+            There is no email recovery. Keep your password somewhere safe.
           </p>
         </div>
       </section>

@@ -2,8 +2,8 @@
 
 ## Create and configure a world
 
-1. Open `/`, choose **Build**, then choose or create a local development
-   profile.
+1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
+   username, display name, and password but no email address.
 2. Create a world from the Builder library.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
@@ -32,7 +32,7 @@ attributes, skills, entity classes, or privileged names.
 
 1. Open `/play/invite/{token}` for a player/spectator invitation or
    `/build/invite/{token}` for an editor invitation.
-2. If no local identity is selected, choose one without losing the invite URL.
+2. Sign up or sign in if needed; the invite URL remains intact throughout.
 3. Review the world, inviter, and offered role.
 4. Redeem the link.
 5. The world now appears in the corresponding Play or Build library and the
@@ -42,7 +42,8 @@ attributes, skills, entity classes, or privileged names.
    live play opens only after one controlled character is complete.
 
 Invite tokens are bearer secrets. Share them only with intended recipients;
-authors can revoke a link at any time.
+authors can revoke a link at any time. Preview and redemption both require an
+authenticated account, and redemption binds the membership to that account.
 
 ## Run an ad-hoc problem
 

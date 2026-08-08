@@ -4,8 +4,8 @@
 
 The React application presents two deliberately separate product areas over the
 same world model. `/play` is the table and `/build` is the authoring studio; the
-root route only asks which area the user wants to enter. A signed-in development
-identity sees only worlds it owns or has joined. Authors configure three
+root route only asks which area the user wants to enter. A signed-in account
+sees only worlds it owns or has joined. Authors configure three
 user-authored lists:
 
 - **capacities**: numeric input or derived scores/pools carried by every entity;
@@ -27,18 +27,20 @@ problem and snapshots it onto each affected entity.
 ## Stack and source layout
 
 The frontend is React 19 and strict TypeScript, built by Vite and managed with
-Bun. It uses browser `fetch`, History API routing, local storage, and native
-form controls. There is no router, global-state library, form framework,
+Bun. It uses browser `fetch`, History API routing, and native form controls.
+There is no router, global-state library, form framework,
 component framework, or service worker.
 
 | Path                                        | Responsibility                                                                        |
 | ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/App.tsx`                               | Neutral home, development identity boundary, redirects, and top-level area selection. |
+| `src/App.tsx`                               | Neutral home, session bootstrap/boundary, redirects, and top-level area selection.    |
 | `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                                    |
-| `src/api/client.ts`                         | JSON fetch adapter, errors, path helpers, and identity header.                        |
+| `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers.       |
 | `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                               |
 | `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.                  |
 | `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                         |
+| `src/features/IdentityGate.tsx`             | Username/password signup and signin while preserving the requested URL.               |
+| `src/features/AccountControls.tsx`          | Account identity, password change, and server-side signout controls.                   |
 | `src/features/BuildLibrary.tsx`             | Owner/editor Builder library and world creation.                                      |
 | `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                     |
 | `src/features/BuildWorkspace.tsx`           | Owner/editor-only Builder shell.                                                      |
@@ -60,14 +62,14 @@ ESLint includes hooks and JSX accessibility rules. Stylelint enforces tokenized
 colors and bounded selector complexity. Prettier, TypeScript, Bun tests, and
 Knip are all part of frontend CI.
 
-## Routing and identity
+## Routing and authentication
 
 Routes are parsed without an external router:
 
 | URL                                             | Surface                                       |
 | ----------------------------------------------- | --------------------------------------------- |
 | `/`                                             | Neutral Play or Build choice; no API load.    |
-| `/play`                                         | Current identity's table list.                |
+| `/play`                                         | Current account's table list.                 |
 | `/play/{world-id}`                              | Onboarding or live table.                     |
 | `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
 | `/build`                                        | Editable-world list and world creation.       |
@@ -84,12 +86,28 @@ A bare Builder world path canonicalizes to capacities. A player or spectator
 cannot cause Play to render under a Build URL; the Builder shows an explicit
 access boundary and offers a deliberate transition to Play.
 
-`dnd.selected-user` stores the selected local-development user UUID. The API
-client sends it as `X-DND-User-ID`. The root choice bypasses identity selection
-and does not fetch users or worlds. Play, Build, and invite URLs remain in the
-address bar while the identity gate is shown, so choosing a profile returns the
-user to the requested area rather than losing the path or token. This storage is
-an identity adapter, not production authentication.
+The root choice remains data-free. On entering Play, Build, or an invite URL,
+the application bootstraps with `GET /api/me`. An anonymous browser sees a
+username/password gate; signup asks for username, display name, and a 15–128
+character password with confirmation, while signin asks only for username and
+password. Password change also confirms the new value because this release has
+no recovery channel. The
+requested URL remains in the address bar, so authentication returns the user
+to the intended area or opaque invite without storing a redirect target.
+
+The browser owns no durable identity credential in JavaScript. `fetch` sends
+the server's HttpOnly SameSite session cookie, while the CSRF token returned by
+signup, signin, `/api/me`, or password change lives only in module memory and
+is added to unsafe calls as `X-DND-CSRF`. A global 401 boundary clears that
+token and returns protected surfaces to the signin gate; each request captures
+its starting authentication token so a late 401 from an old session cannot
+tear down a newly established one. A `csrf_invalid` response caused by another
+tab rotating the same account's cookie triggers `/api/me` and one safe retry;
+the client will not replay the mutation if the cookie belongs to another user.
+Account controls are
+available in libraries, workspaces, and invite preview; signout revokes the
+server session, and password change replaces the current session after
+revoking the account's other sessions.
 
 ## World library
 

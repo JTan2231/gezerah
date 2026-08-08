@@ -9,10 +9,21 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  putAs,
+  signupActor,
+} from "../support/auth";
 
 interface IdentifiedResource {
   id: string;
 }
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 interface WorldResponse extends IdentifiedResource {
   membership_id: string;
@@ -73,9 +84,13 @@ test("contract: readiness and profile projections preserve authority and privacy
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Profile Owner ${unique}`);
-  const player = await createUser(request, baseURL, `Profile Player ${unique}`);
-  const spectator = await createUser(
+  const owner = await createActor(request, baseURL, `Profile Owner ${unique}`);
+  const player = await createActor(
+    request,
+    baseURL,
+    `Profile Player ${unique}`,
+  );
+  const spectator = await createActor(
     request,
     baseURL,
     `Profile Spectator ${unique}`,
@@ -182,9 +197,10 @@ test("contract: readiness and profile projections preserve authority and privacy
     can_edit: true,
   });
   await expectAPIError(
-    await request.get(`${baseURL}/api/worlds/${world.id}/interactions`, {
-      headers: identityHeaders(player.id),
-    }),
+    await actorRequest(player.id).get(
+      `${baseURL}/api/worlds/${world.id}/interactions`,
+      {},
+    ),
     403,
     "character_setup_required",
   );
@@ -217,17 +233,17 @@ test("contract: readiness and profile projections preserve authority and privacy
   ).toBe("setup-required");
   expect(
     (
-      await request.get(
+      await actorRequest(player.id).get(
         `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/state`,
-        { headers: identityHeaders(player.id) },
+        {},
       )
     ).status(),
   ).toBe(200);
   expect(
     (
-      await request.get(
+      await actorRequest(player.id).get(
         `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/state`,
-        { headers: identityHeaders(player.id) },
+        {},
       )
     ).status(),
   ).toBe(403);
@@ -287,10 +303,9 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   expect(
     (
-      await request.put(
+      await actorRequest(spectator.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
         {
-          headers: identityHeaders(spectator.id),
           data: {
             expected_revision: complete.revision,
             expected_character_fields_revision: fields.revision,
@@ -301,10 +316,9 @@ test("contract: readiness and profile projections preserve authority and privacy
     ).status(),
   ).toBe(403);
   await expectAPIError(
-    await request.put(
+    await actorRequest(player.id).put(
       `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
       {
-        headers: identityHeaders(player.id),
         data: {
           expected_revision: 0,
           expected_character_fields_revision: fields.revision,
@@ -376,10 +390,12 @@ test("contract: readiness and profile projections preserve authority and privacy
   };
   await test.step("CHF-V01 blocks requirement-set changes during unfinished play", async () => {
     await expectAPIError(
-      await request.put(`${baseURL}/api/worlds/${world.id}/character-fields`, {
-        headers: identityHeaders(owner.id),
-        data: expandedFieldRequest,
-      }),
+      await actorRequest(owner.id).put(
+        `${baseURL}/api/worlds/${world.id}/character-fields`,
+        {
+          data: expandedFieldRequest,
+        },
+      ),
       409,
       "character_fields_in_use",
     );
@@ -414,22 +430,21 @@ test("contract: readiness and profile projections preserve authority and privacy
     ).play_status,
   ).toBe("setup-required");
   await expectAPIError(
-    await request.get(`${baseURL}/api/worlds/${world.id}/interactions`, {
-      headers: identityHeaders(player.id),
-    }),
+    await actorRequest(player.id).get(
+      `${baseURL}/api/worlds/${world.id}/interactions`,
+      {},
+    ),
     403,
     "character_setup_required",
   );
 });
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function redeemInvite(
@@ -455,18 +470,12 @@ async function redeemInvite(
   );
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -476,10 +485,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -489,10 +495,7 @@ async function putJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.put(url, {
-    data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await putAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

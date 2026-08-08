@@ -47,7 +47,8 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
 The root page asks whether to enter **Play** or **Build**. Each area then asks
-for a local development profile when needed. **Build** defines input and
+the user to sign up or sign in when needed. Accounts use a username and
+password; no email address is required. **Build** defines input and
 derived capacities/capabilities, character requirements, roster setup, people,
 invitations, and world settings. **Play** is the separate live table: complete
 player onboarding, present an ad-hoc problem, collect player actions, preview a
@@ -92,19 +93,18 @@ concurrent starts serialize schema upgrades.
 | `DND_DATABASE_URL` | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL.                         |
 | `DATABASE_URL`     | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset. |
 | `DND_LOG_LEVEL`    | `info`                                          | `debug`, `info`, `warn`, or `error`.               |
+| `DND_PUBLIC_ORIGIN` | request origin                                 | Exact browser origin allowed for authenticated writes; set this behind a proxy. |
 
 World roles, lifecycle states, visibility, and mutation permissions are
-enforced by the server. Authentication is not: the current development UI
-stores a selected user UUID and sends it as `X-DND-User-ID`. Any client can
-forge that header. This is intentionally a trusted-development identity
-adapter, so do not expose the application or its database outside a trusted
-environment until it is replaced by real session or identity-provider
-authentication. Command bodies do not choose their acting user or membership.
+enforced by the server. Username/password authentication creates an opaque,
+revocable server session in an HttpOnly SameSite cookie. Passwords are stored
+only as Argon2id hashes, authenticated writes require a session-bound CSRF
+token and a same-origin request, and command bodies never choose their acting
+user or membership. The server derives the actor from the session.
 
 Player-safe live responses omit facilitator private notes and reject entities,
 actions, or effects outside the requested world. World configuration endpoints
-enforce membership and roles, but those checks remain only as strong as the
-forgeable development identity header.
+continue to enforce membership and roles after authentication.
 
 ## Validation
 
@@ -122,8 +122,8 @@ and `e2e`.
 When `DND_TEST_DATABASE_URL` is set, the backend target also starts the built
 application against that explicitly disposable test database, validating the
 complete migration chain. End-to-end tests create their own disposable database
-and exercise world privacy, invitations, authored mechanics, generated sheets,
-and the multiplayer ad-hoc Play loop.
+and exercise account/session/CSRF boundaries, world privacy, invitations,
+authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 
 ## Deployment
 

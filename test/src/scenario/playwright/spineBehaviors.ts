@@ -30,7 +30,7 @@ export interface SpineBehaviorSpec {
 }
 
 const SPECS = [
-  spec("identity.enter-builder", ["owner"], ["IDN-001", "IDN-002", "NAV-001"]),
+  spec("identity.enter-builder", ["owner"], ["IDN-001", "IDN-004", "NAV-001"]),
   spec("world.create", ["owner"], ["WRL-001", "WRL-V01"]),
   spec("mechanics.publish", ["owner"], ["MEC-001", "MEC-002", "MEC-003"]),
   spec("character-fields.publish", ["owner"], ["CHF-002"]),

@@ -4,9 +4,9 @@
 
 PostgreSQL is authoritative. The schema persists worlds, memberships,
 user-authored input/derived mechanic graphs, problem-sourced status instances,
-sparse input state, character profiles, interactions, expanded receipts, and
-event cursors as normalized relations. There is no canonical JSON aggregate
-column and no seeded vocabulary.
+sparse input state, character profiles, interactions, expanded receipts, event
+cursors, password credentials, and revocable sessions as normalized relations.
+There is no canonical JSON aggregate column and no seeded vocabulary.
 
 The schema uses:
 
@@ -46,12 +46,14 @@ disposable database and terminate sessions connected to it.
    migration search path fixed to `public`;
 7. releases the advisory lock.
 
-The current application has one clean baseline followed by a forward upgrade:
+The current application has one clean baseline followed by forward upgrades:
 
 | Migration                         | Purpose                                                                                         |
 | --------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `001_worldwright.sql`             | Complete world-native schema: users, worlds, mechanics, state, profiles, controls, live play.   |
 | `002_rules_graph_statuses.sql`    | Mechanic rules revisions, typed derived expressions, problem-sourced statuses, and effective receipts. |
+| `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity. |
+| `004_password_auth.sql`           | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions. |
 
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
@@ -67,6 +69,12 @@ mechanic-rules root per world and one status-set root per entity, while existing
 mechanics remain `input`. Triggers create those roots for later worlds/entities.
 The migration adds no authored vocabulary.
 
+`004` is an intentional account-model cutover and aborts if `users` already
+contains a row. This is acceptable for the current pre-user deployment and
+prevents silently inventing credentials or leaving claimable legacy accounts.
+Install it against an empty application database. It stores no email address,
+raw password, raw session token, recovery secret, or seeded account.
+
 The baseline and upgrade contain no alternate configuration container,
 secondary live container, reusable simulation aggregate, or superseded profile
 storage.
@@ -77,7 +85,8 @@ storage.
 
 | Table                      | Purpose                                                                    |
 | -------------------------- | -------------------------------------------------------------------------- |
-| `users`                    | Local development identities.                                              |
+| `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
+| `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state. |
 | `worlds`                   | Name, description, lifecycle, settings revision, and table revision.       |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.       |
 | `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.     |
@@ -89,6 +98,15 @@ guards controller-set changes and table authority independently.
 Invite rows never store raw bearer tokens. Creation returns the token once;
 the table stores a lowercase 64-character SHA-256 digest. Redemption rows make
 use counting idempotent per invite/user pair.
+
+Usernames preserve the chosen ASCII casing while `normalized_username` is
+lowercase and unique, making signin and uniqueness case-insensitive. Session
+cookies carry a cryptographically random raw token; only its lowercase SHA-256
+digest reaches `auth_sessions`. Idle and absolute expiry are separate, and
+revocation is recorded as a timestamp so current-session, all-session, password
+change, and stream revalidation use one source of truth. The next session
+creation removes expired/revoked rows and prunes least-recently-seen active rows
+so an account retains at most 20 live sessions.
 
 ### Rules, mechanics, entities, and state
 

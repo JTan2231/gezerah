@@ -20,13 +20,13 @@ import type {
 } from "../playwright/scenarioReporter";
 
 describe("whole-suite scenario coverage", () => {
-  test("accepts 131 exact terminal evidence rows without synthesizing fields", () => {
+  test("accepts 141 exact terminal evidence rows without synthesizing fields", () => {
     const inventory = buildSuiteCoverageInventory(completeEvidence());
 
-    assert.equal(inventory.catalogSize, 131);
+    assert.equal(inventory.catalogSize, 141);
     assert.equal(
       inventory.passed,
-      131,
+      141,
       `not run: ${inventory.records
         .filter(({ result }) => result !== "passed")
         .map(({ scenarioId }) => scenarioId)

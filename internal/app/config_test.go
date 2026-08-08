@@ -10,6 +10,7 @@ func TestLoadConfigPrefersDNDVariables(t *testing.T) {
 	t.Setenv("PORT", "7070")
 	t.Setenv("DND_DATABASE_URL", "postgres://dnd-primary")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
+	t.Setenv("DND_PUBLIC_ORIGIN", " https://worldwright.example ")
 	t.Setenv("DND_LOG_LEVEL", "warning")
 
 	config := LoadConfig()
@@ -18,6 +19,9 @@ func TestLoadConfigPrefersDNDVariables(t *testing.T) {
 	}
 	if config.DatabaseURL != "postgres://dnd-primary" {
 		t.Fatalf("DatabaseURL = %q, want DND_DATABASE_URL", config.DatabaseURL)
+	}
+	if config.PublicOrigin != "https://worldwright.example" {
+		t.Fatalf("PublicOrigin = %q, want configured origin", config.PublicOrigin)
 	}
 	if config.LogLevel != slog.LevelWarn {
 		t.Fatalf("LogLevel = %v, want warn", config.LogLevel)
@@ -30,6 +34,7 @@ func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
 	t.Setenv("DND_DATABASE_URL", "")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
 	t.Setenv("DND_LOG_LEVEL", "not-a-level")
+	t.Setenv("DND_PUBLIC_ORIGIN", "")
 
 	config := LoadConfig()
 	if config.Addr != ":7070" {
@@ -50,5 +55,48 @@ func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
 	}
 	if config.DatabaseURL != "postgres://localhost:5432/dnd?sslmode=disable" {
 		t.Fatalf("default DatabaseURL = %q", config.DatabaseURL)
+	}
+}
+
+func TestParsePublicOrigin(t *testing.T) {
+	t.Parallel()
+	for _, value := range []string{
+		"https://example.test/path",
+		"https://example.test?query=yes",
+		"https://user@example.test",
+		"ftp://example.test",
+		"example.test",
+		"https://éxample.test",
+		"https://[fe80::1%25en0]",
+	} {
+		if _, _, err := parsePublicOrigin(value); err == nil {
+			t.Errorf("parsePublicOrigin(%q) accepted a non-origin value", value)
+		}
+	}
+	for _, test := range []struct {
+		value      string
+		wantOrigin string
+		wantSecure bool
+	}{
+		{value: "https://example.test/", wantOrigin: "https://example.test", wantSecure: true},
+		{value: "HTTPS://EXAMPLE.TEST:443", wantOrigin: "https://example.test", wantSecure: true},
+		{value: "http://EXAMPLE.TEST:80", wantOrigin: "http://example.test"},
+		{value: "https://EXAMPLE.TEST:8443", wantOrigin: "https://example.test:8443", wantSecure: true},
+		{value: "http://[2001:0DB8:0:0::1]:80", wantOrigin: "http://[2001:db8::1]"},
+	} {
+		origin, secure, err := parsePublicOrigin(test.value)
+		if err != nil || origin != test.wantOrigin || secure != test.wantSecure {
+			t.Errorf("parsePublicOrigin(%q) = %q, %t, %v; want %q, %t", test.value, origin, secure, err, test.wantOrigin, test.wantSecure)
+		}
+	}
+}
+
+func TestValidateConfigRejectsInvalidPublicOrigin(t *testing.T) {
+	t.Parallel()
+	if err := ValidateConfig(Config{PublicOrigin: "https://example.test/path"}); err == nil {
+		t.Fatal("ValidateConfig accepted a public URL with a path")
+	}
+	if err := ValidateConfig(Config{PublicOrigin: "https://example.test"}); err != nil {
+		t.Fatalf("ValidateConfig rejected a valid origin: %v", err)
 	}
 }

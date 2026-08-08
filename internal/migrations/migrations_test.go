@@ -13,6 +13,7 @@ func TestMigrationHistoryMatches(t *testing.T) {
 		"001_worldwright.sql",
 		"002_rules_graph_statuses.sql",
 		"003_interaction_audience_invalidations.sql",
+		"004_password_auth.sql",
 	}
 	tests := []struct {
 		name    string
@@ -36,6 +37,55 @@ func TestMigrationHistoryMatches(t *testing.T) {
 				t.Fatalf("migrationHistoryMatches(%v, %v) = %t, want %t", available, test.applied, got, test.want)
 			}
 		})
+	}
+}
+
+func TestPasswordAuthenticationMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("004_password_auth.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"if exists (select 1 from users)",
+		"add column username text not null",
+		"add column normalized_username text not null",
+		"add column password_hash text not null",
+		"users_normalized_username_unique",
+		"users_password_hash_argon2id",
+		"users_status_valid",
+		"create table auth_sessions",
+		"token_hash text not null unique",
+		"idle_expires_at timestamptz not null",
+		"absolute_expires_at timestamptz not null",
+		"revoked_at timestamptz",
+		"auth_sessions_token_hash_shape",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing authentication contract fragment %q", fragment)
+		}
+	}
+
+	start := strings.Index(sql, "create table auth_sessions (")
+	if start < 0 {
+		t.Fatal("migration has no auth_sessions table")
+	}
+	end := strings.Index(sql[start:], "\n);")
+	if end < 0 {
+		t.Fatal("auth_sessions table has no closing delimiter")
+	}
+	table := sql[start : start+end]
+	for _, rawColumn := range []*regexp.Regexp{
+		regexp.MustCompile(`(?m)^\s*token\s+`),
+		regexp.MustCompile(`(?m)^\s*session_token\s+`),
+		regexp.MustCompile(`(?m)^\s*raw_token\s+`),
+		regexp.MustCompile(`(?m)^\s*csrf_token\s+`),
+	} {
+		if rawColumn.MatchString(table) {
+			t.Errorf("auth_sessions persists a raw secret column matching %s", rawColumn)
+		}
 	}
 }
 

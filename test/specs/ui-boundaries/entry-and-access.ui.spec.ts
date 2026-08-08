@@ -10,6 +10,13 @@ import {
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeURL } from "../../src/scenario";
 import { sanitizeDiagnosticBody } from "../../src/scenario/evidence/redaction";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  authenticateBrowserContext,
+  disposeAuthenticatedActors,
+  signupActor,
+} from "../support/auth";
 
 interface IdentifiedResource {
   id: string;
@@ -22,6 +29,8 @@ interface WorldResponse extends IdentifiedResource {
 interface InviteResponse {
   join_path: string;
 }
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 test("focused entry, narrow-layout, keyboard, and access boundaries stay deliberate", async ({
   page,
@@ -59,17 +68,9 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
 
   await test.step("NAV-V01/non-editor-build-boundary", async () => {
     const unique = randomUUID().slice(0, 8);
-    const owner = await postJSON<IdentifiedResource>(
-      request,
-      `${baseURL}/api/users`,
-      { display_name: `Boundary Owner ${unique}` },
-    );
+    const owner = await signupActor(baseURL, `Boundary Owner ${unique}`);
     const playerName = `Boundary Player ${unique}`;
-    const player = await postJSON<IdentifiedResource>(
-      request,
-      `${baseURL}/api/users`,
-      { display_name: playerName },
-    );
+    const player = await signupActor(baseURL, playerName);
     const world = await postJSON<WorldResponse>(
       request,
       `${baseURL}/api/worlds`,
@@ -91,8 +92,8 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
       player.id,
     );
 
+    await authenticateBrowserContext(page.context(), player);
     await page.goto(`${baseURL}/build/${world.id}/capacities`);
-    await page.getByRole("button", { name: new RegExp(playerName) }).click();
     await expect(page.getByRole("alert")).toContainText(
       "Builder access is not available",
     );
@@ -101,19 +102,18 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
   });
 });
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function postJSON<T>(
-  request: APIRequestContext,
+  _request: APIRequestContext,
   url: string,
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
+  if (userID === undefined) {
+    throw new Error("fixture mutations require an authenticated actor");
+  }
+  const response = await actorRequest(userID).post(url, {
     data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
+    headers: actorMutationHeaders(userID),
   });
   return expectJSON<T>(response, url);
 }

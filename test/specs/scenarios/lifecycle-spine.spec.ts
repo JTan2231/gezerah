@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import { expect, test, type Page } from "../../src/scenario";
 
+const LIFECYCLE_PASSWORD = "lantern-estuary-keeps-four-safe-harbors";
+
 test("one rendered lifecycle carries the table from authoring through archive", async ({
   scenario,
 }) => {
@@ -15,9 +17,13 @@ test("one rendered lifecycle carries the table from authoring through archive", 
   const run = randomUUID().slice(0, 8);
   const labels = {
     owner: `Harbor Author ${run}`,
+    ownerUsername: `owner-${run}`,
     editor: `Harbor Editor ${run}`,
+    editorUsername: `editor-${run}`,
     player: `Harbor Player ${run}`,
+    playerUsername: `player-${run}`,
     spectator: `Harbor Witness ${run}`,
+    spectatorUsername: `spectator-${run}`,
     world: `Lantern Estuary ${run}`,
     worldDescription: `A tidebound crossing authored for run ${run}.`,
     editedDescription: `A tidebound crossing tended by its editor ${run}.`,
@@ -47,7 +53,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           }),
         ).toBeVisible();
         await ownerPage.getByRole("link", { name: /Build/ }).click();
-        await createLocalProfile(ownerPage, labels.owner);
+        await createAccount(ownerPage, labels.ownerUsername, labels.owner);
         await expect(
           ownerPage.getByRole("heading", { name: "Shape a world." }),
         ).toBeVisible();
@@ -237,6 +243,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           redeemInvite(
             editorPage,
             editorInvite,
+            labels.editorUsername,
             labels.editor,
             labels.world,
             "Capacities",
@@ -244,6 +251,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           redeemInvite(
             playerPage,
             playerInvite,
+            labels.playerUsername,
             labels.player,
             labels.world,
             labels.world,
@@ -251,6 +259,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           redeemInvite(
             spectatorPage,
             spectatorInvite,
+            labels.spectatorUsername,
             labels.spectator,
             labels.world,
             labels.world,
@@ -1016,12 +1025,30 @@ test("one rendered lifecycle carries the table from authoring through archive", 
   });
 });
 
-async function createLocalProfile(page: Page, displayName: string) {
+async function createAccount(
+  page: Page,
+  username: string,
+  displayName: string,
+) {
   await expect(
-    page.getByRole("heading", { name: "Who is opening the book?" }),
+    page.getByRole("heading", { name: "Welcome back." }),
   ).toBeVisible();
-  await page.getByLabel("Your display name").fill(displayName);
-  await page.getByRole("button", { name: "Create local profile" }).click();
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Create your account." }),
+  ).toBeVisible();
+  const form = page.locator("form.identity-form");
+  await form.locator('input[name="username"]').fill(username);
+  await form.locator('input[name="display_name"]').fill(displayName);
+  await form.locator('input[name="password"]').fill(LIFECYCLE_PASSWORD);
+  await form
+    .locator('input[name="password_confirmation"]')
+    .fill(LIFECYCLE_PASSWORD);
+  await form
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
 }
 
 async function beginInvalidNumericInput(page: Page, name: string) {
@@ -1113,12 +1140,14 @@ async function createInvite(
 async function redeemInvite(
   page: Page,
   inviteURL: string,
+  username: string,
   displayName: string,
   worldName: string,
   destinationHeading: string,
 ) {
   await page.goto(inviteURL);
-  await createLocalProfile(page, displayName);
+  await expect(page.getByText(worldName, { exact: false })).toHaveCount(0);
+  await createAccount(page, username, displayName);
   await expect(
     page.getByRole("heading", { name: `Come to ${worldName}.` }),
   ).toBeVisible();

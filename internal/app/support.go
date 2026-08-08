@@ -15,8 +15,6 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 )
 
-const identityHeader = "X-DND-User-ID"
-
 var uuidPattern = regexp.MustCompile(`^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$`)
 
 type queryer interface {
@@ -134,30 +132,12 @@ func revisionConflict(resource string, expected, actual int64) error {
 	}
 }
 
-func actorID(r *http.Request) (string, error) {
-	userID := strings.TrimSpace(r.Header.Get(identityHeader))
-	if userID == "" {
-		return "", &statusError{Status: http.StatusUnauthorized, Code: "authentication_required", Message: identityHeader + " is required"}
+func requireKnownActor(_ context.Context, _ queryer, r *http.Request) (string, error) {
+	actor, ok := actorFromRequest(r)
+	if !ok {
+		return "", authenticationRequired()
 	}
-	if !validID(userID) {
-		return "", &statusError{Status: http.StatusUnauthorized, Code: "invalid_identity", Message: identityHeader + " must identify a local user"}
-	}
-	return userID, nil
-}
-
-func requireKnownActor(ctx context.Context, db queryer, r *http.Request) (string, error) {
-	userID, err := actorID(r)
-	if err != nil {
-		return "", err
-	}
-	var exists bool
-	if err := db.QueryRow(ctx, `select exists(select 1 from users where id = $1)`, userID).Scan(&exists); err != nil {
-		return "", err
-	}
-	if !exists {
-		return "", &statusError{Status: http.StatusUnauthorized, Code: "invalid_identity", Message: "local user does not exist"}
-	}
-	return userID, nil
+	return actor.User.ID, nil
 }
 
 type authorizedWorldMember struct {

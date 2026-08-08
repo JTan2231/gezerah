@@ -35,6 +35,7 @@ binary whose SPA routes return 503.
 | `DND_DATABASE_URL` | Preferred                      | PostgreSQL URL.                             |
 | `DATABASE_URL`     | Fallback                       | Hosting-provider database URL.              |
 | `DND_LOG_LEVEL`    | `info`                         | `debug`, `info`, `warn`/`warning`, `error`. |
+| `DND_PUBLIC_ORIGIN` | Request origin                | Exact browser origin accepted for unsafe/auth requests; HTTPS also selects the secure cookie. |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
@@ -42,9 +43,13 @@ development; a production process with no database variable will try that local
 address rather than fail configuration parsing. Unknown log-level values also
 silently select `info`.
 
-The default bind address `:8080` listens on all interfaces. For the current
-trusted-development build, use `DND_ADDR=127.0.0.1:8080` unless network access is
-independently restricted. `./run.sh` otherwise inherits the wildcard default.
+The default bind address `:8080` listens on all interfaces. Use
+`DND_ADDR=127.0.0.1:8080` for strictly local direct access. `./run.sh` starts the
+Vite-facing backend with `DND_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the
+variable is already set. In production, set `DND_PUBLIC_ORIGIN` to the exact
+external HTTPS origin (scheme and authority, with no path/query/fragment); this
+is required when a reverse proxy changes the request host and ensures the
+`Secure` `__Host-dnd_session` cookie is issued.
 
 Treat database URLs as secrets. The application does not read secret files or
 rotate credentials. Supply them through the deployment platform and restrict
@@ -105,9 +110,9 @@ request summaries, and recovered panics with stacks. Request summaries include:
 - response bytes;
 - duration.
 
-The server does not intentionally log request/response bodies, identity
-headers, raw invitation bearer tokens, or query strings in its standard request
-or panic log. Database/validation errors returned to clients are often
+The server does not intentionally log request/response bodies, cookies,
+passwords, CSRF tokens, raw invitation bearer tokens, or query strings in its
+standard request or panic log. Database/validation errors returned to clients are often
 generalized. Ordinary handler and database failures are not logged with their
 underlying cause; only the request status remains. Panic stacks remain in
 server logs.
@@ -147,8 +152,9 @@ application falls back to local PostgreSQL and startup fails.
 The repository does not configure Railway `drainingSeconds`, so the checked-in
 deployment does not establish the greater-than-ten-second termination grace
 required above. Configure that service setting before relying on signal-based
-shutdown. Do not deploy publicly in the current authentication state; see
-[Security](security.md).
+shutdown. Authentication is installed, but the remaining hardening and
+operational gaps in [Security](security.md) still need review before a public
+launch.
 
 ### Railway release checklist
 
@@ -157,8 +163,8 @@ shutdown. Do not deploy publicly in the current authentication state; see
    application/schema rollout.
 3. Take/verify a database backup before a risky migration.
 4. Confirm Bun/Go versions and the build log shows Vite before Go.
-5. Confirm the application service has the PostgreSQL reference variable and the
-   expected log level.
+5. Confirm the application service has the PostgreSQL reference variable, exact
+   HTTPS `DND_PUBLIC_ORIGIN`, and expected log level.
 6. Configure a termination/draining grace period greater than ten seconds.
 7. Deploy one instance and watch migration/startup logs.
 8. Verify `/api/health`, an SPA route, and representative authorized API reads.
@@ -193,7 +199,10 @@ horizontal scaling:
 
 - durable state, events, revisions, and idempotency are in PostgreSQL;
 - migrations serialize through a database advisory lock;
-- the application has no server-local session state;
+- account sessions are database-backed rather than replica-local;
+- authentication throttles are replica-local and key the directly connected
+  peer, so a shared proxy can aggregate unrelated users and they are not a
+  complete public/multi-replica abuse boundary;
 - any replica can answer normal queries/commands;
 - successful commands wake SSE handlers on the same replica immediately;
 - SSE handlers retain a 1.5-second shared-PostgreSQL poll, so events committed
@@ -216,9 +225,12 @@ schema-change mechanism.
 `001_worldwright.sql` remains the clean supported baseline rather than an
 upgrade from the removed schema. New databases apply `001`,
 `002_rules_graph_statuses.sql`, and
-`003_interaction_audience_invalidations.sql`; a database at a recorded prefix
+`003_interaction_audience_invalidations.sql`, then the empty-user account
+cutover in `004_password_auth.sql`; a database at a recorded prefix
 upgrades in place, including mechanic-rules/status-set root backfills and the
-audience-invalidation event flag. Do not attach a database with a different
+audience-invalidation event flag. `004` deliberately stops if any user row
+exists; this repository has no account-claim or password-invention migration.
+Use a fresh deployment database for this cutover. Do not attach a database with a different
 migration history or unledgered application tables. If unsupported data must
 be retained, use separately reviewed one-time export/transform/import tooling
 outside the running service,
@@ -310,7 +322,8 @@ be treated as an idempotency conflict and investigated rather than forced.
 
 ### SSE freshness issue
 
-1. Confirm active membership and identity header.
+1. Confirm the account session is active and the user still has an active,
+   play-ready membership.
 2. Check proxy buffering and idle timeouts; the response sets no-buffer hints
    and sends keep-alives.
 3. Account for the fixed 30-second server write timeout and expected reconnects.
@@ -321,8 +334,10 @@ be treated as an idempotency conflict and investigated rather than forced.
 
 ## Production-readiness gaps
 
-- development-only forgeable identity and public identity provisioning;
-- no built-in TLS/security-header/rate-limit layer;
+- no built-in TLS termination; the reverse proxy must enforce HTTPS;
+- authentication throttling is in-memory, per-process, and direct-peer based;
+  there is no trusted proxy-aware/distributed abuse-control layer for public
+  auth traffic, other commands, or streams;
 - no backup/restore automation or release rollback tooling;
 - no metrics/tracing/alerts or audit trail for configuration changes;
 - no pool tuning or capacity test;
@@ -332,5 +347,7 @@ be treated as an idempotency conflict and investigated rather than forced.
 - no container/release pipeline beyond Railway configuration;
 - no documented provider-specific incident response or disaster-recovery SLO.
 
-The authentication gap is a release blocker for untrusted/public deployment,
-not merely an observability enhancement.
+Username/password sessions close the former impersonation gap. Public launch
+still requires deliberate TLS/proxy configuration, backup/restore evidence,
+capacity/abuse testing, monitoring, and an account-support policy for a product
+that intentionally collects no email and provides no password recovery.

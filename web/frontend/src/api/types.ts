@@ -154,9 +154,15 @@ export interface WorldEntity {
 
 export interface User {
   id: string;
+  username: string;
   display_name: string;
-  created_at?: string | undefined;
-  updated_at?: string | undefined;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthenticatedSession {
+  user: User;
+  csrf_token: string;
 }
 
 export type PlayStatus =

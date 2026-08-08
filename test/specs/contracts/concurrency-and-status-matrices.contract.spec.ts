@@ -9,11 +9,21 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorCookieHeader,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  signupActor,
+} from "../support/auth";
 
 const REQUIRED_NAMED_CASES = {
   "CON-V04": ["stale", "already-removed", "entity-mismatch", "cross-world"],
   "CCY-V06": ["late-submit", "late-withdraw", "stale-transition"],
 } as const;
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 interface IdentifiedResource {
   id: string;
@@ -147,10 +157,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         });
 
         await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.player.id).post(
             interactionURL(fixture, interaction.id, "actions"),
             {
-              headers: identityHeaders(fixture.player.id),
               data: {
                 text: "This submission was composed against the open revision.",
                 expected_revision: interaction.revision,
@@ -211,14 +220,13 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         );
 
         await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.player.id).post(
             interactionURL(
               fixture,
               interaction.id,
               `actions/${action.id}/withdraw`,
             ),
             {
-              headers: identityHeaders(fixture.player.id),
               data: { expected_revision: action.revision },
             },
           ),
@@ -249,14 +257,18 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           "Competing lifecycle",
         );
         const responses = await Promise.all([
-          request.post(interactionURL(fixture, interaction.id, "adjudicate"), {
-            headers: identityHeaders(fixture.owner.id),
-            data: { expected_revision: interaction.revision },
-          }),
-          request.post(interactionURL(fixture, interaction.id, "cancel"), {
-            headers: identityHeaders(fixture.owner.id),
-            data: { expected_revision: interaction.revision },
-          }),
+          actorRequest(fixture.owner.id).post(
+            interactionURL(fixture, interaction.id, "adjudicate"),
+            {
+              data: { expected_revision: interaction.revision },
+            },
+          ),
+          actorRequest(fixture.owner.id).post(
+            interactionURL(fixture, interaction.id, "cancel"),
+            {
+              data: { expected_revision: interaction.revision },
+            },
+          ),
         ]);
         expect(responses.map((response) => response.status()).sort()).toEqual([
           200, 409,
@@ -436,10 +448,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
 
   await test.step("CCY-V08 changed-content idempotency reuse preserves the original receipt", async () => {
     await expectAPIError(
-      await request.post(
+      await actorRequest(fixture.owner.id).post(
         interactionURL(fixture, statusSetup.interaction.id, "resolve"),
         {
-          headers: identityHeaders(fixture.owner.id),
           data: {
             ...statusSetup.payload,
             narrative: `${statusSetup.payload.narrative} Changed after commit.`,
@@ -549,10 +560,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         });
 
         const error = await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.owner.id).post(
             interactionURL(fixture, staleInteraction.id, "resolve"),
             {
-              headers: identityHeaders(fixture.owner.id),
               data: stalePayload,
             },
           ),
@@ -587,10 +597,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture.primaryEntity.id,
         );
         await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.owner.id).post(
             interactionURL(fixture, interaction.id, "resolve"),
             {
-              headers: identityHeaders(fixture.owner.id),
               data: removeStatusPayload(
                 fixture,
                 interaction,
@@ -637,10 +646,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture.otherEntity.id,
         );
         await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.owner.id).post(
             interactionURL(fixture, interaction.id, "resolve"),
             {
-              headers: identityHeaders(fixture.owner.id),
               data: removeStatusPayload(
                 fixture,
                 interaction,
@@ -696,10 +704,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture.foreignOwner.id,
         );
         const error = await expectAPIError(
-          await request.post(
+          await actorRequest(fixture.owner.id).post(
             interactionURL(fixture, interaction.id, "resolve"),
             {
-              headers: identityHeaders(fixture.owner.id),
               data: removeStatusPayload(
                 fixture,
                 interaction,
@@ -762,14 +769,18 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       effects: [],
     };
     const responses = await Promise.all([
-      request.post(interactionURL(fixture, interaction.id, "resolve"), {
-        headers: identityHeaders(fixture.owner.id),
-        data: { ...basePayload, idempotency_key: randomUUID() },
-      }),
-      request.post(interactionURL(fixture, interaction.id, "resolve"), {
-        headers: identityHeaders(fixture.owner.id),
-        data: { ...basePayload, idempotency_key: randomUUID() },
-      }),
+      actorRequest(fixture.owner.id).post(
+        interactionURL(fixture, interaction.id, "resolve"),
+        {
+          data: { ...basePayload, idempotency_key: randomUUID() },
+        },
+      ),
+      actorRequest(fixture.owner.id).post(
+        interactionURL(fixture, interaction.id, "resolve"),
+        {
+          data: { ...basePayload, idempotency_key: randomUUID() },
+        },
+      ),
     ]);
     expect(responses.map((response) => response.status()).sort()).toEqual([
       200, 409,
@@ -856,9 +867,9 @@ async function createFixture(
 ): Promise<ContractFixture> {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Matrix Owner ${unique}`);
-  const player = await createUser(request, baseURL, `Matrix Player ${unique}`);
-  const foreignOwner = await createUser(
+  const owner = await createActor(request, baseURL, `Matrix Owner ${unique}`);
+  const player = await createActor(request, baseURL, `Matrix Player ${unique}`);
+  const foreignOwner = await createActor(
     request,
     baseURL,
     `Foreign Matrix Owner ${unique}`,
@@ -925,14 +936,12 @@ async function createFixture(
   };
 }
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function redeemPlayer(
@@ -1165,7 +1174,7 @@ async function readAvailableEvents(
   const response = await fetch(
     `${fixture.baseURL}/api/worlds/${worldID}/events?after=${after}`,
     {
-      headers: identityHeaders(fixture.owner.id),
+      headers: { Cookie: await actorCookieHeader(fixture.owner.id) },
       signal: controller.signal,
     },
   );
@@ -1201,18 +1210,12 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -1222,10 +1225,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

@@ -9,6 +9,15 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  putAs,
+  signupActor,
+} from "../support/auth";
 
 const CASE_MANIFEST = {
   "MEC-V03": ["unknown", "cross-world", "archived"],
@@ -27,6 +36,8 @@ const CASE_MANIFEST = {
     "archived-new-reference",
   ],
 } as const;
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 type ScenarioID = keyof typeof CASE_MANIFEST;
 type CaseKey = (typeof CASE_MANIFEST)[ScenarioID][number];
@@ -135,7 +146,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     await test.step(`${scenarioID} [${caseKey}]`, body);
   };
 
-  const owner = await createUser(
+  const owner = await createActor(
     request,
     baseURL,
     `Lifecycle Author ${unique}`,
@@ -217,10 +228,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         owner.id,
       );
       const candidateID = randomUUID();
-      const response = await request.post(
+      const response = await actorRequest(owner.id).post(
         `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
         {
-          headers: identityHeaders(owner.id),
           data: derivedMechanicRequest(
             candidateID,
             `Rejected ${matrixCase.key} graph ${unique}`,
@@ -283,12 +293,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   const requiredField = required(characterFields.fields[0], "character field");
 
-  const readyPlayer = await createUser(
+  const readyPlayer = await createActor(
     request,
     baseURL,
     `Ready Player ${unique}`,
   );
-  const incompletePlayer = await createUser(
+  const incompletePlayer = await createActor(
     request,
     baseURL,
     `Setup Player ${unique}`,
@@ -374,10 +384,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   for (const matrixCase of contextCases) {
     await runCase("RST-V03", matrixCase.key, async () => {
-      const response = await request.post(
+      const response = await actorRequest(owner.id).post(
         `${baseURL}/api/worlds/${mainWorld.id}/interactions`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             id: randomUUID(),
             prompt: `Rejected ${matrixCase.key} selection ${unique}`,
@@ -436,10 +445,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   await runCase("RST-V03", "incomplete-attribution", async () => {
     await expectAPIError(
-      await request.post(
+      await actorRequest(readyPlayer.id).post(
         `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
         {
-          headers: identityHeaders(readyPlayer.id),
           data: {
             expected_revision: interactionSnapshot.revision,
             acting_entity_id: attributionIncompleteEntity.id,
@@ -479,10 +487,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
 
   await runCase("RST-V03", "archived-attribution", async () => {
     await expectAPIError(
-      await request.post(
+      await actorRequest(readyPlayer.id).post(
         `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
         {
-          headers: identityHeaders(readyPlayer.id),
           data: {
             expected_revision: interactionSnapshot.revision,
             acting_entity_id: archivedEntity.id,
@@ -542,10 +549,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         owner.id,
       );
       await expectAPIError(
-        await request.post(
+        await actorRequest(owner.id).post(
           `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/preview`,
           {
-            headers: identityHeaders(owner.id),
             data: {
               expected_revision: beforeInteraction.revision,
               expected_rules_revision: archivedMechanic.revision,
@@ -601,15 +607,17 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     );
     const candidateID = randomUUID();
     await expectAPIError(
-      await request.post(`${baseURL}/api/worlds/${mainWorld.id}/mechanics`, {
-        headers: identityHeaders(owner.id),
-        data: derivedMechanicRequest(
-          candidateID,
-          `Archived dependency attempt ${unique}`,
-          archivedMechanic.mechanic.id,
-          before.revision,
-        ),
-      }),
+      await actorRequest(owner.id).post(
+        `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
+        {
+          data: derivedMechanicRequest(
+            candidateID,
+            `Archived dependency attempt ${unique}`,
+            archivedMechanic.mechanic.id,
+            before.revision,
+          ),
+        },
+      ),
       {
         status: 422,
         code: "validation_failed",
@@ -639,10 +647,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       owner.id,
     );
     await expectAPIError(
-      await request.put(
+      await actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             display_name: `Mutated retired pathfinder ${unique}`,
             archived: true,
@@ -674,10 +681,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       owner.id,
     );
     await expectAPIError(
-      await request.put(
+      await actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             ...archivedMechanicRequest,
             name: `Mutated retired bearing ${unique}`,
@@ -724,8 +730,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       owner.id,
     );
     await expectAPIError(
-      await request.patch(`${baseURL}/api/worlds/${world.id}`, {
-        headers: identityHeaders(owner.id),
+      await actorRequest(owner.id).patch(`${baseURL}/api/worlds/${world.id}`, {
         data: {
           name: `Mutated archive ${unique}`,
           expected_revision: before.revision,
@@ -795,14 +800,12 @@ function derivedMechanicRequest(
   } as const;
 }
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function joinWorldAsPlayer(
@@ -876,18 +879,12 @@ async function completeProfile(
   );
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -897,10 +894,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -910,10 +904,7 @@ async function putJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.put(url, {
-    data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await putAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

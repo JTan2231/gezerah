@@ -6,13 +6,16 @@ import { readBaseURL } from "../../src/runtime";
 import {
   createEntity,
   createOpenInteraction,
-  createUser,
+  createActor,
   createWorld,
+  disposeAuthenticatedActors,
   joinWorld,
-  openAs,
+  openAuthenticated,
   postJSON,
   type Interaction,
 } from "./support";
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 test("UI boundaries: interrupted live events resume from the cursor without duplicate history", async ({
   page,
@@ -20,8 +23,12 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Reconnect Owner ${unique}`);
-  const player = await createUser(
+  const owner = await createActor(
+    request,
+    baseURL,
+    `Reconnect Owner ${unique}`,
+  );
+  const player = await createActor(
     request,
     baseURL,
     `Reconnect Player ${unique}`,
@@ -85,7 +92,7 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
   });
 
   await test.step("NAV-V02/event-stream-interruption", async () => {
-    await openAs(page, baseURL, `/play/${world.id}`, player.display_name);
+    await openAuthenticated(page, baseURL, `/play/${world.id}`, player);
     await firstStream;
     await expect(page.getByText(prompt)).toBeVisible();
     await postJSON<Interaction>(

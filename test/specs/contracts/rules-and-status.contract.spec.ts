@@ -9,9 +9,20 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  putAs,
+  signupActor,
+} from "../support/auth";
 
 type TaggedValue =
   { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 interface IdentifiedResource {
   id: string;
@@ -122,11 +133,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await postJSON<IdentifiedResource>(
-    request,
-    `${baseURL}/api/users`,
-    { display_name: `Graph Author ${unique}` },
-  );
+  const owner = await signupActor(baseURL, `Graph Author ${unique}`);
   const world = await postJSON<WorldResponse>(
     request,
     `${baseURL}/api/worlds`,
@@ -191,10 +198,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
   });
   const impact = derivedMutation.mechanic;
 
-  const cyclePublication = await request.put(
+  const cyclePublication = await actorRequest(owner.id).put(
     `${baseURL}/api/worlds/${world.id}/mechanics/${impact.id}`,
     {
-      headers: identityHeaders(owner.id),
       data: {
         ...derivedRequest,
         expected_rules_revision: derivedMutation.revision,
@@ -221,10 +227,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
     "multiply-number",
   );
 
-  const invalidTypePublication = await request.put(
+  const invalidTypePublication = await actorRequest(owner.id).put(
     `${baseURL}/api/worlds/${world.id}/mechanics/${impact.id}`,
     {
-      headers: identityHeaders(owner.id),
       data: {
         ...derivedRequest,
         expected_rules_revision: derivedMutation.revision,
@@ -270,10 +275,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
 
   const authoredState =
     await test.step("CCY-V03 rejects a stale state/rules save and accepts the authoritative retry", async () => {
-      const staleStateWrite = await request.put(
+      const staleStateWrite = await actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             expected_revision: entity.state.revision,
             expected_rules_revision: rulesRevision - 1,
@@ -358,10 +362,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
     ],
   };
 
-  const stalePreview = await request.post(
+  const stalePreview = await actorRequest(owner.id).post(
     `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
     {
-      headers: identityHeaders(owner.id),
       data: { ...applyPayload, expected_rules_revision: rulesRevision - 1 },
     },
   );
@@ -460,10 +463,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
     applied_effects: applyResult.applied_effects,
   });
   await expectAPIError(
-    await request.post(
+    await actorRequest(owner.id).post(
       `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
       {
-        headers: identityHeaders(owner.id),
         data: {
           ...applyPayload,
           narrative: `${applyPayload.narrative} changed`,
@@ -643,17 +645,15 @@ test("contract: typed rules publish atomically and statuses change effective sta
     effects: [],
   };
   const competingResponses = await Promise.all([
-    request.post(
+    actorRequest(owner.id).post(
       `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
       {
-        headers: identityHeaders(owner.id),
         data: { ...competingPayload, idempotency_key: randomUUID() },
       },
     ),
-    request.post(
+    actorRequest(owner.id).post(
       `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
       {
-        headers: identityHeaders(owner.id),
         data: { ...competingPayload, idempotency_key: randomUUID() },
       },
     ),
@@ -744,18 +744,12 @@ function effectiveChange(
   };
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -765,10 +759,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -778,10 +769,7 @@ async function putJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.put(url, {
-    data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await putAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

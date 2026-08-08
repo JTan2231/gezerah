@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -515,13 +514,15 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 	}
 	defer tx.Rollback(r.Context()) //nolint:errcheck
 	var inviteID, worldID, role string
-	var expiresAt time.Time
-	var revokedAt *time.Time
 	err = tx.QueryRow(r.Context(), `
-		select id::text, world_id::text, role, expires_at, revoked_at
-		from world_invites where token_hash = $1 for update`, hashWorldInviteToken(token),
-	).Scan(&inviteID, &worldID, &role, &expiresAt, &revokedAt)
-	if errors.Is(err, pgx.ErrNoRows) || (err == nil && (revokedAt != nil || !expiresAt.After(time.Now()))) {
+		select invite.id::text, invite.world_id::text, invite.role
+		from world_invites invite
+		join worlds world on world.id = invite.world_id
+		where invite.token_hash = $1 and invite.revoked_at is null
+			and invite.expires_at > now() and world.status = 'active'
+		for update of invite, world`, hashWorldInviteToken(token),
+	).Scan(&inviteID, &worldID, &role)
+	if errors.Is(err, pgx.ErrNoRows) {
 		handleAppError(w, inviteNotFound())
 		return
 	}
@@ -536,6 +537,33 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
+	if alreadyRedeemed {
+		var reactivatedMembershipID string
+		err := tx.QueryRow(r.Context(), `
+			update world_memberships membership
+			set status = 'active', revision = membership.revision + 1
+			from world_invite_redemptions redemption
+			where redemption.invite_id = $1 and redemption.user_id = $2
+				and membership.id = redemption.world_membership_id
+				and membership.world_id = redemption.world_id
+				and membership.status <> 'active'
+			returning membership.id::text`, inviteID, userID,
+		).Scan(&reactivatedMembershipID)
+		if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+			handleAppError(w, err)
+			return
+		}
+		if err == nil {
+			if _, err := tx.Exec(r.Context(), `update worlds set table_revision = table_revision + 1 where id = $1`, worldID); err != nil {
+				handleAppError(w, err)
+				return
+			}
+			if err := appendWorldEvent(r.Context(), tx, worldID, "membership-created", reactivatedMembershipID, nil, nil, nil); err != nil {
+				handleAppError(w, err)
+				return
+			}
+		}
+	}
 	if !alreadyRedeemed {
 		membershipID, idErr := newID()
 		if idErr != nil {
@@ -546,7 +574,11 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 			insert into world_memberships (id, world_id, user_id, role, status, joined_at)
 			values ($1, $2, $3, $4, 'active', now())
 			on conflict (world_id, user_id) do update set
-				role = case when world_memberships.role = 'owner' then 'owner' else excluded.role end,
+				role = case
+					when world_memberships.role = 'owner' then 'owner'
+					when world_memberships.status = 'active' then world_memberships.role
+					else excluded.role
+				end,
 				status = 'active', joined_at = coalesce(world_memberships.joined_at, now()),
 				revision = world_memberships.revision + 1
 			returning id::text`, membershipID, worldID, userID, role,

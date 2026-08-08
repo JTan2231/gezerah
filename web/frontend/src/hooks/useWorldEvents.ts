@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 
-import { readSelectedUserId, worldPath } from "../api/client";
+import { authenticationFailureReporter, worldPath } from "../api/client";
 
 export function useWorldEvents(
   worldId: string | undefined,
@@ -14,19 +14,23 @@ export function useWorldEvents(
 
     async function connect() {
       if (controller.signal.aborted || worldId === undefined) return;
+      const reportAuthenticationFailure = authenticationFailureReporter();
       const headers = new Headers({ Accept: "text/event-stream" });
-      const userId = readSelectedUserId();
-      if (userId !== "") headers.set("X-DND-User-ID", userId);
       const suffix =
         cursor === "" ? "" : `?after=${encodeURIComponent(cursor)}`;
       try {
         const response = await fetch(
           `${worldPath(worldId, "events")}${suffix}`,
           {
+            credentials: "same-origin",
             headers,
             signal: controller.signal,
           },
         );
+        if (response.status === 401) {
+          if (reportAuthenticationFailure()) return;
+          throw new Error("stale event stream authentication failed");
+        }
         if (!response.ok || response.body === null)
           throw new Error(`event stream failed (${response.status})`);
         const reader = response.body.getReader();

@@ -457,6 +457,12 @@ textarea {
   color: var(--danger);
 }
 
+.notice-success {
+  border-color: color-mix(in srgb, var(--active-green) 35%, var(--line));
+  background: var(--moss-soft);
+  color: var(--moss);
+}
+
 .loading-state {
   display: flex;
   align-items: center;
@@ -866,60 +872,37 @@ textarea {
   color: var(--muted);
 }
 
-.profile-list {
+.auth-mode-switch {
   display: grid;
   margin: 1.5rem 0;
-  gap: 0.55rem;
-}
-
-.profile-list button {
-  display: grid;
-  min-height: 58px;
-  padding: 0.55rem 0.7rem;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: 0.8rem;
+  padding: 0.25rem;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--paper-soft);
+}
+
+.auth-mode-switch button {
+  min-height: 40px;
+  border: 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.auth-mode-switch [aria-pressed="true"] {
+  background: var(--surface);
   color: var(--ink);
-  text-align: left;
+  box-shadow: var(--shadow-soft);
 }
 
-.profile-list button:hover {
-  border-color: var(--ember);
-  background: var(--white);
-}
-
-.profile-mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  place-items: center;
-  border-radius: 50%;
-  background: var(--ember-soft);
-  color: var(--ember-dark);
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.identity-divider {
-  display: flex;
-  align-items: center;
-  margin: 1.4rem 0;
-  gap: 0.8rem;
-  color: var(--faint);
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.identity-divider::before,
-.identity-divider::after {
-  height: 1px;
-  flex: 1;
-  background: var(--line);
-  content: "";
+.auth-session-notice {
+  margin-bottom: 1rem;
+  background: var(--paper-soft);
+  color: var(--ink-soft);
 }
 
 .identity-form {
@@ -1040,6 +1023,89 @@ textarea {
   gap: 0.65rem;
   color: var(--ink-soft);
   font-size: 0.78rem;
+}
+
+.account-copy,
+.play-account-name {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.account-copy strong,
+.play-account-name strong {
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-copy small,
+.play-account-name small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.account-control-buttons {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.account-menu > .account-control-buttons {
+  padding-left: 0.65rem;
+  border-left: 1px solid var(--line);
+}
+
+.play-library-page .account-copy small {
+  color: var(--night-muted);
+}
+
+.play-library-page .account-menu > .account-control-buttons {
+  border-color: var(--night-line);
+}
+
+.account-password-form {
+  color: var(--ink);
+}
+
+.account-details {
+  display: grid;
+  padding: 0.9rem 1rem;
+  grid-template-columns: minmax(110px, auto) 1fr;
+  gap: 0.35rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+}
+
+.account-details span {
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.account-details strong {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+}
+
+.account-session-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 1rem;
+  gap: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.account-session-actions strong {
+  font-size: 0.78rem;
+}
+
+.account-session-actions p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
 }
 
 .library-main {
@@ -1262,7 +1328,33 @@ textarea {
 .invite-page > header {
   position: fixed;
   top: 1.5rem;
+  right: 2rem;
   left: 2rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.invite-account {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.invite-account > span {
+  display: grid;
+  line-height: 1.25;
+  text-align: right;
+}
+
+.invite-account strong {
+  font-size: 0.74rem;
+}
+
+.invite-account small {
+  color: var(--muted);
+  font-size: 0.62rem;
 }
 
 .invite-card {
@@ -1523,10 +1615,13 @@ textarea {
   padding: 0.8rem 0.55rem 0;
   gap: 0.65rem;
   border-top: 1px solid var(--sidebar-line);
+  flex-wrap: wrap;
 }
 
-.sidebar-user > span:last-child {
+.sidebar-account-copy {
   display: grid;
+  min-width: 0;
+  flex: 1;
 }
 
 .sidebar-user strong {
@@ -1536,6 +1631,15 @@ textarea {
 .sidebar-user small {
   color: var(--sidebar-faint);
   font-size: 0.59rem;
+}
+
+.sidebar-user > .account-control-buttons {
+  width: 100%;
+  padding-left: 2.75rem;
+}
+
+.sidebar-user .text-button {
+  color: var(--sidebar-muted);
 }
 
 .player-sidebar-note {
@@ -2767,6 +2871,10 @@ textarea {
 }
 
 .play-app-account .text-button {
+  color: var(--night-muted);
+}
+
+.play-account-name small {
   color: var(--night-muted);
 }
 
@@ -4346,7 +4454,7 @@ textarea {
     display: grid;
     min-height: 58px;
     padding: 0.55rem 0.8rem;
-    grid-template-columns: auto 1fr minmax(120px, 170px);
+    grid-template-columns: auto minmax(0, 1fr) minmax(120px, 170px) auto;
     align-items: center;
     gap: 0.7rem;
     border-bottom: 1px solid var(--line);
@@ -4373,6 +4481,10 @@ textarea {
     min-height: 38px;
     padding: 0.35rem 0.5rem;
     font-size: 0.7rem;
+  }
+
+  .mobile-account-controls > .account-control-buttons > button:last-child {
+    display: none;
   }
 
   .world-section-play .world-mobile-bar {
@@ -4461,6 +4573,11 @@ textarea {
   }
 
   .account-menu > span:not(.avatar) {
+    display: none;
+  }
+
+  .invite-account > span,
+  .invite-account > .account-control-buttons > button:last-child {
     display: none;
   }
 
@@ -4579,7 +4696,8 @@ textarea {
 
   .play-brand-button .brand-copy,
   .play-app-account .role-pill,
-  .play-app-account .text-button {
+  .play-account-name,
+  .play-app-account .account-control-buttons > button:last-child {
     display: none;
   }
 

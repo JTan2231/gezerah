@@ -1,14 +1,22 @@
 import type { APIRequestContext, APIResponse, Page } from "@playwright/test";
 
 import { sanitizeDiagnosticBody } from "../../src/scenario/evidence/redaction";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  authenticateBrowserContext,
+  publicMutationHeaders,
+  signupActor,
+  type AuthenticatedActor,
+} from "../support/auth";
+
+export { disposeAuthenticatedActors } from "../support/auth";
 
 export interface IdentifiedResource {
   id: string;
 }
 
-export interface User extends IdentifiedResource {
-  display_name: string;
-}
+export type User = AuthenticatedActor;
 
 export interface World extends IdentifiedResource {
   name: string;
@@ -71,18 +79,12 @@ export interface InteractionAction extends IdentifiedResource {
   status: "submitted" | "withdrawn" | "selected" | "declined";
 }
 
-export function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
-export async function createUser(
-  request: APIRequestContext,
+export async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<User> {
-  return postJSON<User>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 export async function createWorld(
@@ -336,9 +338,9 @@ export async function getJSON<T>(
   url: string,
   actorID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(actorID === undefined ? {} : { headers: identityHeaders(actorID) }),
-  });
+  const response = await (
+    actorID === undefined ? request : actorRequest(actorID)
+  ).get(url);
   return expectJSON<T>(response, url);
 }
 
@@ -348,9 +350,14 @@ export async function postJSON<T>(
   data: unknown,
   actorID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
+  const response = await (
+    actorID === undefined ? request : actorRequest(actorID)
+  ).post(url, {
     ...(data === undefined ? {} : { data }),
-    ...(actorID === undefined ? {} : { headers: identityHeaders(actorID) }),
+    headers:
+      actorID === undefined
+        ? publicMutationHeaders(url)
+        : actorMutationHeaders(actorID),
   });
   return expectJSON<T>(response, url);
 }
@@ -361,9 +368,14 @@ export async function putJSON<T>(
   data: unknown,
   actorID?: string,
 ): Promise<T> {
-  const response = await request.put(url, {
+  const response = await (
+    actorID === undefined ? request : actorRequest(actorID)
+  ).put(url, {
     data,
-    ...(actorID === undefined ? {} : { headers: identityHeaders(actorID) }),
+    headers:
+      actorID === undefined
+        ? publicMutationHeaders(url)
+        : actorMutationHeaders(actorID),
   });
   return expectJSON<T>(response, url);
 }
@@ -374,9 +386,14 @@ export async function patchJSON<T>(
   data: unknown,
   actorID?: string,
 ): Promise<T> {
-  const response = await request.patch(url, {
+  const response = await (
+    actorID === undefined ? request : actorRequest(actorID)
+  ).patch(url, {
     data,
-    ...(actorID === undefined ? {} : { headers: identityHeaders(actorID) }),
+    headers:
+      actorID === undefined
+        ? publicMutationHeaders(url)
+        : actorMutationHeaders(actorID),
   });
   return expectJSON<T>(response, url);
 }
@@ -394,17 +411,14 @@ export async function expectJSON<T>(
   return JSON.parse(body) as T;
 }
 
-export async function openAs(
+export async function openAuthenticated(
   page: Page,
   baseURL: string,
   path: string,
-  displayName: string,
+  actor: AuthenticatedActor,
 ): Promise<void> {
+  await authenticateBrowserContext(page.context(), actor);
   await page.goto(`${baseURL}${path}`);
-  const identity = page.getByRole("button", {
-    name: new RegExp(escapeRegExp(displayName)),
-  });
-  if (await identity.isVisible()) await identity.click();
 }
 
 export function acceptNextDialog(page: Page): void {
@@ -413,10 +427,6 @@ export function acceptNextDialog(page: Page): void {
 
 export function dismissNextDialog(page: Page): void {
   page.once("dialog", async (dialog) => dialog.dismiss());
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function required<T>(value: T | undefined, label: string): T {

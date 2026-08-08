@@ -42,14 +42,44 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 	}
 }
 
+func TestSecurityHeadersAndHTTPSOnlyHSTS(t *testing.T) {
+	server := NewServerWithStaticFS(nil, fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("index")},
+	})
+	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, request)
+	for name, want := range map[string]string{
+		"Content-Security-Policy": "default-src 'self'",
+		"Permissions-Policy":      "camera=()",
+		"Referrer-Policy":         "no-referrer",
+		"X-Content-Type-Options":  "nosniff",
+		"X-Frame-Options":         "DENY",
+	} {
+		if got := response.Header().Get(name); !strings.Contains(got, want) {
+			t.Errorf("%s = %q, want it to contain %q", name, got, want)
+		}
+	}
+	if hsts := response.Header().Get("Strict-Transport-Security"); hsts != "" {
+		t.Fatalf("HTTP Strict-Transport-Security = %q, want empty", hsts)
+	}
+
+	server.securePublicOrigin = true
+	response = httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if hsts := response.Header().Get("Strict-Transport-Security"); !strings.Contains(hsts, "max-age=") {
+		t.Fatalf("HTTPS Strict-Transport-Security = %q", hsts)
+	}
+}
+
 func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<main>test</main>")},
 	})
-	server.HandleAPIFunc("POST /api/test/wake", func(w http.ResponseWriter, _ *http.Request) {
+	server.handlePublicAPIFunc("POST /api/test/wake", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusCreated, map[string]bool{"ok": true})
 	})
-	server.HandleAPIFunc("POST /api/test/reject", func(w http.ResponseWriter, _ *http.Request) {
+	server.handlePublicAPIFunc("POST /api/test/reject", func(w http.ResponseWriter, _ *http.Request) {
 		writeError(w, http.StatusConflict, "conflict", "conflict", nil)
 	})
 	handler := server.Routes()
@@ -79,11 +109,51 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 	}
 }
 
+func TestAuthenticationMutationsDoNotBroadcastWorldEventWakeups(t *testing.T) {
+	for _, path := range []string{
+		"/api/auth/signup",
+		"/api/auth/signin",
+		"/api/auth/logout",
+		"/api/auth/logout-all",
+		"/api/me/password",
+	} {
+		request := httptest.NewRequest(http.MethodPost, path, nil)
+		if successfulAPIMutation(request, http.StatusNoContent) {
+			t.Errorf("successfulAPIMutation(%q) woke world streams for account-only work", path)
+		}
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/worlds", nil)
+	if !successfulAPIMutation(request, http.StatusCreated) {
+		t.Fatal("world mutation no longer wakes world event streams")
+	}
+}
+
+func TestExportedAPIRouteRegistrationIsAuthenticatedByDefault(t *testing.T) {
+	server := NewServerWithStaticFS(nil, fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte("index")},
+	})
+	called := false
+	server.HandleAPIFunc("GET /api/test/protected", func(w http.ResponseWriter, _ *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	request := httptest.NewRequest(http.MethodGet, "/api/test/protected", nil)
+	request.Header.Set("X-DND-User-ID", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
+	response := httptest.NewRecorder()
+	server.Routes().ServeHTTP(response, request)
+	if response.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusUnauthorized)
+	}
+	if called {
+		t.Fatal("deny-by-default route reached its handler without a session")
+	}
+}
+
 func TestRecoveryReturnsJSONForAPIPanic(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("index")},
 	})
-	server.HandleAPIFunc("GET /api/panic-test", func(http.ResponseWriter, *http.Request) {
+	server.handlePublicAPIFunc("GET /api/panic-test", func(http.ResponseWriter, *http.Request) {
 		panic("test panic")
 	})
 

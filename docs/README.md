@@ -21,7 +21,7 @@ constraints.
 | [Architecture](architecture.md) | System boundaries, runtime topology, layers, data flow, and repository layout.                        |
 | [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, and interactions.                           |
 | [Workflows](workflows.md)       | World creation, configuration, invitations, sheets, and the ad-hoc Play lifecycle.                    |
-| [API reference](api.md)         | HTTP conventions, authentication adapter, payloads, errors, concurrency guards, SSE, and every route. |
+| [API reference](api.md)         | HTTP conventions, sessions/CSRF, payloads, errors, concurrency guards, SSE, and every route. |
 | [Backend](backend.md)           | Go server construction, application packages, rules engine, persistence adapters, and transactions.   |
 | [Frontend](frontend.md)         | React application structure, screens, state management, API integration, and styling.                 |
 | [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, receipts, and immutability.            |

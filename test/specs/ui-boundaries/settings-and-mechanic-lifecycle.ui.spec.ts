@@ -9,14 +9,17 @@ import {
   createEntity,
   createInputMechanic,
   createOpenInteraction,
-  createUser,
+  createActor,
   createWorld,
   dismissNextDialog,
+  disposeAuthenticatedActors,
   joinWorld,
-  openAs,
+  openAuthenticated,
   postJSON,
   type Interaction,
 } from "./support";
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 test("UI boundaries: stale settings, dirty drafts, and mechanic archive order recover visibly", async ({
   browser,
@@ -40,8 +43,8 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
   try {
     const [owner, editor] = await Promise.all([
-      createUser(request, baseURL, labels.owner),
-      createUser(request, baseURL, labels.editor),
+      createActor(request, baseURL, labels.owner),
+      createActor(request, baseURL, labels.editor),
     ]);
     const world = await createWorld(request, baseURL, owner.id, labels.world);
     await joinWorld(request, baseURL, world.id, owner.id, editor.id, "editor");
@@ -114,8 +117,18 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
     );
 
     await Promise.all([
-      openAs(ownerPage, baseURL, `/build/${world.id}/settings`, labels.owner),
-      openAs(editorPage, baseURL, `/build/${world.id}/settings`, labels.editor),
+      openAuthenticated(
+        ownerPage,
+        baseURL,
+        `/build/${world.id}/settings`,
+        owner,
+      ),
+      openAuthenticated(
+        editorPage,
+        baseURL,
+        `/build/${world.id}/settings`,
+        editor,
+      ),
     ]);
 
     await test.step("CCY-V01/stale-world-details-recovery", async () => {

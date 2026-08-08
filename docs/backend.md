@@ -2,8 +2,8 @@
 
 ## Stack and process model
 
-The backend is a Go 1.25 application with one direct runtime dependency:
-`github.com/jackc/pgx/v5`. It uses the standard-library HTTP server and
+The backend is a Go 1.25 application with two direct runtime dependencies:
+`github.com/jackc/pgx/v5` and `golang.org/x/crypto` for Argon2id. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
 the PostgreSQL schema and production frontend.
 
@@ -69,7 +69,9 @@ HTTP and persistence adapter:
 
 - request/response DTOs encode current world resources, recursive expression
   trees, and typed scalar unions;
-- authorization helpers derive one world membership from the identity header;
+- authentication helpers hash/verify passwords, issue/revoke opaque sessions,
+  enforce origin/CSRF checks, and derive the actor from request context;
+- authorization helpers derive one world membership from that authenticated actor;
 - route handlers perform validation, visibility filtering, and transaction
   orchestration;
 - SQL loaders/savers use `world_id` on every scoped aggregate;
@@ -88,7 +90,10 @@ facilitator authority directly; there is no parallel live membership model.
 
 `001_worldwright.sql` is the clean world-native baseline;
 `002_rules_graph_statuses.sql` is its supported forward upgrade for typed
-derived mechanics, problem-sourced persistent statuses, and expanded receipts. See
+derived mechanics, problem-sourced persistent statuses, and expanded receipts;
+`003_interaction_audience_invalidations.sql` adds constrained audience-removal
+event invalidations; and
+`004_password_auth.sql` installs credentials and server sessions. See
 [Database](database.md).
 
 ### `web`
@@ -105,7 +110,8 @@ and explicit JSON not-found handlers for `/api` and `/api/`.
 ```text
 request logger
 └── panic recovery
-    └── API/static dispatch
+    └── browser security headers
+        └── API/static dispatch
         ├── /api and /api/* → API mux
         └── GET everything else → static/SPA handler
 ```
@@ -150,7 +156,7 @@ Handlers generally validate:
 1. path/query syntax and UUID shape;
 2. strict body decoding;
 3. transport required fields, lengths, and enums;
-4. known development identity;
+4. active server session and, for unsafe methods, origin plus CSRF token;
 5. active world membership and required role/readiness;
 6. world ownership of every referenced resource;
 7. domain mechanics/state/transition rules;
@@ -330,7 +336,8 @@ applications, effective changes, action statuses, interaction status, and
 world event in one transaction.
 
 An equivalent idempotent replay loads the immutable receipt and current state,
-and still checks current identity, facilitator authority, and active world.
+and still checks the current authenticated actor, facilitator authority, and
+active world.
 
 ### Lock discipline
 
@@ -339,10 +346,14 @@ before world/mechanic roots when resolution locks them in the opposite order.
 
 ## Authorization and filtering
 
-All non-public product handlers derive a user from `X-DND-User-ID`, verify the
-user, and load an active membership in the path world. Owner/editor helpers add
-configuration or facilitator authority. Players must also have at least one
-complete controlled entity before live interaction/event access.
+Every product handler except health, signup, and signin requires an active
+opaque-cookie session. Route registration wraps protected handlers
+deny-by-default; unsafe requests additionally require an exact same-origin
+`Origin` and the session-bound `X-DND-CSRF` token. The old identity header is
+ignored. World handlers load an active membership for the session user.
+Owner/editor helpers add configuration or facilitator authority. Players must
+also have at least one complete controlled entity before live
+interaction/event access.
 
 Profile writes allow owner/editor or the entity's current active controller.
 Controller and field-set replacement are owner/editor only. An acting entity on
@@ -361,7 +372,8 @@ The world event endpoint:
 - authenticates and checks readiness before headers;
 - parses `after`, falling back to `Last-Event-ID`;
 - disables buffering/caching and flushes `retry: 1500`;
-- rechecks membership and queries up to 100 visible events per batch;
+- rechecks both the session and membership and queries up to 100 visible events
+  per batch;
 - wakes every local stream immediately after a successful mutating API handler
   returns, which is after its transaction has committed;
 - retains the 1.5-second database poll as a lost-wakeup and cross-replica

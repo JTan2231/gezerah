@@ -9,10 +9,22 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorCookieHeader,
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  putAs,
+  signupActor,
+} from "../support/auth";
 
 interface IdentifiedResource {
   id: string;
 }
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 interface WorldResponse extends IdentifiedResource {
   name: string;
@@ -168,25 +180,29 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Gap Owner ${unique}`);
-  const editor = await createUser(request, baseURL, `Gap Editor ${unique}`);
-  const player = await createUser(request, baseURL, `Gap Player ${unique}`);
-  const setupPlayer = await createUser(
+  const owner = await createActor(request, baseURL, `Gap Owner ${unique}`);
+  const editor = await createActor(request, baseURL, `Gap Editor ${unique}`);
+  const player = await createActor(request, baseURL, `Gap Player ${unique}`);
+  const setupPlayer = await createActor(
     request,
     baseURL,
     `Gap Setup Player ${unique}`,
   );
-  const waitingPlayer = await createUser(
+  const waitingPlayer = await createActor(
     request,
     baseURL,
     `Gap Waiting Player ${unique}`,
   );
-  const spectator = await createUser(
+  const spectator = await createActor(
     request,
     baseURL,
     `Gap Spectator ${unique}`,
   );
-  const outsider = await createUser(request, baseURL, `Gap Outsider ${unique}`);
+  const outsider = await createActor(
+    request,
+    baseURL,
+    `Gap Outsider ${unique}`,
+  );
   const world = await postJSON<WorldResponse>(
     request,
     `${baseURL}/api/worlds`,
@@ -387,10 +403,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
   await test.step("LFC-V01 active derived dependents block mechanic archive atomically", async () => {
     const before = await readMechanics(request, baseURL, world.id, owner.id);
     await expectAPIError(
-      await request.post(
+      await actorRequest(owner.id).post(
         `${baseURL}/api/worlds/${world.id}/mechanics/${baseMechanic.mechanic.id}/archive`,
         {
-          headers: identityHeaders(owner.id),
           data: { expected_rules_revision: before.revision },
         },
       ),
@@ -420,10 +435,12 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     rulesRevision = winner.revision;
     await expectAPIError(
-      await request.post(`${baseURL}/api/worlds/${world.id}/mechanics`, {
-        headers: identityHeaders(editor.id),
-        data: booleanMechanic(`Stale flag ${unique}`, stale.revision),
-      }),
+      await actorRequest(editor.id).post(
+        `${baseURL}/api/worlds/${world.id}/mechanics`,
+        {
+          data: booleanMechanic(`Stale flag ${unique}`, stale.revision),
+        },
+      ),
       409,
       "revision_conflict",
     );
@@ -556,10 +573,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     await expectAPIError(
-      await request.put(
+      await actorRequest(player.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/profile`,
         {
-          headers: identityHeaders(player.id),
           data: {
             expected_revision: staleProfile.revision,
             expected_character_fields_revision: staleFields.revision,
@@ -638,20 +654,18 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     const responses = await Promise.all([
-      request.put(
+      actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             expected_table_revision: before.table_revision,
             controller_world_membership_ids: [playerWorld!.membership_id],
           },
         },
       ),
-      request.put(
+      actorRequest(editor.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
-          headers: identityHeaders(editor.id),
           data: {
             expected_table_revision: before.table_revision,
             controller_world_membership_ids: [setupPlayerWorld.membership_id],
@@ -731,10 +745,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     await expectAPIError(
-      await request.put(
+      await actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/state`,
         {
-          headers: identityHeaders(owner.id),
           data: {
             expected_revision: before.revision,
             expected_rules_revision: before.rules_revision,
@@ -762,10 +775,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       player.id,
     );
     await expectAPIError(
-      await request.put(
+      await actorRequest(player.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/state`,
         {
-          headers: identityHeaders(player.id),
           data: {
             expected_revision: before.revision,
             expected_rules_revision: before.rules_revision,
@@ -806,15 +818,16 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       await getState(request, baseURL, world.id, incomplete.id, setupPlayer.id),
     ).toMatchObject({ entity_id: incomplete.id });
     await expectAPIError(
-      await request.get(`${baseURL}/api/worlds/${world.id}/interactions`, {
-        headers: identityHeaders(setupPlayer.id),
-      }),
+      await actorRequest(setupPlayer.id).get(
+        `${baseURL}/api/worlds/${world.id}/interactions`,
+        {},
+      ),
       403,
       "character_setup_required",
     );
     const eventResponse = await fetch(
       `${baseURL}/api/worlds/${world.id}/events?after=0`,
-      { headers: identityHeaders(setupPlayer.id) },
+      { headers: { Cookie: await actorCookieHeader(setupPlayer.id) } },
     );
     await expectFetchAPIError(eventResponse, 403, "character_setup_required");
   });
@@ -838,10 +851,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     });
     const cursor = await latestEventCursor(baseURL, world.id, owner.id);
     await expectAPIError(
-      await request.post(
+      await actorRequest(owner.id).post(
         `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}/present`,
         {
-          headers: identityHeaders(owner.id),
           data: { expected_revision: draft.revision },
         },
       ),
@@ -894,16 +906,18 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     for (const scenarioCase of cases) {
       await test.step(scenarioCase.name, async () => {
         await expectAPIError(
-          await request.post(`${baseURL}/api/worlds/${world.id}/interactions`, {
-            headers: identityHeaders(owner.id),
-            data: {
-              present: true,
-              prompt: `${scenarioCase.name} ${unique}`,
-              audience_membership_ids: scenarioCase.audience,
-              eligible_responder_membership_ids: scenarioCase.responders,
-              entity_ids: scenarioCase.entities,
+          await actorRequest(owner.id).post(
+            `${baseURL}/api/worlds/${world.id}/interactions`,
+            {
+              data: {
+                present: true,
+                prompt: `${scenarioCase.name} ${unique}`,
+                audience_membership_ids: scenarioCase.audience,
+                eligible_responder_membership_ids: scenarioCase.responders,
+                entity_ids: scenarioCase.entities,
+              },
             },
-          }),
+          ),
           422,
           "validation_failed",
         );
@@ -1078,20 +1092,18 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       primary.id,
     );
     const responses = await Promise.all([
-      request.post(
+      actorRequest(player.id).post(
         `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
-          headers: identityHeaders(player.id),
           data: {
             text: "First simultaneous offer",
             expected_revision: open.revision,
           },
         },
       ),
-      request.post(
+      actorRequest(player.id).post(
         `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
-          headers: identityHeaders(player.id),
           data: {
             text: "Second simultaneous offer",
             expected_revision: open.revision,
@@ -1286,10 +1298,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     await expectAPIError(
-      await request.post(
+      await actorRequest(owner.id).post(
         `${baseURL}/api/worlds/${world.id}/mechanics/${statusTarget.mechanic.id}/archive`,
         {
-          headers: identityHeaders(owner.id),
           data: { expected_rules_revision: mechanicsBefore.revision },
         },
       ),
@@ -1349,10 +1360,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       ).play_status,
     ).toBe("ready");
     await expectAPIError(
-      await request.put(
+      await actorRequest(player.id).put(
         `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/profile`,
         {
-          headers: identityHeaders(player.id),
           data: {
             expected_revision: ownerBefore.revision,
             expected_character_fields_revision: fields.revision,
@@ -1406,10 +1416,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       primary.id,
     );
     await expectAPIError(
-      await request.post(
+      await actorRequest(player.id).post(
         `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
-          headers: identityHeaders(player.id),
           data: {
             text: `A stale attribution ${unique}`,
             acting_entity_id: primary.id,
@@ -1458,16 +1467,12 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     ] as const;
     for (const [existingURL, guessedURL] of nestedPairs) {
       const existing = await readAPIError(
-        await request.get(existingURL, {
-          headers: identityHeaders(outsider.id),
-        }),
+        await actorRequest(outsider.id).get(existingURL, {}),
         403,
         "world_forbidden",
       );
       const guessed = await readAPIError(
-        await request.get(guessedURL, {
-          headers: identityHeaders(outsider.id),
-        }),
+        await actorRequest(outsider.id).get(guessedURL, {}),
         403,
         "world_forbidden",
       );
@@ -1540,9 +1545,8 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     ] as const;
     for (const attempt of attempts) {
       await expectAPIError(
-        await request.fetch(`${baseURL}${attempt.path}`, {
+        await actorRequest(outsider.id).fetch(`${baseURL}${attempt.path}`, {
           method: attempt.method,
-          headers: identityHeaders(outsider.id),
           ...("data" in attempt ? { data: attempt.data } : {}),
         }),
         403,
@@ -1623,10 +1627,9 @@ async function assertResolutionRejectedAtomically(
     );
     const cursor = await latestEventCursor(baseURL, world.id, ownerID);
     await expectAPIError(
-      await request.post(
+      await actorRequest(ownerID).post(
         `${baseURL}/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
         {
-          headers: identityHeaders(ownerID),
           data: {
             expected_revision: adjudicating.revision,
             expected_rules_revision: rulesRevision,
@@ -1733,7 +1736,10 @@ async function readAvailableEvents(
   const controller = new AbortController();
   const response = await fetch(
     `${baseURL}/api/worlds/${worldID}/events?after=${after}`,
-    { headers: identityHeaders(userID), signal: controller.signal },
+    {
+      headers: { Cookie: await actorCookieHeader(userID) },
+      signal: controller.signal,
+    },
   );
   expect(response.status, "authorized event stream status").toBe(200);
   const reader = required(response.body, "event stream body").getReader();
@@ -1767,14 +1773,12 @@ function delay(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function createInvite(
@@ -2009,18 +2013,12 @@ function booleanValue(value: boolean): TaggedValue {
   return { kind: "boolean", value };
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -2030,10 +2028,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -2043,10 +2038,7 @@ async function putJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.put(url, {
-    data,
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await putAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

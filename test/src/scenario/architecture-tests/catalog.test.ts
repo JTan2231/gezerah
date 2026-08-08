@@ -13,6 +13,8 @@ import { BehaviorCatalog } from "../catalog/behaviorCatalog";
 import {
   EVIDENCE_TIERS,
   EXPECTED_SCENARIO_COUNT,
+  RETIRED_SCENARIO_IDS,
+  SCENARIO_IDS,
   SCENARIO_TRACE_REGISTRY,
   validateScenarioTraceRegistry,
 } from "../catalog/scenarioTraces";
@@ -71,7 +73,7 @@ describe("scenario catalog", () => {
       verification.lifecycleSpine.explicitlyMappedScenarioIds.length,
       59,
     );
-    assert.equal(verification.namedCaseCount, 34);
+    assert.equal(verification.namedCaseCount, 51);
     assert.deepEqual(
       Object.keys(verification.tierCounts).sort(),
       [...EVIDENCE_TIERS].sort(),
@@ -79,6 +81,13 @@ describe("scenario catalog", () => {
     assert.equal(
       new Set(SCENARIO_TRACE_REGISTRY.map((trace) => trace.scenarioId)).size,
       EXPECTED_SCENARIO_COUNT,
+    );
+    assert.deepEqual(RETIRED_SCENARIO_IDS, ["IDN-002"]);
+    assert.equal(SCENARIO_IDS.includes("IDN-002" as never), false);
+    assert.equal(
+      SCENARIO_TRACE_REGISTRY.find(({ scenarioId }) => scenarioId === "IDN-003")
+        ?.scenarioVersion,
+      2,
     );
   });
 

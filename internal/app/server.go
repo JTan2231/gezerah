@@ -18,46 +18,80 @@ import (
 )
 
 type Server struct {
-	db       *pgxpool.Pool
-	api      *http.ServeMux
-	static   http.Handler
-	staticFS fs.FS
+	db                 *pgxpool.Pool
+	api                *http.ServeMux
+	static             http.Handler
+	staticFS           fs.FS
+	publicOrigin       string
+	securePublicOrigin bool
+	authThrottle       *authThrottle
 
 	worldEventWakeMu sync.Mutex
 	worldEventWake   chan struct{}
 }
 
-func NewServer(_ context.Context, db *pgxpool.Pool, _ Config) (*Server, error) {
+func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, error) {
 	staticFS, err := fs.Sub(web.Static, "static")
 	if err != nil {
 		return nil, fmt.Errorf("load static files: %w", err)
 	}
-	return NewServerWithStaticFS(db, staticFS), nil
+	publicOrigin, securePublicOrigin, err := parsePublicOrigin(config.PublicOrigin)
+	if err != nil {
+		return nil, err
+	}
+	server := newServerWithStaticFS(db, staticFS)
+	server.publicOrigin = publicOrigin
+	server.securePublicOrigin = securePublicOrigin
+	return server, nil
 }
 
 // NewServerWithStaticFS is the test seam for serving a synthetic frontend.
 func NewServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
+	return newServerWithStaticFS(db, staticFS)
+}
+
+func newServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	server := &Server{
 		db:             db,
 		api:            http.NewServeMux(),
 		static:         http.FileServer(http.FS(staticFS)),
 		staticFS:       staticFS,
+		authThrottle:   newAuthThrottle(),
 		worldEventWake: make(chan struct{}),
 	}
-	server.api.HandleFunc("GET /api/health", server.handleHealth)
+	server.handlePublicAPIFunc("GET /api/health", server.handleHealth)
 	server.registerResourceRoutes()
-	server.api.HandleFunc("/api", server.handleAPINotFound)
-	server.api.HandleFunc("/api/", server.handleAPINotFound)
+	server.handlePublicAPIFunc("/api", server.handleAPINotFound)
+	server.handlePublicAPIFunc("/api/", server.handleAPINotFound)
 	return server
 }
 
-// HandleAPI lets resource modules register method-aware /api patterns without
-// coupling static-file routing or middleware to those modules.
+// HandleAPI is the deny-by-default registration seam for method-aware product
+// routes. Safe methods require a live session; unsafe methods additionally
+// require the session's CSRF token and the exact browser origin.
 func (s *Server) HandleAPI(pattern string, handler http.Handler) {
+	s.validateAPIPattern(pattern)
+	wrapped := s.withAuthentication(handler)
+	method, _, _ := strings.Cut(pattern, " ")
+	if method != http.MethodGet && method != http.MethodHead && method != http.MethodOptions {
+		wrapped = s.withAuthenticatedMutation(handler)
+	}
+	s.api.Handle(pattern, wrapped)
+}
+
+func (s *Server) handlePublicAPI(pattern string, handler http.Handler) {
+	s.validateAPIPattern(pattern)
+	s.api.Handle(pattern, handler)
+}
+
+func (s *Server) handlePublicAPIFunc(pattern string, handler http.HandlerFunc) {
+	s.handlePublicAPI(pattern, handler)
+}
+
+func (s *Server) validateAPIPattern(pattern string) {
 	if !strings.Contains(pattern, "/api/") && pattern != "/api" {
 		panic("API route pattern must target /api")
 	}
-	s.api.Handle(pattern, handler)
 }
 
 func (s *Server) HandleAPIFunc(pattern string, handler http.HandlerFunc) {
@@ -79,7 +113,22 @@ func (s *Server) Routes() http.Handler {
 		staticMux.ServeHTTP(w, r)
 	})
 
-	return s.withRequestLog(s.withRecovery(root))
+	return s.withRequestLog(s.withRecovery(s.withSecurityHeaders(root)))
+}
+
+func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		headers := w.Header()
+		headers.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'")
+		headers.Set("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
+		headers.Set("Referrer-Policy", "no-referrer")
+		headers.Set("X-Content-Type-Options", "nosniff")
+		headers.Set("X-Frame-Options", "DENY")
+		if r.TLS != nil || s.securePublicOrigin {
+			headers.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) handleAPINotFound(w http.ResponseWriter, _ *http.Request) {
@@ -170,6 +219,9 @@ func successfulAPIMutation(r *http.Request, status int) bool {
 		return false
 	}
 	if r.URL == nil || (r.URL.Path != "/api" && !strings.HasPrefix(r.URL.Path, "/api/")) {
+		return false
+	}
+	if strings.HasPrefix(r.URL.Path, "/api/auth/") || r.URL.Path == "/api/me/password" {
 		return false
 	}
 	switch r.Method {

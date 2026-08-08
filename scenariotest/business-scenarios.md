@@ -49,10 +49,11 @@ looked right” from “the system committed the right facts.” A validator mus
 never seed, modify, retry with altered data, or repair journey state through a
 back channel.
 
-Worldwright currently uses a forgeable local-development identity selector.
-These scenarios validate identity selection and the authorization behavior
-that follows it; they must not describe that selector as production
-authentication.
+Worldwright uses username/password accounts and revocable server sessions.
+Anonymous visitors may load the authentication boundary and static shell, but
+product data and actions require a valid session before world authorization is
+evaluated. Passwords, session tokens, and CSRF tokens are never scenario
+evidence.
 
 ## 2. Scenario vocabulary
 
@@ -60,17 +61,17 @@ authentication.
 
 | Actor       | Business meaning                                                                                                                                            |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Visitor     | A browser context with no selected local development profile.                                                                                               |
+| Visitor     | A browser context with no valid server session.                                                                                                             |
 | Owner       | The creator of a world and its owner membership. The owner also has facilitator authority during Play.                                                      |
 | Editor      | An admitted editor. Editors can configure the world and facilitate, but cannot perform owner-only lifecycle actions.                                        |
 | Player      | An admitted player. Its milestone state is qualified as waiting, setup-required, or ready.                                                                  |
 | Controller  | A player whose active world membership controls the entity in question. This is authority derived from a relationship, not a separate role or entity class. |
 | Spectator   | An admitted read-only table participant.                                                                                                                    |
 | Facilitator | An owner or editor acting with live-problem authority. This is a capability of those roles, not another membership type.                                    |
-| Outsider    | A known local profile with no active membership in the world.                                                                                               |
+| Outsider    | An authenticated account with no active membership in the world.                                                                                            |
 
 Each independently acting participant receives an isolated browser context.
-An actor never borrows another actor's local storage, cookies, open page, or
+An actor never borrows another actor's cookie jar, CSRF token, open page, or
 in-memory application state.
 
 ### 2.2 Stable identifiers
@@ -83,7 +84,7 @@ than reused for different business meaning.
 
 | Prefix | Scenario family                                                                  |
 | ------ | -------------------------------------------------------------------------------- |
-| `IDN`  | Identity selection and product entry                                             |
+| `IDN`  | Account authentication, sessions, and product entry                              |
 | `WRL`  | World creation, discovery, and details                                           |
 | `MEC`  | Capacities, capabilities, and the typed derived graph                            |
 | `CHF`  | Character-field configuration                                                    |
@@ -194,6 +195,7 @@ single convenient representative. The initial required matrices are:
 | `CON-V04` | remove exact status               | target invalidity                | `stale`, `already-removed`, `entity-mismatch`, `cross-world`                                                                                     |
 | `AUT-V02` | issue role-gated command          | actor and command family         | `player-configure`, `spectator-configure`, `player-facilitate`, `spectator-facilitate`, `spectator-respond`, `editor-archive`                    |
 | `AUT-V05` | substitute foreign reference      | resource kind                    | `mechanic`, `entity`, `membership`, `action`, `status-instance`                                                                                  |
+| `AUT-V07` | forge request identity            | forged identity attempt          | `anonymous-forgery`, `authenticated-override`                                                                                                    |
 | `CCY-V06` | issue lifecycle-sensitive command | stale command kind               | `late-submit`, `late-withdraw`, `stale-transition`                                                                                               |
 | `LFC-V04` | use archived resource             | resource and use kind            | `world-mutation`, `entity-mutation`, `mechanic-mutation`, `archived-new-reference`                                                               |
 
@@ -303,14 +305,14 @@ prerequisite behaviors retain their own IDs without duplicating browser setup.
 - **Actors:** visitor becoming owner
 - **Tags:** `happy`, `owner`, `identity`, `rules`, `profile`
 - **Scopes:** `UI`, `HTTP`, `DB`, `A11Y`, `RUNTIME`
-- **Precondition:** a clean run and a browser with no selected local profile
-- **Composition:** `IDN-001`, `IDN-002`, `WRL-001`, `MEC-001`, `MEC-002`,
+- **Precondition:** a clean run and a browser with no valid server session
+- **Composition:** `IDN-001`, `IDN-004`, `WRL-001`, `MEC-001`, `MEC-002`,
   `MEC-003`, `MEC-005`, `CHF-002`, `RST-001`, `RST-002`
 - **Spine checkpoint:** `JRN-001/playable-world`
 
 Semantic flow:
 
-1. Choose the authoring area and create or select a local profile.
+1. Choose the authoring area and create a username/password account.
 2. Create a named world with optional authored description.
 3. Publish numeric and Boolean inputs, then publish a calculated numeric value
    that references the authored input.
@@ -347,8 +349,8 @@ Semantic flow:
 
 1. The owner creates a player invitation and passes the displayed link to a
    separate visitor browser.
-2. The visitor opens the link, selects or creates a profile without losing the
-   destination, reviews the offer, and redeems it.
+2. The visitor opens the link, authenticates without losing the destination,
+   then reviews and redeems the protected offer.
 3. The admitted player first sees the waiting state.
 4. The owner assigns the player's active membership to an entity.
 5. The player saves a partial profile and remains in setup.
@@ -524,19 +526,26 @@ Section 6.
 
 ### 5.1 Identity and entry
 
-| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                   | Priority | Scopes and tags                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------ |
-| `IDN-001` | **Neutral area choice.** A visitor at the product entry chooses Play or Build and reaches that area's identity boundary without the neutral choice itself loading user/world data.                                                             | P1       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
-| `IDN-002` | **Select or create a local profile.** A visitor chooses an existing development profile or authors a display name for a new one, then continues as that identity. The UI labels this as local development identity rather than secure sign-in. | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`                |
-| `IDN-003` | **Resume requested destination after identity selection.** A visitor opens an area, world, or invitation destination first, chooses a profile, and returns to the same semantic destination with the bearer invitation intact.                 | P0       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`, `invite` |
+| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                    | Priority | Scopes and tags                                        |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------ |
+| `IDN-001` | **Neutral area choice.** A visitor at the product entry chooses Play or Build and reaches that area's authentication boundary without the neutral choice itself loading protected user/world data.                                                              | P1       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
+| `IDN-003` | **Resume requested destination after authentication (version 2).** A visitor opens an area, world, or invitation destination first, authenticates, and returns to the same semantic destination. Invitation metadata remains hidden until then.                 | P0       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`, `invite` |
+| `IDN-004` | **Create a password account.** A visitor authors a unique username, display name, and confirmed password. The server creates the account and establishes an opaque cookie session without requiring email.                                                      | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`                |
+| `IDN-005` | **Sign in and retain the session.** An existing account submits its username and password, resumes the protected destination, and remains authenticated through navigation and reload.                                                                          | P0       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
+| `IDN-006` | **Sign out.** An authenticated account ends the current server session. The same cookie no longer reaches protected data, and the requested route displays the sign-in boundary.                                                                                | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`                |
+| `IDN-007` | **Change password.** An authenticated account supplies its current password and confirms a new one. The credential changes atomically, every prior session is revoked, and one replacement session remains; an overlapping old-password sign-in cannot survive. | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`, `atomic`      |
+| `IDN-008` | **Sign out everywhere.** An authenticated account ends every server session for the account. Every previously issued cookie loses access, including sessions held by other browser contexts.                                                                    | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`                |
+
+`IDN-002` is retired. It described selecting or creating a forgeable local
+profile and is not reused for materially different password authentication.
 
 ### 5.2 World authoring
 
-| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                         | Priority | Scopes and tags                                         |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------- |
-| `WRL-001` | **Create an owned world.** A known profile authors a name and optional description. One active world, owner membership, empty rules root, empty character-field root, and world-created history are established together; the creator can enter both Build and Play. | P0       | `UI`, `HTTP`, `DB`, `AUDIT`; `happy`, `owner`, `atomic` |
-| `WRL-002` | **Reopen an admitted world in its appropriate library.** An admitted actor leaves and returns. The world remains discoverable in Play, and appears in Build only when the role has authoring authority, with current role/readiness/activity summary.                | P1       | `UI`, `HTTP`; `happy`, `owner`, `player`                |
-| `WRL-003` | **Edit world details.** An active owner/editor replaces the authored name or description against the current settings revision and sees the updated identity consistently on subsequent authoritative loads in libraries, Build, and Play.                           | P1       | `UI`, `HTTP`, `DB`; `happy`, `owner`, `editor`          |
+| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                                  | Priority | Scopes and tags                                         |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------- |
+| `WRL-001` | **Create an owned world.** An authenticated account authors a name and optional description. One active world, owner membership, empty rules root, empty character-field root, and world-created history are established together; the creator can enter both Build and Play. | P0       | `UI`, `HTTP`, `DB`, `AUDIT`; `happy`, `owner`, `atomic` |
+| `WRL-002` | **Reopen an admitted world in its appropriate library.** An admitted actor leaves and returns. The world remains discoverable in Play, and appears in Build only when the role has authoring authority, with current role/readiness/activity summary.                         | P1       | `UI`, `HTTP`; `happy`, `owner`, `player`                |
+| `WRL-003` | **Edit world details.** An active owner/editor replaces the authored name or description against the current settings revision and sees the updated identity consistently on subsequent authoritative loads in libraries, Build, and Play.                                    | P1       | `UI`, `HTTP`, `DB`; `happy`, `owner`, `editor`          |
 
 ### 5.3 Mechanics and the derived graph
 
@@ -576,13 +585,13 @@ must not turn those product shapes into named built-in mechanics.
 
 ### 5.6 Invitations, memberships, and roles
 
-| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                                            | Priority | Scopes and tags                                                        |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
-| `INV-001` | **Create a role-bearing invite.** An owner/editor chooses editor, player, or spectator and an allowed lifetime. A new bearer link is visibly offered for intentional sharing.                                                                                                           | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `owner`, `editor`               |
-| `INV-002` | **Preserve one-time token secrecy.** Immediately after creation the author can copy the raw link and is warned it will not be listed again. Later invite lists show role, creator, use/expiry/revocation metadata but cannot recover the token; persistence contains only its digest.   | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `privacy`                       |
-| `INV-003` | **Preview and redeem into the matching area.** A visitor with the bearer link reviews world, inviter, role, and expiry, selects an identity if needed, then accepts. Exactly one active membership is established and the world appears in Play or Build according to the offered role. | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `player`, `spectator`, `editor` |
-| `INV-004` | **Repeat redemption idempotently.** The same user returns to the same valid link. The existing active membership is reused/reactivated as specified, and invite use accounting does not create a duplicate redemption for that invite/user pair.                                        | P1       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `idempotent`                    |
-| `INV-005` | **Revoke an invite without ejecting admitted members.** An owner/editor revokes an open link. Future redemption closes, while existing memberships created through it remain active and usable.                                                                                         | P0       | `UI`, `MULTI`, `HTTP`, `DB`; `happy`, `invite`, `privacy`              |
+| ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                                             | Priority | Scopes and tags                                                        |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `INV-001` | **Create a role-bearing invite.** An owner/editor chooses editor, player, or spectator and an allowed lifetime. A new bearer link is visibly offered for intentional sharing.                                                                                                            | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `owner`, `editor`               |
+| `INV-002` | **Preserve one-time token secrecy.** Immediately after creation the author can copy the raw link and is warned it will not be listed again. Later invite lists show role, creator, use/expiry/revocation metadata but cannot recover the token; persistence contains only its digest.    | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `privacy`                       |
+| `INV-003` | **Preview and redeem into the matching area.** An authenticated visitor with the bearer link reviews world, inviter, role, and expiry, then accepts. Anonymous visitors see only authentication. Exactly one active membership is established and the world appears in the offered area. | P0       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `player`, `spectator`, `editor` |
+| `INV-004` | **Repeat redemption idempotently.** The same user returns to the same valid link. The existing active membership is reused/reactivated as specified, and invite use accounting does not create a duplicate redemption for that invite/user pair.                                         | P1       | `UI`, `HTTP`, `DB`; `happy`, `invite`, `idempotent`                    |
+| `INV-005` | **Revoke an invite without ejecting admitted members.** An owner/editor revokes an open link. Future redemption closes, while existing memberships created through it remain active and usable.                                                                                          | P0       | `UI`, `MULTI`, `HTTP`, `DB`; `happy`, `invite`, `privacy`              |
 
 ### 5.7 Live problem lifecycle and multiplayer
 
@@ -618,7 +627,7 @@ receive. Denials and sensitive-field absence are explicit variants in Section
 
 | ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                    | Priority | Scopes and tags                                                |
 | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------- |
-| `AUT-001` | **Show each member only admitted worlds.** Each known profile's libraries and direct world projection contain active memberships for that actor and no unrelated world summaries.                                                               | P0       | `UI`, `HTTP`; `happy`, `privacy`, `multi-actor`                |
+| `AUT-001` | **Show each member only admitted worlds.** Each authenticated account's libraries and direct world projection contain active memberships for that actor and no unrelated world summaries.                                                       | P0       | `UI`, `HTTP`; `happy`, `privacy`, `multi-actor`                |
 | `AUT-002` | **Expose Build authority only to owners/editors.** Owners/editors can enter authoring and use its commands. Players/spectators remain in Play and receive an explicit area boundary rather than a partially functional Builder.                 | P0       | `UI`, `HTTP`; `happy`, `privacy`, `owner`, `editor`            |
 | `AUT-003` | **Project profile fields by visibility.** Facilitators/controllers can read authorized active values; ordinary admitted members receive only completed table-visible prose. Restricted definitions and values are filtered before presentation. | P0       | `UI`, `MULTI`, `HTTP`; `happy`, `privacy`, `profile`           |
 | `AUT-004` | **Project problem data by audience and lifecycle.** A non-facilitator reads only open/resolved problems in their audience and never facilitator-private notes or private receipt fields.                                                        | P0       | `UI`, `MULTI`, `HTTP`, `AUDIT`; `happy`, `privacy`             |
@@ -674,7 +683,17 @@ replay an exact browser-issued command, but may not manufacture a different
 journey command. Exhaustive payload combinations continue to belong in focused
 rules/application tests rather than being multiplied through the browser.
 
-### 6.1 Authoring, configuration, and onboarding variants
+### 6.1 Authentication variants
+
+| ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                                            | Priority | Scopes and tags                                      |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------------------------------------------- |
+| `IDN-V01` | **Reject invalid or duplicate-normalized signup.** Invalid account fields or a username already owned under case-insensitive normalization creates neither another account nor a session.                                                             | P0       | `HTTP`, `DB`; `negative`, `identity`, `atomic`       |
+| `IDN-V02` | **Reject bad credentials without account disclosure.** An unknown username and a wrong password return the same status, code, and message and establish no session.                                                                                   | P0       | `HTTP`, `RUNTIME`; `negative`, `identity`, `privacy` |
+| `IDN-V03` | **Reject every invalid session state.** Missing, malformed, expired, revoked, and disabled-account sessions return `401` before a protected handler runs.                                                                                             | P0       | `HTTP`, `DB`; `negative`, `identity`, `privacy`      |
+| `IDN-V04` | **Persist only protected credential/session forms.** Passwords use salted Argon2id hashes, session storage contains only digests, cookie/session secrets never enter response bodies or diagnostics, and equal passwords have distinct stored hashes. | P0       | `HTTP`, `DB`, `RUNTIME`; `privacy`, `identity`       |
+| `IDN-V05` | **Reject CSRF and cross-origin mutations atomically.** A signed-in request with a missing/wrong session-bound CSRF token or a foreign Origin cannot mutate product state.                                                                             | P0       | `HTTP`, `DB`; `negative`, `identity`, `atomic`       |
+
+### 6.2 Authoring, configuration, and onboarding variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                       | Priority | Scopes and tags                                                           |
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
@@ -691,7 +710,7 @@ rules/application tests rather than being multiplied through the browser.
 | `RST-V04` | **Deny player sheet-state mutation.** A player can read an authorized generated sheet but cannot directly alter mechanical inputs; state and revisions remain unchanged.                                                         | P0       | `UI`, `HTTP`, `DB`; `negative`, `player`, `privacy`                       |
 | `RST-V05` | **Revoke profile/action authority when control is removed.** A stale controller screen cannot save a profile or attribute a new action after control removal. Existing values remain intact and filtered appropriately.          | P0       | `UI`, `MULTI`, `HTTP`, `DB`; `negative`, `control`, `privacy`, `conflict` |
 
-### 6.2 Invitation and live-play variants
+### 6.3 Invitation and live-play variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                                                                               | Priority | Scopes and tags                                                         |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
@@ -703,7 +722,7 @@ rules/application tests rather than being multiplied through the browser.
 | `PLY-V04` | **Reject late submit/withdraw after submissions close.** A player acting against a stale open revision after adjudication begins gets a lifecycle conflict and no action changes.                                                                                                        | P0       | `HTTP`, `DB`; `negative`, `player`, `conflict`                          |
 | `PLY-V05` | **Hide non-visible/adjudicating problems from non-facilitators.** A non-audience member never sees an open problem; all non-facilitators lose it during adjudication without receiving revealing event payload.                                                                          | P0       | `UI`, `MULTI`, `HTTP`, `AUDIT`; `negative`, `privacy`, `sse`            |
 
-### 6.3 Consequence variants
+### 6.4 Consequence variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                                                      | Priority | Scopes and tags                                                           |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------- |
@@ -713,18 +732,19 @@ rules/application tests rather than being multiplied through the browser.
 | `CON-V04` | **Reject stale, removed, mismatched, or foreign exact-status targets.** Removal never falls back to a display-name lookup and never affects a different same-name instance.                                                                                     | P0       | `UI`, `HTTP`, `DB`, `AUDIT`; `negative`, `status`, `privacy`, `atomic`    |
 | `CON-V05` | **Roll back every earlier effect when a later effect fails.** An ordered plan has a valid early effect and invalid later effect. Neither base nor status snapshots change, the problem remains adjudicating, and no final receipt/event exists.                 | P0       | `UI`, `HTTP`, `DB`, `AUDIT`; `negative`, `consequence`, `atomic`          |
 
-### 6.4 Authorization and privacy variants
+### 6.5 Authorization and privacy variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                                                         | Priority | Scopes and tags                                                 |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | --------------------------------------------------------------- |
-| `AUT-V01` | **Deny outsider direct reads and commands.** A known identity without active membership cannot list/read the world or operate any world resource. No distinction leaks whether a guessed nested resource exists.                                                   | P0       | `UI`, `HTTP`; `negative`, `outsider`, `privacy`                 |
+| `AUT-V01` | **Deny outsider direct reads and commands.** An authenticated account without active membership cannot list/read the world or operate any world resource. No distinction leaks whether a guessed nested resource exists.                                           | P0       | `UI`, `HTTP`; `negative`, `outsider`, `privacy`                 |
 | `AUT-V02` | **Deny commands outside the actor's role.** The UI omits unsupported controls. Table-driven direct commands prove player/spectator configuration and facilitation denial, spectator response denial, and editor owner-only lifecycle denial, all without mutation. | P0       | `UI`, `HTTP`, `DB`; `negative`, `privacy`, `atomic`             |
 | `AUT-V03` | **Omit restricted profile definitions and values from unauthorized responses.** The assertion inspects the response projection and confirms neither labels nor prose values are serialized.                                                                        | P0       | `HTTP`; `negative`, `privacy`, `profile`                        |
 | `AUT-V04` | **Omit facilitator-private problem/receipt data.** Authorized non-facilitators receive the allowed public projection with private notes and facilitator-only receipt fields absent.                                                                                | P0       | `UI`, `HTTP`, `AUDIT`; `negative`, `privacy`, `history`         |
 | `AUT-V05` | **Deny cross-world substitutions without disclosure.** Substituting a mechanic, entity, membership, action, status instance, or other durable ID from a second world fails and creates no cross-world relationship.                                                | P0       | `HTTP`, `DB`, `AUDIT`; `negative`, `privacy`, `atomic`          |
 | `AUT-V06` | **Deny live interactions/events to onboarding players.** An active but not-ready player can access authorized onboarding resources and cannot read the live interaction collection or event stream.                                                                | P0       | `UI`, `HTTP`, `RUNTIME`; `negative`, `player`, `privacy`, `sse` |
+| `AUT-V07` | **Ignore caller-selected identity headers.** A forged legacy user-ID header cannot authenticate an anonymous request or override the account established by a valid session.                                                                                       | P0       | `HTTP`; `negative`, `identity`, `privacy`                       |
 
-### 6.5 Concurrency, conflict, idempotency, and atomicity variants
+### 6.6 Concurrency, conflict, idempotency, and atomicity variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                                       | Priority | Scopes and tags                                                               |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ----------------------------------------------------------------------------- |
@@ -738,7 +758,7 @@ rules/application tests rather than being multiplied through the browser.
 | `CCY-V08` | **Conflict on idempotency-key reuse with different content.** Reusing a captured key with a semantically different resolve payload does not reinterpret or replace the committed receipt.                                                        | P0       | `UI`, `HTTP`, `DB`, `AUDIT`; `conflict`, `idempotent`, `atomic`               |
 | `CCY-V09` | **Let only one competing resolve commit.** Two facilitator contexts attempt first resolution of the same adjudicating problem. One immutable resolution wins; the other observes final state/conflict, with one transition and event.            | P0       | `UI`, `MULTI`, `HTTP`, `DB`, `AUDIT`; `conflict`, `multi-actor`, `atomic`     |
 
-### 6.6 Archive, navigation, and resilience variants
+### 6.7 Archive, navigation, and resilience variants
 
 | ID        | Changed precondition or attempted action; expected outcome                                                                                                                                                                   | Priority | Scopes and tags                                                         |
 | --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
@@ -769,7 +789,7 @@ business rejection. They are distinct from scenario-specific assertions.
 | `GLO-009` | **Eventual live convergence.** Every authorized open browser reaches the same authoritative visible state after a committed event; unauthorized or not-ready browsers do not gain visibility.                                                                  | P0       | `UI`, `MULTI`, `HTTP`, `AUDIT`, `RUNTIME` |
 | `GLO-010` | **Accessible interaction.** Core commands have semantic names/labels, visible focus, keyboard operation, understandable status/error announcement, and usable responsive presentation.                                                                         | P1       | `UI`, `A11Y`                              |
 | `GLO-011` | **Deterministic isolation and waits.** The spine has only its declared milestone dependencies; every independent test is order-independent. All use unique authored data, isolated actor contexts, and observable business state rather than arbitrary sleeps. | P0       | `UI`, `MULTI`, `RUNTIME`                  |
-| `GLO-012` | **Diagnostic evidence without secret leakage.** A failure preserves a useful timeline, trace, screenshot/video as configured, response/error metadata, and server log window while redacting raw invite tokens and sensitive prose.                            | P1       | `RUNTIME`, `AUDIT`                        |
+| `GLO-012` | **Diagnostic evidence without secret leakage.** A failure preserves useful diagnostics while redacting passwords, password hashes, session cookies/tokens/digests, CSRF tokens, raw invite tokens, and sensitive prose.                                        | P1       | `RUNTIME`, `AUDIT`                        |
 
 ## 8. Coverage and risk plan
 
@@ -934,3 +954,8 @@ A scenario review asks:
 - Are examples wholly user-authored and free of privileged-name assumptions?
 - Does the code map identify every implementation and validation region without
   moving low-level knowledge into this business plan?
+  | `IDN-V01` | create password account | signup rejection reason | `invalid`, `duplicate-normalized-username` |
+  | `IDN-V02` | sign in | credential rejection reason | `unknown-username`, `wrong-password` |
+  | `IDN-V03` | authenticate session | invalid session state | `missing`, `malformed`, `expired`, `revoked`, `disabled` |
+  | `IDN-V04` | persist credentials/session | credential or session secret | `password-hash`, `session-digest`, `response-redaction` |
+  | `IDN-V05` | issue authenticated mutation | CSRF failure mode | `missing-token`, `wrong-token`, `cross-origin` |

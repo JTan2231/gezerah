@@ -1,5 +1,5 @@
-import { selectUserId, worldPath } from "../api/client";
-import type { User, World } from "../api/types";
+import { worldPath } from "../api/client";
+import type { AuthenticatedSession, User, World } from "../api/types";
 import {
   Avatar,
   Brand,
@@ -9,18 +9,23 @@ import {
 } from "../components/StudioUI";
 import { useResource } from "../hooks/useResource";
 import type { Navigate } from "../worldRoutes";
+import { AccountControls } from "./AccountControls";
 import { WorldPlay } from "./WorldPlay";
 
 export function PlayWorkspace({
   worldId,
   user,
   navigate,
-  onSwitchProfile,
+  onLogout,
+  onLogoutAll,
+  onSessionChanged,
 }: {
   worldId: string;
   user: User;
   navigate: Navigate;
-  onSwitchProfile: () => void;
+  onLogout: () => Promise<void>;
+  onLogoutAll: () => Promise<void>;
+  onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const resource = useResource<World>(worldPath(worldId));
   const world = resource.value;
@@ -74,16 +79,16 @@ export function PlayWorkspace({
         <div className="play-app-account">
           <RolePill role={world.role} />
           <Avatar name={user.display_name} size="small" />
-          <button
-            className="text-button"
-            type="button"
-            onClick={() => {
-              selectUserId("");
-              onSwitchProfile();
-            }}
-          >
-            Switch profile
-          </button>
+          <span className="play-account-name">
+            <strong>{user.display_name}</strong>
+            <small>@{user.username}</small>
+          </span>
+          <AccountControls
+            user={user}
+            onLogout={onLogout}
+            onLogoutAll={onLogoutAll}
+            onSessionChanged={onSessionChanged}
+          />
         </div>
       </header>
       <main id="play-content" tabIndex={-1}>

@@ -2,269 +2,245 @@
 
 ## Current deployment classification
 
-The application is a **trusted-development build**. It is not safe for direct
-public or untrusted-network exposure.
+Worldwright now has native username/password authentication and revocable
+server sessions. A caller-supplied user UUID is not an authentication mechanism:
+the former `X-DND-User-ID` adapter and public user directory are gone, and every
+product endpoint except signup and signin derives its actor from a valid session.
 
-The selected browser user UUID is stored in local storage and sent as
-`X-DND-User-ID`. Any client can forge that header. `GET /api/users` enumerates
-local users and `POST /api/users` creates them without authentication. World
-endpoints enforce membership, role, readiness, scope, and visibility only after
-resolving that forgeable identity.
+This closes the direct impersonation gap identified in the identity audit. A
+public deployment still needs correct HTTPS/proxy configuration, backups,
+monitoring, capacity/abuse testing, and an explicit support policy. The account
+model intentionally collects no email and therefore provides no password
+recovery.
 
-Resource authorization remains valuable, but it does not turn a caller-chosen
-UUID into authentication.
+## Authentication model
+
+### Accounts and passwords
+
+- Signup accepts `username`, `display_name`, and `password`; no email address is
+  requested or stored.
+- Usernames are 3–64 ASCII characters, begin with a letter or number, and may
+  otherwise contain letters, numbers, `.`, `_`, and `-`.
+- The chosen casing is preserved for display; normalized lowercase usernames
+  are unique and signin is case-insensitive.
+- New passwords are 15–128 Unicode code points. Long passphrases and spaces are
+  accepted.
+- PostgreSQL stores only an Argon2id PHC string with a random salt. The current
+  work factor is 19 MiB, two iterations, and one lane; supported hashes are
+  parsed with explicit parameter and decoded-length bounds.
+- Unknown usernames, wrong passwords, and disabled accounts receive the same
+  signin error. A fixed dummy Argon2id verification reduces username timing
+  disclosure.
+- Successful verification can upgrade an older supported hash to the current
+  work factor.
+
+There is no email recovery, security question, password hint, MFA, OAuth/OIDC,
+administrator account-claim flow, or seeded account. Password change requires
+the current password and revokes all earlier sessions before issuing one
+replacement session.
+
+### Sessions
+
+Signup/signin creates 32 random bytes and puts their unpadded URL-safe encoding
+in an HttpOnly cookie. The database stores only the SHA-256 digest of that raw
+token. A session has a seven-day sliding idle expiry, a 30-day absolute expiry,
+and an explicit revocation timestamp. Disabled users cannot authenticate an
+otherwise valid session.
+
+Session creation serializes per account, removes expired/revoked rows, and
+retains at most 20 active sessions including the newly issued one. Crossing the
+cap invalidates the least recently seen sessions.
+
+Local HTTP uses `dnd_session`. HTTPS uses `__Host-dnd_session`, which is
+`Secure`, host-only by construction, and scoped to `/`. Both variants are
+`HttpOnly` and `SameSite=Lax`; logout clears both names. Configure the exact
+external HTTPS origin in `DND_PUBLIC_ORIGIN` when deploying behind a proxy.
+
+`POST /api/auth/logout` revokes the current session. `POST
+/api/auth/logout-all` revokes every active session for the account. Password
+change does the same before creating its replacement. Revocation/expiry is
+checked in PostgreSQL rather than trusted from the cookie.
+
+### Origin and CSRF
+
+Every unsafe authenticated request requires both:
+
+- one `Origin` header exactly matching `DND_PUBLIC_ORIGIN`, or the request's own
+  scheme and host when the setting is empty; and
+- `X-DND-CSRF` equal to a token derived with a domain-separated SHA-256 digest
+  from that session's random token.
+
+Signup and signin also require the exact origin, although they do not require a
+preexisting CSRF token. The CSRF value is returned by signup, signin, `GET
+/api/me`, and password change. The React client keeps it in module memory only;
+it is neither a cookie nor browser storage. A page reload reacquires it through
+`GET /api/me` using the HttpOnly session cookie.
+
+The server does not emit permissive CORS headers. Browser security headers
+include a same-origin Content Security Policy, frame denial, MIME sniffing
+protection, no-referrer policy, a restrictive permissions policy, and HSTS when
+the request/public origin is HTTPS. Authenticated and authentication responses
+are `private, no-store` and vary on `Cookie`.
 
 ## Endpoint trust matrix
 
-| Surface                                  | Current gate                                     | Exposure                                              |
-| ---------------------------------------- | ------------------------------------------------ | ----------------------------------------------------- |
-| SPA/static assets                        | None                                             | Public content.                                       |
-| `/api/health`                            | None                                             | Reveals service/database readiness.                   |
-| `/api/users` GET/POST                    | None                                             | Local identities can be enumerated/created.           |
-| Invite preview                           | Opaque bearer token                              | Exposes active world, inviter, role, and expiry.      |
-| Invite redemption                        | Known UUID header + bearer token                 | Creates/reactivates one world membership.             |
-| World list/read                          | Known UUID + active membership                   | Returns only worlds for the resolved identity.        |
-| World configuration/entities/setup state | Active owner/editor                              | Correct role check only if identity were trustworthy. |
-| Character fields                         | Active member read; owner/editor write           | Restricted definitions filtered server-side.          |
-| Character profiles                       | Owner/editor or active controller                | Values filtered by field visibility.                  |
-| Character control                        | Active owner/editor + table revision             | Grants only same-world active-player control.         |
-| World archive                            | Active owner                                     | Requires no unfinished interaction.                   |
-| Live reads/events                        | Active, play-ready membership                    | Onboarding players are denied live resources.         |
-| Facilitator commands                     | Active owner/editor                              | Lifecycle, scope, and revision checks apply.          |
-| Player actions                           | Active ready player + eligible responder/control | Server enforces ownership and audience.               |
+| Surface | Gate | Additional authority |
+| ------- | ---- | -------------------- |
+| SPA/static assets | Public | Content only. |
+| `GET /api/health` | Public | Database readiness only. |
+| Signup/signin | Exact origin + in-memory throttle | Creates a user/session or verifies credentials. |
+| `GET /api/me` | Active session | Returns current user and session CSRF token. |
+| Logout/password change | Active session + origin + CSRF | Revokes current/all sessions as documented above. |
+| Invite preview | Active session + opaque bearer token | Exposes active invite/world metadata. |
+| Invite redemption | Session + origin + CSRF + bearer token | Creates/reactivates one membership; never changes an already-active role. |
+| World list/read | Active session + active membership | Returns only worlds for the session user. |
+| World configuration/setup | Active owner/editor | Resource scope and revisions still apply. |
+| Character profiles | Active member; controller/facilitator filtering | Restricted definitions/values are removed server-side. |
+| World archive | Active owner | Requires no unfinished interaction. |
+| Live reads/events | Active, play-ready membership | Streams periodically revalidate session and membership. |
+| Facilitator commands | Active owner/editor | Lifecycle, scope, revision, and idempotency checks apply. |
+| Player actions | Active ready eligible player | Server enforces responder, ownership, and control. |
 
-Do not treat network reachability, the React UI, or hidden controls as access
-control.
+Network reachability, React routes, and hidden controls are never treated as
+authorization.
 
-## Enforced authorization behavior
+## Resource authorization
 
-Within the trusted identity assumption, the server enforces:
+Authentication proves which `user` is acting. Existing world authorization
+continues to decide what that user may do:
 
-- actor user and membership are derived from request context, never body IDs;
 - world lists are membership-filtered and direct reads require active
   membership;
-- configuration/invite/entity/setup-state mutation requires owner/editor;
-- archive requires owner and no unfinished interaction;
+- configuration, invite, entity, and setup-state mutation requires
+  owner/editor authority;
+- archive requires owner authority and no unfinished interaction;
 - controller grants name active player memberships and entities in the same
   world and use `table_revision`;
-- character-field replacement is owner/editor-only, revision-guarded, and
-  blocked from changing active IDs while an interaction is unfinished;
 - profile writes require owner/editor or current control and check profile plus
   field-schema revisions;
-- restricted field definitions/values are omitted from unauthorized responses;
-- invite tokens are stored only as SHA-256 digests, expire, can be revoked, and
-  count one redemption per invite/user;
-- live interaction/event access requires readiness for players;
-- only owners/editors facilitate interactions and Consequences;
+- restricted fields and facilitator-private prose are removed server-side;
+- live access requires player readiness;
 - only eligible players submit, with at most one current action each;
-- acting-entity attribution requires a ready controlled world entity and stores
-  a server-captured display name;
 - players withdraw only their own submitted actions;
-- interaction lifecycle and expected revisions gate live mutation;
-- every mechanic/entity/membership/action ID is checked against the path world;
-- incomplete entities cannot be new context or effect targets;
-- non-facilitator interaction visibility requires audience membership and a
-  visible lifecycle state;
-- private notes and restricted profile prose are removed server-side;
-- SSE rechecks membership/readiness and filters visible events;
-- final interaction roots, applied receipt trees, and event rows have database
-  immutability triggers.
+- referenced mechanic/entity/membership/action IDs are checked against the path
+  world;
+- interaction lifecycle, expected revisions, and resolve idempotency gate live
+  mutation;
+- final interaction roots, applied receipts, and world events have database
+  immutability protections.
 
-Tests should preserve role denials, cross-world substitution failures, private
-field omission, visibility, revision conflicts, and multi-browser refresh when
-real authentication is added.
+Command bodies cannot choose the actor. A user UUID supplied in the retired
+identity header or a body does not override the session user.
 
 ## Data boundaries
 
 ### World scope
 
-The world is the single authorization and storage boundary. Composite
-`world_id` foreign keys and application checks prevent mechanics, entities,
-memberships, profiles, interactions, effects, receipts, and events from
-crossing worlds. This is strong data integrity, but it is not secure tenant
-isolation while identities are forgeable.
-
-There is no second API surface that bypasses world membership.
+The world is the tenant/resource boundary. Composite `world_id` foreign keys
+and application checks prevent mechanics, entities, memberships, profiles,
+interactions, effects, receipts, and events from crossing worlds. There is no
+second API surface that bypasses membership.
 
 ### Invite bearer scope
 
-The raw invite token is returned only at creation and is not recoverable from
-the database or invite list. Anyone holding a valid token can preview it and
-redeem the offered role using any selected development identity. There is no
-maximum-use count, email binding, rate limit, or intended-recipient binding.
-Production needs authenticated accounts and an explicit invitation policy.
+An invite is still a bearer capability layered on authentication. Its raw 256-
+bit token is returned once, while PostgreSQL stores only a SHA-256 digest. A
+valid invite can be previewed and redeemed by any signed-in account that holds
+the link; it is not bound to an email or intended username and has no maximum
+use count. It expires, can be revoked, is unavailable after world archive, and
+cannot change the role of an already-active membership.
 
-### Test-only controlled time
-
-The product exposes no clock-control or database-maintenance endpoint. During
-an E2E run only, ignored runtime metadata is created with mode `0600` and holds
-the disposable database URL alongside the loopback application URL. A direct
-contract helper may read that credential, but it first validates a canonical
-invite UUID and its SQL updates only the matching invite's `expires_at`. All
-identity, world, membership, invite, preview, and redemption operations remain
-on the public HTTP surface.
-
-This privileged fixture exists only to cross the real expiry boundary without
-waiting a day. It is outside scenario/journey exports, is forbidden in the
-UI-authentic lifecycle spine, points at the per-run disposable database, and is
-removed with runtime metadata at teardown after that database is dropped.
+Treat invite URLs as secrets. Request logs redact their bearer path segment.
 
 ### Participant versus entity
 
 `users` and `world_memberships` represent real participants. `entities`
-represent fictional state owners. No mechanic name or entity name grants
-real-world authority. “Dungeon Master” is UI language for owner/editor
-facilitator authority, not a mechanical class.
+represent fictional state owners. A username, mechanic name, entity name, or
+profile value grants no product authority. “Dungeon Master” remains UI language
+for owner/editor facilitator authority, not a mechanical class.
 
 `world_membership_entity_controls` is the only character-authority edge.
-Profile content cannot grant control, mutate mechanical state, or become an
-effect target. Completing all active fields is an explicit player admission
-gate and character eligibility requirement.
+Profile text cannot grant control, mutate mechanical state, or become an effect
+target.
 
 ### Private data
 
-Facilitator-private fields include interaction/Consequence private notes and any
-facilitator-only context. Filtering happens in server query/mapping paths;
-frontend hiding is secondary.
+Facilitator-private interaction/Consequence notes and restricted character
+fields are filtered in server query/mapping paths. Frontend hiding is secondary.
+World events contain invalidation identifiers, not passwords, profile text,
+action text, or private narrative.
 
-Character fields marked `controllers-and-facilitators` are similarly
-sensitive. Spectators receive neither their definitions nor values; other
-non-controller members receive no value. World events contain identifiers only,
-not profile text, action text, or private narrative.
+The request logger records method, a redacted path, status, bytes, and duration.
+It does not intentionally log request/response bodies, cookies, passwords, CSRF
+tokens, invitation bearer tokens, or query strings.
 
-## Existing defensive controls
+## Abuse controls
 
-- parameterized pgx queries;
-- strict JSON with unknown-field rejection;
-- 1 MiB request-body limit;
-- UUID/length/enum/scalar-union validation;
-- exact finite decimal validation;
-- centralized error envelopes that hide unexpected details;
-- panic recovery and server-side stack logging;
-- `X-Content-Type-Options: nosniff` on JSON;
-- world membership, role, readiness, visibility, and scope checks;
-- optimistic revisions and idempotent live resolve;
-- normalized relations and cross-world composite foreign keys;
-- applied-receipt/final-interaction/event protections;
-- HTTP timeouts and bounded shutdown.
+The process has bounded in-memory throttles for every signup (120 per direct
+peer per 10 minutes), every signin (120 per direct peer per five minutes),
+failed signin (100 per peer and 10 per normalized account per five minutes),
+and failed current-password checks (10 per user per five minutes).
+Authentication request bodies retain the global 1 MiB cap and strict JSON
+decoding.
 
-These reduce malformed input and integrity risk. They do not replace real
-authentication, TLS, abuse controls, or least-privilege database access.
+At most four Argon2id jobs run concurrently; excess authentication work fails
+quickly with `429` and `Retry-After` instead of multiplying memory use. Throttle
+keys hash the client/account value, and the entry map evicts old records at a
+fixed ceiling so random usernames cannot grow it without bound.
 
-## Known gaps and threats
+These controls are per process and trust the directly connected peer address;
+they do not consume forwarded-address headers. A shared reverse proxy can
+therefore aggregate unrelated users into one bucket and cause an availability
+lockout. Public or multi-replica deployments need a trusted, shared,
+proxy-aware limiter. World writes, invite use, actions, resolutions, and SSE
+connections still have no general per-user quotas.
 
-### Authentication and account lifecycle
+## Remaining risks and hardening
 
-- identity is a user-supplied UUID header;
-- user discovery/creation are unauthenticated;
-- no password, session, OAuth/OIDC, MFA, logout/revocation, or recovery;
-- local storage identity is readable by same-origin scripts;
-- no linkage to a verified provider subject.
+Before a public launch:
 
-Impact: complete impersonation of any user and all world roles.
+1. Terminate TLS at a trusted proxy, redirect HTTP to HTTPS, set the exact HTTPS
+   `DND_PUBLIC_ORIGIN`, and verify secure-cookie/HSTS behavior end to end.
+2. Decide the no-email support policy: lost passwords currently mean creating a
+   new account; there is no automated recovery or account-administration API.
+3. Decide whether MFA or federated login is needed for the threat model.
+4. Move authentication/command/stream abuse controls to a shared proxy-aware
+   system and add aggregate quotas/backpressure.
+5. Separate migration and least-privilege runtime database roles.
+6. Add actor-attributed audit facts for privileged configuration, membership,
+   and direct state changes, with privacy-aware retention.
+7. Establish backup/restore evidence, monitoring, alerting, dependency scanning,
+   incident response, and an external security review.
+8. Define user-data export/erasure and retention policies for display names,
+   actions, narrative, profiles, sessions, and logs.
+9. Load/soak test Argon2id concurrency and SSE behavior for the target capacity.
 
-### Privileged writes and audit
-
-- impersonation can assume owner/editor authority;
-- direct Builder state corrections do not create live Consequence receipts;
-- configuration/state changes lack a complete actor-attributed audit history.
-
-Impact: a reachable client can alter world configuration/state as another user,
-and some privileged changes cannot be reconstructed from durable history.
-
-### Network and browser controls
-
-- no application TLS;
-- no explicit CORS policy;
-- no CSRF defense for a future cookie-authenticated deployment;
-- no CSP, HSTS, frame-ancestor protection, Referrer Policy, or Permissions
-  Policy;
-- no application rate limiting/connection quotas;
-- default `:8080` bind listens on all interfaces.
-
-### Abuse and denial of service
-
-- public identity creation and forgeable-identity world creation have no quota;
-- SSE holds requests and polls PostgreSQL per client as a 1.5-second fallback;
-  successful local mutations also wake every local stream immediately;
-- no per-user/IP command throttles;
-- request/effect/text limits exist, but aggregate counts and event retention do
-  not;
-- no general log sampling/retention/redaction policy beyond avoiding bodies and
-  redacting invitation bearer paths in request summaries and panic records.
-
-### Audit and privacy operations
-
-- applied receipts/events are durable, but not every final interaction child is
-  trigger-protected;
-- no retention/deletion policy for user names, actions, narratives, or notes;
-- no user export/erasure workflow;
-- no documented backup/log encryption or retention controls;
-- no dependency vulnerability workflow in repository CI.
-
-### Infrastructure
-
-- one database role performs schema and runtime work;
-- that role can alter immutability triggers;
-- database URL is the only application secret and has no rotation helper;
-- no metrics, intrusion alerting, WAF, production threat model, or penetration
-  test is recorded.
-
-## Required hardening path
-
-Before untrusted/public use:
-
-1. **Install real authentication.** Validate a server-side session/provider
-   token and map an immutable provider subject to a local user.
-2. **Protect provisioning and discovery.** Define signup/invite/admin policy;
-   prevent arbitrary enumeration/creation.
-3. **Bind world authorization to authenticated identity.** Preserve all current
-   membership, role, readiness, resource, and visibility checks.
-4. **Define setup-state audit policy.** Decide whether direct Builder state
-   changes need actor-attributed before/after history.
-5. **Use deny-by-default route middleware.** Require an explicit public or
-   authenticated classification for every route.
-6. **Add browser/network defenses.** TLS, secure cookies if used, CSRF, narrow
-   CORS, CSP, HSTS, frame protection, and referrer/permissions headers.
-7. **Add abuse controls.** Rate/size/count limits for identity, invites, writes,
-   actions, resolutions, and streams; add event retention/backpressure.
-8. **Separate database roles.** Migration role owns DDL; runtime gets only
-   required table/sequence permissions.
-9. **Add auditability.** Actor-attributed append-only facts for privileged
-   configuration/state/membership operations with privacy-aware retention.
-10. **Operationalize secrets, backups, monitoring, and incident response.**
-11. **Expand security testing.** Anonymous/wrong-user/wrong-role/cross-world,
-    CSRF/CORS, dependency/static analysis, and external review.
-
-Authentication proves who the user is; world membership and role checks still
-decide what that user may do.
+The process still has no built-in TLS server, WAF, metrics/tracing, complete
+configuration audit history, or separate migration role. Those are distinct
+from the now-enforced application authentication boundary.
 
 ## Security review checklist
 
-For every endpoint or field:
+For every route or field:
 
-- Is it public, authenticated, active-member, owner/editor, player, audience,
-  or controller scoped?
+- Is the route explicitly public or wrapped by session authentication?
+- For an unsafe route, are origin and CSRF enforced before the handler?
+- Is the actor taken only from authenticated request context?
+- Is membership/role/readiness/control checked for the exact path world?
 - Can any referenced ID be substituted from another world?
-- Is the actor derived from trusted request context rather than the body?
-- Does the response include notes, hidden context, identities, or restricted
-  profile prose?
-- Can an event reveal a hidden interaction?
+- Does the response omit private notes and restricted profile prose?
 - Is a revision/idempotency guard required?
 - Can failure partially mutate state or create an incomplete receipt?
-- Does final history remain immutable/readable?
-- Are nested/text/stream limits sufficient?
-- Are logs/errors free of narrative, action text, profile prose, and tokens?
-- Are both forbidden status and sensitive-field absence tested server-side?
+- Are password, cookie, CSRF, invite, and narrative values absent from logs?
+- Are anonymous, expired/revoked-session, forged-header, CSRF/origin,
+  wrong-role, and cross-world failures tested server-side?
 
 ## Responsible operation
 
-Until hardening is complete:
-
-- bind local use to `127.0.0.1` or independently restrict the network;
-- do not share the deployment with untrusted users;
-- do not store sensitive personal information or secrets in prose fields;
-- use disposable/non-sensitive databases for demonstrations;
-- restrict database/network access independently;
-- stop managed services after debugging;
-- treat world data as writable by anyone who can forge a selected identity.
+- Use a fresh empty database for the password-auth migration; it intentionally
+  refuses to invent credentials for preexisting users.
+- Keep `DND_PUBLIC_ORIGIN` aligned exactly with the browser-visible origin.
+- Do not put personal secrets in narrative/profile fields.
+- Protect database and deployment configuration independently of application
+  authentication.
+- Treat invite URLs and browser sessions as bearer secrets.

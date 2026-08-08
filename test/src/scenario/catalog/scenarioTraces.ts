@@ -18,7 +18,7 @@ const JOURNEY_CHECKPOINT_GROUPS = [
     scenarioIds: [
       "JRN-001",
       "IDN-001",
-      "IDN-002",
+      "IDN-004",
       "WRL-001",
       "WRL-V01",
       "MEC-001",
@@ -105,6 +105,10 @@ const JOURNEY_RIB_SCENARIO_ID_VALUES = Object.freeze([
 ] as const);
 
 const UI_BOUNDARY_SCENARIOS = [
+  "IDN-005",
+  "IDN-006",
+  "IDN-007",
+  "IDN-008",
   "CHF-001",
   "CHF-003",
   "CHF-004",
@@ -128,6 +132,11 @@ const UI_BOUNDARY_SCENARIOS = [
 ] as const;
 
 const DIRECT_CONTRACT_SCENARIOS = [
+  "IDN-V01",
+  "IDN-V02",
+  "IDN-V03",
+  "IDN-V04",
+  "IDN-V05",
   "MEC-V03",
   "CHF-V01",
   "RST-V03",
@@ -150,6 +159,7 @@ const DIRECT_CONTRACT_SCENARIOS = [
   "AUT-V04",
   "AUT-V05",
   "AUT-V06",
+  "AUT-V07",
   "CCY-V02",
   "CCY-V03",
   "CCY-V04",
@@ -198,11 +208,14 @@ export const SCENARIO_IDS = [
 
 export type ScenarioId = (typeof SCENARIO_IDS)[number];
 
+export const RETIRED_SCENARIO_IDS = Object.freeze(["IDN-002"] as const);
+
 export const JOURNEY_RIB_SCENARIO_IDS: readonly ScenarioId[] =
   JOURNEY_RIB_SCENARIO_ID_VALUES;
 
 export interface ScenarioTrace {
   readonly scenarioId: ScenarioId;
+  readonly scenarioVersion: number;
   readonly primaryTier: EvidenceTier;
   readonly executionId: string;
   readonly ownerFile: string;
@@ -227,6 +240,11 @@ interface OwnerAssignment {
 const REQUIRED_NAMED_CASES: Readonly<
   Partial<Record<ScenarioId, readonly string[]>>
 > = Object.freeze({
+  "IDN-V01": ["invalid", "duplicate-normalized-username"],
+  "IDN-V02": ["unknown-username", "wrong-password"],
+  "IDN-V03": ["missing", "malformed", "expired", "revoked", "disabled"],
+  "IDN-V04": ["password-hash", "session-digest", "response-redaction"],
+  "IDN-V05": ["missing-token", "wrong-token", "cross-origin"],
   "INV-V01": ["invalid", "revoked", "expired"],
   "MEC-V03": ["unknown", "cross-world", "archived"],
   "RST-V03": [
@@ -247,6 +265,7 @@ const REQUIRED_NAMED_CASES: Readonly<
     "editor-archive",
   ],
   "AUT-V05": ["mechanic", "entity", "membership", "action", "status-instance"],
+  "AUT-V07": ["anonymous-forgery", "authenticated-override"],
   "CCY-V06": ["late-submit", "late-withdraw", "stale-transition"],
   "LFC-V04": [
     "world-mutation",
@@ -258,12 +277,18 @@ const REQUIRED_NAMED_CASES: Readonly<
 
 const CHANGED_DIMENSIONS: Readonly<Partial<Record<ScenarioId, string>>> =
   Object.freeze({
+    "IDN-V01": "signup rejection reason",
+    "IDN-V02": "credential rejection reason",
+    "IDN-V03": "invalid session state",
+    "IDN-V04": "credential or session secret",
+    "IDN-V05": "CSRF failure mode",
     "INV-V01": "closure reason",
     "MEC-V03": "reference eligibility",
     "RST-V03": "readiness/lifecycle and use site",
     "CON-V04": "target invalidity",
     "AUT-V02": "actor and command family",
     "AUT-V05": "resource kind",
+    "AUT-V07": "forged identity attempt",
     "CCY-V06": "stale command kind",
     "LFC-V04": "resource and use kind",
   });
@@ -314,7 +339,24 @@ const UI_EVENTS_OWNER = Object.freeze({
   evidenceAvailability: "executable",
 } as const satisfies OwnerAssignment);
 
+const UI_AUTH_OWNER = Object.freeze({
+  primaryTier: "ui-boundary",
+  executionId: "ui.authentication",
+  ownerFile: "test/specs/ui-boundaries/authentication.ui.spec.ts",
+  executionMarker:
+    "UI authentication: signin, password changes, and logout use server sessions",
+  evidenceAvailability: "executable",
+} as const satisfies OwnerAssignment);
+
 const DIRECT_OWNERS = Object.freeze({
+  authentication: {
+    primaryTier: "direct-contract",
+    executionId: "contract.authentication",
+    ownerFile: "test/specs/contracts/authentication.contract.spec.ts",
+    executionMarker:
+      "contract: password accounts, sessions, CSRF, and forged identity headers are enforced",
+    evidenceAvailability: "executable",
+  },
   access: {
     primaryTier: "direct-contract",
     executionId: "contract.access-and-invites",
@@ -383,6 +425,7 @@ function trace(
   const changedDimension = CHANGED_DIMENSIONS[scenarioId];
   return Object.freeze({
     scenarioId,
+    scenarioVersion: scenarioId === "IDN-003" ? 2 : 1,
     ...owner,
     ...(checkpointId === undefined ? {} : { checkpointId }),
     requiredNamedCases: Object.freeze([...requiredNamedCases]),
@@ -405,6 +448,7 @@ const JOURNEY_TRACES = JOURNEY_CHECKPOINT_GROUPS.flatMap(
 );
 
 const UI_TRACES = [
+  ...traces(["IDN-005", "IDN-006", "IDN-007", "IDN-008"], UI_AUTH_OWNER),
   ...traces(["NAV-002", "NAV-V01"], UI_ENTRY_OWNER),
   ...traces(
     [
@@ -428,6 +472,10 @@ const UI_TRACES = [
 ];
 
 const DIRECT_TRACES = [
+  ...traces(
+    ["IDN-V01", "IDN-V02", "IDN-V03", "IDN-V04", "IDN-V05", "AUT-V07"],
+    DIRECT_OWNERS.authentication,
+  ),
   ...traces(
     ["MEC-V03", "RST-V03", "LFC-003", "LFC-V04"],
     DIRECT_OWNERS.resource,
@@ -618,16 +666,16 @@ export const SCENARIO_TRACE_REGISTRY: readonly ScenarioTrace[] = Object.freeze([
   ...HARNESS_TRACES,
 ]);
 
-export const EXPECTED_SCENARIO_COUNT = 131;
+export const EXPECTED_SCENARIO_COUNT = 141;
 export const EXPECTED_JOURNEY_SCENARIO_COUNT = 59;
 
 const EXPECTED_FAMILY_COUNTS: Readonly<Record<string, number>> = Object.freeze({
-  AUT: 14,
+  AUT: 15,
   CCY: 9,
   CHF: 5,
   CON: 13,
   GLO: 12,
-  IDN: 3,
+  IDN: 12,
   INV: 7,
   JRN: 7,
   LFC: 9,
@@ -648,6 +696,11 @@ export function validateScenarioTraceRegistry(
   }
 
   const expectedIds = new Set<string>(SCENARIO_IDS);
+  for (const retiredId of RETIRED_SCENARIO_IDS) {
+    if (expectedIds.has(retiredId)) {
+      throw new Error(`retired scenario ${retiredId} remains active`);
+    }
+  }
   const seen = new Set<string>();
   const tiers = new Set<EvidenceTier>();
   const familyCounts = new Map<string, number>();
@@ -659,6 +712,9 @@ export function validateScenarioTraceRegistry(
       throw new Error(`unknown scenario id ${owner.scenarioId}`);
     }
     seen.add(owner.scenarioId);
+    if (!Number.isInteger(owner.scenarioVersion) || owner.scenarioVersion < 1) {
+      throw new Error(`invalid scenario version for ${owner.scenarioId}`);
+    }
     tiers.add(owner.primaryTier);
     const family = owner.scenarioId.split("-")[0];
     if (family === undefined) {

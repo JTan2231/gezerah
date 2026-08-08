@@ -1,4 +1,4 @@
-import type { User, World } from "../api/types";
+import type { AuthenticatedSession, User, World } from "../api/types";
 import { worldPath } from "../api/client";
 import {
   Avatar,
@@ -11,6 +11,7 @@ import { confirmDiscardDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
 import { buildWorldURL, playWorldURL } from "../worldRoutes";
 import type { BuildSection, Navigate } from "../worldRoutes";
+import { AccountControls } from "./AccountControls";
 import { MechanicsWorkspace } from "./MechanicsWorkspace";
 import { CharacterFieldsWorkspace } from "./CharacterFieldsWorkspace";
 import { PeopleWorkspace } from "./PeopleWorkspace";
@@ -23,12 +24,18 @@ export function BuildWorkspace({
   resourceId,
   user,
   navigate,
+  onLogout,
+  onLogoutAll,
+  onSessionChanged,
 }: {
   worldId: string;
   section: BuildSection;
   resourceId?: string | undefined;
   user: User;
   navigate: Navigate;
+  onLogout: () => Promise<void>;
+  onLogoutAll: () => Promise<void>;
+  onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const resource = useResource<World>(worldPath(worldId));
   const world = resource.value;
@@ -41,6 +48,16 @@ export function BuildWorkspace({
 
   function go(next: BuildSection, selected?: string) {
     guardedNavigate(buildWorldURL(worldId, next, selected));
+  }
+
+  async function guardedLogout() {
+    if (!confirmDiscardDraft()) return;
+    await onLogout();
+  }
+
+  async function guardedLogoutAll() {
+    if (!confirmDiscardDraft()) return;
+    await onLogoutAll();
   }
 
   if (resource.loading && world === null)
@@ -205,10 +222,16 @@ export function BuildWorkspace({
         </nav>
         <div className="sidebar-user">
           <Avatar name={user.display_name} size="small" />
-          <span>
+          <span className="sidebar-account-copy">
             <strong>{user.display_name}</strong>
-            <small>Local profile</small>
+            <small>@{user.username}</small>
           </span>
+          <AccountControls
+            user={user}
+            onLogout={guardedLogout}
+            onLogoutAll={guardedLogoutAll}
+            onSessionChanged={onSessionChanged}
+          />
         </div>
       </aside>
 
@@ -233,6 +256,14 @@ export function BuildWorkspace({
           <option value="people">People</option>
           <option value="settings">Settings</option>
         </select>
+        <div className="mobile-account-controls">
+          <AccountControls
+            user={user}
+            onLogout={guardedLogout}
+            onLogoutAll={guardedLogoutAll}
+            onSessionChanged={onSessionChanged}
+          />
+        </div>
       </div>
 
       <main id="world-content" className="world-content" tabIndex={-1}>

@@ -9,6 +9,12 @@ import {
 
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  signupActor,
+} from "../support/auth";
 
 interface IdentifiedResource {
   id: string;
@@ -31,15 +37,17 @@ interface InviteResponse extends IdentifiedResource {
   use_count: number;
 }
 
+test.afterEach(async () => disposeAuthenticatedActors());
+
 test("contract: invitation secrecy, admission, authorization, and revocation", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Invite Owner ${unique}`);
-  const player = await createUser(request, baseURL, `Invite Player ${unique}`);
-  const editor = await createUser(request, baseURL, `Invite Editor ${unique}`);
-  const outsider = await createUser(
+  const owner = await createActor(request, baseURL, `Invite Owner ${unique}`);
+  const player = await createActor(request, baseURL, `Invite Player ${unique}`);
+  const editor = await createActor(request, baseURL, `Invite Editor ${unique}`);
+  const outsider = await createActor(
     request,
     baseURL,
     `Invite Outsider ${unique}`,
@@ -64,9 +72,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     ),
   ).toEqual([]);
   await expectAPIError(
-    await request.get(`${baseURL}/api/worlds/${world.id}`, {
-      headers: identityHeaders(outsider.id),
-    }),
+    await actorRequest(outsider.id).get(`${baseURL}/api/worlds/${world.id}`),
     403,
     "world_forbidden",
   );
@@ -112,7 +118,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     world_name: string;
     role: string;
     invited_by_display_name: string;
-  }>(request, `${baseURL}/api/world-invites/${playerToken}`);
+  }>(request, `${baseURL}/api/world-invites/${playerToken}`, player.id);
   expect(preview).toMatchObject({ world_name: world.name, role: "player" });
 
   const joinedPlayer = await postJSON<WorldResponse>(
@@ -139,10 +145,13 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
   });
 
   await expectAPIError(
-    await request.post(`${baseURL}/api/worlds/${world.id}/invites`, {
-      data: { role: "player", expires_in_days: 7 },
-      headers: identityHeaders(player.id),
-    }),
+    await actorRequest(player.id).post(
+      `${baseURL}/api/worlds/${world.id}/invites`,
+      {
+        data: { role: "player", expires_in_days: 7 },
+        headers: actorMutationHeaders(player.id),
+      },
+    ),
     403,
     "world_editor_required",
   );
@@ -153,10 +162,13 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     owner.id,
   );
   await expectAPIError(
-    await request.post(`${baseURL}/api/worlds/${world.id}/archive`, {
-      data: { expected_revision: ownerBeforeDenial.revision },
-      headers: identityHeaders(editor.id),
-    }),
+    await actorRequest(editor.id).post(
+      `${baseURL}/api/worlds/${world.id}/archive`,
+      {
+        data: { expected_revision: ownerBeforeDenial.revision },
+        headers: actorMutationHeaders(editor.id),
+      },
+    ),
     403,
     "world_owner_required",
   );
@@ -179,32 +191,35 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     owner.id,
   );
   await expectAPIError(
-    await request.get(`${baseURL}/api/world-invites/${playerToken}`),
+    await actorRequest(outsider.id).get(
+      `${baseURL}/api/world-invites/${playerToken}`,
+    ),
     404,
     "invite_not_found",
   );
   await expectAPIError(
-    await request.post(`${baseURL}/api/world-invites/${playerToken}/redeem`, {
-      headers: identityHeaders(outsider.id),
-    }),
+    await actorRequest(outsider.id).post(
+      `${baseURL}/api/world-invites/${playerToken}/redeem`,
+      { headers: actorMutationHeaders(outsider.id) },
+    ),
     404,
     "invite_not_found",
   );
   await expectAPIError(
-    await request.get(`${baseURL}/api/world-invites/not-a-real-token`),
+    await actorRequest(outsider.id).get(
+      `${baseURL}/api/world-invites/not-a-real-token`,
+    ),
     404,
     "invite_not_found",
   );
 });
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function createInvite(
@@ -222,18 +237,14 @@ async function createInvite(
   );
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function getJSON<T>(
   request: APIRequestContext,
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await (
+    userID === undefined ? request : actorRequest(userID)
+  ).get(url);
   return expectJSON<T>(response, url);
 }
 
@@ -243,9 +254,12 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
+  if (userID === undefined) {
+    throw new Error("fixture mutations require an authenticated actor");
+  }
+  const response = await actorRequest(userID).post(url, {
     ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
+    headers: actorMutationHeaders(userID),
   });
   return expectJSON<T>(response, url);
 }

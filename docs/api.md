@@ -6,9 +6,10 @@ The same-origin API is rooted at `/api`; the React application is its primary
 client. There is no version prefix, so coordinated client/server changes land
 together. Every authored and live resource is scoped through a world URL.
 
-Except for health, local-user provisioning, and invite preview, endpoints use a
-development identity header plus server-side world membership/role checks. See
-[Security](security.md) before exposing the service outside a trusted network.
+Except for health, signup, and signin, every API endpoint requires an active
+server session. World resources additionally apply server-side membership,
+role, readiness, scope, and visibility checks. See [Security](security.md) for
+the browser and session boundaries.
 
 ## Conventions
 
@@ -28,18 +29,40 @@ development identity header plus server-side world membership/role checks. See
 Numeric decoding uses `json.Number` and exact decimals. Send finite JSON
 numbers, not quoted numbers, `NaN`, or infinities.
 
-### Identity
+### Authentication and CSRF
 
-`GET /api/users` and `POST /api/users` are public within the trusted deployment.
-Every world query or command and invite redemption requires:
+Accounts use a username and password; email is neither requested nor stored.
+Successful signup/signin returns the authenticated user plus a CSRF token and
+sets an opaque HttpOnly session cookie:
 
-```http
-X-DND-User-ID: 2a7c0a53-65be-47d6-9e71-a97cbb1e53d4
+```json
+{
+  "user": {
+    "id": "2a7c0a53-65be-47d6-9e71-a97cbb1e53d4",
+    "username": "river.song",
+    "display_name": "River",
+    "created_at": "2026-08-07T12:00:00Z",
+    "updated_at": "2026-08-07T12:00:00Z"
+  },
+  "csrf_token": "..."
+}
 ```
 
-The UUID must name a row in `users`. This is a forgeable development adapter,
-not authentication. Command bodies never select the acting user or membership;
-the server derives both from the header and world membership.
+The cookie is `dnd_session` for HTTP development and `__Host-dnd_session` for
+an HTTPS public origin. It is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
+Clients must send the returned token as `X-DND-CSRF` on authenticated methods
+other than GET, HEAD, and OPTIONS. Those requests must also have an `Origin`
+matching `DND_PUBLIC_ORIGIN`, or the request's own origin when that setting is
+empty. The token is session-bound and changes when the password is changed.
+
+The server stores only a SHA-256 digest of the random session token. Passwords
+are stored as Argon2id hashes. Command bodies and headers never select the
+acting user or membership; the server derives both from the session. Supplying
+the former `X-DND-User-ID` header has no effect.
+
+Sessions have a seven-day sliding idle lifetime and a 30-day absolute lifetime.
+Issuing a session removes expired/revoked rows and keeps at most 20 active
+sessions for the account, pruning least-recently-seen sessions first.
 
 ### Error envelope
 
@@ -60,11 +83,12 @@ the server derives both from the header and world membership.
 | Status | Typical codes                                                                                  | Meaning                                                             |
 | ------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                 | Transport, path, or query syntax is malformed.                      |
-| 401    | `authentication_required`, `invalid_identity`                                                  | Development identity is absent, malformed, or unknown.              |
-| 403    | `world_forbidden`, role-required codes, `character_setup_required`, `entity_profile_forbidden` | Actor lacks world/resource authority or is not ready for live play. |
+| 401    | `authentication_required`, `invalid_credentials`                                               | Session is absent/expired/revoked, or signin credentials are wrong. |
+| 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                                           | Browser-integrity check or resource authority failed.               |
 | 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                          | Resource, invite, or endpoint is absent or hidden.                  |
 | 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors                | Current state conflicts with the command.                           |
 | 422    | `validation_failed`, `invalid_reference`, `effect_application_failed`                          | Structurally readable JSON violates a domain/database rule.         |
+| 429    | `rate_limited`                                                                                 | Authentication attempt/work limit was reached; honor `Retry-After`. |
 | 500    | `internal_error`, `database_error`                                                             | Unexpected server or database failure.                              |
 | 503    | `database_unavailable`                                                                         | Health check cannot ping PostgreSQL.                                |
 
@@ -112,20 +136,31 @@ Create/update/archive commands require the wrapper's revision as
 
 Path placeholders are UUIDs unless noted otherwise.
 
-### Health and local users
+### Health and accounts
 
-| Method and path   | Authority | Request              | Response                                               |
-| ----------------- | --------- | -------------------- | ------------------------------------------------------ |
-| `GET /api/health` | Public    | None                 | `{"ok":true,"timestamp":"..."}` after a database ping. |
-| `GET /api/users`  | Public    | None                 | Up to 1000 local identities.                           |
-| `POST /api/users` | Public    | `{id?,display_name}` | Creates a local development identity.                  |
+| Method and path          | Authority     | Request/response |
+| ------------------------ | ------------- | ---------------- |
+| `GET /api/health`        | Public        | `{"ok":true,"timestamp":"..."}` after a database ping. |
+| `POST /api/auth/signup`  | Public+origin | `{username,display_name,password}`; creates the first session and returns the authentication response. |
+| `POST /api/auth/signin`  | Public+origin | `{username,password}`; returns the same generic error for unknown usernames and wrong passwords. |
+| `GET /api/me`            | Session       | Returns the current authentication response so the browser can restore its in-memory CSRF token. |
+| `POST /api/auth/logout`  | Session+CSRF  | Revokes the current session and clears both possible cookie names; `204`. |
+| `POST /api/auth/logout-all` | Session+CSRF | Revokes all sessions belonging to the current account; `204`. |
+| `PUT /api/me/password`   | Session+CSRF  | `{current_password,new_password}`; revokes every old session, creates a replacement, and returns the new authentication response. |
+
+Usernames contain 3–64 ASCII characters, begin with a letter or number, and
+otherwise accept letters, numbers, `.`, `_`, and `-`. Uniqueness is
+case-insensitive. New passwords contain 15–128 Unicode code points. Because no
+email is collected, this release intentionally has no password-recovery flow.
+An incorrect current password on the change endpoint is a field-specific
+`422 validation_failed`; it does not invalidate the still-valid session.
 
 ### Worlds
 
 | Method and path                       | Authority                  | Request/response                                                                 |
 | ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/worlds`                     | Known user                 | Active memberships only; role/count/activity and derived `play_status`.          |
-| `POST /api/worlds`                    | Known user                 | Name/description; creates world, owner membership, field/rules roots, and event. |
+| `GET /api/worlds`                     | Authenticated user         | Active memberships only; role/count/activity and derived `play_status`.          |
+| `POST /api/worlds`                    | Authenticated user         | Name/description; creates world, owner membership, field/rules roots, and event. |
 | `GET /api/worlds/{world_id}`          | Active world member        | World summary for the current member.                                            |
 | `PATCH /api/worlds/{world_id}`        | Owner/editor, active world | Name, nullable description, and `expected_revision`.                             |
 | `POST /api/worlds/{world_id}/archive` | Owner                      | `expected_revision`; rejects unfinished interactions.                            |
@@ -180,12 +215,13 @@ profile text.
 | `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
 | `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
 | `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
-| `GET /api/world-invites/{opaque_token}`                  | Public                     | Preview when active, unexpired, and not revoked.                            |
-| `POST /api/world-invites/{opaque_token}/redeem`          | Known user                 | Creates/reactivates one matching world membership atomically.               |
+| `GET /api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.        |
+| `POST /api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.                |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only their
-SHA-256 digest is stored. Redemption counts once per invite/user and never
-escalates an already-active role.
+SHA-256 digest is stored. Redemption counts once per invite/user. An already
+active non-owner membership keeps its current role; a different-role invite
+cannot silently escalate or downgrade it.
 
 ### Interactions and actions
 
@@ -218,9 +254,10 @@ data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id
 
 ```
 
-The handler reauthorizes membership, emits at most 100 visible rows per batch,
-and closes on revocation, cancellation, query failure, or write failure. The
-client reconnects with its cursor. Events are invalidation signals only.
+The handler reauthorizes the session and membership, emits at most 100 visible
+rows per batch, and closes on session revocation/expiry, membership revocation,
+cancellation, query failure, or write failure. The client reconnects with its
+cursor unless authentication has ended. Events are invalidation signals only.
 
 ## Payload reference
 
@@ -610,7 +647,7 @@ to the problem that created it.
 | Character-field value                             | 20,000 characters                   |
 | Consequence effects                               | 100                                 |
 | Inline status description                         | 2,000 characters                    |
-| Entity/user/world lists                           | 500–1000 depending on resource      |
+| Entity/world/member lists                        | 500–1000 depending on resource      |
 | SSE batch                                         | 100 events                          |
 
 For mechanical and lifecycle invariants, see [Domain model](domain-model.md).

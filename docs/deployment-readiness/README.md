@@ -16,10 +16,10 @@ Readiness documents use these labels:
 
 | Deployment target | Status | Reason |
 | --- | --- | --- |
-| Local trusted development | Ready | This is the environment assumed by the current identity adapter. |
-| Domainless/private Railway staging | Conditional | Suitable for infrastructure validation with non-sensitive data after CI passes and access remains restricted. |
-| Browser-accessible preview on an untrusted network | Blocked | A caller can select or forge any local user UUID and inherit that user's world authority. |
-| Public production | Blocked | Real authentication, protected account provisioning, hardened invitations, and the remaining security/operational controls are not implemented. |
+| Local trusted development | Ready | Native signup/signin and server sessions work through the managed Vite origin. |
+| Domainless/private Railway staging | Conditional | Set the exact HTTPS public origin, attach a fresh database, and restrict access while operational controls are evaluated. |
+| Browser-accessible preview on an untrusted network | Conditional | UUID impersonation is closed; use HTTPS, non-sensitive data, verified secure cookies, and deployment-level abuse controls. |
+| Public production | Blocked | Authentication is implemented, but backup/restore, monitoring, distributed abuse controls, privacy/support policy, capacity evidence, and external review remain open. |
 
 Creating a Railway deployment does not change these classifications. A healthy
 deployment is not automatically a safe public deployment.
@@ -31,14 +31,15 @@ deployment is not automatically a safe public deployment.
 
 ## Next readiness audits
 
-The identity and access audit is the first application-level audit. Follow-up
-documents should cover:
+The identity/access remediation is implemented. Follow-up documents should
+cover:
 
-1. production authentication and account lifecycle design;
-2. HTTP/browser security and abuse controls;
-3. production data, migration, backup, restore, and privacy operations;
-4. observability, alerting, capacity, and incident response;
-5. Railway configuration, deployment verification, and rollback evidence.
+1. production data, migration, backup, restore, and privacy operations;
+2. observability, alerting, capacity, and incident response;
+3. distributed/proxy-aware abuse controls and external security review;
+4. Railway configuration, deployment verification, and rollback evidence;
+5. the no-email password-loss and account-support policy, plus any future MFA
+   requirement.
 
 The public-release gate remains closed until every public-production blocker is
 resolved and the resulting behavior is covered by automated tests.

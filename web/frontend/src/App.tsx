@@ -1,7 +1,13 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
-import { readSelectedUserId, selectUserId } from "./api/client";
-import type { User } from "./api/types";
+import {
+  api,
+  ApiError,
+  clearAuthentication,
+  onAuthenticationRequired,
+  setCSRFToken,
+} from "./api/client";
+import type { AuthenticatedSession, User } from "./api/types";
 import { Brand, ErrorMessage, LoadingState } from "./components/StudioUI";
 import { HomeChoice } from "./features/HomeChoice";
 import { IdentityGate } from "./features/IdentityGate";
@@ -11,24 +17,79 @@ import { PlayLibrary } from "./features/PlayLibrary";
 import { PlayWorkspace } from "./features/PlayWorkspace";
 import { BuildLibrary } from "./features/BuildLibrary";
 import { BuildWorkspace } from "./features/BuildWorkspace";
-import { useCollection } from "./hooks/useCollection";
 import { readLocation, type Navigate } from "./worldRoutes";
 
+type AuthenticationStatus =
+  "checking" | "authenticated" | "anonymous" | "error";
+
 export default function App() {
-  const [selectedUserId, setSelectedUserId] = useState(readSelectedUserId);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+  const [authenticationStatus, setAuthenticationStatus] =
+    useState<AuthenticationStatus>("checking");
+  const [user, setUser] = useState<User | null>(null);
+  const [authenticationError, setAuthenticationError] =
+    useState<ApiError | null>(null);
+  const [authenticationNotice, setAuthenticationNotice] = useState<
+    string | undefined
+  >();
   const [location, setLocation] = useState(readLocation);
+  const userRef = useRef<User | null>(null);
   const identityRequired =
     location.type !== "home" &&
     location.type !== "redirect" &&
     location.type !== "not-found";
-  const users = useCollection<User>(
-    selectedUserId === "" || !identityRequired ? null : "/api/users",
+
+  const establishSession = useCallback((session: AuthenticatedSession) => {
+    setCSRFToken(session.csrf_token, session.user.id);
+    userRef.current = session.user;
+    setUser(session.user);
+    setAuthenticationStatus("authenticated");
+    setAuthenticationError(null);
+    setAuthenticationNotice(undefined);
+  }, []);
+
+  const endSession = useCallback((notice?: string) => {
+    clearAuthentication();
+    userRef.current = null;
+    setUser(null);
+    setAuthenticationStatus("anonymous");
+    setAuthenticationError(null);
+    setAuthenticationNotice(notice);
+  }, []);
+
+  useEffect(
+    () =>
+      onAuthenticationRequired(() => {
+        endSession(
+          userRef.current === null
+            ? undefined
+            : "Your session ended. Sign in again to continue.",
+        );
+      }),
+    [endSession],
   );
-  const user =
-    selectedUser?.id === selectedUserId
-      ? selectedUser
-      : users.items.find((candidate) => candidate.id === selectedUserId);
+
+  useEffect(() => {
+    if (!identityRequired || authenticationStatus !== "checking")
+      return undefined;
+    const controller = new AbortController();
+    setAuthenticationError(null);
+    void api<AuthenticatedSession>("/api/me", { signal: controller.signal })
+      .then(establishSession)
+      .catch((reason: unknown) => {
+        if (controller.signal.aborted) return;
+        if (reason instanceof ApiError && reason.status === 401) {
+          endSession();
+          return;
+        }
+        setAuthenticationStatus("error");
+        setAuthenticationError(
+          reason instanceof ApiError
+            ? reason
+            : new ApiError(0, "unknown", "Could not open your account."),
+        );
+      });
+    return () => controller.abort();
+  }, [authenticationStatus, endSession, establishSession, identityRequired]);
 
   useEffect(() => {
     function handlePopState() {
@@ -54,10 +115,21 @@ export default function App() {
     });
   };
 
-  function chooseUser(nextUser: User) {
-    selectUserId(nextUser.id);
-    setSelectedUserId(nextUser.id);
-    setSelectedUser(nextUser);
+  async function revokeSessions(path: string) {
+    try {
+      await api<void>(path, { method: "POST" });
+    } catch (reason) {
+      if (!(reason instanceof ApiError) || reason.status !== 401) throw reason;
+    }
+    endSession();
+  }
+
+  function logout() {
+    return revokeSessions("/api/auth/logout");
+  }
+
+  function logoutAll() {
+    return revokeSessions("/api/auth/logout-all");
   }
 
   if (location.type === "home") return <HomeChoice navigate={navigate} />;
@@ -65,43 +137,52 @@ export default function App() {
     return <NotFoundPage navigate={navigate} />;
   if (location.type === "redirect") return null;
 
-  if (selectedUserId !== "" && users.loading && user === undefined) {
+  if (authenticationStatus === "checking") {
     return (
       <main className="app-boot">
         <Brand />
-        <LoadingState label="Opening your worlds" />
+        <LoadingState label="Opening your account" />
       </main>
     );
   }
 
-  if (selectedUserId !== "" && users.error !== null && user === undefined) {
+  if (authenticationStatus === "error" && authenticationError !== null) {
     return (
       <main className="app-boot">
         <Brand />
-        <ErrorMessage error={users.error} onRetry={users.reload} />
-        <button
-          className="button button-quiet"
-          type="button"
-          onClick={() => {
-            selectUserId("");
-            setSelectedUserId("");
+        <ErrorMessage
+          error={authenticationError}
+          onRetry={() => {
+            setAuthenticationStatus("checking");
           }}
-        >
-          Choose another local profile
-        </button>
+        />
       </main>
     );
   }
 
-  if (user === undefined) return <IdentityGate onSelected={chooseUser} />;
+  if (authenticationStatus !== "authenticated" || user === null) {
+    return (
+      <IdentityGate
+        notice={authenticationNotice}
+        onAuthenticated={establishSession}
+      />
+    );
+  }
+
+  const accountProps = {
+    user,
+    onLogout: logout,
+    onLogoutAll: logoutAll,
+    onSessionChanged: establishSession,
+  };
 
   if (location.type === "invite") {
     return (
       <InvitePage
         area={location.area}
         token={location.token}
-        user={user}
         navigate={navigate}
+        {...accountProps}
       />
     );
   }
@@ -110,12 +191,8 @@ export default function App() {
     return (
       <PlayWorkspace
         worldId={location.worldId}
-        user={user}
         navigate={navigate}
-        onSwitchProfile={() => {
-          setSelectedUserId("");
-          setSelectedUser(null);
-        }}
+        {...accountProps}
       />
     );
   }
@@ -126,20 +203,13 @@ export default function App() {
         worldId={location.worldId}
         section={location.section}
         resourceId={location.resourceId}
-        user={user}
         navigate={navigate}
+        {...accountProps}
       />
     );
   }
 
-  const libraryProps = {
-    user,
-    navigate,
-    onSwitchProfile: () => {
-      setSelectedUserId("");
-      setSelectedUser(null);
-    },
-  };
+  const libraryProps = { navigate, ...accountProps };
   if (location.type === "play-library")
     return <PlayLibrary {...libraryProps} />;
   return <BuildLibrary {...libraryProps} />;

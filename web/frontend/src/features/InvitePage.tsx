@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 
 import { api, ApiError, worldInvitePath } from "../api/client";
-import type { User, World, WorldInvitePreview } from "../api/types";
+import type {
+  AuthenticatedSession,
+  User,
+  World,
+  WorldInvitePreview,
+} from "../api/types";
 import {
   Avatar,
   Brand,
@@ -17,17 +22,24 @@ import {
   type AppArea,
   type Navigate,
 } from "../worldRoutes";
+import { AccountControls } from "./AccountControls";
 
 export function InvitePage({
   area,
   token,
   user,
   navigate,
+  onLogout,
+  onLogoutAll,
+  onSessionChanged,
 }: {
   area: AppArea;
   token: string;
   user: User;
   navigate: Navigate;
+  onLogout: () => Promise<void>;
+  onLogoutAll: () => Promise<void>;
+  onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const invite = useResource<WorldInvitePreview>(worldInvitePath(token));
   const [joining, setJoining] = useState(false);
@@ -70,6 +82,18 @@ export function InvitePage({
     <main className="invite-page">
       <header>
         <Brand compact />
+        <div className="invite-account">
+          <span>
+            <strong>{user.display_name}</strong>
+            <small>@{user.username}</small>
+          </span>
+          <AccountControls
+            user={user}
+            onLogout={onLogout}
+            onLogoutAll={onLogoutAll}
+            onSessionChanged={onSessionChanged}
+          />
+        </div>
       </header>
       {invite.loading ? <LoadingState label="Reading the invitation" /> : null}
       {invite.error === null ? null : (
@@ -104,7 +128,7 @@ export function InvitePage({
           <div className="invite-role-row">
             <Avatar name={user.display_name} />
             <div>
-              <span>You’ll join as</span>
+              <span>This invitation offers</span>
               <RolePill role={invite.value.role} />
             </div>
           </div>

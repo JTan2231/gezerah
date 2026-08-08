@@ -137,7 +137,8 @@ PostgreSQL integration fixture. They cover:
 - archived-mechanic and dependency guards;
 - event cursor parsing and matching;
 - audience-removal event projection and request/panic-log bearer redaction;
-- development identity vocabulary and live effect validation;
+- username/password hashing and parsing, origin/cookie/session middleware, and
+  live effect validation;
 - world creation, invite token hashing, capacity/capability mapping,
   character-field/profile validation, and semantic no-op comparison;
 - recursive expression transport/storage reconstruction, derived-source
@@ -149,20 +150,25 @@ Migration contract tests also require digest-only invitation storage, the
 forward `002` graph/status tables, existing-world/entity backfill statements,
 root-creation triggers, normalized storage (no JSON/JSONB aggregate),
 resolution-owned inline status modifiers, status source-provenance columns,
-expanded receipt tables, immutable receipt triggers, and the `003` constrained
-audience-invalidation event flag. They assert that status authoring rows are
-owned by the resolution rather than world configuration.
+expanded receipt tables, immutable receipt triggers, the `003` constrained
+audience-invalidation event flag, and the `004` empty-user cutover to normalized
+usernames/Argon2id/session-token digests. They assert that status authoring rows
+are owned by the resolution rather than world configuration and that plaintext
+credentials do not appear in the schema.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
 
 ### Frontend unit tests
 
-Bun tests under `web/frontend/src/domain/*.test.ts` cover pure helpers:
+Bun tests under `web/frontend/src/**/*.test.ts` cover pure helpers and the API
+adapter:
 
 - human-readable API vocabulary and past/future relative timestamps;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
   round trips, and unknown-route rejection.
+- same-origin cookie requests, unsafe-method CSRF injection, removal of the
+  legacy UUID header, and global 401 authentication teardown.
 
 There are no current component-rendering unit tests.
 
@@ -170,15 +176,20 @@ There are no current component-rendering unit tests.
 
 `test/specs/scenarios/lifecycle-spine.spec.ts` is the one UI-authentic browser
 execution. Four isolated, persistent owner/editor/player/spectator contexts
-carry one user-authored world from identity and configuration through invites,
+sign up through the UI and carry one user-authored world from account creation
+and configuration through invites,
 waiting/setup/readiness, editor authority, a shared live round, same-name status
 application and exact removal, and owner-authored archive. `JRN-001` through
 `JRN-007` remain separately named Playwright checkpoints inside that one test.
 The spine does not use API writes, storage injection, or prepared state.
 
-Fast PostgreSQL-backed contracts under `test/specs/contracts/` retain the exact
-server evidence that does not need another browser journey:
+Fast PostgreSQL-backed contracts under `test/specs/contracts/` use independent
+cookie jars and in-memory CSRF tokens. They retain the exact server evidence
+that does not need another browser journey:
 
+- `authentication.contract.spec.ts` covers signup/signin, cookie attributes,
+  session bootstrap, anonymous and forged-header denial, origin/CSRF failures,
+  logout scopes, password replacement, and revoked-session behavior;
 - `access-and-invites.contract.spec.ts` covers world isolation, invitation-token
   secrecy, admission, role denial, editor archive denial, and revocation;
 - `profile-and-readiness.contract.spec.ts` covers waiting/setup/ready
@@ -198,11 +209,12 @@ server evidence that does not need another browser journey:
 
 Focused browser contracts under `test/specs/ui-boundaries/` cover only behavior
 whose visible UI is itself material: entry/deep-link/accessibility boundaries,
-dirty-draft and stale-screen recovery, authored-profile/control workflows, and
-event-stream reconnection. They use ordinary HTTP fixture setup and do not
+signup/signin/logout/reload, dirty-draft and stale-screen recovery,
+authored-profile/control workflows, and event-stream reconnection. They use
+ordinary HTTP fixture setup and do not
 claim lifecycle-journey evidence.
 
-The dependency-free runtime under `test/src/scenario/` owns the 131-ID/five-tier
+The dependency-free runtime under `test/src/scenario/` owns the 141-ID/five-tier
 registry, required named cases, behavior/outcome contracts, checkpoint and
 blocked-by semantics, mutation epochs, observation reuse, redacted evidence,
 and performance records. Its millisecond verification runs before Playwright.
@@ -216,7 +228,8 @@ When invoked through `./ci.sh e2e`, Playwright global setup:
    already embeds the production frontend from the same invocation;
 3. creates a unique database named `dnd_e2e_<timestamp>_<random>`;
 4. selects a free loopback port;
-5. starts the application with debug logging and the disposable URL;
+5. starts the application with debug logging and the disposable URL as its
+   exact public origin;
 6. waits up to 10 seconds for `/api/health`;
 7. writes the base URL and disposable database URL to ignored runtime metadata,
    created with mode `0600`.
@@ -230,7 +243,8 @@ directory, and removes runtime metadata. Setup also removes stale metadata
 before starting the application.
 
 The disposable database URL is a narrowly scoped controlled-time fixture for
-direct contracts. `INV-V01[expired]` creates its user, world, membership, and
+direct contracts. `INV-V01[expired]` signs up its account and creates its world,
+membership, and
 invite through public HTTP, then a test-only helper validates the invite's
 canonical UUID and uses `psql` to move only that row's `expires_at` into the
 past. Preview, redemption, membership, and use-count evidence still comes from
@@ -277,7 +291,7 @@ On E2E runs, inspect:
 | `test/artifacts/playwright/`                | Per-test results and screenshots captured on failure.           |
 | `test/artifacts/report/`                    | HTML report.                                                    |
 | `test/artifacts/scenario-test-results.json` | Exact Playwright owner results and durations.                   |
-| `test/artifacts/scenario-coverage.json`     | Final 131-row scenario inventory; root E2E requires all passed. |
+| `test/artifacts/scenario-coverage.json`     | Final 141-row scenario inventory; root E2E requires all passed. |
 
 The active checkout usually receives no artifacts when invoked through root
 `ci.sh`, because the entire run occurs in the disposable worktree that is

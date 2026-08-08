@@ -18,14 +18,22 @@ export interface RedactionOptions {
 const DEFAULT_SENSITIVE_KEYS = [
   "authorization",
   "cookie",
+  "currentPassword",
+  "csrfToken",
   "inviteToken",
   "inviteUrl",
   "joinPath",
+  "newPassword",
   "password",
+  "passwordHash",
   "privateNotes",
   "restrictedValue",
   "secret",
+  "sessionToken",
+  "sessionTokenHash",
+  "setCookie",
   "token",
+  "xDndCsrf",
 ] as const;
 
 function normalizedKeys(options: RedactionOptions): Set<string> {
@@ -84,6 +92,14 @@ export function sanitizeURL(raw: string): string {
 
 export function sanitizeText(raw: string): string {
   return raw
+    .replace(
+      /\b(authorization|cookie|set-cookie|x-dnd-csrf)\s*:\s*[^\r\n]+/gi,
+      `$1: ${REDACTED}`,
+    )
+    .replace(
+      /\b((?:current_|new_)?password(?:_hash)?|(?:current|new)Password|csrf_token|session_token(?:_hash)?)\s*[=:]\s*[^\s,&;]+/gi,
+      `$1=${REDACTED}`,
+    )
     .replace(/(\/(?:play|build)\/invite\/)[^/?#\s"']+/g, `$1${REDACTED}`)
     .replace(/(\/(?:api\/)?(?:world-)?invites\/)[^/?#\s"']+/g, `$1${REDACTED}`)
     .replace(

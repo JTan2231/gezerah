@@ -242,7 +242,9 @@ changes. Exact decimal arithmetic is used throughout.
 
 ## Participants, memberships, and invitations
 
-A `user` represents a real participant. A `world_membership` grants an owner,
+A `user` represents a real participant and owns a case-insensitive username,
+display name, Argon2id password hash, and account status. Authentication binds
+an opaque server session to that user. A `world_membership` grants an owner,
 editor, player, or spectator role and lifecycle status. Owners and editors have
 facilitator authority; players may respond when admitted and ready.
 
@@ -250,11 +252,13 @@ An invite is an expiring and revocable bearer grant for a non-owner role. The
 raw URL-safe token is returned only when the invite is created. PostgreSQL
 stores its SHA-256 digest, and a redemption row makes use counting idempotent
 per invite/user pair. Redeeming a valid link creates or reactivates one world
-membership without escalating an already-active member.
+membership. An already-active membership keeps its current role, so a bearer
+link cannot silently escalate or downgrade it.
 
-The current identity boundary is only `X-DND-User-ID`. The server derives the
-actor from that header and then enforces membership and roles, but the header is
-forgeable and is not production authentication.
+The server derives the actor only from an active, unexpired session and then
+enforces membership and roles. User UUIDs remain durable internal identifiers,
+but sending one in a header or command body does not authenticate or select an
+actor.
 
 ## World table scope and control
 

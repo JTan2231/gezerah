@@ -42,6 +42,7 @@ export async function startAppServer(options: {
         DND_ADDR: `127.0.0.1:${port}`,
         DND_DATABASE_URL: database.url,
         DND_LOG_LEVEL: "debug",
+        DND_PUBLIC_ORIGIN: baseURL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });

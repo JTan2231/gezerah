@@ -10,10 +10,20 @@ import {
 import { expireInviteForDirectContract } from "../../src/controlledTime";
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  actorMutationHeaders,
+  actorRequest,
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  signupActor,
+} from "../support/auth";
 
 interface IdentifiedResource {
   id: string;
 }
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 interface WorldResponse extends IdentifiedResource {
   membership_id: string;
@@ -192,15 +202,15 @@ test("contract: invitation closure and authorization matrices are atomic and pri
 }) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
-  const owner = await createUser(request, baseURL, `Matrix Owner ${unique}`);
-  const editor = await createUser(request, baseURL, `Matrix Editor ${unique}`);
-  const player = await createUser(request, baseURL, `Matrix Player ${unique}`);
-  const spectator = await createUser(
+  const owner = await createActor(request, baseURL, `Matrix Owner ${unique}`);
+  const editor = await createActor(request, baseURL, `Matrix Editor ${unique}`);
+  const player = await createActor(request, baseURL, `Matrix Player ${unique}`);
+  const spectator = await createActor(
     request,
     baseURL,
     `Matrix Spectator ${unique}`,
   );
-  const inviteCandidate = await createUser(
+  const inviteCandidate = await createActor(
     request,
     baseURL,
     `Matrix Invite Candidate ${unique}`,
@@ -370,14 +380,16 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     const invalidToken = randomUUID().replaceAll("-", "");
 
     const previewError = await expectAPIError(
-      await request.get(`${baseURL}/api/world-invites/${invalidToken}`),
+      await actorRequest(inviteCandidate.id).get(
+        `${baseURL}/api/world-invites/${invalidToken}`,
+      ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
-      await request.post(
+      await actorRequest(inviteCandidate.id).post(
         `${baseURL}/api/world-invites/${invalidToken}/redeem`,
-        { headers: identityHeaders(inviteCandidate.id) },
+        {},
       ),
       404,
       "invite_not_found",
@@ -426,14 +438,17 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     expect(beforeInvite.revoked_at).toBeTruthy();
 
     const previewError = await expectAPIError(
-      await request.get(`${baseURL}/api/world-invites/${token}`),
+      await actorRequest(inviteCandidate.id).get(
+        `${baseURL}/api/world-invites/${token}`,
+      ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
-      await request.post(`${baseURL}/api/world-invites/${token}/redeem`, {
-        headers: identityHeaders(inviteCandidate.id),
-      }),
+      await actorRequest(inviteCandidate.id).post(
+        `${baseURL}/api/world-invites/${token}/redeem`,
+        {},
+      ),
       404,
       "invite_not_found",
     );
@@ -494,14 +509,17 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     expect(Date.parse(expiredInvite.expires_at)).toBeLessThan(Date.now());
 
     const previewError = await expectAPIError(
-      await request.get(`${baseURL}/api/world-invites/${token}`),
+      await actorRequest(inviteCandidate.id).get(
+        `${baseURL}/api/world-invites/${token}`,
+      ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
-      await request.post(`${baseURL}/api/world-invites/${token}/redeem`, {
-        headers: identityHeaders(inviteCandidate.id),
-      }),
+      await actorRequest(inviteCandidate.id).post(
+        `${baseURL}/api/world-invites/${token}/redeem`,
+        {},
+      ),
       404,
       "invite_not_found",
     );
@@ -543,10 +561,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           await expectAPIError(
-            await request.post(
+            await actorRequest(actorID).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/mechanics`,
               {
-                headers: identityHeaders(actorID),
                 data: inputMechanicRequest(
                   `Denied ${item.case} ${unique}`,
                   before.revision,
@@ -569,10 +586,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           await expectAPIError(
-            await request.post(
+            await actorRequest(actorID).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions`,
               {
-                headers: identityHeaders(actorID),
                 data: {
                   prompt: `Denied facilitation ${item.case} ${unique}`,
                   eligible_responder_membership_ids: [],
@@ -597,10 +613,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           await expectAPIError(
-            await request.post(
+            await actorRequest(actorID).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryOpen.id}/actions`,
               {
-                headers: identityHeaders(actorID),
                 data: {
                   text: `Denied spectator response ${unique}`,
                   expected_revision: before.revision,
@@ -629,10 +644,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           await expectAPIError(
-            await request.post(
+            await actorRequest(actorID).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/archive`,
               {
-                headers: identityHeaders(actorID),
                 data: { expected_revision: before.revision },
               },
             ),
@@ -684,10 +698,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
       switch (item.case) {
         case "mechanic":
           error = await expectAPIError(
-            await request.post(
+            await actorRequest(owner.id).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
-                headers: identityHeaders(owner.id),
                 data: resolutionRequest(
                   primaryAdjudicating,
                   primaryMechanic.revision,
@@ -713,10 +726,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           break;
         case "entity":
           error = await expectAPIError(
-            await request.post(
+            await actorRequest(owner.id).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
-                headers: identityHeaders(owner.id),
                 data: resolutionRequest(
                   primaryAdjudicating,
                   primaryMechanic.revision,
@@ -751,10 +763,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           error = await expectAPIError(
-            await request.put(
+            await actorRequest(owner.id).put(
               `${baseURL}/api/worlds/${primaryWorld.id}/entities/${primaryEntity.id}/controllers`,
               {
-                headers: identityHeaders(owner.id),
                 data: {
                   expected_table_revision: primaryWorldBefore.table_revision,
                   controller_world_membership_ids: [
@@ -784,10 +795,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
             owner.id,
           );
           error = await expectAPIError(
-            await request.post(
+            await actorRequest(owner.id).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
-                headers: identityHeaders(owner.id),
                 data: {
                   ...resolutionRequest(
                     primaryAdjudicating,
@@ -815,10 +825,9 @@ test("contract: invitation closure and authorization matrices are atomic and pri
         }
         case "status-instance":
           error = await expectAPIError(
-            await request.post(
+            await actorRequest(owner.id).post(
               `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
-                headers: identityHeaders(owner.id),
                 data: resolutionRequest(
                   primaryAdjudicating,
                   primaryMechanic.revision,
@@ -881,14 +890,12 @@ test("contract: invitation closure and authorization matrices are atomic and pri
   expect(primarySpectator.role).toBe("spectator");
 });
 
-async function createUser(
-  request: APIRequestContext,
+async function createActor(
+  _request: APIRequestContext,
   baseURL: string,
   displayName: string,
 ): Promise<IdentifiedResource> {
-  return postJSON<IdentifiedResource>(request, `${baseURL}/api/users`, {
-    display_name: displayName,
-  });
+  return signupActor(baseURL, displayName);
 }
 
 async function createWorld(
@@ -1034,10 +1041,6 @@ function numberValue(value: number) {
   return { kind: "number", value } as const;
 }
 
-function identityHeaders(userID: string): Record<string, string> {
-  return { "X-DND-User-ID": userID };
-}
-
 async function worldFor(
   request: APIRequestContext,
   baseURL: string,
@@ -1149,9 +1152,7 @@ async function getJSON<T>(
   url: string,
   userID?: string,
 ): Promise<T> {
-  const response = await request.get(url, {
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await getAs(request, url, userID);
   return expectJSON<T>(response, url);
 }
 
@@ -1161,10 +1162,7 @@ async function postJSON<T>(
   data: unknown,
   userID?: string,
 ): Promise<T> {
-  const response = await request.post(url, {
-    ...(data === undefined ? {} : { data }),
-    ...(userID === undefined ? {} : { headers: identityHeaders(userID) }),
-  });
+  const response = await postAs(request, url, data, userID);
   return expectJSON<T>(response, url);
 }
 

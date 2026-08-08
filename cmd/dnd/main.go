@@ -29,6 +29,9 @@ func main() {
 }
 
 func run(config app.Config) error {
+	if err := app.ValidateConfig(config); err != nil {
+		return fmt.Errorf("validate configuration: %w", err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 

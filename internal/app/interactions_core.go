@@ -850,6 +850,11 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "world ID is malformed", nil)
 		return
 	}
+	actor, ok := actorFromRequest(r)
+	if !ok {
+		handleAppError(w, authenticationRequired())
+		return
+	}
 	member, err := requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -878,6 +883,10 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 	defer ticker.Stop()
 	for {
 		wake := s.currentWorldEventWake()
+		validSession, err := s.refreshAuthenticatedSession(r.Context(), actor)
+		if err != nil || !validSession {
+			return
+		}
 		member, err = requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
 		if err != nil {
 			return

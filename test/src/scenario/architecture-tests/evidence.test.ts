@@ -3,7 +3,13 @@ import { describe, test } from "bun:test";
 
 import { CoverageLedger } from "../evidence/coverage";
 import { PerformanceReporter } from "../evidence/performance";
-import { REDACTED, redact, sanitizeURL, secret } from "../evidence/redaction";
+import {
+  REDACTED,
+  redact,
+  sanitizeText,
+  sanitizeURL,
+  secret,
+} from "../evidence/redaction";
 import { EvidenceTimeline } from "../evidence/timeline";
 
 describe("scenario evidence", () => {
@@ -11,6 +17,19 @@ describe("scenario evidence", () => {
     const evidence = redact({
       visible: "safe",
       token: "opaque",
+      password: "plain text",
+      current_password: "old plain text",
+      currentPassword: "old camel text",
+      new_password: "new plain text",
+      newPassword: "new plain text",
+      password_hash: "argon2id digest",
+      csrf_token: "csrf secret",
+      session_token_hash: "session digest",
+      headers: {
+        Cookie: "dnd_session=session-secret",
+        "Set-Cookie": "dnd_session=session-secret; HttpOnly",
+        "X-DND-CSRF": "csrf secret",
+      },
       nested: {
         value: secret("private prose"),
         private_notes: "facilitator only",
@@ -22,6 +41,19 @@ describe("scenario evidence", () => {
     assert.deepEqual(evidence, {
       visible: "safe",
       token: REDACTED,
+      password: REDACTED,
+      current_password: REDACTED,
+      currentPassword: REDACTED,
+      new_password: REDACTED,
+      newPassword: REDACTED,
+      password_hash: REDACTED,
+      csrf_token: REDACTED,
+      session_token_hash: REDACTED,
+      headers: {
+        Cookie: REDACTED,
+        "Set-Cookie": REDACTED,
+        "X-DND-CSRF": REDACTED,
+      },
       nested: {
         value: REDACTED,
         private_notes: REDACTED,
@@ -45,6 +77,12 @@ describe("scenario evidence", () => {
         `/api/world-invites/${REDACTED}/redeem`,
         `/api/invites/${REDACTED}`,
       ],
+    );
+    assert.equal(
+      sanitizeText(
+        "Cookie: dnd_session=secret\nSet-Cookie: dnd_session=secret\nX-DND-CSRF: secret\npassword=secret\ncurrent_password=old-secret\nnew_password=new-secret\ncurrentPassword=old-camel-secret\nnewPassword=new-camel-secret",
+      ),
+      `Cookie: ${REDACTED}\nSet-Cookie: ${REDACTED}\nX-DND-CSRF: ${REDACTED}\npassword=${REDACTED}\ncurrent_password=${REDACTED}\nnew_password=${REDACTED}\ncurrentPassword=${REDACTED}\nnewPassword=${REDACTED}`,
     );
   });
 

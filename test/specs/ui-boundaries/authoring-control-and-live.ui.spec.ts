@@ -15,11 +15,12 @@ import {
   createEntity,
   createInvite,
   createOpenInteraction,
-  createUser,
+  createActor,
   createWorld,
+  disposeAuthenticatedActors,
   getJSON,
   joinWorld,
-  openAs,
+  openAuthenticated,
   putCharacterFields,
   putProfile,
   readProfile,
@@ -30,6 +31,8 @@ import {
 } from "./support";
 
 const NARROW_VIEWPORT = { width: 390, height: 844 } as const;
+
+test.afterEach(async () => disposeAuthenticatedActors());
 
 test("UI boundaries: authored profiles, shared control, live actions, and accessible recovery stay coherent", async ({
   browser,
@@ -72,10 +75,10 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
 
   try {
     const [owner, playerOne, playerTwo, visitor] = await Promise.all([
-      createUser(request, baseURL, labels.owner),
-      createUser(request, baseURL, labels.playerOne),
-      createUser(request, baseURL, labels.playerTwo),
-      createUser(request, baseURL, labels.visitor),
+      createActor(request, baseURL, labels.owner),
+      createActor(request, baseURL, labels.playerOne),
+      createActor(request, baseURL, labels.playerTwo),
+      createActor(request, baseURL, labels.visitor),
     ]);
     const world = await createWorld(request, baseURL, owner.id, labels.world);
     const [playerOneMembership, playerTwoMembership] = await Promise.all([
@@ -118,18 +121,22 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
     );
 
     await Promise.all([
-      openAs(
+      openAuthenticated(
         ownerPage,
         baseURL,
         `/build/${world.id}/character-fields`,
-        labels.owner,
+        owner,
       ),
-      openAs(playerOnePage, baseURL, `/play/${world.id}`, labels.playerOne),
-      openAs(playerTwoPage, baseURL, `/play/${world.id}`, labels.playerTwo),
+      openAuthenticated(playerOnePage, baseURL, `/play/${world.id}`, playerOne),
+      openAuthenticated(playerTwoPage, baseURL, `/play/${world.id}`, playerTwo),
     ]);
 
     await test.step("NAV-005/keyboard-semantic-core and GLO-010", async () => {
       await ownerPage.goto(`${baseURL}/build/${world.id}/character-fields`);
+      await expect(ownerPage.locator(".skip-link")).toBeAttached();
+      await expect(
+        ownerPage.getByRole("heading", { name: "Character fields" }),
+      ).toBeVisible();
       await ownerPage.locator("body").press("Tab");
       await expect(ownerPage.locator(".skip-link")).toBeFocused();
       await ownerPage.keyboard.press("Enter");
@@ -438,11 +445,11 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       "visitor invite token",
     );
     await test.step("NAV-004/narrow-identity-invite-configuration-onboarding-live", async () => {
-      await openAs(
+      await openAuthenticated(
         visitorPage,
         baseURL,
         `/play/invite/${visitorToken}`,
-        labels.visitor,
+        visitor,
       );
       await visitorPage
         .getByRole("button", { name: `Join ${labels.world}` })

@@ -94,7 +94,7 @@ const CHECKPOINT_SCENARIO_IDS: Readonly<Record<string, readonly ScenarioId[]>> =
     "JRN-001/playable-world": [
       "JRN-001",
       "IDN-001",
-      "IDN-002",
+      "IDN-004",
       "WRL-001",
       "WRL-V01",
       "MEC-001",
@@ -200,7 +200,6 @@ class ScenarioRuntime {
   readonly #observations = new MutationEpochObservations();
   readonly #failures: RuntimeFailure[] = [];
   readonly #navigationCounts = new Map<ScenarioActorId, number>();
-  readonly #actorIdentityIds = new Map<ScenarioActorId, string>();
   readonly #actorWorldIds = new Map<ScenarioActorId, string>();
   readonly #checkpointStack: string[] = [];
   readonly #completedCheckpoints = new Set<string>();
@@ -660,10 +659,6 @@ class ScenarioRuntime {
     const requestURL = new URL(request.url());
     const applicationURL = new URL(this.baseURL);
     if (requestURL.origin !== applicationURL.origin) return;
-    const identityId = request.headers()["x-dnd-user-id"];
-    if (identityId !== undefined && identityId !== "") {
-      this.#actorIdentityIds.set(actorId, identityId);
-    }
     const worldMatch = requestURL.pathname.match(
       /^\/api\/worlds\/([0-9a-f-]{36})(?:\/|$)/i,
     );
@@ -717,20 +712,15 @@ class ScenarioRuntime {
     const actorIds = ["editor", "player", "spectator"] as const;
     const projections = await Promise.all(
       actorIds.map(async (actorId) => {
-        const identityId = this.#actorIdentityIds.get(actorId);
         const worldId = this.#actorWorldIds.get(actorId);
-        if (identityId === undefined || worldId === undefined) {
+        if (worldId === undefined) {
           throw new Error(
-            `event projection identity is unavailable for ${actorId}`,
+            `event projection world is unavailable for ${actorId}`,
           );
         }
         return {
           actorId,
-          events: await readAvailableWorldEvents(
-            this.baseURL,
-            worldId,
-            identityId,
-          ),
+          events: await readAvailableWorldEvents(this.actors[actorId], worldId),
         };
       }),
     );
@@ -850,43 +840,39 @@ interface ProjectedWorldEvent {
 }
 
 async function readAvailableWorldEvents(
-  baseURL: string,
+  page: Page,
   worldId: string,
-  identityId: string,
 ): Promise<readonly ProjectedWorldEvent[]> {
-  const controller = new AbortController();
-  const response = await fetch(
-    `${baseURL}/api/worlds/${worldId}/events?after=0`,
-    {
-      headers: { "X-DND-User-ID": identityId },
-      signal: controller.signal,
-    },
-  );
-  if (response.status !== 200 || response.body === null) {
-    controller.abort();
-    throw new Error("event projection read failed");
-  }
-  const reader = response.body.getReader();
-  const decoder = new TextDecoder();
-  let source = "";
-  try {
-    for (let reads = 0; reads < 8; reads += 1) {
-      const result = await Promise.race([
-        reader.read().then((value) => ({ kind: "data" as const, value })),
-        new Promise<Readonly<{ kind: "idle" }>>((resolve) =>
-          setTimeout(() => resolve({ kind: "idle" }), 100),
-        ),
-      ]);
-      if (result.kind === "idle" || result.value.done) break;
-      source += decoder.decode(result.value.value, { stream: true });
-      if (source.includes('"type":"resolution-applied"')) break;
+  return page.evaluate(async (targetWorldId) => {
+    const controller = new AbortController();
+    const response = await fetch(
+      `/api/worlds/${targetWorldId}/events?after=0`,
+      { credentials: "same-origin", signal: controller.signal },
+    );
+    if (response.status !== 200 || response.body === null) {
+      controller.abort();
+      throw new Error("event projection read failed");
     }
-  } finally {
-    controller.abort();
-    await reader.cancel().catch(() => undefined);
-  }
-  return Object.freeze(
-    source.split("\n\n").flatMap((block): ProjectedWorldEvent[] => {
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let source = "";
+    try {
+      for (let reads = 0; reads < 8; reads += 1) {
+        const result = await Promise.race([
+          reader.read().then((value) => ({ kind: "data" as const, value })),
+          new Promise<Readonly<{ kind: "idle" }>>((resolve) =>
+            setTimeout(() => resolve({ kind: "idle" }), 100),
+          ),
+        ]);
+        if (result.kind === "idle" || result.value.done) break;
+        source += decoder.decode(result.value.value, { stream: true });
+        if (source.includes('"type":"resolution-applied"')) break;
+      }
+    } finally {
+      controller.abort();
+      await reader.cancel().catch(() => undefined);
+    }
+    return source.split("\n\n").flatMap((block): ProjectedWorldEvent[] => {
       const data = block
         .split("\n")
         .find((line) => line.startsWith("data: "))
@@ -896,8 +882,8 @@ async function readAvailableWorldEvents(
       return typeof parsed === "object" && parsed !== null
         ? [parsed as ProjectedWorldEvent]
         : [];
-    }),
-  );
+    });
+  }, worldId);
 }
 
 export const test = base.extend<ScenarioFixtures>({

@@ -11,14 +11,31 @@ import (
 
 type userResponse struct {
 	ID          string    `json:"id"`
+	Username    string    `json:"username"`
 	DisplayName string    `json:"display_name"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-type createUserRequest struct {
-	ID          string `json:"id,omitempty"`
+type signupRequest struct {
+	Username    string `json:"username"`
 	DisplayName string `json:"display_name"`
+	Password    string `json:"password"`
+}
+
+type signinRequest struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+}
+
+type changePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+type authResponse struct {
+	User      userResponse `json:"user"`
+	CSRFToken string       `json:"csrf_token"`
 }
 
 type worldResponse struct {
