@@ -29,6 +29,7 @@ constraints.
 | [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, and browser tests.          |
 | [Operations](operations.md)     | Production build, configuration, deployment, health, logging, backups, and recovery.                  |
 | [Security](security.md)         | Current trust boundary, authorization rules, visibility filtering, known gaps, and hardening path.    |
+| [Deployment readiness](deployment-readiness/README.md) | Audits, blockers, decisions, and exit criteria for trusted staging and public release. |
 
 ## System at a glance
 
