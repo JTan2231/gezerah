@@ -50,17 +50,18 @@ The validator requires a valid Git repository with a `HEAD` commit.
 
 ### Frontend
 
-`./ci.sh frontend` performs:
+`./ci.sh frontend` performs a frozen Bun dependency install, then runs these six
+checks concurrently:
 
-1. frozen Bun dependency install;
-2. Prettier format check;
-3. ESLint for TypeScript/React/accessibility rules;
-4. Stylelint for `src/**/*.css`;
-5. Bun unit tests;
-6. Knip unused-code analysis;
-7. TypeScript check;
-8. `bun run build`, which repeats the TypeScript check and then runs the
-   production Vite build.
+- Prettier format check;
+- ESLint for TypeScript/React/accessibility rules;
+- Stylelint for `src/**/*.css`;
+- Bun unit tests;
+- Knip unused-code analysis;
+- TypeScript check.
+
+After all six pass, it runs `bunx vite build` for the production assets. The CI
+build does not repeat the TypeScript check performed in the validation group.
 
 ### Backend
 
@@ -71,7 +72,7 @@ The validator requires a valid Git repository with a `HEAD` commit.
 3. `go vet` over application packages;
 4. `go test` over application packages;
 5. trimmed `cmd/dnd` binary build;
-6. shell syntax checking for `ci.sh` and `run.sh`;
+6. shell syntax checking for `ci.sh`, `run.sh`, and `reset-db.sh`;
 7. optional application-startup/migration smoke test.
 
 Application tests cover the five-minute session-touch boundary, immediate
@@ -86,14 +87,12 @@ the schema.
 
 ### End to end
 
-`./ci.sh e2e` runs independent frontend and backend validation concurrently,
-builds the production frontend and then the Go binary once, and then runs:
-
-1. frozen install for `test/`;
-2. Prettier check for the harness/specs;
-3. TypeScript check;
-4. scenario-runtime unit and architecture verification;
-5. Playwright scenarios through the custom launcher.
+`./ci.sh e2e` first runs frontend validation, backend validation, and the frozen
+`test/` dependency install concurrently. It then runs the production artifact
+builds (Vite followed by the Go binary and optional database smoke test) in
+parallel with three independent test-project checks: Prettier, TypeScript, and
+the scenario-runtime architecture tests plus catalog verification. After both
+groups pass, it runs the Playwright scenarios through the custom launcher.
 
 The verified Go binary already embeds the verified frontend assets and is passed
 to Playwright global setup. The successful command, including detached-worktree
@@ -158,8 +157,12 @@ resolution-owned inline status modifiers, status source-provenance columns,
 expanded receipt tables, immutable receipt triggers, the `003` constrained
 audience-invalidation event flag, and the `004` empty-user cutover to normalized
 usernames/Argon2id/session-token digests. They assert that status authoring rows
-are owned by the resolution rather than world configuration and that plaintext
-credentials do not appear in the schema.
+are owned by the resolution rather than world configuration. For authentication,
+the static migration contract requires the password-hash/token-digest columns
+and shape constraints and rejects raw-token/session-token/CSRF columns in
+`auth_sessions`; it does not inspect stored runtime values. The authentication
+contract's targeted SQL reads perform the value comparison for signup-created
+rows against the presented password and cookie token.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -170,10 +173,15 @@ Bun tests under `web/frontend/src/**/*.test.ts` cover pure helpers and the API
 adapter:
 
 - human-readable API vocabulary and past/future relative timestamps;
+- consequence draft-to-API mapping for scalar values, inline status
+  applications, status-only targets, and exact active-instance removal;
+- derived mechanic mode/result-kind changes, including expression preservation
+  and reset behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
-  round trips, and unknown-route rejection.
+  round trips, removed routes, and unknown-route rejection;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
-  legacy UUID header, and global 401 authentication teardown.
+  legacy UUID header, stale-CSRF recovery, session-safe mutation replay, and
+  current-versus-superseded 401 authentication teardown.
 
 There are no current component-rendering unit tests.
 
@@ -189,15 +197,24 @@ application and exact removal, and owner-authored archive. `JRN-001` through
 The spine does not use API writes, storage injection, or prepared state.
 
 Fast PostgreSQL-backed contracts under `test/specs/contracts/` use independent
-cookie jars and in-memory CSRF tokens. They retain the exact server evidence
-that does not need another browser journey:
+cookie jars and in-memory CSRF tokens. Ordinary product setup and commands go
+through the public HTTP API. The authentication contract additionally uses test-
+only direct SQL to expire or age a session, disable an account, seed the session-
+cap fixture, and inspect password/session digests and timestamps. Those probes
+make otherwise slow or unreachable persistence states deterministic; they are
+not evidence that the same states are exposed through a product API. The
+contracts retain the exact server evidence that does not need another browser
+journey:
 
 - `authentication.contract.spec.ts` covers signup/signin, cookie attributes,
-  session bootstrap, anonymous and forged-header denial, origin/CSRF failures,
-  logout scopes, password replacement, and revoked-session behavior. It also
-  proves that recent activity does not rewrite session timestamps, activity
-  older than five minutes touches once, subsequent activity is coalesced, and
-  repeated SSE reauthorization does not extend idle expiry;
+  session bootstrap, anonymous forged-header denial, authenticated header
+  ignoring, origin/CSRF failures, logout scopes, password replacement, and
+  revoked-session behavior. Its targeted SQL reads verify that signup fixtures
+  have distinct Argon2id hashes, session rows contain a digest rather than the
+  cookie value, and authentication responses omit the inspected credentials. It
+  also verifies that recent activity does not rewrite session timestamps,
+  activity older than five minutes touches once, subsequent activity is
+  coalesced, and repeated SSE reauthorization does not extend idle expiry;
 - `access-and-invites.contract.spec.ts` covers world isolation, invitation-token
   secrecy, admission, role denial, editor archive denial, and revocation;
 - `profile-and-readiness.contract.spec.ts` covers waiting/setup/ready
@@ -293,13 +310,15 @@ assertions remain world- or exact-resource-scoped.
 
 On E2E runs, inspect:
 
-| Path                                        | Content                                                         |
-| ------------------------------------------- | --------------------------------------------------------------- |
-| `test/artifacts/app-server.log`             | Application stdout/stderr for the disposable server.            |
-| `test/artifacts/playwright/`                | Per-test results and screenshots captured on failure.           |
-| `test/artifacts/report/`                    | HTML report.                                                    |
-| `test/artifacts/scenario-test-results.json` | Exact Playwright owner results and durations.                   |
-| `test/artifacts/scenario-coverage.json`     | Final 141-row scenario inventory; root E2E requires all passed. |
+| Path                                               | Content                                                         |
+| -------------------------------------------------- | --------------------------------------------------------------- |
+| `test/artifacts/app-server.log`                    | Application stdout/stderr for the disposable server.            |
+| `test/artifacts/go-test-results.jsonl`             | Machine-readable `go test -json` output.                        |
+| `test/artifacts/scenario-architecture-results.xml` | JUnit output from scenario-runtime architecture tests.          |
+| `test/artifacts/playwright/`                       | Per-test results and screenshots captured on failure.           |
+| `test/artifacts/report/`                           | HTML report.                                                    |
+| `test/artifacts/scenario-test-results.json`        | Exact Playwright owner results and durations.                   |
+| `test/artifacts/scenario-coverage.json`            | Final 141-row scenario inventory; root E2E requires all passed. |
 
 The active checkout usually receives no artifacts when invoked through root
 `ci.sh`, because the entire run occurs in the disposable worktree that is
@@ -368,11 +387,15 @@ applicable.
 
 ### Migration
 
-Exercise an empty database through E2E. Verify that an unknown or non-prefix
-migration history is rejected with the clean-database instruction. Once a
-second migration exists after `001_worldwright.sql`, test upgrades from each
-supported predecessor derived from that baseline. Set `DND_TEST_DATABASE_URL`
-only to a database that can be destroyed or modified without consequence.
+Exercise an empty database through E2E. Extend the migration-history test so
+only prefixes of the full `001`–current chain are accepted, and add focused SQL
+contract assertions for the new schema behavior. If a migration supports a
+populated predecessor, add an explicit database fixture for every supported
+upgrade prefix; the current suite has no automated populated-upgrade matrix.
+`004_password_auth.sql` is intentionally different: it rejects any nonempty
+`users` table, so test and document a separately reviewed data transition before
+claiming such an upgrade is supported. Set `DND_TEST_DATABASE_URL` only to a
+database that can be destroyed or modified without consequence.
 
 ## Current gaps
 

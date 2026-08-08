@@ -80,20 +80,20 @@ sessions for the account, pruning least-recently-seen sessions first.
 
 `fields` is optional. Common status/code pairs include:
 
-| Status | Typical codes                                                                                  | Meaning                                                             |
-| ------ | ---------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                                 | Transport, path, or query syntax is malformed.                      |
-| 401    | `authentication_required`, `invalid_credentials`                                               | Session is absent/expired/revoked, or signin credentials are wrong. |
-| 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                                           | Browser-integrity check or resource authority failed.               |
-| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                                          | Resource, invite, or endpoint is absent or hidden.                  |
-| 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors                | Current state conflicts with the command.                           |
-| 422    | `validation_failed`, `invalid_reference`, `effect_application_failed`                          | Structurally readable JSON violates a domain/database rule.         |
-| 429    | `rate_limited`                                                                                 | Authentication attempt/work limit was reached; honor `Retry-After`. |
-| 500    | `internal_error`, `database_error`                                                             | Unexpected server or database failure.                              |
-| 503    | `database_unavailable`                                                                         | Health check cannot ping PostgreSQL.                                |
+| Status | Typical codes                                                                   | Meaning                                                             |
+| ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                  | Transport, path, or query syntax is malformed.                      |
+| 401    | `authentication_required`, `invalid_credentials`                                | Session is absent/expired/revoked, or signin credentials are wrong. |
+| 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                           | Browser-integrity check or resource authority failed.               |
+| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                           | Resource, invite, or endpoint is absent or hidden.                  |
+| 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors | Current state conflicts with the command.                           |
+| 422    | `validation_failed`, `invalid_reference`, `transition_failed`                   | Structurally readable JSON violates a domain/database rule.         |
+| 429    | `rate_limited`                                                                  | Authentication attempt/work limit was reached; honor `Retry-After`. |
+| 500    | `internal_error`, `database_error`                                              | Unexpected server or database failure.                              |
+| 503    | `database_unavailable`                                                          | Health check cannot ping PostgreSQL.                                |
 
-The standard-library mux may emit its own `405 Method Not Allowed` for a known
-path with the wrong method.
+Unknown API paths and unsupported methods on known paths reach the methodless
+API catchall and return `404 endpoint_not_found` in the JSON error envelope.
 
 ### Optimistic concurrency
 
@@ -138,15 +138,15 @@ Path placeholders are UUIDs unless noted otherwise.
 
 ### Health and accounts
 
-| Method and path          | Authority     | Request/response |
-| ------------------------ | ------------- | ---------------- |
-| `GET /api/health`        | Public        | `{"ok":true,"timestamp":"..."}` after a database ping. |
-| `POST /api/auth/signup`  | Public+origin | `{username,display_name,password}`; creates the first session and returns the authentication response. |
-| `POST /api/auth/signin`  | Public+origin | `{username,password}`; returns the same generic error for unknown usernames and wrong passwords. |
-| `GET /api/me`            | Session       | Returns the current authentication response so the browser can restore its in-memory CSRF token. |
-| `POST /api/auth/logout`  | Session+CSRF  | Revokes the current session and clears both possible cookie names; `204`. |
-| `POST /api/auth/logout-all` | Session+CSRF | Revokes all sessions belonging to the current account; `204`. |
-| `PUT /api/me/password`   | Session+CSRF  | `{current_password,new_password}`; revokes every old session, creates a replacement, and returns the new authentication response. |
+| Method and path             | Authority     | Request/response                                                                                                                  |
+| --------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/health`           | Public        | `{"ok":true,"timestamp":"..."}` after a database ping.                                                                            |
+| `POST /api/auth/signup`     | Public+origin | `{username,display_name,password}`; creates the first session and returns the authentication response.                            |
+| `POST /api/auth/signin`     | Public+origin | `{username,password}`; returns the same generic error for unknown usernames and wrong passwords.                                  |
+| `GET /api/me`               | Session       | Returns the current authentication response so the browser can restore its in-memory CSRF token.                                  |
+| `POST /api/auth/logout`     | Session+CSRF  | Revokes the current session and clears both possible cookie names; `204`.                                                         |
+| `POST /api/auth/logout-all` | Session+CSRF  | Revokes all sessions belonging to the current account; `204`.                                                                     |
+| `PUT /api/me/password`      | Session+CSRF  | `{current_password,new_password}`; revokes every old session, creates a replacement, and returns the new authentication response. |
 
 Usernames contain 3–64 ASCII characters, begin with a letter or number, and
 otherwise accept letters, numbers, `.`, `_`, and `-`. Uniqueness is
@@ -175,17 +175,23 @@ three are returned on every `World` response.
 
 ### Capacities and capabilities
 
-| Method and path                                                  | Authority                  | Notes                                                           |
-| ---------------------------------------------------------------- | -------------------------- | --------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.        |
-| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision. |
-| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                          |
-| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision. |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency remains.               |
+| Method and path                                                  | Authority                  | Notes                                                                        |
+| ---------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.                     |
+| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision.              |
+| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                                       |
+| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision.              |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency or active status reference remains. |
 
 Capacity `score`/`pool` and capability `rating` are numeric; capability
 `binary` is Boolean. Each is either a stored/defaulted `input` or a calculated
 `derived` mechanic. Every mechanic applies to every entity.
+
+Archiving an active mechanic fails with `409 mechanic_has_dependents` while an
+active derived mechanic references it, or `409 mechanic_has_active_statuses`
+while any active status modifier references it. Remove those active statuses
+before archiving. Archived mechanics remain readable but cannot be changed or
+restored through the product API.
 
 ### Character fields, entities, profiles, and state
 
@@ -197,16 +203,20 @@ Capacity `score`/`pool` and capability `rating` are numeric; capability
 | `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates entity/state root; optional controller memberships.         |
 | `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.  |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Archives the entity.                                                |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Terminally archives the entity; the record remains readable.        |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.              |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete controller set using `expected_table_revision`.            |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions. |
 
-Onboarding players may read only controlled entities until ready. Direct state
+Until ready, a player's entity collection, entity-detail, and state reads are
+restricted to controlled entities. Profile reads are filtered separately: a
+different completed entity may expose only its table-visible values, while
+restricted values require controller or facilitator authority. Direct state
 writes remain owner/editor setup operations; players edit only authorized
-profile text.
+profile text. An archived entity remains readable, but its identity/display
+archive transition has no product restore operation.
 
 ### Invite links
 
@@ -215,8 +225,8 @@ profile text.
 | `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
 | `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
 | `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
-| `GET /api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.        |
-| `POST /api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.                |
+| `GET /api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.       |
+| `POST /api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.               |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only their
 SHA-256 digest is stored. Redemption counts once per invite/user. An already
@@ -266,6 +276,15 @@ handler closes on process/request cancellation, session revocation/expiry or
 account disablement, membership revocation, query failure, or write failure.
 The client reconnects with its cursor unless authentication has ended. Events
 are invalidation signals only.
+
+When an open interaction moves to adjudicating or cancelled, it leaves a
+non-facilitator audience member's visible feed. That former audience still
+receives the marked cursor row, projected as
+`interaction-feed-invalidated`: `id` and `created_at` remain, while
+`interaction_id`, `submission_id`, `resolution_id`, and
+`actor_membership_id` are omitted. Facilitators receive the original lifecycle
+event. Clients advance the cursor and reload the visible interaction feed for
+either form.
 
 ## Payload reference
 
@@ -334,7 +353,9 @@ dependency cycles without advancing the revision.
 
 List responses are `{revision,mechanics}`. Single-resource reads and every
 mutation return `{revision,mechanic}`. Archival accepts only
-`{"expected_rules_revision":6}`.
+`{"expected_rules_revision":6}`. It preserves stored input values and
+historical receipt/status references, but rejects active derived dependents and
+active status modifiers before making the mechanic terminally archived.
 
 ### State
 
@@ -644,18 +665,20 @@ to the problem that created it.
 
 ## Limits and notable validation rules
 
-| Item                                              | Limit/rule                          |
-| ------------------------------------------------- | ----------------------------------- |
-| API request body                                  | 1 MiB                               |
-| Names/labels/display names                        | Usually 200 characters              |
-| Interaction title                                 | 200 characters                      |
-| Interaction prompt/action text                    | 10,000 characters                   |
-| Interaction/Consequence private notes and summary | 20,000 characters                   |
-| Character fields                                  | 50 active; label 200/guidance 2,000 |
-| Character-field value                             | 20,000 characters                   |
-| Consequence effects                               | 100                                 |
-| Inline status description                         | 2,000 characters                    |
-| Entity/world/member lists                        | 500–1000 depending on resource      |
-| SSE batch                                         | 100 events                          |
+| Item                                                           | Limit/rule                                   |
+| -------------------------------------------------------------- | -------------------------------------------- |
+| API request body                                               | 1 MiB                                        |
+| Names/labels/display names                                     | Usually 200 characters                       |
+| Interaction title                                              | 200 characters                               |
+| Interaction prompt/action text                                 | 10,000 characters                            |
+| Consequence action summary                                     | 10,000 characters                            |
+| Interaction private notes; Consequence narrative/private notes | 20,000 characters                            |
+| Character fields                                               | 50 active; label 200/guidance 2,000          |
+| Character-field value                                          | 20,000 characters                            |
+| Consequence effects                                            | No separate item cap; 1 MiB body cap applies |
+| Inline status description                                      | 2,000 characters                             |
+| World list; interaction feed                                   | 500 each                                     |
+| Entity/member/mechanic lists                                   | No explicit application cap                  |
+| SSE batch                                                      | 100 events                                   |
 
 For mechanical and lifecycle invariants, see [Domain model](domain-model.md).

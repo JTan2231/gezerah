@@ -198,7 +198,10 @@ sequenceDiagram
     H-->>UI: revision + saved mechanic
 ```
 
-Archiving is explicit and retains stored values and receipt references.
+Archiving is explicit and retains stored values and receipt references. An
+active derived dependency or active status modifier reference blocks mechanic
+archive. Once archived, a mechanic remains readable but has no product restore
+transition.
 
 ### Live interaction resolution
 
@@ -211,8 +214,10 @@ sequenceDiagram
     participant E as SSE clients
 
     F->>H: Resolve Consequence summary + ordered effects + revisions + idempotency key
-    H->>DB: Lock mechanic rules, interaction, entities, state/status roots
-    H->>DB: Recheck facilitator, lifecycle, revisions, selected action
+    H->>DB: Authorize active facilitator/world and check idempotent replay
+    H->>DB: Lock mechanic rules and interaction roots
+    H->>DB: Check lifecycle, revisions, and selected action
+    H->>DB: Lock sorted target entities and state/status roots
     H->>R: Evaluate before; validate/apply inline statuses and exact removals; evaluate after
     R-->>H: Applications and effective changes or atomic failure
     H->>DB: Persist changed state, status snapshots/provenance, and status revisions
@@ -234,9 +239,10 @@ replay returns the immutable Consequence with
 The system combines:
 
 1. **Optimistic revisions.** Settings, the world table, the world mechanic graph,
-   character fields, profiles, entity state, memberships, interactions, and
-   actions reject stale expected revisions. Entity status-set roots version
-   actual status lifecycle changes.
+   character fields, profiles, entity state, interactions, and actions reject
+   stale expected revisions. Membership rows carry recorded revisions but no
+   membership mutation currently accepts an expected membership revision.
+   Entity status-set roots version actual status lifecycle changes.
 2. **Row locks and stable ordering.** Mutation transactions lock aggregate roots
    first and sort mechanic/entity IDs where lock order matters.
 3. **Database constraints.** Uniqueness, world-scoped foreign keys, tagged
@@ -259,6 +265,14 @@ comments. Events are invalidation hints; clients reload authoritative world
 resources instead of reconstructing state from event payloads. A
 `rules-updated` event causes Play to reload the mechanic catalog and evaluated
 entity state before enabling a Consequence based on them.
+
+An open interaction's transition to adjudicating or cancelled removes it from
+the former non-facilitator audience's feed. The marked lifecycle event remains
+visible to that audience but is projected as `interaction-feed-invalidated`,
+retaining only cursor/time metadata and clearing interaction, submission,
+resolution, and actor IDs. Facilitators receive the original lifecycle event.
+This lets clients discard a resource that has just become invisible without
+leaking its now-restricted identifiers.
 
 There is no broker. A successful mutation broadcasts an in-process wakeup so
 streams on the same server query PostgreSQL immediately after commit. Each open

@@ -48,12 +48,12 @@ disposable database and terminate sessions connected to it.
 
 The current application has one clean baseline followed by forward upgrades:
 
-| Migration                         | Purpose                                                                                         |
-| --------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `001_worldwright.sql`             | Complete world-native schema: users, worlds, mechanics, state, profiles, controls, live play.   |
-| `002_rules_graph_statuses.sql`    | Mechanic rules revisions, typed derived expressions, problem-sourced statuses, and effective receipts. |
-| `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity. |
-| `004_password_auth.sql`           | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions. |
+| Migration                                    | Purpose                                                                                                |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `001_worldwright.sql`                        | Complete world-native schema: users, worlds, mechanics, state, profiles, controls, live play.          |
+| `002_rules_graph_statuses.sql`               | Mechanic rules revisions, typed derived expressions, problem-sourced statuses, and effective receipts. |
+| `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity.                                                |
+| `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
 
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
@@ -83,14 +83,14 @@ storage.
 
 ### Worlds, users, and membership
 
-| Table                      | Purpose                                                                    |
-| -------------------------- | -------------------------------------------------------------------------- |
+| Table                      | Purpose                                                                                  |
+| -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
-| `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state. |
-| `worlds`                   | Name, description, lifecycle, settings revision, and table revision.       |
-| `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.       |
-| `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.     |
-| `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership. |
+| `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
+| `worlds`                   | Name, description, lifecycle, settings revision, and table revision.                     |
+| `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
+| `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.                   |
+| `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |
 
 `worlds.revision` guards settings and archive commands. `table_revision`
 guards controller-set changes and table authority independently.
@@ -110,14 +110,14 @@ so an account retains at most 20 live sessions.
 
 ### Rules, mechanics, entities, and state
 
-| Table                               | Purpose                                                                          |
-| ----------------------------------- | -------------------------------------------------------------------------------- |
-| `world_rule_sets`                   | One mechanic dependency-graph revision root per world.                           |
-| `world_mechanics`                   | Capacity/capability kind, mode, scalar/source kind, input metadata, lifecycle.    |
-| `world_mechanic_expression_nodes`   | Normalized typed expression tree and dependency-reference rows.                  |
-| `entities`                          | World-owned fictional state owners with display name and archive flag.           |
-| `state_records`                     | One optimistic base-state revision/timestamp root per entity.                    |
-| `state_values`                      | Numeric or Boolean stored input override per entity/mechanic pair.                |
+| Table                             | Purpose                                                                        |
+| --------------------------------- | ------------------------------------------------------------------------------ |
+| `world_rule_sets`                 | One mechanic dependency-graph revision root per world.                         |
+| `world_mechanics`                 | Capacity/capability kind, mode, scalar/source kind, input metadata, lifecycle. |
+| `world_mechanic_expression_nodes` | Normalized typed expression tree and dependency-reference rows.                |
+| `entities`                        | World-owned fictional state owners with display name and archive flag.         |
+| `state_records`                   | One optimistic base-state revision/timestamp root per entity.                  |
+| `state_values`                    | Numeric or Boolean stored input override per entity/mechanic pair.             |
 
 `world_mechanics` permits only:
 
@@ -150,11 +150,11 @@ entity/mechanic. A tagged-shape check requires exactly one of `number_value` or
 
 ### Runtime status instances
 
-| Table                              | Purpose                                                                                  |
-| ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| `entity_status_sets`               | One independent runtime status revision root per entity.                                 |
-| `entity_status_instances`          | Applied/removed lifecycle, snapshotted prose, source Consequence IDs, and stable order.   |
-| `entity_status_instance_modifiers` | Immutable literal modifier snapshots copied from the source apply effect.                |
+| Table                              | Purpose                                                                                 |
+| ---------------------------------- | --------------------------------------------------------------------------------------- |
+| `entity_status_sets`               | One independent runtime status revision root per entity.                                |
+| `entity_status_instances`          | Applied/removed lifecycle, snapshotted prose, source Consequence IDs, and stable order. |
+| `entity_status_instance_modifiers` | Immutable literal modifier snapshots copied from the source apply effect.               |
 
 An apply-status effect in an immutable resolution supplies the status name,
 optional description, and modifiers directly. Each target produces an
@@ -213,15 +213,15 @@ rather than retained as a historical foreign key.
 
 ### Resolution receipts
 
-| Table                                            | Purpose                                                                                  |
-| ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
-| `interaction_resolutions`                        | One problem Consequence, actor, idempotency key, prose summary, and rules revision.      |
-| `interaction_resolution_effects`                 | Ordered scalar/status requests; apply rows snapshot inline status name/description.      |
-| `interaction_resolution_status_effect_modifiers` | Ordered literal modifiers authored on an apply-status effect.                            |
-| `interaction_resolution_effect_targets`          | Ordered entity targets; remove rows also carry the exact status-instance target.         |
-| `interaction_resolution_effect_applications`     | Ordered per-target changed/before/after scalar receipt.                                  |
-| `interaction_resolution_status_applications`     | Ordered status lifecycle applications and snapshotted names/instance IDs.                |
-| `interaction_resolution_effective_changes`       | Ordered before/after values for every calculated mechanic that actually moved.           |
+| Table                                            | Purpose                                                                             |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------- |
+| `interaction_resolutions`                        | One problem Consequence, actor, idempotency key, prose summary, and rules revision. |
+| `interaction_resolution_effects`                 | Ordered scalar/status requests; apply rows snapshot inline status name/description. |
+| `interaction_resolution_status_effect_modifiers` | Ordered literal modifiers authored on an apply-status effect.                       |
+| `interaction_resolution_effect_targets`          | Ordered entity targets; remove rows also carry the exact status-instance target.    |
+| `interaction_resolution_effect_applications`     | Ordered per-target changed/before/after scalar receipt.                             |
+| `interaction_resolution_status_applications`     | Ordered status lifecycle applications and snapshotted names/instance IDs.           |
+| `interaction_resolution_effective_changes`       | Ordered before/after values for every calculated mechanic that actually moved.      |
 
 Effects and applications use dedicated numeric/Boolean columns with shape
 checks; there are no polymorphic scalar sets or unknown-value wrappers.
@@ -248,6 +248,12 @@ Event IDs are generated `bigint` identities indexed by `(world_id, id)`. The
 payload is not a state snapshot. Event types cover world/membership changes,
 entity control/profile changes, character-field changes, interaction/action
 lifecycle, mechanic `rules-updated` publication, and resolution application.
+
+`invalidates_interaction_audience` marks an open interaction's transition to
+adjudicating or cancelled. It keeps that cursor row visible to the former
+non-facilitator audience even though the interaction has left their feed. The
+application projects it as `interaction-feed-invalidated` and clears all
+resource and actor IDs; facilitators receive the original lifecycle event.
 
 The schema checks event type and world scope of populated IDs but does not
 prove every semantically required actor/resource combination. Events are an
@@ -314,9 +320,11 @@ against a holder of the DDL-capable database credentials.
 Owned children generally cascade from their world or aggregate root. Historical
 cross-references generally restrict deletion. Public APIs use archive/final
 statuses and expose no hard-delete workflow. Archiving current mechanic
-configuration does not remove stored input, receipt references, or active
-status snapshots. An active mechanic with an active derived-mechanic dependency
-must have that dependent archived first.
+configuration does not remove stored input, receipt references, or historical
+status snapshots. An active mechanic cannot be archived while an active
+derived mechanic depends on it or an active status modifier references it; the
+dependent must be archived or the status removed first. Mechanic and entity
+archive transitions have no product restore operation.
 
 Deleting a world directly would cascade authored data and can interact with
 restricted history references. It is not a supported operational action.
@@ -325,7 +333,8 @@ restricted history references. It is not a supported operational action.
 
 After the existing migration chain is released:
 
-1. add the next zero-padded SQL file after `002_rules_graph_statuses.sql`;
+1. add the next zero-padded file after the current tip
+   (`004_password_auth.sql`, so currently `005_*.sql`);
 2. never edit a migration already recorded in a durable database;
 3. keep each file valid inside one transaction;
 4. preserve user-authored, world-scoped vocabulary—do not seed canonical

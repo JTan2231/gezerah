@@ -51,9 +51,9 @@ the user to sign up or sign in when needed. Accounts use a username and
 password; no email address is required. **Build** defines input and
 derived capacities/capabilities, character requirements, roster setup, people,
 invitations, and world settings. **Play** is the separate live table: complete
-player onboarding, present an ad-hoc problem, collect player actions, preview a
-Consequence with one prose summary and ordered scalar/status effects, then
-commit an immutable resolution receipt.
+player onboarding, present an ad-hoc problem, collect player actions, author a
+Consequence with one prose summary and ordered scalar/status effects, optionally
+run an advisory preview, then commit an immutable resolution receipt.
 
 Useful process commands:
 
@@ -86,14 +86,14 @@ concurrent starts serialize schema upgrades.
 
 ## Configuration
 
-| Variable           | Default                                         | Purpose                                            |
-| ------------------ | ----------------------------------------------- | -------------------------------------------------- |
-| `DND_ADDR`         | `:8080`                                         | HTTP listen address.                               |
-| `PORT`             | unset                                           | Hosting fallback when `DND_ADDR` is unset.         |
-| `DND_DATABASE_URL` | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL.                         |
-| `DATABASE_URL`     | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset. |
-| `DND_LOG_LEVEL`    | `info`                                          | `debug`, `info`, `warn`, or `error`.               |
-| `DND_PUBLIC_ORIGIN` | request origin                                 | Exact browser origin allowed for authenticated writes; set this behind a proxy. |
+| Variable            | Default                                         | Purpose                                                                         |
+| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `DND_ADDR`          | `:8080`                                         | HTTP listen address.                                                            |
+| `PORT`              | unset                                           | Hosting fallback when `DND_ADDR` is unset.                                      |
+| `DND_DATABASE_URL`  | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL.                                                      |
+| `DATABASE_URL`      | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset.                              |
+| `DND_LOG_LEVEL`     | `info`                                          | `debug`, `info`, `warn`, or `error`.                                            |
+| `DND_PUBLIC_ORIGIN` | request origin                                  | Exact browser origin allowed for authenticated writes; set this behind a proxy. |
 
 World roles, lifecycle states, visibility, and mutation permissions are
 enforced by the server. Username/password authentication creates an opaque,
@@ -129,6 +129,9 @@ authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 
 Railway configuration is included. Railpack installs Bun, builds the frontend,
 compiles a static Go binary, starts it as `./out`, and checks `/api/health`.
-Attach a Railway PostgreSQL database so `DATABASE_URL` is available.
+Attach a Railway PostgreSQL database, then define a reference variable on the
+application service, such as `DATABASE_URL=${{Postgres.DATABASE_URL}}` using the
+actual database service name. Attaching the database alone does not inject its
+variables into the application service.
 
 Generated files under `web/static` are build output and are not committed.

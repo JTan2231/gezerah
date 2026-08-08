@@ -51,23 +51,29 @@ Problems are runtime moments, never authored configuration.
 
 1. The facilitator enters the world through `/play` and clicks **New problem**.
 2. Write what is happening, with an optional short title.
-3. Optionally select context entities and choose eligible player responders.
-   Players still onboarding and incomplete controlled entities are excluded.
+3. The UI automatically includes every active member whose play status is
+   ready in the audience. Optionally select active uncontrolled or ready
+   controlled context entities and choose eligible player responders.
+   Onboarding players are excluded from the audience and responder choices;
+   setup-required controlled entities are excluded from context.
 4. Present the problem. It becomes open and visible to its audience.
 5. Eligible players offer one free-form action each; they may attribute it to a
    ready controlled character and may withdraw while the problem remains open.
 6. The facilitator begins adjudication. The interaction becomes adjudicating
    and is hidden from non-facilitators until it is resolved.
 7. Optionally choose the action at the center and author the problem's
-   **Consequence**: one prose summary plus ordered targeted effects. Scalar
-   effects change mutable inputs. An apply-status effect defines its name,
-   optional description, and ordered literal modifiers inline; a remove-status
-   effect selects an exact active status instance on its entity.
-8. Preview with the current rules revision to validate exact bounds, steps,
-   types, inline status modifiers, exact removal targets, permissions, status
-   lifecycle, and resulting effective values without writing.
-9. Resolve with a fresh idempotency key. Base-state changes, persistent status
-   instances with source-problem provenance, modifier snapshots,
+   **Consequence**: one prose summary plus ordered targeted effects. Each scalar
+   effect changes one mutable input on one entity. An apply-status effect
+   defines its name, optional description, and ordered literal modifiers inline
+   for one or more entity targets; each remove-status effect selects one exact
+   active status instance on one entity.
+8. Optionally run an advisory preview with the current rules revision to
+   validate exact bounds, steps, types, inline status modifiers, exact removal
+   targets, permissions, status lifecycle, and resulting effective values
+   without writing. Preview does not reserve the revision.
+9. Resolve, with or without a prior preview, using a fresh idempotency key.
+   Base-state changes, persistent status instances with source-problem
+   provenance, modifier snapshots,
    effective-change receipt, action selection, interaction status, and event
    cursor commit together.
 
@@ -122,8 +128,9 @@ permission. Archived worlds/entities preserve profiles as read-only material.
 ## Archive resources
 
 - Archive a capacity/capability when it should stop appearing on current
-  sheets. Active derived-mechanic dependents must be archived first; existing
-  stored values, active status snapshots, and receipts remain.
+  sheets. Active derived-mechanic dependents must be archived and active
+  statuses whose modifiers target it must be removed first; existing stored
+  values, removed status snapshots, and receipts remain.
 - Revoke an invite to prevent future redemption; existing members remain.
 - Archive a world only after all active problems are resolved/cancelled. This
   prevents further configuration and play mutations.

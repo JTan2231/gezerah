@@ -1,16 +1,16 @@
-# Business scenario plan
+# Business scenario catalog
 
 This document defines the business behavior that the scenario-test system must
 exercise. It is the authority for **what a user attempts and what outcome makes
 that attempt correct**. It deliberately does not define selectors, request
 paths, SQL, or the code that performs an action.
 
-The companion [architecture plan](architecture.md) defines how journeys,
+The companion [scenario-test architecture](architecture.md) defines how journeys,
 behavior drivers, outcome contracts, and validators execute. The
-[code-mapping plan](code-mapping.md) maps every scenario family and scenario ID
+[code-mapping reference](code-mapping.md) maps every scenario family and scenario ID
 below to the product code and existing tests that implement or protect it.
 
-This plan follows the current Worldwright workflows and domain model. All
+This catalog follows the current Worldwright workflows and domain model. All
 world, mechanic, field, entity, problem, and status names used by a test are
 run-local, user-authored examples. They are never built-in vocabulary, entity
 classes, privileged keys, or seeded definitions.
@@ -18,7 +18,7 @@ classes, privileged keys, or seeded definitions.
 The product baseline for this catalog is the current
 [workflow guide](../docs/workflows.md), [domain model](../docs/domain-model.md),
 [frontend guide](../docs/frontend.md), [security boundary](../docs/security.md),
-and [testing guide](../docs/testing.md). If implemented behavior and this plan
+and [testing guide](../docs/testing.md). If implemented behavior and this catalog
 diverge, reconcile the product decision and update this catalog before silently
 teaching a driver the divergence.
 
@@ -266,10 +266,11 @@ The runner validates four checkpoint types:
 4. **Journey checkpoint:** validate persistence, history, privacy, and global
    invariants at the end of the story.
 
-Every failed checkpoint reports the actor, scenario ID, expected outcome,
-current visible state, browser trace, relevant response metadata, and server
-log window. Sensitive prose and invite tokens must be redacted from durable
-diagnostics.
+Every failed checkpoint identifies the actor, scenario ID, expected outcome,
+and sanitized causal timeline. Playwright retains a failure screenshot and the
+run keeps relevant response metadata plus `app-server.log`; trace and video are
+available only on an explicitly enabled diagnostic rerun. Sensitive prose and
+invite tokens must be redacted from durable diagnostics.
 
 ## 4. Canonical user journeys
 
@@ -871,16 +872,16 @@ cheaper and clearer as focused contracts. A scenario remains meaningfully
 distinct at the business level even when its cheapest trustworthy evidence is
 below the browser.
 
-## 9. Complete implementation and runtime contract
+## 9. Implemented suite and runtime contract
 
-This plan has one complete implementation delivery: add the scenario registry
-and runtime, implement the lifecycle spine, attach every journey checkpoint and
-safe rib, add the focused UI-boundary and direct-contract coverage, retain
-exhaustive lower-layer ownership, enforce the harness policies, and remove
-superseded browser duplication in the same change. No partial subset of
-`JRN-001` through `JRN-007` is the target state.
+The suite implements the scenario registry and runtime, the seven-checkpoint
+lifecycle spine, focused UI-boundary and direct-contract coverage, lower-layer
+ownership, and harness-policy evidence. Superseded broad browser specifications
+were removed so the current suite does not replay the same lifecycle in several
+files. `test/src/scenario/catalog/scenarioTraces.ts` is the executable ownership
+record for all 141 scenario IDs.
 
-Completion requires all of the following together:
+The maintained contract requires all of the following together:
 
 - `lifecycle-spine.spec.ts` reaches all seven separately reported checkpoints
   from a clean database using only visible frontend mutations;
@@ -888,9 +889,9 @@ Completion requires all of the following together:
   `ui-boundary`, `direct-contract`, `lower-layer`, or `harness-policy` evidence;
 - one shared observation snapshot may satisfy several registered contracts,
   but each contract reports its own pass, failure, or `blocked-by` result;
-- old broad browser tests are removed or narrowed once their registered
-  coverage is present, so they do not rebuild the same world or replay the same
-  lifecycle; and
+- broad browser coverage remains split into the single lifecycle spine, focused
+  UI-boundary specifications, and direct contracts so tests do not rebuild the
+  same world or replay the same lifecycle; and
 - the complete repository E2E command meets the runtime gate below without
   retries, arbitrary sleeps, weakened assertions, seed vocabulary, or a
   back-channel mutation in the lifecycle spine.
@@ -918,8 +919,8 @@ The design envelope leaves explicit headroom:
 The wall clock, not the sum of separately reported test durations, is the
 authority. The gate is accepted only after five consecutive retry-free
 `./ci.sh e2e` runs each finish below 30 seconds. Failed-run trace capture may be
-diagnosed separately, but successful runs record per-segment timing and query
-counts so regressions identify their owner.
+diagnosed separately, while successful runs record stage and scenario spans so
+runtime regressions have an identifiable owner.
 
 To stay inside the gate, the suite reuses build/server artifacts rather than
 building again in browser setup, starts the browser once, creates actor
@@ -953,9 +954,4 @@ A scenario review asks:
 - Does multi-user behavior use isolated contexts and observable convergence?
 - Are examples wholly user-authored and free of privileged-name assumptions?
 - Does the code map identify every implementation and validation region without
-  moving low-level knowledge into this business plan?
-  | `IDN-V01` | create password account | signup rejection reason | `invalid`, `duplicate-normalized-username` |
-  | `IDN-V02` | sign in | credential rejection reason | `unknown-username`, `wrong-password` |
-  | `IDN-V03` | authenticate session | invalid session state | `missing`, `malformed`, `expired`, `revoked`, `disabled` |
-  | `IDN-V04` | persist credentials/session | credential or session secret | `password-hash`, `session-digest`, `response-redaction` |
-  | `IDN-V05` | issue authenticated mutation | CSRF failure mode | `missing-token`, `wrong-token`, `cross-origin` |
+  moving low-level knowledge into this business catalog?

@@ -9,8 +9,9 @@ in this document are dormant unless someone proposes that target.
 
 Worldwright now has native username/password authentication and revocable
 server sessions. A caller-supplied user UUID is not an authentication mechanism:
-the former `X-DND-User-ID` adapter and public user directory are gone, and every
-product endpoint except signup and signin derives its actor from a valid session.
+the former `X-DND-User-ID` adapter and public user directory are gone. Health,
+signup, and signin are the explicit public API exceptions; every other product
+endpoint derives its actor from a valid session.
 
 This closes the direct impersonation gap identified in the identity audit. A
 public deployment still needs correct HTTPS/proxy configuration, backups,
@@ -65,6 +66,11 @@ Session creation serializes per account, removes expired/revoked rows, and
 retains at most 20 active sessions including the newly issued one. Crossing the
 cap invalidates the least recently seen sessions.
 
+The storage shape is enforced by migration constraints and targeted contract
+reads of `users.password_hash` and `auth_sessions.token_hash` for signup-created
+fixtures. Those reads verify the inspected rows; they are not an exhaustive
+inspection of PostgreSQL or platform diagnostic logging.
+
 Local HTTP uses `dnd_session`. HTTPS uses `__Host-dnd_session`, which is
 `Secure`, host-only by construction, and scoped to `/`. Both variants are
 `HttpOnly` and `SameSite=Lax`; logout clears both names. Configure the exact
@@ -98,22 +104,23 @@ are `private, no-store` and vary on `Cookie`.
 
 ## Endpoint trust matrix
 
-| Surface | Gate | Additional authority |
-| ------- | ---- | -------------------- |
-| SPA/static assets | Public | Content only. |
-| `GET /api/health` | Public | Database readiness only. |
-| Signup/signin | Exact origin + in-memory throttle | Creates a user/session or verifies credentials. |
-| `GET /api/me` | Active session | Returns current user and session CSRF token. |
-| Logout/password change | Active session + origin + CSRF | Revokes current/all sessions as documented above. |
-| Invite preview | Active session + opaque bearer token | Exposes active invite/world metadata. |
-| Invite redemption | Session + origin + CSRF + bearer token | Creates/reactivates one membership; never changes an already-active role. |
-| World list/read | Active session + active membership | Returns only worlds for the session user. |
-| World configuration/setup | Active owner/editor | Resource scope and revisions still apply. |
-| Character profiles | Active member; controller/facilitator filtering | Restricted definitions/values are removed server-side. |
-| World archive | Active owner | Requires no unfinished interaction. |
-| Live reads/events | Active, play-ready membership | Streams periodically revalidate session and membership. |
-| Facilitator commands | Active owner/editor | Lifecycle, scope, revision, and idempotency checks apply. |
-| Player actions | Active ready eligible player | Server enforces responder, ownership, and control. |
+| Surface                             | Gate                                            | Additional authority                                                      |
+| ----------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
+| SPA/static assets                   | Public                                          | Content only.                                                             |
+| `GET /api/health`                   | Public                                          | Database readiness only.                                                  |
+| Signup/signin                       | Exact origin + in-memory throttle               | Creates a user/session or verifies credentials.                           |
+| `GET /api/me`                       | Active session                                  | Returns current user and session CSRF token.                              |
+| Logout/password change              | Active session + origin + CSRF                  | Revokes current/all sessions as documented above.                         |
+| Invite preview                      | Active session + opaque bearer token            | Exposes active invite/world metadata.                                     |
+| Invite redemption                   | Session + origin + CSRF + bearer token          | Creates/reactivates one membership; never changes an already-active role. |
+| World list/read                     | Active session + active membership              | Returns only worlds for the session user.                                 |
+| World configuration/setup reads     | Active session + active membership              | Server-side scope and visibility projections still apply.                 |
+| World configuration/setup mutations | Active owner/editor + origin + CSRF             | Resource scope and revisions still apply.                                 |
+| Character profiles                  | Active member; controller/facilitator filtering | Restricted definitions/values are removed server-side.                    |
+| World archive                       | Active owner                                    | Requires no unfinished interaction.                                       |
+| Live reads/events                   | Active, play-ready membership                   | Streams periodically revalidate session and membership.                   |
+| Facilitator commands                | Active owner/editor                             | Lifecycle, scope, revision, and idempotency checks apply.                 |
+| Player actions                      | Active ready eligible player                    | Server enforces responder, ownership, and control.                        |
 
 Network reachability, React routes, and hidden controls are never treated as
 authorization.
@@ -143,8 +150,10 @@ continues to decide what that user may do:
 - final interaction roots, applied receipts, and world events have database
   immutability protections.
 
-Command bodies cannot choose the actor. A user UUID supplied in the retired
-identity header or a body does not override the session user.
+Command bodies cannot choose the actor. On an anonymous request, a retired
+identity header does not authenticate; on an authenticated request, it is
+ignored and cannot override the session user. A user UUID in a command body
+likewise does not replace the actor established by the session.
 
 ## Data boundaries
 
@@ -184,9 +193,12 @@ fields are filtered in server query/mapping paths. Frontend hiding is secondary.
 World events contain invalidation identifiers, not passwords, profile text,
 action text, or private narrative.
 
-The request logger records method, a redacted path, status, bytes, and duration.
-It does not intentionally log request/response bodies, cookies, passwords, CSRF
-tokens, invitation bearer tokens, or query strings.
+The standard request/recovery logger records method, a redacted path, status,
+bytes, and duration. It does not intentionally log request/response bodies,
+cookies, passwords, CSRF tokens, invitation bearer tokens, or query strings.
+Focused application tests cover invitation-bearer redaction in ordinary request
+and panic logs. That scope does not prove absence from reverse-proxy, database,
+hosting-provider, or newly added diagnostic logs; those need separate review.
 
 ## Abuse controls
 
@@ -199,8 +211,10 @@ decoding.
 
 At most four Argon2id jobs run concurrently; excess authentication work fails
 quickly with `429` and `Retry-After` instead of multiplying memory use. Throttle
-keys hash the client/account value, and the entry map evicts old records at a
-fixed ceiling so random usernames cannot grow it without bound.
+keys hash direct-peer and normalized-account inputs. The current-password
+failure key instead contains the already-authenticated internal user UUID. The
+entry map evicts old records at a fixed ceiling so random usernames cannot grow
+it without bound.
 
 These controls are per process and trust the directly connected peer address;
 they do not consume forwarded-address headers. A shared reverse proxy can
@@ -245,7 +259,8 @@ For every route or field:
 - Does the response omit private notes and restricted profile prose?
 - Is a revision/idempotency guard required?
 - Can failure partially mutate state or create an incomplete receipt?
-- Are password, cookie, CSRF, invite, and narrative values absent from logs?
+- Do the application, proxy, database, and provider logging paths omit or redact
+  password, cookie, CSRF, invite, and narrative values?
 - Are anonymous, expired/revoked-session, forged-header, CSRF/origin,
   wrong-role, and cross-world failures tested server-side?
 

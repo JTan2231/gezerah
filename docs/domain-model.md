@@ -48,8 +48,9 @@ classification and a source:
 - a capability is a Boolean `binary` value or numeric `rating`;
 - an `input` owns a default and optional stored override;
 - a `derived` owns a typed expression over other mechanics;
-- `mutable_during_play` determines whether a live Consequence may target an
-  input.
+- `mutable_during_play` determines whether a live Consequence may directly
+  target an input with a scalar `set` or `adjust-number` effect; it does not
+  restrict status modifiers.
 
 The classification adds no canonical name, entity class, or special key.
 
@@ -122,12 +123,12 @@ World mechanics are scalar numeric or Boolean definitions. Product kind and
 mode determine the scalar kind; `source_kind` determines where its value comes
 from:
 
-| Product kind | Mode     | Scalar  | Input metadata                      | Derived metadata          |
-| ------------ | -------- | ------- | ----------------------------------- | ------------------------- |
-| Capacity     | `score`  | Number  | Default, optional bounds/step/unit  | Expression, optional unit |
-| Capacity     | `pool`   | Number  | Default, optional bounds/step/unit  | Expression, optional unit |
-| Capability   | `binary` | Boolean | Boolean default                     | Boolean expression        |
-| Capability   | `rating` | Number  | Default, optional bounds/step/unit  | Expression, optional unit |
+| Product kind | Mode     | Scalar  | Input metadata                     | Derived metadata          |
+| ------------ | -------- | ------- | ---------------------------------- | ------------------------- |
+| Capacity     | `score`  | Number  | Default, optional bounds/step/unit | Expression, optional unit |
+| Capacity     | `pool`   | Number  | Default, optional bounds/step/unit | Expression, optional unit |
+| Capability   | `binary` | Boolean | Boolean default                    | Boolean expression        |
+| Capability   | `rating` | Number  | Default, optional bounds/step/unit | Expression, optional unit |
 
 Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic. HTTP
 numbers are decoded with `json.Number`; the backend does not intentionally
@@ -158,8 +159,9 @@ edges, so they cannot create a second kind of graph cycle.
 Archiving a mechanic removes it from current sheet presentation and new live
 effects while retaining stored values and receipts so history remains
 interpretable. An active mechanic cannot be archived while an active derived
-mechanic depends on it. Existing problem receipts and active status snapshots
-retain their references for evaluation and history.
+mechanic depends on it or an active status modifier targets it. Archive the
+derived dependents and remove the active statuses first. Existing problem
+receipts and removed status snapshots retain their references for history.
 
 ## Base, intrinsic, and effective state
 
@@ -275,8 +277,10 @@ the world settings revision.
 Readiness gates the live table for players. Onboarding players remain active
 world members so they can read and edit authorized character profiles, but
 interactions/events return `character_setup_required` until at least one
-controlled character is ready. Incomplete entities cannot be new interaction
-context, acting-entity attribution, or live-effect targets.
+controlled character is ready. An active uncontrolled entity or ready
+controlled entity may be interaction context or a live-effect target; a
+setup-required controlled entity may not. Acting-entity attribution also
+requires the submitting player to control the ready entity.
 
 ## Interactions and actions
 
@@ -316,7 +320,7 @@ of zero or more scalar and status effects:
 | `set`           | Mutable input on one or more entities | Replaces a numeric or Boolean logical input value.        |
 | `adjust-number` | Mutable numeric input on entities     | Adds an exact amount, then validates the stored result.   |
 | `apply-status`  | Entities plus one inline status       | Creates a distinct snapshotted instance for every target. |
-| `remove-status` | Exact active instance per entity      | Removes only the identified persistent status instance.  |
+| `remove-status` | Exact active instance per entity      | Removes only the identified persistent status instance.   |
 
 Every target entity must belong to the world, be active and eligible, and own a
 state root. An effect value must match the mechanic kind; numeric results must
@@ -331,9 +335,10 @@ the resulting base state and active statuses together. It clones both input
 snapshots first, and any effect or evaluation failure returns no partially
 usable result. The application adds database transaction atomicity.
 
-Preview runs the same validation and application logic without persisting.
-Resolve locks the relevant lifecycle/configuration/state roots, rechecks
-revisions, applies the plan, and commits state plus history together.
+Preview optionally runs the same validation and application logic without
+persisting. It is advisory and does not reserve a revision or need to precede
+resolution. Resolve locks the relevant lifecycle/configuration/state roots,
+rechecks revisions, applies the plan, and commits state plus history together.
 
 ## Resolution receipts and events
 
@@ -369,9 +374,10 @@ Clients reconnect with their last cursor and reload authoritative resources.
 
 ## Revisions and lifecycle rules
 
-Optimistic revisions protect world details, the world table, character-field
-sets, profiles, entity state, memberships, interactions, action submissions,
-and the world mechanic graph. Each entity also has a status-set revision.
+Optimistic revisions protect world details, complete controller-set
+replacements through the world table, character-field sets, profiles, entity
+state, interactions, action submissions, and the world mechanic graph. Each
+entity also has a status-set revision.
 Mechanic mutations advance the world-rules counter. State replacement,
 preview, and resolve carry `expected_rules_revision`; status modifiers authored
 inside a Consequence are validated against that exact mechanic graph, and the

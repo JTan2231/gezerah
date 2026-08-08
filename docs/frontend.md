@@ -31,32 +31,32 @@ Bun. It uses browser `fetch`, History API routing, and native form controls.
 There is no router, global-state library, form framework,
 component framework, or service worker.
 
-| Path                                        | Responsibility                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `src/App.tsx`                               | Neutral home, session bootstrap/boundary, redirects, and top-level area selection.    |
-| `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                                    |
-| `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers.       |
-| `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                               |
-| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.                  |
-| `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                         |
-| `src/features/IdentityGate.tsx`             | Username/password signup and signin while preserving the requested URL.               |
-| `src/features/AccountControls.tsx`          | Account identity, password change, and server-side signout controls.                   |
-| `src/features/BuildLibrary.tsx`             | Owner/editor Builder library and world creation.                                      |
-| `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                     |
-| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Builder shell.                                                      |
-| `src/features/PlayWorkspace.tsx`            | Independent Play shell and world loader.                                              |
-| `src/features/RosterWorkspace.tsx`          | Builder entity, controller, profile, and direct sheet setup.                          |
-| `src/features/RosterModals.tsx`             | Builder-only entity creation and controller assignment dialogs.                       |
-| `src/features/EntityDetail.tsx`             | Shared profile tabs and generated sheet reader/editor presentation.                   |
-| `src/features/MechanicsWorkspace.tsx`       | Input/derived mechanic and recursive expression master-detail editor.                 |
-| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                                          |
-| `src/features/PeopleWorkspace.tsx`          | Members, invite creation, one-time token display, and revocation.                     |
-| `src/features/SettingsWorkspace.tsx`        | World details and owner-only archive command.                                         |
-| `src/features/WorldPlay.tsx`                | Read-only live roster/sheets, ad-hoc problem lifecycle, history/receipts.             |
-| `src/features/EntityProfilePanel.tsx`       | Character-field reader/editor with completion and visibility.                         |
-| `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                           |
-| `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                               |
-| `src/styles/app.css`                        | Responsive library, editor, invitation, and dark play-table layouts.                  |
+| Path                                        | Responsibility                                                                     |
+| ------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `src/App.tsx`                               | Neutral home, session bootstrap/boundary, redirects, and top-level area selection. |
+| `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                                 |
+| `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers.   |
+| `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                            |
+| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.               |
+| `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                      |
+| `src/features/IdentityGate.tsx`             | Username/password signup and signin while preserving the requested URL.            |
+| `src/features/AccountControls.tsx`          | Account identity, password change, and server-side signout controls.               |
+| `src/features/BuildLibrary.tsx`             | Owner/editor Builder library and world creation.                                   |
+| `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                  |
+| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Builder shell.                                                   |
+| `src/features/PlayWorkspace.tsx`            | Independent Play shell and world loader.                                           |
+| `src/features/RosterWorkspace.tsx`          | Builder entity, controller, profile, and direct sheet setup.                       |
+| `src/features/RosterModals.tsx`             | Builder-only entity creation and controller assignment dialogs.                    |
+| `src/features/EntityDetail.tsx`             | Shared profile tabs and generated sheet reader/editor presentation.                |
+| `src/features/MechanicsWorkspace.tsx`       | Input/derived mechanic and recursive expression master-detail editor.              |
+| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                                       |
+| `src/features/PeopleWorkspace.tsx`          | Members, invite creation, one-time token display, and revocation.                  |
+| `src/features/SettingsWorkspace.tsx`        | World details and owner-only archive command.                                      |
+| `src/features/WorldPlay.tsx`                | Read-only live roster/sheets, ad-hoc problem lifecycle, history/receipts.          |
+| `src/features/EntityProfilePanel.tsx`       | Character-field reader/editor with completion and visibility.                      |
+| `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                        |
+| `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                            |
+| `src/styles/app.css`                        | Responsive library, editor, invitation, and dark play-table layouts.               |
 
 ESLint includes hooks and JSX accessibility rules. Stylelint enforces tokenized
 colors and bounded selector complexity. Prettier, TypeScript, Bun tests, and
@@ -135,19 +135,19 @@ recursive expression builder with literal/reference leaves, typed numeric and
 Boolean operations, comparisons, and conditionals. The editor filters
 operations/references by expected kind for guidance; the server remains the
 authority and rejects invalid types or cycles when saved. Only inputs may set
-`mutable_during_play`.
+`mutable_during_play`; it gates direct scalar effects, not status modifiers.
 
 The Builder's explicit-save editors share one dirty/unload guard. It protects
 section changes, mechanic and roster child selection, Settings, Home, and both
 desktop and mobile exits to the Builder library. Cancelling keeps the current
 draft and destination; accepting discards the draft before navigation. The
 capacity and capability editors archive rather than delete and include a
-generated-sheet preview. Archiving removes a
-mechanic from new use while preserving stored input, active status snapshots,
-and historical receipts. The server explains dependency conflicts when an
-active derived mechanic still needs an archived target. There are no
-privileged configured keys or predefined mechanic names; stable internal IDs
-are not a user-facing ontology.
+generated-sheet preview. Archiving removes a mechanic from new use while
+preserving stored input, historical status snapshots, and receipts. Active
+derived dependents must be archived and active statuses whose modifiers target
+the mechanic must be removed first; the server explains either conflict. There
+are no privileged configured keys or predefined mechanic names; stable internal
+IDs are not a user-facing ontology.
 
 The character-field screen edits the whole ordered requirement set as one
 draft. Each field has a user-authored label, optional guidance, and either
@@ -179,11 +179,12 @@ controllers, edits profiles, and makes direct setup sheet changes in the
 Builder roster. Every active capacity and capability appears automatically on
 the generated sheet. Inputs begin at configured defaults; derived values are
 calculated from the current graph. The sheet displays active status chips,
-labels derived fields as calculated, and can expand the modifier trail from
-intrinsic to effective value. Builder inputs edit only base input values and
-send both state and mechanic-rules revisions. Play renders sheets read-only.
-Each active status exposes its optional description and the source problem, so
-equal names remain distinguishable without becoming keys.
+labels derived fields as calculated, and lists the modifier trail from
+intrinsic to effective value whenever modifiers are present. Builder inputs
+edit only base input values and send both state and mechanic-rules revisions.
+Play renders sheets read-only. Each active status exposes its optional
+description and the source problem, so equal names remain distinguishable
+without becoming keys.
 
 The roster labels entities controlled by the current membership as “Your
 character” and otherwise names active controllers. The selected entity panel
@@ -204,22 +205,24 @@ triggers an authoritative reload.
 The interaction lifecycle is:
 
 1. facilitator clicks **New problem** and writes the moment in free text;
-2. optional ready context entities and play-ready player responders are selected;
+2. the audience is automatically every active member whose play status is
+   ready; optional active uncontrolled or ready controlled context entities and
+   eligible player responders are selected;
 3. players offer or withdraw one free-form action while the problem is open,
    optionally attributing it to one of their ready controlled entities;
 4. facilitator closes submissions and enters private adjudication;
 5. facilitator optionally selects an action and authors the **Consequence** as
    one public prose summary plus ordered targeted effects;
-6. scalar `set`/`adjust-number` effects select entities and inputs; an
-   `apply-status` effect selects entity targets and defines the status name,
-   optional description, and ordered literal modifiers inline; a
-   `remove-status` effect selects an exact active status instance for each
-   entity target;
-7. preview submits the mechanic rules revision and validates/evaluates the
-   whole transition without writing;
-8. resolve atomically stores base state, status instances/snapshots with source
-   problem, resolution, and effect IDs, the receipt, lifecycle change, and
-   event cursor;
+6. each scalar `set`/`adjust-number` effect selects one entity and one input;
+   an `apply-status` effect selects one or more entity targets and defines the
+   status name, optional description, and ordered literal modifiers inline; each
+   `remove-status` effect selects one exact active status instance on one entity;
+7. the facilitator may run an advisory preview with the current mechanic rules
+   revision to validate/evaluate the whole transition without writing; preview
+   is not required and does not reserve that revision;
+8. resolve, with or without a prior preview, atomically stores base state,
+   status instances/snapshots with source problem, resolution, and effect IDs,
+   the receipt, lifecycle change, and event cursor;
 9. resolved Consequence summary, direct applications, and effective
    before/after changes appear in world history.
 

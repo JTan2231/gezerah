@@ -225,8 +225,10 @@ UI must not offer coordinates that only sometimes pass validation.
 
 ### Migration
 
-Add `internal/migrations/002_world_appearance.sql` after the clean
-`001_worldwright.sql` baseline.
+Add the next forward-only migration after the current tip. With
+`004_password_auth.sql` as the current tip, that would be
+`internal/migrations/005_world_appearance.sql`; advance the number if another
+migration lands first.
 
 Create a one-to-zero-or-one relational aggregate:
 
@@ -553,8 +555,9 @@ execute without a build step. The command must:
 - report useful token/contrast details on failure;
 - exit nonzero on any issue.
 
-Wire `bun run check:palette` into `run_frontend` in `ci.sh`, immediately after
-CSS linting and before unit tests. Document it in `docs/testing.md`.
+Wire `bun run check:palette` into `run_frontend_checks` in `ci.sh` as its own
+logged parallel validation job alongside CSS linting and unit tests. Document
+it in `docs/testing.md`.
 
 ## Test plan
 

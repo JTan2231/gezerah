@@ -24,14 +24,14 @@ cache, message broker, code generator, or dependency-injection framework.
 7. listens;
 8. attempts HTTP shutdown with a ten-second deadline.
 
-| Timeout                   | Value      |
-| ------------------------- | ---------- |
-| Read header               | 5 seconds  |
-| Read request              | 15 seconds |
-| Ordinary response write   | 30 seconds |
-| SSE write/flush           | 5 seconds  |
-| Idle connection           | 60 seconds |
-| Graceful shutdown         | 10 seconds |
+| Timeout                 | Value      |
+| ----------------------- | ---------- |
+| Read header             | 5 seconds  |
+| Read request            | 15 seconds |
+| Ordinary response write | 30 seconds |
+| SSE write/flush         | 5 seconds  |
+| Idle connection         | 60 seconds |
+| Graceful shutdown       | 10 seconds |
 
 Request contexts inherit the process root, so signal cancellation reaches
 long-lived handlers. SSE uses response-controller flushing and replaces the
@@ -155,17 +155,22 @@ boundary and round through `float64`.
 
 ### Validation order
 
-Handlers generally validate:
+Route wrappers validate before a protected handler runs:
+
+1. an active server session;
+2. for unsafe methods, the exact origin and session-bound CSRF token.
+
+Public signup and signin apply their origin check before decoding the body.
+Once a handler runs, it generally validates:
 
 1. path/query syntax and UUID shape;
 2. strict body decoding;
 3. transport required fields, lengths, and enums;
-4. active server session and, for unsafe methods, origin plus CSRF token;
-5. active world membership and required role/readiness;
-6. world ownership of every referenced resource;
-7. domain mechanics/state/transition rules;
-8. archive/lifecycle/revision constraints;
-9. PostgreSQL constraints during persistence.
+4. active world membership and required role/readiness;
+5. world ownership of every referenced resource;
+6. domain mechanics/state/transition rules;
+7. archive/lifecycle/revision constraints;
+8. PostgreSQL constraints during persistence.
 
 Transport/domain failures return path-indexed fields where practical.
 PostgreSQL is the final uniqueness, reference, and check boundary.
@@ -246,9 +251,12 @@ The mechanic catalog is read in `REPEATABLE READ` and returned as a
 7. returns the new revision with the saved mechanic.
 
 An active mechanic archive is rejected while another active derived mechanic
-depends on it. Database constraints preserve tagged and world-scoped shapes,
-while graph-wide type and cycle checks remain application and pure-rule
-responsibilities.
+depends on it (`mechanic_has_dependents`) or any active status modifier
+references it (`mechanic_has_active_statuses`). The latter status instances
+must be removed before archive. Archived mechanics remain readable but cannot
+be changed or restored through the product API. Database constraints preserve
+tagged and world-scoped shapes, while graph-wide type and cycle checks remain
+application and pure-rule responsibilities.
 
 ### Persistent status snapshots
 
@@ -325,19 +333,23 @@ response cannot combine a root at one revision with children/state from another.
 ### Optimistic commands
 
 World settings, world table, mechanic rules, character-field set, profile,
-state, membership, interaction, and action roots compare expected revisions
-after loading/locking. Conflicts return 409 rather than overwriting newer state.
+state, interaction, and action roots compare expected revisions after
+loading/locking. Membership rows carry revisions, but no membership mutation
+currently accepts an expected membership revision. Conflicts return 409 rather
+than overwriting newer state.
 
 ### Live resolution
 
-Resolve locks the active world/facilitator boundary, mechanic rules revision,
-interaction, referenced entities, state/status roots, and selected action in
-stable order. It rechecks idempotency and revisions; evaluates before; applies
-the combined transition; persists base state and status snapshots with source
+Resolve checks the active world/facilitator boundary with ordinary transaction
+reads, then checks for an idempotent replay. A new resolution locks the mechanic
+rules root, interaction, and sorted target entity/state/status roots. Selected
+action existence is validated by an ordinary read rather than a row lock. The
+transaction checks lifecycle and revisions; evaluates before; applies the
+combined transition; persists base state and status snapshots with source
 provenance; evaluates after; and stores the resolution, requested effects,
 inline status-effect modifiers, exact remove targets, scalar/status
 applications, effective changes, action statuses, interaction status, and
-world event in one transaction.
+world event atomically.
 
 An equivalent idempotent replay loads the immutable receipt and current state,
 and still checks the current authenticated actor, facilitator authority, and
@@ -345,8 +357,9 @@ active world.
 
 ### Lock discipline
 
-Keep root-first and sorted-ID lock order. Do not add a path that locks state
-before world/mechanic roots when resolution locks them in the opposite order.
+Keep root-first and sorted-ID lock order. Do not add a path that locks target
+entity/state/status roots before the mechanic-rules and interaction roots used
+by resolution.
 
 ## Authorization and filtering
 
@@ -399,6 +412,13 @@ The world event endpoint:
 
 Payloads contain identifiers and event types, never aggregate snapshots.
 Clients treat them as reload signals.
+
+Events that move an open interaction to adjudicating or cancelled are marked
+as audience invalidations. A former non-facilitator audience member receives
+the cursor as `interaction-feed-invalidated`, with interaction, submission,
+resolution, and actor IDs cleared; facilitators receive the original lifecycle
+event. The projection preserves cursor/time metadata so the client can reload
+and remove the newly invisible interaction without an identifier leak.
 
 ## Testing seams
 

@@ -53,9 +53,13 @@ postgres://localhost:5432/dnd?sslmode=disable
 Migrations run automatically when the backend starts. The repository has no
 seed step; create all world vocabulary through the application/API. New
 databases install the `001` baseline, the `002` derived-graph/problem-status
-upgrade, and the `003` audience-invalidation event upgrade. Existing databases
-at a recorded migration prefix upgrade forward; databases created by the
-removed pre-baseline schema remain unsupported.
+upgrade, the `003` audience-invalidation event upgrade, and the `004` password-
+authentication cutover. Existing databases at a recorded migration prefix
+upgrade forward, but `004_password_auth.sql` deliberately refuses a nonempty
+`users` table because the repository has no safe way to invent credentials for
+UUID-only accounts. Use a fresh database for that cutover unless a separately
+reviewed data transition exists. Databases created by the removed pre-baseline
+schema remain unsupported.
 
 ## Resetting local data
 
@@ -92,13 +96,20 @@ shell/process manager that launches the application. Vite independently loads
 
 ### Runtime variables
 
-| Variable           | Default/precedence                 | Purpose                                                                  |
-| ------------------ | ---------------------------------- | ------------------------------------------------------------------------ |
-| `DND_ADDR`         | First; default `:8080`             | HTTP listen address.                                                     |
-| `PORT`             | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                     |
-| `DND_DATABASE_URL` | First database URL                 | Preferred PostgreSQL connection URL.                                     |
-| `DATABASE_URL`     | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                   |
-| `DND_LOG_LEVEL`    | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info. |
+| Variable            | Default/precedence                 | Purpose                                                                                  |
+| ------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| `DND_ADDR`          | First; default `:8080`             | HTTP listen address.                                                                     |
+| `PORT`              | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                                     |
+| `DND_DATABASE_URL`  | First database URL                 | Preferred PostgreSQL connection URL.                                                     |
+| `DATABASE_URL`      | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                   |
+| `DND_PUBLIC_ORIGIN` | Request origin                     | Exact origin accepted for auth/unsafe requests; HTTPS selects the secure session cookie. |
+| `DND_LOG_LEVEL`     | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                 |
+
+When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
+uses the incoming request's scheme and host. Managed `run.sh` instead supplies
+`http://127.0.0.1:5173` unless the variable is already exported. A proxied
+deployment must set the exact browser-visible HTTP(S) origin, without a path,
+query, or fragment.
 
 ### Local process variables
 
@@ -241,7 +252,8 @@ Validation details are in [Testing](testing.md).
 
 Update together:
 
-- backend `api_*.go`, mapping, handler, and tests;
+- backend `internal/app/api.go`, relevant handler/mapping/storage files, and
+  tests;
 - `web/frontend/src/api/types.ts` and callers;
 - Playwright fixtures/scenarios;
 - [API reference](api.md) and domain/workflow docs.

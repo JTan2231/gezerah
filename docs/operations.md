@@ -34,14 +34,14 @@ binary whose SPA routes return 503.
 
 ## Runtime configuration
 
-| Variable           | Default/precedence             | Operational use                             |
-| ------------------ | ------------------------------ | ------------------------------------------- |
-| `DND_ADDR`         | Preferred; `:8080` default     | Bind address.                               |
-| `PORT`             | Fallback when `DND_ADDR` unset | Hosting-provider port.                      |
-| `DND_DATABASE_URL` | Preferred                      | PostgreSQL URL.                             |
-| `DATABASE_URL`     | Fallback                       | Hosting-provider database URL.              |
-| `DND_LOG_LEVEL`    | `info`                         | `debug`, `info`, `warn`/`warning`, `error`. |
-| `DND_PUBLIC_ORIGIN` | Request origin                | Exact browser origin accepted for unsafe/auth requests; HTTPS also selects the secure cookie. |
+| Variable            | Default/precedence             | Operational use                                                                               |
+| ------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
+| `DND_ADDR`          | Preferred; `:8080` default     | Bind address.                                                                                 |
+| `PORT`              | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                        |
+| `DND_DATABASE_URL`  | Preferred                      | PostgreSQL URL.                                                                               |
+| `DATABASE_URL`      | Fallback                       | Hosting-provider database URL.                                                                |
+| `DND_LOG_LEVEL`     | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                   |
+| `DND_PUBLIC_ORIGIN` | Request origin                 | Exact browser origin accepted for unsafe/auth requests; HTTPS also selects the secure cookie. |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
@@ -141,12 +141,14 @@ careful not to add private notes or player action text to telemetry.
 The repository contains Railway configuration, but no Railway deployment is
 currently running or planned. The checked-in definition is:
 
-- `railpack.json` selects the Go provider and Bun 1.1.42;
+- `railpack.json` selects the Go provider and pins Bun 1.1.42 plus Node
+  22.12.0;
 - `railway.toml` performs frozen frontend install/build, then a `CGO_ENABLED=0`
   trimmed Go build to `out`;
 - start command is `./out`;
 - health path is `/api/health` with a 30-second timeout;
-- configured replica count is one.
+- configured replica count is one;
+- deployment draining is configured for 15 seconds.
 
 Adding a Railway PostgreSQL service does not by itself inject its variables into
 the application service. Define a reference variable such as
@@ -154,9 +156,10 @@ the application service. Define a reference variable such as
 name, or set `DND_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
 
-The repository does not configure Railway `drainingSeconds`. If this target is
-activated, configure that service setting above ten seconds before relying on
-signal-based shutdown. The remaining hardening and operational conditions in
+The checked-in 15-second Railway drain exceeds the application's ten-second
+shutdown deadline. If this target is activated, verify that Railway applies that
+setting and do not reduce it to ten seconds or less before relying on signal-
+based shutdown. The remaining hardening and operational conditions in
 [Security](security.md) apply only in proportion to the target and its audience.
 
 ### Dormant deployment activation checklist
@@ -176,7 +179,8 @@ activation:
    durable data; confirm Bun/Go versions and that Vite builds before Go.
 5. Set the PostgreSQL reference, exact HTTPS `DND_PUBLIC_ORIGIN`, expected log
    level, TLS/proxy policy, and secret access boundaries.
-6. Configure a termination/draining grace period greater than ten seconds, then
+6. Verify the checked-in 15-second termination/draining setting is active and
+   remains greater than the ten-second application shutdown deadline, then
    deploy one instance and inspect migration, startup, request, and shutdown
    logs.
 7. Verify `/api/health`, an SPA deep link, signup/signin, `/api/me`, logout
@@ -351,8 +355,10 @@ be treated as an idempotency conflict and investigated rather than forced.
 4. Verify cursor syntax and inspect recent `world_events`. Full 100-row batches
    should drain immediately rather than waiting for the next poll.
 5. Check PostgreSQL/event query and read-only session-validation health.
-6. The frontend has a three-second query fallback, so distinguish stream failure
-   from general API refresh failure.
+6. A ready Play surface performs one catch-up refresh when the stream ends and
+   reconnects after 1.5 seconds; it does not run a general polling fallback.
+   The three-second poll is limited to player onboarding while the world is not
+   play-ready, so distinguish that state from a ready-table stream failure.
 
 ## Future deployment gaps
 

@@ -23,18 +23,18 @@ remain layered after authentication.
 
 ## Product decisions
 
-| Question | Decision |
-| -------- | -------- |
-| Existing accounts | There are no users to preserve. The migration fails closed if the `users` table is nonempty. |
-| Account identifier | User-chosen username; normalized uniqueness and signin are case-insensitive. |
-| Email | Not collected or stored. |
-| Password storage | Argon2id PHC string with a random salt and bounded parser. |
-| Browser credential | Opaque random token in an HttpOnly SameSite cookie. |
-| Server credential storage | SHA-256 digest only; raw tokens never enter PostgreSQL. |
-| CSRF | Exact `Origin` plus a session-bound token on every unsafe authenticated request. |
-| Recovery | None in this release. A lost password cannot be recovered by email. |
-| Federated identity/MFA | Not in this release. |
-| Legacy UUID adapter | Removed; `X-DND-User-ID` cannot authenticate or override a session. |
+| Question                  | Decision                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Existing accounts         | No populated-account upgrade is supported by the current chain. `004_password_auth.sql` fails closed if `users` is nonempty; a populated cutover requires a separately reviewed data transition. |
+| Account identifier        | User-chosen username; normalized uniqueness and signin are case-insensitive.                                                                                                                     |
+| Email                     | Not collected or stored.                                                                                                                                                                         |
+| Password storage          | Argon2id PHC string with a random salt and bounded parser.                                                                                                                                       |
+| Browser credential        | Opaque random token in an HttpOnly SameSite cookie.                                                                                                                                              |
+| Server credential storage | SHA-256 digest only; raw tokens never enter PostgreSQL.                                                                                                                                          |
+| CSRF                      | Exact `Origin` plus a session-bound token on every unsafe authenticated request.                                                                                                                 |
+| Recovery                  | None in this release. A lost password cannot be recovered by email.                                                                                                                              |
+| Federated identity/MFA    | Not in this release.                                                                                                                                                                             |
+| Legacy UUID adapter       | Removed; `X-DND-User-ID` cannot authenticate or override a session.                                                                                                                              |
 
 The lack of email is deliberate, not an incomplete form field. It avoids
 collecting a contact identifier when the product has no recovery/delivery
@@ -51,7 +51,8 @@ Unicode code points.
 
 The command hashes the password before insertion, creates the user and first
 session in one transaction, sets the session cookie, and returns the user plus
-an in-memory CSRF token. Duplicate normalized usernames return a field-specific
+the session's CSRF token. The client keeps that value in memory. Duplicate
+normalized usernames return a field-specific
 conflict. The endpoint is public but requires the exact browser origin and is
 rate-limited per directly connected client address.
 
@@ -181,20 +182,28 @@ This preserves the gameplay scenarios after a one-time authentication prelude:
 ## Automated evidence
 
 The test harness creates isolated account contexts with independent cookie jars
-and CSRF tokens. Contract requests no longer pass an actor UUID header. The
-scenario catalog covers signup, signin, reload/session continuity, current and
-all-session logout, anonymous denial, wrong credentials, forged identity-header
-rejection, CSRF/origin denial, and expired/revoked-session behavior alongside
-the existing authorization matrices.
+and CSRF tokens. Ordinary contract requests no longer pass an actor UUID header;
+the two deliberate forged-header cases still send it to prove that it cannot
+authenticate an anonymous request or override a cookie actor. The scenario
+catalog covers signup, signin, reload/session continuity, current and all-session
+logout, anonymous denial, wrong credentials, those forged-header boundaries,
+CSRF/origin denial, and expired or revoked-session behavior alongside the
+existing authorization matrices.
 
 The UI-authentic lifecycle spine signs up its actors through the browser and
 keeps invitation deep links intact. Direct contract setup still uses public
-signup, then performs protected requests through that actor's cookie context.
-SSE probes use an authenticated cookie and verify stream termination after
-session invalidation. Application tests also cover the five-minute activity
-boundary and guarded touches; stream tests cover read-only reauthorization,
-full-batch draining, bounded per-write deadlines, survival beyond the ordinary
-response write timeout, and process-context cancellation.
+signup, then performs protected product requests through that actor's cookie
+context. The authentication contract uses test-only direct SQL to create
+otherwise slow or unreachable states (aged/expired sessions, a disabled user,
+and the active-session cap) and to inspect password/session digests and touch
+timestamps. Those probes are deterministic fixture control and targeted
+persistence evidence, not proof that a product endpoint can create those states
+or an exhaustive scan of all database storage. SSE probes use an authenticated
+cookie and verify stream termination after session invalidation. Application
+tests also cover the five-minute activity boundary and guarded touches; stream
+tests cover read-only reauthorization, full-batch draining, bounded per-write
+deadlines, survival beyond the ordinary response write timeout, and process-
+context cancellation.
 
 See [Testing](../testing.md) for suite mechanics and the generated scenario
 evidence.
@@ -221,7 +230,7 @@ identity operations remain conditional on the following:
 
 ## Exit criteria
 
-The identity impersonation finding is closed when CI proves that:
+The identity impersonation finding is closed by CI evidence that:
 
 - anonymous callers cannot access product or invite resources;
 - signup/signin establish only the returned account's server session;
@@ -236,7 +245,16 @@ The identity impersonation finding is closed when CI proves that:
   after invalidation;
 - existing membership/role/readiness/privacy/world-scope matrices pass through
   isolated authenticated contexts;
-- no password or raw session token is stored or logged.
+- migration constraints and targeted reads of signup-created rows show an
+  Argon2id password hash and a session-token digest rather than the presented
+  password or cookie value;
+- inspected authentication responses omit the presented and stored credentials,
+  while focused application tests cover invitation-bearer redaction in the
+  standard request/panic logger.
+
+The last two checks are deliberately scoped. They do not prove secret absence
+from every PostgreSQL, reverse-proxy, hosting-provider, or future diagnostic log;
+those logging paths require separate review when a deployment target exists.
 
 If public production is proposed, its broader gate starts closed and is tracked
 in this directory. There is no production audience to gate today.
