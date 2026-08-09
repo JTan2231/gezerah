@@ -87,9 +87,8 @@ export function SettingsWorkspace({
   return (
     <section className="settings-page content-narrow">
       <PageIntro
-        eyebrow="World administration"
         title="Settings"
-        description="The durable identity and lifecycle of this world."
+        description="Update world details or archive the world."
       />
       <div className="settings-layout">
         <form
@@ -97,10 +96,7 @@ export function SettingsWorkspace({
           onSubmit={(event) => void save(event)}
         >
           <header>
-            <div>
-              <p className="eyebrow">World details</p>
-              <h2>What the table sees</h2>
-            </div>
+            <h2>World details</h2>
           </header>
           <Field label="World name" error={error?.fields["name"]}>
             <input
@@ -133,7 +129,7 @@ export function SettingsWorkspace({
         </form>
 
         <aside className="settings-summary">
-          <p className="eyebrow">Your access</p>
+          <h2>Access</h2>
           <RolePill role={world.role} />
           <p>
             {world.role === "owner"
@@ -160,11 +156,11 @@ export function SettingsWorkspace({
       {world.role === "owner" && world.status === "active" ? (
         <section className="panel danger-zone">
           <div>
-            <p className="eyebrow">Lifecycle</p>
-            <h2>Close the book</h2>
+            <h2>Archive world</h2>
             <p>
-              Archiving keeps every entity, resolved problem, and ruling receipt
-              readable. Active problems must be resolved or cancelled first.
+              Archiving keeps every entity, resolved problem, and resolution
+              record readable. Active problems must be resolved or cancelled
+              first.
             </p>
           </div>
           <button

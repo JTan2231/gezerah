@@ -87,37 +87,15 @@ export function IdentityGate({
 
   return (
     <main className="identity-page">
-      <section className="identity-story">
-        <Brand />
-        <div className="identity-headline">
-          <p className="eyebrow">A shared table for improvised worlds</p>
-          <h1>
-            Build the rules.
-            <br />
-            Make the rest up together.
-          </h1>
-          <p>
-            Define the capacities and capabilities that matter, invite your
-            table, and let every problem emerge in play.
-          </p>
-        </div>
-        <div className="identity-motif" aria-hidden="true">
-          <span>capacity</span>
-          <i />
-          <span>action</span>
-          <i />
-          <span>consequence</span>
-        </div>
-      </section>
       <section className="identity-panel" aria-labelledby="identity-title">
         <div className="identity-panel-inner">
-          <p className="eyebrow">Your Worldwright account</p>
-          <h2 id="identity-title">
-            {mode === "signin" ? "Welcome back." : "Create your account."}
-          </h2>
+          <Brand />
+          <h1 id="identity-title">
+            {mode === "signin" ? "Sign in" : "Create account"}
+          </h1>
           <p className="muted-copy">
             {mode === "signin"
-              ? "Sign in to return to your worlds and tables."
+              ? "Enter your username and password."
               : "Choose a username and password. No email is required."}
           </p>
 

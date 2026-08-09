@@ -71,7 +71,7 @@ Reset the development application to an empty state with:
 
 The script uses `DND_DATABASE_URL`, then `DATABASE_URL`, then the same default
 URL as the application. It refuses PostgreSQL system databases, non-loopback
-servers, and databases without the Worldwright migration ledger. After
+servers, and databases without the dnd migration ledger. After
 displaying the resolved database name and server, it requires that database
 name to be typed exactly. `--yes` skips only this confirmation; it does not
 bypass the target safety checks.

@@ -65,20 +65,19 @@ export function BuildLibrary({
       <main className="library-main">
         <header className="library-heading">
           <div>
-            <p className="eyebrow">Builder</p>
-            <h1>Shape a world.</h1>
-            <p>Worlds you own or edit appear in this studio.</p>
+            <h1>Worlds</h1>
+            <p>Worlds you can edit.</p>
           </div>
           <button
             className="button button-primary"
             type="button"
             onClick={() => setCreating(true)}
           >
-            <span aria-hidden="true">＋</span> Create world
+            Create world
           </button>
         </header>
 
-        {worlds.loading ? <LoadingState label="Opening your worlds" /> : null}
+        {worlds.loading ? <LoadingState label="Loading worlds" /> : null}
         {worlds.error === null ? null : (
           <ErrorMessage error={worlds.error} onRetry={worlds.reload} />
         )}
@@ -86,30 +85,24 @@ export function BuildLibrary({
         worlds.error === null &&
         editableWorlds.length === 0 ? (
           <EmptyState
-            symbol="✦"
-            title="Your first world starts with two lists"
-            description="Create a world, define the values and skills that matter, then invite the rest of the table."
+            title="No worlds"
+            description="Create a world to configure its mechanics and invite people."
             action={
               <button
                 className="button button-primary"
                 type="button"
                 onClick={() => setCreating(true)}
               >
-                Create your first world
+                Create world
               </button>
             }
           />
         ) : null}
 
         <div className="world-grid">
-          {editableWorlds.map((world, index) => {
+          {editableWorlds.map((world) => {
             return (
-              <article
-                className="world-card"
-                key={world.id}
-                style={{ "--world-index": index } as React.CSSProperties}
-              >
-                <div className="world-card-wash" aria-hidden="true" />
+              <article className="world-card" key={world.id}>
                 <header>
                   <RolePill role={world.role} />
                   <span
@@ -119,7 +112,7 @@ export function BuildLibrary({
                         : "world-status world-status-archived"
                     }
                   >
-                    <i aria-hidden="true" /> {world.status}
+                    {world.status}
                   </span>
                 </header>
                 <button
@@ -129,12 +122,9 @@ export function BuildLibrary({
                     navigate(buildWorldURL(world.id, "capacities"))
                   }
                 >
-                  <span className="world-monogram" aria-hidden="true">
-                    {world.name.slice(0, 1).toUpperCase()}
-                  </span>
                   <span>
                     <strong>{world.name}</strong>
-                    <small>{world.description ?? "An unwritten world."}</small>
+                    <small>{world.description ?? "No description"}</small>
                   </span>
                 </button>
                 <dl className="world-stats">
@@ -166,7 +156,7 @@ export function BuildLibrary({
                         navigate(buildWorldURL(world.id, "capacities"))
                       }
                     >
-                      Open builder <span aria-hidden="true">→</span>
+                      Open
                     </button>
                   </div>
                 </footer>
@@ -227,7 +217,7 @@ function CreateWorldModal({
   return (
     <Modal
       title="Create a world"
-      description="Name it now. Its mechanics begin on the next page."
+      description="Enter a name. You can configure mechanics after creation."
       onClose={onClose}
     >
       <form className="modal-form" onSubmit={(event) => void submit(event)}>
@@ -236,18 +226,15 @@ function CreateWorldModal({
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
             maxLength={200}
-            placeholder="Ember Coast"
+            placeholder="World name"
           />
         </Field>
-        <Field
-          label="Short description"
-          hint="Optional. Give the table a sentence to orient around."
-        >
+        <Field label="Short description" hint="Optional.">
           <textarea
             value={description}
             onChange={(event) => setDescription(event.currentTarget.value)}
             rows={3}
-            placeholder="A rain-soaked frontier where old promises still have teeth."
+            placeholder="World description"
           />
         </Field>
         {error === null ? null : <ErrorMessage error={error} />}

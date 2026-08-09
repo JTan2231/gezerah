@@ -61,7 +61,7 @@ export function BuildWorkspace({
   }
 
   if (resource.loading && world === null)
-    return <LoadingState label="Opening Builder" />;
+    return <LoadingState label="Opening Build" />;
   if (resource.error !== null)
     return (
       <main className="boot-failure">
@@ -71,7 +71,7 @@ export function BuildWorkspace({
           type="button"
           onClick={() => navigate("/build")}
         >
-          Back to Builder
+          Back to Build
         </button>
       </main>
     );
@@ -83,8 +83,8 @@ export function BuildWorkspace({
         <Brand />
         <div className="notice" role="alert">
           <div>
-            <strong>Builder access is not available</strong>
-            <p>Only world owners and editors can open this studio.</p>
+            <strong>Build access is not available</strong>
+            <p>Only world owners and editors can open Build.</p>
           </div>
         </div>
         <div className="access-actions">
@@ -93,7 +93,7 @@ export function BuildWorkspace({
             type="button"
             onClick={() => navigate("/build")}
           >
-            Back to Builder
+            Back to Build
           </button>
           <button
             className="button button-ink"
@@ -122,32 +122,23 @@ export function BuildWorkspace({
         </button>
         <div className="world-identity">
           <button type="button" onClick={() => guardedNavigate("/build")}>
-            <span className="world-avatar" aria-hidden="true">
-              {world.name.slice(0, 1).toUpperCase()}
-            </span>
             <span>
               <strong>{world.name}</strong>
-              <small>
-                Builder worlds <b aria-hidden="true">↗</b>
-              </small>
+              <small>Worlds</small>
             </span>
           </button>
           <RolePill role={world.role} />
         </div>
 
-        <nav aria-label="World builder">
+        <nav aria-label="Build navigation">
           <p>Mechanics</p>
           <button
             className={section === "capacities" ? "active" : ""}
             type="button"
             onClick={() => go("capacities")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ◇
-            </span>
             <span>
               <strong>Capacities</strong>
-              <small>Values & resources</small>
             </span>
             <em>{world.capacity_count}</em>
           </button>
@@ -156,12 +147,8 @@ export function BuildWorkspace({
             type="button"
             onClick={() => go("capabilities")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ✦
-            </span>
             <span>
               <strong>Capabilities</strong>
-              <small>Skills & proficiencies</small>
             </span>
             <em>{world.capability_count}</em>
           </button>
@@ -171,12 +158,8 @@ export function BuildWorkspace({
             type="button"
             onClick={() => go("character-fields")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ◫
-            </span>
             <span>
               <strong>Character fields</strong>
-              <small>Player onboarding</small>
             </span>
             <em>{world.character_field_count}</em>
           </button>
@@ -185,12 +168,8 @@ export function BuildWorkspace({
             type="button"
             onClick={() => go("roster")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ◎
-            </span>
             <span>
               <strong>Roster & sheets</strong>
-              <small>Entities & controllers</small>
             </span>
           </button>
           <button
@@ -198,25 +177,18 @@ export function BuildWorkspace({
             type="button"
             onClick={() => go("people")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ○
-            </span>
             <span>
               <strong>People & invites</strong>
-              <small>{world.member_count} at the table</small>
             </span>
+            <em>{world.member_count}</em>
           </button>
           <button
             className={section === "settings" ? "active" : ""}
             type="button"
             onClick={() => go("settings")}
           >
-            <span className="nav-symbol" aria-hidden="true">
-              ⌁
-            </span>
             <span>
               <strong>Settings</strong>
-              <small>Details & lifecycle</small>
             </span>
           </button>
         </nav>
@@ -239,7 +211,7 @@ export function BuildWorkspace({
         <button
           type="button"
           onClick={() => guardedNavigate("/build")}
-          aria-label="Builder worlds"
+          aria-label="Build worlds"
         >
           ←
         </button>
@@ -247,7 +219,7 @@ export function BuildWorkspace({
         <select
           value={section}
           onChange={(event) => go(event.currentTarget.value as BuildSection)}
-          aria-label="Builder section"
+          aria-label="Build section"
         >
           <option value="capacities">Capacities</option>
           <option value="capabilities">Capabilities</option>

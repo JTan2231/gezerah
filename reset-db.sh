@@ -81,7 +81,7 @@ esac
 
 is_dnd_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
 if [ "$is_dnd_database" != "t" ]; then
-	printf 'Refusing to reset database "%s": the Worldwright migration ledger is absent.\n' \
+	printf 'Refusing to reset database "%s": the dnd migration ledger is absent.\n' \
 		"$database_name" >&2
 	exit 1
 fi

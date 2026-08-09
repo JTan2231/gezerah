@@ -56,13 +56,12 @@ export function PlayLibrary({
       <main className="library-main">
         <header className="library-heading">
           <div>
-            <p className="eyebrow">Play</p>
-            <h1>Take your seat.</h1>
-            <p>Choose a world where you are already a member of the table.</p>
+            <h1>Worlds</h1>
+            <p>Worlds you can play in.</p>
           </div>
         </header>
 
-        {worlds.loading ? <LoadingState label="Finding your tables" /> : null}
+        {worlds.loading ? <LoadingState label="Loading worlds" /> : null}
         {worlds.error === null ? null : (
           <ErrorMessage error={worlds.error} onRetry={worlds.reload} />
         )}
@@ -70,20 +69,14 @@ export function PlayLibrary({
         worlds.error === null &&
         worlds.items.length === 0 ? (
           <EmptyState
-            symbol="✦"
-            title="No tables are waiting yet"
-            description="Open an invitation from a world author to join a table."
+            title="No worlds"
+            description="Use an invitation link to join a world."
           />
         ) : null}
 
         <div className="world-grid">
-          {worlds.items.map((world, index) => (
-            <article
-              className="world-card play-world-card"
-              key={world.id}
-              style={{ "--world-index": index } as React.CSSProperties}
-            >
-              <div className="world-card-wash" aria-hidden="true" />
+          {worlds.items.map((world) => (
+            <article className="world-card play-world-card" key={world.id}>
               <header>
                 <RolePill role={world.role} />
                 <span
@@ -93,7 +86,7 @@ export function PlayLibrary({
                       : "world-status world-status-archived"
                   }
                 >
-                  <i aria-hidden="true" /> {world.status}
+                  {world.status}
                 </span>
               </header>
               <button
@@ -101,12 +94,9 @@ export function PlayLibrary({
                 type="button"
                 onClick={() => navigate(playWorldURL(world.id))}
               >
-                <span className="world-monogram" aria-hidden="true">
-                  {world.name.slice(0, 1).toUpperCase()}
-                </span>
                 <span>
                   <strong>{world.name}</strong>
-                  <small>{world.description ?? "An unwritten world."}</small>
+                  <small>{world.description ?? "No description"}</small>
                 </span>
               </button>
               <dl className="world-stats play-world-stats">
@@ -136,7 +126,7 @@ export function PlayLibrary({
                     type="button"
                     onClick={() => navigate(playWorldURL(world.id))}
                   >
-                    Enter table <span aria-hidden="true">→</span>
+                    Open
                   </button>
                 </div>
               </footer>

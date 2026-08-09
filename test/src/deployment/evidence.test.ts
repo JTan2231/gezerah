@@ -139,7 +139,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     ],
     browser: {
       skipped: false,
-      title: "Worldwright",
+      title: "dnd",
       finalPath: "/play",
       authProbe: true,
       failureCount: 0,

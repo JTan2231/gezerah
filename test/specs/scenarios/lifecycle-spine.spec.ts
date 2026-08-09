@@ -49,18 +49,18 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await ownerPage.goto(baseURL);
         await expect(
           ownerPage.getByRole("heading", {
-            name: "What are you here to do?",
+            name: "Play or Build",
           }),
         ).toBeVisible();
         await ownerPage.getByRole("link", { name: /Build/ }).click();
         await createAccount(ownerPage, labels.ownerUsername, labels.owner);
         await expect(
-          ownerPage.getByRole("heading", { name: "Shape a world." }),
+          ownerPage.getByRole("heading", { name: "Worlds", exact: true }),
         ).toBeVisible();
       },
       async () => {
         await expect(
-          ownerPage.getByRole("heading", { name: "Shape a world." }),
+          ownerPage.getByRole("heading", { name: "Worlds", exact: true }),
         ).toBeVisible();
       },
     );
@@ -68,7 +68,10 @@ test("one rendered lifecycle carries the table from authoring through archive", 
     await scenario.behavior(
       "world.create",
       async () => {
-        await ownerPage.getByRole("button", { name: "Create world" }).click();
+        await ownerPage
+          .locator(".library-heading")
+          .getByRole("button", { name: "Create world" })
+          .click();
         const dialog = ownerPage.getByRole("dialog");
         await dialog.getByRole("button", { name: "Create world" }).click();
         await expect(dialog.getByText("is required")).toBeVisible();
@@ -81,12 +84,12 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .fill(labels.worldDescription);
         await dialog.getByRole("button", { name: "Create world" }).click();
         await expect(
-          ownerPage.getByRole("heading", { name: "Capacities" }),
+          ownerPage.getByRole("heading", { name: "Capacities", exact: true }),
         ).toBeVisible();
       },
       async () => {
         await expect(
-          ownerPage.getByRole("heading", { name: "Capacities" }),
+          ownerPage.getByRole("heading", { name: "Capacities", exact: true }),
         ).toBeVisible();
       },
     );
@@ -285,7 +288,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           await playerPage.goto(playerInvite);
           await expect(
             playerPage.getByRole("heading", {
-              name: "This invitation has closed.",
+              name: "Invitation unavailable",
             }),
           ).toBeVisible();
           await playerPage.goto(playerWorldURL);
@@ -294,7 +297,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           ).toBeVisible();
         });
 
-        await playerPage.getByRole("button", { name: /All tables/ }).click();
+        await playerPage.getByRole("button", { name: /All worlds/ }).click();
         await expect(
           playerPage.locator(".world-card").filter({ hasText: labels.world }),
         ).toBeVisible();
@@ -354,9 +357,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .locator(".world-card")
           .filter({ hasText: labels.world });
         await expect(ownerBuildCard).toBeVisible();
-        await ownerBuildCard
-          .getByRole("button", { name: /Open builder/ })
-          .click();
+        await ownerBuildCard.getByRole("button", { name: /^Open$/ }).click();
         await ownerPage
           .getByRole("button", { name: /Roster & sheets/ })
           .click();
@@ -508,15 +509,19 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           editorPage.getByRole("heading", { name: labels.world }),
         ).toBeVisible();
         await expect(
-          editorPage.getByRole("button", { name: "New problem" }),
+          editorPage
+            .locator(".play-header-actions")
+            .getByRole("button", { name: "New problem" }),
         ).toBeVisible();
-        await expect(editorPage.getByText("Dungeon Master")).toBeVisible();
+        await expect(editorPage.getByText("Facilitator")).toBeVisible();
       },
       async () => {
         await expect(
-          editorPage.getByRole("button", { name: "New problem" }),
+          editorPage
+            .locator(".play-header-actions")
+            .getByRole("button", { name: "New problem" }),
         ).toBeVisible();
-        await expect(editorPage.getByText("Dungeon Master")).toBeVisible();
+        await expect(editorPage.getByText("Facilitator")).toBeVisible();
       },
     );
   });
@@ -588,7 +593,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               ),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByRole("button", { name: "Offer action" }),
+              spectatorPage.getByRole("button", { name: "Submit action" }),
             ).toHaveCount(0);
             await expect(
               spectatorPage.getByRole("button", { name: "New problem" }),
@@ -601,7 +606,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               ),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByRole("button", { name: "Offer action" }),
+              spectatorPage.getByRole("button", { name: "Submit action" }),
             ).toHaveCount(0);
           },
         );
@@ -615,7 +620,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
                 .locator(".world-card")
                 .filter({ hasText: labels.world });
               await currentOwnerCard
-                .getByRole("button", { name: /Open builder/ })
+                .getByRole("button", { name: /^Open$/ })
                 .click();
               await ownerPage.getByRole("button", { name: /Settings/ }).click();
               ownerPage.once("dialog", async (dialog) => dialog.accept());
@@ -646,7 +651,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             );
             await playerPage.getByLabel("What do you do?").fill(action);
             await playerPage
-              .getByRole("button", { name: "Offer action" })
+              .getByRole("button", { name: "Submit action" })
               .click();
             await expect(
               editorPage.getByText(action, { exact: true }),
@@ -663,14 +668,14 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           "problem.adjudicate",
           async () => {
             await editorPage
-              .getByRole("button", { name: "Begin ruling" })
+              .getByRole("button", { name: "Close actions" })
               .click();
             await expect(
               spectatorPage.getByText(prompt, { exact: true }),
             ).toHaveCount(0);
             await expect(
               spectatorPage.getByRole("heading", {
-                name: "Waiting for the next problem.",
+                name: "No active problem",
               }),
             ).toBeVisible();
             await expect(
@@ -693,7 +698,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             await editorPage
               .getByRole("radio", { name: new RegExp(escapeRegExp(action)) })
               .check();
-            await editorPage.getByLabel("Consequence summary").fill(outcome);
+            await editorPage.getByLabel("Resolution summary").fill(outcome);
             await addScalarEffect(
               editorPage,
               labels.entity,
@@ -820,8 +825,8 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           `The beacon turns against the wind ${run}.`,
           labels.entity,
         );
-        await editorPage.getByRole("button", { name: "Begin ruling" }).click();
-        await editorPage.getByLabel("Consequence summary").fill(secondOutcome);
+        await editorPage.getByRole("button", { name: "Close actions" }).click();
+        await editorPage.getByLabel("Resolution summary").fill(secondOutcome);
         await addStatusEffect(
           editorPage,
           labels.entity,
@@ -891,11 +896,11 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           `The courier finds one secure stone ${run}.`,
           labels.entity,
         );
-        await editorPage.getByRole("button", { name: "Begin ruling" }).click();
-        await editorPage.getByLabel("Consequence summary").fill(removalOutcome);
+        await editorPage.getByRole("button", { name: "Close actions" }).click();
+        await editorPage.getByLabel("Resolution summary").fill(removalOutcome);
         await editorPage
-          .getByLabel("Consequence effect kind")
-          .selectOption({ label: "End an active status" });
+          .getByLabel("Effect type")
+          .selectOption({ label: "Remove an active status" });
         const statusInstanceSelect = editorPage.getByLabel(
           "Active status instance",
         );
@@ -980,9 +985,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await expect(
           ownerPlayCard.getByText("archived", { exact: true }),
         ).toBeVisible();
-        await ownerPlayCard
-          .getByRole("button", { name: /Enter table/ })
-          .click();
+        await ownerPlayCard.getByRole("button", { name: /^Open$/ }).click();
         await expect(
           ownerPage.getByRole("heading", { name: labels.world }),
         ).toBeVisible();
@@ -1030,14 +1033,12 @@ async function createAccount(
   username: string,
   displayName: string,
 ) {
-  await expect(
-    page.getByRole("heading", { name: "Welcome back." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
   await expect(
-    page.getByRole("heading", { name: "Create your account." }),
+    page.getByRole("heading", { name: "Create account" }),
   ).toBeVisible();
   const form = page.locator("form.identity-form");
   await expect(
@@ -1152,25 +1153,25 @@ async function redeemInvite(
   await expect(page.getByText(worldName, { exact: false })).toHaveCount(0);
   await createAccount(page, username, displayName);
   await expect(
-    page.getByRole("heading", { name: `Come to ${worldName}.` }),
+    page.getByRole("heading", { name: `Invitation to ${worldName}` }),
   ).toBeVisible();
   await page.getByRole("button", { name: `Join ${worldName}` }).click();
   await expect(
-    page.getByRole("heading", { name: destinationHeading }),
+    page.getByRole("heading", { name: destinationHeading, exact: true }),
   ).toBeVisible();
 }
 
 async function enterWorldFromLibrary(page: Page, worldName: string) {
   const worldCard = page.locator(".world-card").filter({ hasText: worldName });
   await expect(worldCard).toBeVisible();
-  await worldCard.getByRole("button", { name: /Enter table/ }).click();
+  await worldCard.getByRole("button", { name: /^Open$/ }).click();
 }
 
 async function reopenArchivedPlayWorld(page: Page, worldName: string) {
   await page.locator(".play-world-return").click();
   const worldCard = page.locator(".world-card").filter({ hasText: worldName });
   await expect(worldCard.getByText("archived", { exact: true })).toBeVisible();
-  await worldCard.getByRole("button", { name: /Enter table/ }).click();
+  await worldCard.getByRole("button", { name: /^Open$/ }).click();
 }
 
 async function presentProblem(
@@ -1179,12 +1180,15 @@ async function presentProblem(
   prompt: string,
   entityName: string,
 ) {
-  await page.getByRole("button", { name: "New problem" }).click();
+  await page
+    .locator(".play-header-actions")
+    .getByRole("button", { name: "New problem" })
+    .click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("Short title").fill(title);
-  await dialog.getByLabel("What is happening?").fill(prompt);
+  await dialog.getByLabel("Title").fill(title);
+  await dialog.getByLabel("Description").fill(prompt);
   await dialog.getByRole("checkbox", { name: entityName }).check();
-  await dialog.getByRole("button", { name: "Present to the table" }).click();
+  await dialog.getByRole("button", { name: "Create problem" }).click();
   await expect(page.getByText(prompt, { exact: true })).toBeVisible();
 }
 
@@ -1195,7 +1199,7 @@ async function addScalarEffect(
   amount: number,
 ) {
   await page
-    .getByLabel("Consequence effect kind")
+    .getByLabel("Effect type")
     .selectOption({ label: "Change a value" });
   await page.getByLabel("Effect entity").selectOption({ label: entityName });
   await page
@@ -1217,14 +1221,14 @@ async function addStatusEffect(
   modifierAmount: number,
 ) {
   await page
-    .getByLabel("Consequence effect kind")
-    .selectOption({ label: "Create a lasting status" });
+    .getByLabel("Effect type")
+    .selectOption({ label: "Apply a status" });
   const composer = page.locator(".status-consequence-composer");
   await composer.getByLabel("Status name").fill(statusName);
   await composer.getByLabel("Description").fill(description);
   const target = composer.getByRole("checkbox", { name: entityName });
   if (!(await target.isChecked())) await target.check();
-  await composer.getByRole("button", { name: "＋ Add modifier" }).click();
+  await composer.getByRole("button", { name: "Add modifier" }).click();
   const modifier = composer.locator(".status-modifier").last();
   await modifier
     .getByLabel("Target value")

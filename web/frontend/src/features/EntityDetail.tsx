@@ -187,21 +187,17 @@ function EntitySheet({
   return (
     <form className="entity-sheet" onSubmit={(event) => void save(event)}>
       <header>
-        <span className="entity-portrait" aria-hidden="true">
-          {entity.display_name.slice(0, 1).toUpperCase()}
-        </span>
         <div>
-          <p className="eyebrow">Entity sheet</p>
           <h2>{entity.display_name}</h2>
           <span>
-            state r{entity.state.revision} · statuses r
+            Entity sheet · state r{entity.state.revision} · statuses r
             {entity.state.status_revision} · rules r{rulesRevision}
           </span>
         </div>
       </header>
       {entity.state.active_statuses.length > 0 ? (
         <section className="active-statuses" aria-label="Active statuses">
-          <p className="eyebrow">Active statuses</p>
+          <h3>Active statuses</h3>
           <div>
             {entity.state.active_statuses.map((status) => (
               <span
@@ -210,7 +206,6 @@ function EntitySheet({
                 title={activeStatusDetails(status)}
                 aria-label={`${status.name}. ${activeStatusDetails(status)}`}
               >
-                <i aria-hidden="true">◈</i>
                 <span>
                   <strong>{status.name}</strong>
                   <small>{activeStatusDetails(status)}</small>

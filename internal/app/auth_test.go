@@ -206,12 +206,12 @@ func TestSameOriginPolicy(t *testing.T) {
 		t.Fatalf("same Origin rejected: %v", err)
 	}
 
-	server.publicOrigin = "https://worldwright.example"
+	server.publicOrigin = "https://app.example"
 	request.Header.Set("Origin", "http://example.test")
 	if err := server.requireSameOrigin(request); err == nil {
 		t.Fatal("request-host Origin bypassed configured public origin")
 	}
-	request.Header.Set("Origin", "https://worldwright.example")
+	request.Header.Set("Origin", "https://app.example")
 	if err := server.requireSameOrigin(request); err != nil {
 		t.Fatalf("configured public Origin rejected: %v", err)
 	}

@@ -4,7 +4,7 @@
 
 1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
    username, display name, and password but no email address.
-2. Create a world from the Builder library.
+2. Create a world from the Build library.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
 4. Define capabilities the same way, using binary or rating scalar shape.
@@ -15,7 +15,7 @@
    player-controlled entity must complete. Labels and guidance are authored for
    this world; zero fields is valid.
 7. Invite editors, players, or spectators through expiring links.
-8. Open **Roster & sheets** in Builder. Create the roster and optionally assign
+8. Open **Roster & sheets** in Build. Create the roster and optionally assign
    active players as an entity's controllers; that entity is presented as their
    character. Sheets are generated from the active capacity/capability
    definitions.
@@ -37,7 +37,7 @@ attributes, skills, entity classes, or privileged names.
 4. Redeem the link.
 5. The world now appears in the corresponding Play or Build library and the
    user receives one world membership.
-6. A player waits for a DM to assign a controlled entity. After assignment,
+6. A player waits for a facilitator to assign a controlled entity. After assignment,
    fill the world's required character fields. Partial drafts may be saved, but
    live play opens only after one controlled character is complete.
 
@@ -87,7 +87,7 @@ Creating an entity creates an empty normalized state root and status-set root.
 Logical defaults make every active input appear immediately; derived mechanics
 evaluate from the graph and need no stored row.
 
-Facilitators use **Roster & sheets** in Builder for **Save sheet** setup
+Facilitators use **Roster & sheets** in Build for **Save sheet** setup
 changes. The request supplies current state and rules revisions and replaces
 only the logical input map atomically. A derived ID is rejected. A stale
 revision returns `409 revision_conflict`; reload before retrying. Sheets are
@@ -109,7 +109,7 @@ correction and do not append a world event.
    is required for every controlled entity; visibility is configured once on
    the field rather than chosen by each player.
 2. A facilitator creates or selects an ordinary entity in **Roster & sheets**
-   in Builder.
+   in Build.
 3. Use **Controllers** to select any number of active player memberships. The
    world table revision guards the complete replacement.
 4. Until setup is complete, the controller sees only their controlled entities

@@ -2,7 +2,7 @@
 
 ## Model overview
 
-Worldwright separates world membership, user-authored mechanics, fictional
+dnd separates world membership, user-authored mechanics, fictional
 entities, and improvised live play. Nothing in the mechanical vocabulary is
 globally special: every mechanic name and entity is created by a user inside a
 world. Problems exist only as live interactions created at the table.

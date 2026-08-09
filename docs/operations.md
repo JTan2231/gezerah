@@ -1,6 +1,6 @@
 # Operations
 
-> **Current state (2026-08-09):** Worldwright has a public-addressable Railway
+> **Current state (2026-08-09):** dnd has a public-addressable Railway
 > preview at <https://worldwright-web-production.up.railway.app>, backed by a
 > managed PostgreSQL service that was created fresh for this target. Railway
 > names the environment `production`; that provider name is not a declaration
@@ -9,7 +9,7 @@
 
 ## Deployable artifact
 
-Worldwright deploys as one statically built Go application plus PostgreSQL. The
+dnd deploys as one statically built Go application plus PostgreSQL. The
 browser assets are compiled by Vite into `web/static` and embedded in the Go
 binary. That binary:
 

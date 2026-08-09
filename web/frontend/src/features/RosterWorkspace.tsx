@@ -106,7 +106,6 @@ export function RosterWorkspace({
   return (
     <section className="roster-workspace content-narrow">
       <PageIntro
-        eyebrow="Table preparation"
         title="Roster & sheets"
         description="Create ordinary world entities, assign player control, complete profiles, and make direct setup edits before entering Play."
         actions={
@@ -116,7 +115,7 @@ export function RosterWorkspace({
               type="button"
               onClick={startAddingEntity}
             >
-              <span aria-hidden="true">＋</span> Create entity
+              Create entity
             </button>
           ) : undefined
         }
@@ -134,9 +133,8 @@ export function RosterWorkspace({
       activeEntities.length === 0 ? (
         <div className="panel roster-builder-empty">
           <EmptyState
-            symbol="○"
-            title="No one is in this world yet"
-            description="Create an entity and its sheet will be generated from every active capacity and capability."
+            title="No entities"
+            description="Create an entity to generate a sheet from the active capacities and capabilities."
             action={
               world.status === "active" ? (
                 <button
@@ -156,10 +154,7 @@ export function RosterWorkspace({
         <div className="roster-builder-grid">
           <aside className="panel roster-builder-catalog">
             <header>
-              <div>
-                <p className="eyebrow">World entities</p>
-                <h2>Prepared for the table</h2>
-              </div>
+              <h2>Entities</h2>
               <span>{activeEntities.length}</span>
             </header>
             <div className="roster-builder-list">
@@ -170,9 +165,6 @@ export function RosterWorkspace({
                   key={entity.id}
                   onClick={() => selectEntity(entity.id)}
                 >
-                  <span className="entity-token" aria-hidden="true">
-                    {entity.display_name.slice(0, 1).toUpperCase()}
-                  </span>
                   <span>
                     <strong>{entity.display_name}</strong>
                     <small>
@@ -183,7 +175,6 @@ export function RosterWorkspace({
                       )}
                     </small>
                   </span>
-                  <b aria-hidden="true">›</b>
                 </button>
               ))}
             </div>

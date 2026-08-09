@@ -140,7 +140,7 @@ export function WorldPlay({
     (members.loading && members.items.length === 0) ||
     (mechanics.loading && mechanics.value === null)
   )
-    return <LoadingState label="Setting the table" />;
+    return <LoadingState label="Loading world" />;
   if (members.error !== null || mechanics.error !== null)
     return (
       <ErrorMessage
@@ -165,7 +165,7 @@ export function WorldPlay({
   if (membership === undefined)
     return (
       <EmptyState
-        title="You are not at this table"
+        title="Play access unavailable"
         description="An active world membership is required to enter play."
       />
     );
@@ -193,23 +193,15 @@ export function WorldPlay({
     <section className="play-page">
       <header className="play-header">
         <div>
-          <p className="eyebrow">
-            <span className="live-dot" aria-hidden="true" /> Live world
-          </p>
           <h1>{world.name}</h1>
-          <p>
-            {facilitator
-              ? "Present a problem, hear the table, and make the ruling."
-              : "The world changes when the table acts."}
-          </p>
         </div>
         <div className="play-header-actions">
           <div className="table-role">
             <Avatar name={user.display_name} size="small" />
             <span>
-              <small>Your seat</small>
+              <small>Role</small>
               <strong>
-                {facilitator ? "Dungeon Master" : humanize(membership.role)}
+                {facilitator ? "Facilitator" : humanize(membership.role)}
               </strong>
             </span>
           </div>
@@ -220,7 +212,7 @@ export function WorldPlay({
               onClick={() => setCreatingProblem(true)}
               disabled={active !== undefined}
             >
-              <span aria-hidden="true">＋</span> New problem
+              New problem
             </button>
           ) : null}
         </div>
@@ -229,10 +221,7 @@ export function WorldPlay({
       <div className="play-grid">
         <aside className="roster-panel">
           <header>
-            <div>
-              <p className="eyebrow">Roster</p>
-              <h2>In this world</h2>
-            </div>
+            <h2>Entities</h2>
           </header>
           {entities.loading && entities.items.length === 0 ? (
             <LoadingState label="Loading roster" />
@@ -281,12 +270,8 @@ export function WorldPlay({
           </div>
           {!entities.loading && entities.items.length === 0 ? (
             <div className="roster-empty">
-              <span aria-hidden="true">○</span>
-              <strong>No one is here yet</strong>
-              <p>
-                The world’s authors can prepare entities and generated sheets in
-                Builder.
-              </p>
+              <strong>No entities</strong>
+              <p>Create entities and generated sheets in Build.</p>
             </div>
           ) : null}
           <div className="table-members">
@@ -297,7 +282,7 @@ export function WorldPlay({
                     item.status === "active" && item.play_status === "ready",
                 ).length
               }{" "}
-              people at the table
+              active members
             </p>
             <div>
               {members.items
@@ -315,7 +300,7 @@ export function WorldPlay({
 
         <main className="table-stage">
           {interactions.loading && interactions.items.length === 0 ? (
-            <LoadingState label="Reading the table" />
+            <LoadingState label="Loading problems" />
           ) : null}
           {interactions.error === null ? null : (
             <ErrorMessage
@@ -326,6 +311,7 @@ export function WorldPlay({
           {active === undefined ? (
             <IdleTable
               facilitator={facilitator}
+              canCreate={facilitator && world.status === "active"}
               onCreate={() => setCreatingProblem(true)}
             />
           ) : (
@@ -345,8 +331,7 @@ export function WorldPlay({
           {history.length > 0 ? (
             <section className="history-feed">
               <header>
-                <p className="eyebrow">Recent history</p>
-                <h2>What became true</h2>
+                <h2>History</h2>
               </header>
               {history.map((interaction) => (
                 <HistoryCard
@@ -364,7 +349,7 @@ export function WorldPlay({
           {selectedEntity === undefined ? (
             <EmptyState
               title="No entity selected"
-              description="Choose someone from the roster to open their generated sheet."
+              description="Select an entity to view its profile and generated sheet."
             />
           ) : (
             <EntityDetail
@@ -434,11 +419,10 @@ function CharacterOnboarding({
     <section className="character-onboarding-page">
       <header className="play-header onboarding-header">
         <div>
-          <p className="eyebrow">Character onboarding</p>
           <h1>{world.name}</h1>
           <p>
-            Welcome, {user.display_name}. Complete every field prescribed for a
-            controlled character before entering the live table.
+            {user.display_name}, complete all required fields for a controlled
+            character before entering Play.
           </p>
         </div>
         <span className="character-status status-setup">
@@ -449,14 +433,14 @@ function CharacterOnboarding({
       </header>
 
       {loading && available.length === 0 ? (
-        <LoadingState label="Looking for your character" />
+        <LoadingState label="Loading characters" />
       ) : null}
       {error === null ? null : <ErrorMessage error={error} onRetry={onRetry} />}
       {!loading && available.length === 0 ? (
         <div className="onboarding-waiting panel">
           <EmptyState
-            title="Your character has not been assigned yet"
-            description="You have joined the world, but you are not at the live table. A Dungeon Master needs to create an entity and assign you as a controller."
+            title="No character assigned"
+            description="An owner or editor must create an entity and assign you as a controller."
           />
         </div>
       ) : null}
@@ -465,7 +449,7 @@ function CharacterOnboarding({
         <div className="onboarding-layout">
           {available.length > 1 ? (
             <aside className="panel onboarding-characters">
-              <p className="eyebrow">Your characters</p>
+              <h2>Your characters</h2>
               {available.map((entity) => (
                 <button
                   className={entity.id === selected.id ? "active" : ""}
@@ -503,31 +487,26 @@ function CharacterOnboarding({
 
 function IdleTable({
   facilitator,
+  canCreate,
   onCreate,
 }: {
   facilitator: boolean;
+  canCreate: boolean;
   onCreate: () => void;
 }) {
   return (
     <section className="idle-table">
-      <div className="idle-rings" aria-hidden="true">
-        <i />
-        <i />
-        <i />
-        <span>✦</span>
-      </div>
-      <p className="eyebrow">The table is listening</p>
-      <h2>
-        {facilitator ? "What happens next?" : "Waiting for the next problem."}
-      </h2>
+      <h2>No active problem</h2>
       <p>
-        {facilitator
-          ? "Problems are born here—not in a library. Describe the moment when it arrives."
-          : "The Dungeon Master will present the next moment when it is ready."}
+        {facilitator && !canCreate
+          ? "This world is archived."
+          : facilitator
+            ? "Create a problem to begin."
+            : "A facilitator can create the next problem."}
       </p>
-      {facilitator ? (
+      {canCreate ? (
         <button className="button button-play" type="button" onClick={onCreate}>
-          Present a problem
+          New problem
         </button>
       ) : null}
     </section>
@@ -616,7 +595,7 @@ function NewProblemModal({
       setError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not present this problem."),
+          : new ApiError(0, "unknown", "Could not create this problem."),
       );
       setSaving(false);
     }
@@ -624,32 +603,29 @@ function NewProblemModal({
 
   return (
     <Modal
-      title="Present a problem"
-      description="Describe this moment. It will never become a reusable template."
+      title="New problem"
+      description="Describe the problem and choose who can respond."
       onClose={onClose}
     >
       <form
         className="modal-form problem-form"
         onSubmit={(event) => void submit(event)}
       >
-        <Field
-          label="Short title"
-          hint="Optional. Useful in the resolved history."
-        >
+        <Field label="Title" hint="Optional. Shown in history.">
           <input
             value={title}
             onChange={(event) => setTitle(event.currentTarget.value)}
             maxLength={200}
-            placeholder="The bridge gives way"
+            placeholder="Problem title"
           />
         </Field>
-        <Field label="What is happening?" error={error?.fields["prompt"]}>
+        <Field label="Description" error={error?.fields["prompt"]}>
           <textarea
             value={prompt}
             onChange={(event) => setPrompt(event.currentTarget.value)}
             rows={5}
             maxLength={10_000}
-            placeholder="Rain has swollen the gorge. The center ropes snap, and the far half of the bridge begins to fold beneath you…"
+            placeholder="Describe the problem."
           />
         </Field>
         {entities.length > 0 ? (
@@ -687,8 +663,8 @@ function NewProblemModal({
           <div className="responder-picker">
             {responders.length === 0 ? (
               <p>
-                No active players have joined yet. You can still present a
-                narrative problem.
+                No active players are available. You can create a problem
+                without responders.
               </p>
             ) : (
               responders.map((member) => (
@@ -721,7 +697,7 @@ function NewProblemModal({
             type="submit"
             disabled={saving || prompt.trim() === ""}
           >
-            {saving ? "Presenting…" : "Present to the table"}
+            {saving ? "Creating…" : "Create problem"}
           </button>
         </footer>
       </form>
@@ -775,7 +751,7 @@ function LiveInteraction({
           : new ApiError(
               0,
               "unknown",
-              "The table changed before that command completed.",
+              "The problem changed before that action completed.",
             ),
       );
       setWorking(false);
@@ -789,8 +765,8 @@ function LiveInteraction({
           <span className={`interaction-status status-${interaction.status}`}>
             <i aria-hidden="true" />
             {interaction.status === "open"
-              ? "Open for actions"
-              : "DM is ruling"}
+              ? "Accepting actions"
+              : "Closed for actions"}
           </span>
           <span>
             Presented{" "}
@@ -811,16 +787,12 @@ function LiveInteraction({
         ) : null}
       </header>
       <div className="problem-prompt">
-        <p className="eyebrow">The problem</p>
-        {interaction.title === undefined ? null : <h2>{interaction.title}</h2>}
+        <h2>{interaction.title ?? "Problem"}</h2>
         <p className="prompt-copy">{interaction.prompt}</p>
         {context.length > 0 ? (
           <div className="context-chips">
             {context.map((entity) => (
-              <span key={entity.id}>
-                <i aria-hidden="true">○</i>
-                {entity.display_name}
-              </span>
+              <span key={entity.id}>{entity.display_name}</span>
             ))}
           </div>
         ) : null}
@@ -958,12 +930,12 @@ function OpenProblem({
   return (
     <section className="action-stage">
       <header>
-        <p className="eyebrow">Actions</p>
-        <h3>
+        <h3>Actions</h3>
+        <p>
           {submitted.length === 0
-            ? "The table is considering…"
-            : `${submitted.length} ${submitted.length === 1 ? "action" : "actions"} offered`}
-        </h3>
+            ? "No actions submitted"
+            : `${submitted.length} ${submitted.length === 1 ? "action" : "actions"} submitted`}
+        </p>
       </header>
       {submitted.length > 0 ? (
         <div className="action-list">
@@ -1023,7 +995,7 @@ function OpenProblem({
                 onChange={(event) => setText(event.currentTarget.value)}
                 rows={3}
                 maxLength={10_000}
-                placeholder="Describe your intent in your own words…"
+                placeholder="Describe your action."
               />
             </Field>
             <button
@@ -1031,19 +1003,19 @@ function OpenProblem({
               type="submit"
               disabled={saving || text.trim() === ""}
             >
-              {saving ? "Offering…" : "Offer action"}
+              {saving ? "Submitting…" : "Submit action"}
             </button>
           </form>
         ) : (
           <div className="own-action">
-            <span>Your action is on the table.</span>
+            <span>Action submitted.</span>
             <button
               className="text-button"
               type="button"
               disabled={saving}
               onClick={() => void withdraw()}
             >
-              Withdraw it
+              Withdraw
             </button>
           </div>
         )
@@ -1057,11 +1029,10 @@ function OpenProblem({
       {facilitator ? (
         <div className="adjudicate-callout">
           <div>
-            <span aria-hidden="true">✦</span>
             <p>
-              <strong>Ready to make the ruling?</strong>
+              <strong>Close actions</strong>
               <small>
-                Closing actions moves this problem into private adjudication.
+                Players cannot submit or withdraw actions after you close them.
               </small>
             </p>
           </div>
@@ -1071,7 +1042,7 @@ function OpenProblem({
             disabled={working}
             onClick={onAdjudicate}
           >
-            {working ? "Closing…" : "Begin ruling"}
+            {working ? "Closing…" : "Close actions"}
           </button>
         </div>
       ) : null}
@@ -1157,7 +1128,7 @@ function RulingEditor({
       setError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not complete this ruling."),
+          : new ApiError(0, "unknown", "Could not resolve this problem."),
       );
     } finally {
       setSaving(null);
@@ -1167,17 +1138,13 @@ function RulingEditor({
   return (
     <section className="ruling-editor">
       <header>
-        <p className="eyebrow">Dungeon Master ruling</p>
-        <h3>Say what becomes true.</h3>
-        <p>
-          Choose an action if one drove the outcome, narrate it, and apply only
-          the mechanical changes that matter.
-        </p>
+        <h3>Resolve problem</h3>
+        <p>Optionally select an action, then enter a summary and effects.</p>
       </header>
       {submitted.length > 0 ? (
         <fieldset className="action-selection">
           <legend>
-            Action at the center <small>Optional</small>
+            Selected action <small>Optional</small>
           </legend>
           <label className={selectedActionId === "" ? "selected" : ""}>
             <input
@@ -1218,7 +1185,7 @@ function RulingEditor({
           ))}
         </fieldset>
       ) : null}
-      <Field label="Consequence summary">
+      <Field label="Resolution summary">
         <textarea
           value={narrative}
           onChange={(event) => {
@@ -1227,7 +1194,7 @@ function RulingEditor({
           }}
           rows={4}
           maxLength={20_000}
-          placeholder="The rope catches, hard. Aria swings beneath the bridge, bruised but still holding on…"
+          placeholder="Describe the outcome."
         />
       </Field>
       <EffectBuilder
@@ -1249,12 +1216,12 @@ function RulingEditor({
       )}
       {!rulesReady ? (
         <p className="ruling-sync-notice" role="status">
-          Refreshing the current rules and entity state before this Consequence
-          can be previewed or resolved.
+          Refreshing the current rules and entity state before this problem can
+          be previewed or resolved.
         </p>
       ) : effectsCurrent ? null : (
         <p className="ruling-sync-notice" role="status">
-          The table changed after an effect was added. Remove or rebuild the
+          The world changed after an effect was added. Remove or rebuild the
           outdated effect before continuing.
         </p>
       )}
@@ -1458,18 +1425,15 @@ function EffectBuilder({
   return (
     <section className="effect-builder">
       <header>
-        <div>
-          <p className="eyebrow">Consequence effects</p>
-          <h4>What becomes true mechanically?</h4>
-        </div>
+        <h4>Effects</h4>
         <span>
           {effects.length} {effects.length === 1 ? "effect" : "effects"}
         </span>
       </header>
       {eligibleEntities.length === 0 ? (
         <p className="effect-empty">
-          At least one play-ready entity is required for a mechanical
-          consequence. Narrative-only rulings are always valid.
+          At least one ready entity is required to add effects. A resolution
+          summary without effects is valid.
         </p>
       ) : (
         <>
@@ -1479,14 +1443,14 @@ function EffectBuilder({
             onChange={(event) =>
               setEffectKind(event.currentTarget.value as typeof effectKind)
             }
-            aria-label="Consequence effect kind"
+            aria-label="Effect type"
           >
             {mutableMechanics.length > 0 ? (
               <option value="mechanic">Change a value</option>
             ) : null}
-            <option value="apply-status">Create a lasting status</option>
+            <option value="apply-status">Apply a status</option>
             {activeStatusOptions.length > 0 ? (
-              <option value="remove-status">End an active status</option>
+              <option value="remove-status">Remove an active status</option>
             ) : null}
           </select>
           {effectKind === "mechanic" ? (
@@ -1569,7 +1533,7 @@ function EffectBuilder({
                     onChange={(event) =>
                       setStatusName(event.currentTarget.value)
                     }
-                    placeholder="Shaken"
+                    placeholder="Status name"
                   />
                 </label>
                 <label>
@@ -1583,7 +1547,7 @@ function EffectBuilder({
                     onChange={(event) =>
                       setStatusDescription(event.currentTarget.value)
                     }
-                    placeholder="What this consequence means in the fiction."
+                    placeholder="Describe the status."
                   />
                 </label>
               </div>
@@ -1629,13 +1593,12 @@ function EffectBuilder({
                       ]);
                     }}
                   >
-                    ＋ Add modifier
+                    Add modifier
                   </button>
                 </header>
                 {statusModifiers.length === 0 ? (
                   <p className="status-modifier-empty">
-                    This can remain a named fictional condition with no numeric
-                    modifier.
+                    A status can have no modifiers.
                   </p>
                 ) : (
                   <ol className="status-modifier-list">
@@ -1751,18 +1714,6 @@ function EffectBuilder({
                 : undefined;
             return (
               <li key={effect.id}>
-                <span
-                  className={`effect-kind effect-${
-                    effect.kind === "mechanic" ? item?.kind : "status"
-                  }`}
-                  aria-hidden="true"
-                >
-                  {effect.kind === "mechanic"
-                    ? item?.kind === "capacity"
-                      ? "◇"
-                      : "✦"
-                    : "◈"}
-                </span>
                 <div>
                   <strong>{effectTargetLabel(effect, entities)}</strong>
                   <span>{effectDescription(effect, item)}</span>
@@ -1937,7 +1888,6 @@ function RulingPreview({
   return (
     <div className="ruling-preview" role="status" aria-live="polite">
       <header>
-        <span aria-hidden="true">✓</span>
         <div>
           <strong>Preview is valid</strong>
           <small>
@@ -2027,7 +1977,7 @@ function HistoryCard({
         <span>Resolved</span>
         <time>{formatRelativeDate(interaction.resolved_at)}</time>
       </header>
-      <h3>{interaction.title ?? "A problem at the table"}</h3>
+      <h3>{interaction.title ?? "Untitled problem"}</h3>
       <p className="history-prompt">{interaction.prompt}</p>
       {resolution === undefined ? null : (
         <>
@@ -2036,15 +1986,6 @@ function HistoryCard({
             <div className="history-effects">
               {resolution.applied_effects.map((effect, index) => (
                 <span key={`${effect.effect_id}-${effect.entity_id}-${index}`}>
-                  <i aria-hidden="true">
-                    {effect.type === "apply-status" ||
-                    effect.type === "remove-status"
-                      ? "◈"
-                      : mechanics.find((item) => item.id === effect.mechanic_id)
-                            ?.kind === "capacity"
-                        ? "◇"
-                        : "✦"}
-                  </i>
                   {entities.find((entity) => entity.id === effect.entity_id)
                     ?.display_name ?? "Entity"}
                   :{" "}

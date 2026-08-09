@@ -3,7 +3,7 @@
 ## Product surface
 
 The React application presents two deliberately separate product areas over the
-same world model. `/play` is the table and `/build` is the authoring studio; the
+same world model. `/play` is the live table and `/build` is the configuration area; the
 root route only asks which area the user wants to enter. A signed-in account
 sees only worlds it owns or has joined. Authors configure three
 user-authored lists:
@@ -41,12 +41,12 @@ component framework, or service worker.
 | `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                      |
 | `src/features/IdentityGate.tsx`             | Username/password signup and signin while preserving the requested URL.            |
 | `src/features/AccountControls.tsx`          | Account identity, password change, and server-side signout controls.               |
-| `src/features/BuildLibrary.tsx`             | Owner/editor Builder library and world creation.                                   |
+| `src/features/BuildLibrary.tsx`             | Owner/editor Build library and world creation.                                     |
 | `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                  |
-| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Builder shell.                                                   |
+| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Build shell.                                                     |
 | `src/features/PlayWorkspace.tsx`            | Independent Play shell and world loader.                                           |
-| `src/features/RosterWorkspace.tsx`          | Builder entity, controller, profile, and direct sheet setup.                       |
-| `src/features/RosterModals.tsx`             | Builder-only entity creation and controller assignment dialogs.                    |
+| `src/features/RosterWorkspace.tsx`          | Build entity, controller, profile, and direct sheet setup.                         |
+| `src/features/RosterModals.tsx`             | Build-only entity creation and controller assignment dialogs.                      |
 | `src/features/EntityDetail.tsx`             | Shared profile tabs and generated sheet reader/editor presentation.                |
 | `src/features/MechanicsWorkspace.tsx`       | Input/derived mechanic and recursive expression master-detail editor.              |
 | `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                                       |
@@ -56,7 +56,7 @@ component framework, or service worker.
 | `src/features/EntityProfilePanel.tsx`       | Character-field reader/editor with completion and visibility.                      |
 | `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                        |
 | `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                            |
-| `src/styles/app.css`                        | Responsive library, editor, invitation, and dark play-table layouts.               |
+| `src/styles/app.css`                        | Responsive neutral layouts for libraries, editors, invitations, and live play.     |
 
 ESLint includes hooks and JSX accessibility rules. Stylelint enforces tokenized
 colors and bounded selector complexity. Prettier, TypeScript, Bun tests, and
@@ -82,8 +82,8 @@ Routes are parsed without an external router:
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
 Unknown paths render a not-found screen rather than silently opening a library.
-A bare Builder world path canonicalizes to capacities. A player or spectator
-cannot cause Play to render under a Build URL; the Builder shows an explicit
+A bare Build world path canonicalizes to capacities. A player or spectator
+cannot cause Play to render under a Build URL; Build shows an explicit
 access boundary and offers a deliberate transition to Play.
 
 The root choice remains data-free. On entering Play, Build, or an invite URL,
@@ -119,7 +119,7 @@ library exposes actions belonging to the other area.
 
 ## Static configuration
 
-The Builder sidebar contains exactly:
+The Build sidebar contains exactly:
 
 - Capacities;
 - Capabilities;
@@ -137,9 +137,9 @@ operations/references by expected kind for guidance; the server remains the
 authority and rejects invalid types or cycles when saved. Only inputs may set
 `mutable_during_play`; it gates direct scalar effects, not status modifiers.
 
-The Builder's explicit-save editors share one dirty/unload guard. It protects
+Build's explicit-save editors share one dirty/unload guard. It protects
 section changes, mechanic and roster child selection, Settings, Home, and both
-desktop and mobile exits to the Builder library. Cancelling keeps the current
+desktop and mobile exits to the Build library. Cancelling keeps the current
 draft and destination; accepting discards the draft before navigation. The
 capacity and capability editors archive rather than delete and include a
 generated-sheet preview. Archiving removes a mechanic from new use while
@@ -151,7 +151,7 @@ IDs are not a user-facing ontology.
 
 The character-field screen edits the whole ordered requirement set as one
 draft. Each field has a user-authored label, optional guidance, and either
-table or controller/DM visibility. Every published field is required; there is
+table or controller/facilitator visibility. Every published field is required; there is
 no per-field required toggle. Publishing uses the current schema revision,
 preserves durable IDs, and warns when adding/removing requirements can change
 existing character readiness.
@@ -176,11 +176,11 @@ narrow screens.
 
 An editor/facilitator creates world entities, assigns active player
 controllers, edits profiles, and makes direct setup sheet changes in the
-Builder roster. Every active capacity and capability appears automatically on
+Build roster. Every active capacity and capability appears automatically on
 the generated sheet. Inputs begin at configured defaults; derived values are
 calculated from the current graph. The sheet displays active status chips,
 labels derived fields as calculated, and lists the modifier trail from
-intrinsic to effective value whenever modifiers are present. Builder inputs
+intrinsic to effective value whenever modifiers are present. Build inputs
 edit only base input values and send both state and mechanic-rules revisions.
 Play renders sheets read-only. Each active status exposes its optional
 description and the source problem, so equal names remain distinguishable
@@ -251,7 +251,9 @@ only capability.
 
 ## Accessibility and responsive behavior
 
-The UI uses semantic headings, fieldsets, labels, explicit button types, focus
+The UI uses a shared neutral visual system with sans-serif typography and
+restrained color, radius, and elevation. It uses semantic headings, fieldsets,
+labels, explicit button types, focus
 rings, alert/status roles, an Escape-close modal, a skip link, and reduced-
 motion handling. Desktop configuration uses a persistent sidebar and
 master-detail editor. Below 950px it switches to a sticky world/section bar;

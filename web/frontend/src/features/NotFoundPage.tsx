@@ -6,9 +6,8 @@ export function NotFoundPage({ navigate }: { navigate: Navigate }) {
     <main className="not-found-page">
       <Brand />
       <EmptyState
-        symbol="?"
-        title="That page is not in this world"
-        description="Choose whether you want to return to Play or Build."
+        title="Page not found"
+        description="Return home to choose Play or Build."
         action={
           <button
             className="button button-ink"

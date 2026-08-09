@@ -33,7 +33,7 @@ export function PlayWorkspace({
   if (resource.loading && world === null)
     return (
       <main className="play-app play-app-boot">
-        <LoadingState label="Opening the table" />
+        <LoadingState label="Loading world" />
       </main>
     );
   if (resource.error !== null)
@@ -45,7 +45,7 @@ export function PlayWorkspace({
           type="button"
           onClick={() => navigate("/play")}
         >
-          Back to your tables
+          Back to Play
         </button>
       </main>
     );
@@ -54,7 +54,7 @@ export function PlayWorkspace({
   return (
     <div className="play-app world-section-play">
       <a className="skip-link" href="#play-content">
-        Skip to table
+        Skip to content
       </a>
       <header className="play-app-bar">
         <button
@@ -72,7 +72,7 @@ export function PlayWorkspace({
         >
           <span aria-hidden="true">←</span>
           <span>
-            <small>All tables</small>
+            <small>All worlds</small>
             <strong>{world.name}</strong>
           </span>
         </button>

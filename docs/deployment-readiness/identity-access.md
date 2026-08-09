@@ -14,7 +14,7 @@ The original audit found no signup, signin, logout, or server session. A public
 endpoint created UUID/display-name records, the UI enumerated every user, and a
 caller could assume any account by sending its UUID as `X-DND-User-ID`.
 
-That identity adapter has been removed. Worldwright now uses native
+That identity adapter has been removed. dnd now uses native
 username/password accounts, Argon2id password hashes, opaque revocable server
 sessions, exact-origin validation, and session-bound CSRF tokens. All product
 routes—including invite preview and redemption—require authentication; only

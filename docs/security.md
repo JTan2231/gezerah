@@ -2,13 +2,13 @@
 
 ## Current deployment classification
 
-As of 2026-08-09, Worldwright has a public-addressable Railway preview backed by
+As of 2026-08-09, dnd has a public-addressable Railway preview backed by
 managed PostgreSQL. It is not designated public production, and no
 public-release gate or production-audience commitment has been opened. The
 conditions in this document therefore remain requirements before broader or
 real-user use; reachability and a healthy smoke check do not satisfy them.
 
-Worldwright now has native username/password authentication and revocable
+dnd now has native username/password authentication and revocable
 server sessions. A caller-supplied user UUID is not an authentication mechanism:
 the former `X-DND-User-ID` adapter and public user directory are gone. Health,
 signup, and signin are the explicit public API exceptions; every other product
@@ -180,8 +180,8 @@ Treat invite URLs as secrets. Request logs redact their bearer path segment.
 
 `users` and `world_memberships` represent real participants. `entities`
 represent fictional state owners. A username, mechanic name, entity name, or
-profile value grants no product authority. “Dungeon Master” remains UI language
-for owner/editor facilitator authority, not a mechanical class.
+profile value grants no product authority. Facilitator authority comes from an
+owner/editor membership, not a mechanical class.
 
 `world_membership_entity_controls` is the only character-authority edge.
 Profile text cannot grant control, mutate mechanical state, or become an effect

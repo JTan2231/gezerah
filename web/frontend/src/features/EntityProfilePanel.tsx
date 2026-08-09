@@ -42,11 +42,7 @@ export function EntityProfilePanel({
   return (
     <article className="entity-profile">
       <header>
-        <span className="entity-portrait" aria-hidden="true">
-          {entity.display_name.slice(0, 1).toUpperCase()}
-        </span>
         <div>
-          <p className="eyebrow">Character profile</p>
           <h2>{entity.display_name}</h2>
           <span>
             {profile.value.completed_field_count} of{" "}
@@ -88,8 +84,8 @@ function EntityProfileReader({ profile }: { profile: EntityProfile }) {
   if (profile.fields.length === 0)
     return (
       <EmptyState
-        title="No character story is visible"
-        description="There are no completed table-visible character fields yet."
+        title="No visible profile fields"
+        description="There are no completed fields visible to you."
       />
     );
   return (
@@ -176,7 +172,7 @@ function EntityProfileEditor({
       {profile.fields.length === 0 ? (
         <EmptyState
           title="No character fields configured"
-          description="A Dungeon Master can publish required fields from world configuration. This controlled entity is ready without them."
+          description="A facilitator can publish required fields in Build. This controlled entity is ready without them."
         />
       ) : (
         <div className="character-profile-fields">
@@ -203,7 +199,7 @@ function EntityProfileEditor({
               <span className="character-field-visibility">
                 {characterField.visibility === "table"
                   ? "Visible to everyone at the table"
-                  : "Visible only to controllers and Dungeon Masters"}
+                  : "Visible only to controllers and facilitators"}
               </span>
             </Field>
           ))}

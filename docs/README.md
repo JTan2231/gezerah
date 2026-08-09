@@ -1,6 +1,6 @@
 # System documentation
 
-This directory is the canonical guide to Worldwright. It describes the system
+This directory is the canonical guide to dnd. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 status layers, generated entity sheets, player-controlled characters with

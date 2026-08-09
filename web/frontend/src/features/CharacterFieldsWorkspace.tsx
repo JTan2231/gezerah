@@ -160,9 +160,8 @@ function CharacterFieldsEditor({
   return (
     <section className="character-fields-page content-narrow">
       <PageIntro
-        eyebrow="Character onboarding"
         title="Character fields"
-        description="Define the story information every player-controlled character must complete before entering play."
+        description="Define the information every player-controlled character must complete before entering Play."
       />
 
       <form
@@ -171,11 +170,11 @@ function CharacterFieldsEditor({
       >
         <header>
           <div>
-            <p className="eyebrow">Published requirements</p>
-            <h2>
+            <h2>Requirements</h2>
+            <p>
               {draft.draft.length} required{" "}
               {draft.draft.length === 1 ? "field" : "fields"}
-            </h2>
+            </p>
           </div>
           <span>schema r{fieldSet.revision}</span>
         </header>
@@ -234,7 +233,7 @@ function CharacterFieldsEditor({
                 <input
                   value={characterField.label}
                   maxLength={200}
-                  placeholder="Backstory"
+                  placeholder="Field label"
                   onChange={(event) =>
                     update(index, { label: event.currentTarget.value })
                   }
@@ -249,7 +248,7 @@ function CharacterFieldsEditor({
                   value={characterField.helpText}
                   rows={3}
                   maxLength={2000}
-                  placeholder="Where did this character come from?"
+                  placeholder="Instructions for this field"
                   onChange={(event) =>
                     update(index, { helpText: event.currentTarget.value })
                   }
@@ -267,7 +266,7 @@ function CharacterFieldsEditor({
                 >
                   <option value="table">Everyone at the table</option>
                   <option value="controllers-and-facilitators">
-                    Character controllers and Dungeon Masters
+                    Character controllers and facilitators
                   </option>
                 </select>
               </Field>

@@ -280,18 +280,18 @@ export async function verifyBrowser(
       );
     }
     const title = await page.title();
-    if (title !== "Worldwright") {
+    if (title !== "dnd") {
       throw new Error(
-        `browser title was ${JSON.stringify(title)}, expected "Worldwright"`,
+        `browser title was ${JSON.stringify(title)}, expected "dnd"`,
       );
     }
     await page
-      .getByRole("heading", { name: "What are you here to do?" })
+      .getByRole("heading", { name: "Play or Build" })
       .waitFor({ state: "visible" });
     await page.getByRole("link", { name: /Play/ }).click();
     await page.waitForURL(`${normalized}/play`);
     await page
-      .getByRole("heading", { name: "Welcome back." })
+      .getByRole("heading", { name: "Sign in" })
       .waitFor({ state: "visible" });
 
     const form = page.locator("form.identity-form");
@@ -443,10 +443,8 @@ async function fetchWithTimeout(
 
 function requireHTMLShell(response: TextResponse): void {
   requireContentType(response, "text/html");
-  if (!/<title>Worldwright<\/title>/i.test(response.body)) {
-    throw new Error(
-      `${response.name} did not return the Worldwright app shell`,
-    );
+  if (!/<title>dnd<\/title>/i.test(response.body)) {
+    throw new Error(`${response.name} did not return the dnd app shell`);
   }
 }
 

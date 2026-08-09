@@ -120,7 +120,7 @@ draining. Database health includes Railway's non-migrating flag, the pinned
 volume name, `READY` state, at least 5 GB, and the standard
 `/var/lib/postgresql/data` mount. They refuse to attest while another web
 rollout is unresolved. HTTP checks then require HTTPS with no redirects, `ok:true` health JSON, the
-Worldwright app shell at `/`, the same shell at a direct SPA route, and every
+dnd app shell at `/`, the same shell at a direct SPA route, and every
 same-origin JavaScript and stylesheet discovered from the returned HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted

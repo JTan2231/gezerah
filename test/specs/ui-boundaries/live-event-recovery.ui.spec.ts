@@ -107,7 +107,7 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
     const reconnectURL = new URL(await reconnect);
     expect(reconnectURL.searchParams.get("after")).toBe("0");
     await expect(
-      page.getByRole("heading", { name: "Waiting for the next problem." }),
+      page.getByRole("heading", { name: "No active problem" }),
     ).toBeVisible({ timeout: 4_000 });
     await expect(page.getByText(prompt)).toHaveCount(0);
     await expect(page.getByText("Cancelled")).toHaveCount(0);

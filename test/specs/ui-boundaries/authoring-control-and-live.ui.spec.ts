@@ -159,7 +159,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       ).toBeVisible();
       await expect(
         playerOnePage.getByRole("heading", {
-          name: "Waiting for the next problem.",
+          name: "No active problem",
         }),
       ).toBeVisible({ timeout: 4_000 });
     });
@@ -257,7 +257,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         .click();
       await expect(
         playerOnePage.getByRole("heading", {
-          name: "Waiting for the next problem.",
+          name: "No active problem",
         }),
       ).toBeVisible({ timeout: 4_000 });
     });
@@ -385,7 +385,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         .click();
       await expect(
         playerOnePage.getByRole("heading", {
-          name: "Waiting for the next problem.",
+          name: "No active problem",
         }),
       ).toBeVisible();
 
@@ -481,7 +481,9 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await playerTwoPage
         .getByLabel("What do you do?")
         .fill(`Other player's action ${unique}`);
-      await playerTwoPage.getByRole("button", { name: "Offer action" }).click();
+      await playerTwoPage
+        .getByRole("button", { name: "Submit action" })
+        .click();
 
       await expect(
         playerOnePage.getByText(`Other player's action ${unique}`),
@@ -496,15 +498,19 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await playerOnePage
         .getByLabel("What do you do?")
         .fill(`First offered action ${unique}`);
-      await playerOnePage.getByRole("button", { name: "Offer action" }).click();
-      await playerOnePage.getByRole("button", { name: "Withdraw it" }).click();
+      await playerOnePage
+        .getByRole("button", { name: "Submit action" })
+        .click();
+      await playerOnePage.getByRole("button", { name: "Withdraw" }).click();
       await expect(
         playerOnePage.getByText(`Other player's action ${unique}`),
       ).toBeVisible();
       await playerOnePage
         .getByLabel("What do you do?")
         .fill(`Replacement action ${unique}`);
-      await playerOnePage.getByRole("button", { name: "Offer action" }).click();
+      await playerOnePage
+        .getByRole("button", { name: "Submit action" })
+        .click();
       await expect(
         playerOnePage.getByText(`Replacement action ${unique}`),
       ).toBeVisible();
@@ -525,7 +531,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive world" }).click();
       await expect(
-        ownerPage.getByRole("heading", { name: "Shape a world." }),
+        ownerPage.getByRole("heading", { name: "Worlds", exact: true }),
       ).toBeVisible();
     });
   } finally {
@@ -552,7 +558,7 @@ async function createNarrowContexts(
 }
 
 async function selectBuildSection(page: Page, section: string): Promise<void> {
-  await page.getByLabel("Builder section").selectOption(section);
+  await page.getByLabel("Build section").selectOption(section);
 }
 
 async function expectNoHorizontalPageOverflow(page: Page): Promise<void> {

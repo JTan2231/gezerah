@@ -8,13 +8,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
     <span
       className={compact ? "studio-brand studio-brand-compact" : "studio-brand"}
     >
-      <span className="brand-glyph" aria-hidden="true">
-        W
-      </span>
-      <span className="brand-copy">
-        <strong>Worldwright</strong>
-        {!compact ? <small>Stories, held together.</small> : null}
-      </span>
+      <strong>dnd</strong>
     </span>
   );
 }
@@ -40,12 +34,10 @@ export function Avatar({
 }
 
 export function PageIntro({
-  eyebrow,
   title,
   description,
   actions,
 }: {
-  eyebrow?: string;
   title: string;
   description?: string;
   actions?: ReactNode;
@@ -53,7 +45,6 @@ export function PageIntro({
   return (
     <header className="page-intro">
       <div>
-        {eyebrow === undefined ? null : <p className="eyebrow">{eyebrow}</p>}
         <h1>{title}</h1>
         {description === undefined ? null : <p>{description}</p>}
       </div>
@@ -118,30 +109,22 @@ export function ErrorMessage({
 export function LoadingState({ label = "Loading" }: { label?: string }) {
   return (
     <div className="loading-state" role="status">
-      <span className="loading-orbit" aria-hidden="true" />
       <span>{label}</span>
     </div>
   );
 }
 
 export function EmptyState({
-  symbol,
   title,
   description,
   action,
 }: {
-  symbol?: string;
   title: string;
   description: string;
   action?: ReactNode;
 }) {
   return (
     <div className="empty-state">
-      {symbol === undefined ? null : (
-        <span className="empty-symbol" aria-hidden="true">
-          {symbol}
-        </span>
-      )}
       <h2>{title}</h2>
       <p>{description}</p>
       {action === undefined ? null : <div>{action}</div>}

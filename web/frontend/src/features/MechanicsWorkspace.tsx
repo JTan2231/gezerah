@@ -67,7 +67,6 @@ export function MechanicsWorkspace({
   return (
     <section className="mechanics-page">
       <PageIntro
-        eyebrow="Static world configuration"
         title={kind === "capacity" ? "Capacities" : "Capabilities"}
         description={
           kind === "capacity"
@@ -80,7 +79,7 @@ export function MechanicsWorkspace({
             type="button"
             onClick={() => select("new")}
           >
-            <span aria-hidden="true">＋</span> New {kind}
+            New {kind}
           </button>
         }
       />
@@ -91,7 +90,6 @@ export function MechanicsWorkspace({
         >
           <div className="catalog-tools">
             <label className="search-box">
-              <span aria-hidden="true">⌕</span>
               <span className="sr-only">Search {plural}</span>
               <input
                 value={search}
@@ -128,27 +126,16 @@ export function MechanicsWorkspace({
                 }
                 onClick={() => select(item.id)}
               >
-                <span
-                  className={`catalog-glyph glyph-${kind}`}
-                  aria-hidden="true"
-                >
-                  {kind === "capacity" ? "◇" : "✦"}
-                </span>
                 <span>
                   <strong>{item.name}</strong>
                   <small>{mechanicSummary(item)}</small>
                 </span>
-                {item.archived ? (
-                  <em>Archived</em>
-                ) : (
-                  <b aria-hidden="true">›</b>
-                )}
+                {item.archived ? <em>Archived</em> : null}
               </button>
             ))}
           </div>
           {!resource.loading && filtered.length === 0 ? (
             <div className="catalog-empty">
-              <span aria-hidden="true">{search === "" ? "—" : "⌕"}</span>
               <p>
                 {search === ""
                   ? `No ${plural} yet.`
@@ -161,16 +148,13 @@ export function MechanicsWorkspace({
         <div className="resource-editor-shell">
           {selected === undefined ? (
             <EmptyState
-              symbol={kind === "capacity" ? "◇" : "✦"}
               title={
-                items.length === 0
-                  ? `Define your first ${kind}`
-                  : `Choose a ${kind}`
+                items.length === 0 ? `No ${plural} yet` : `Select a ${kind}`
               }
               description={
                 kind === "capacity"
-                  ? "Start with one value the table needs to see or change during play."
-                  : "Start with one skill or proficiency that matters when players act."
+                  ? "Create a capacity to add a value or resource to entity sheets."
+                  : "Create a capability to add a skill or proficiency to entity sheets."
               }
               action={
                 <button
@@ -301,8 +285,11 @@ function MechanicEditor({
     <form className="mechanic-editor" onSubmit={(event) => void save(event)}>
       <header className="editor-titlebar">
         <div>
-          <p className="eyebrow">{creating ? `New ${item.kind}` : item.kind}</p>
-          <h2>{item.name.trim() || `Untitled ${item.kind}`}</h2>
+          <h2>
+            {creating
+              ? `New ${item.kind}`
+              : item.name.trim() || `Untitled ${item.kind}`}
+          </h2>
           <p>
             {item.kind === "capacity"
               ? "A value an entity carries."
@@ -318,10 +305,9 @@ function MechanicEditor({
         <div className="editor-form-column">
           <section className="form-section">
             <div className="section-heading">
-              <span>01</span>
               <div>
                 <h3>Identity</h3>
-                <p>Use language your table will recognize immediately.</p>
+                <p>Name and describe this mechanic.</p>
               </div>
             </div>
             <div className="form-grid">
@@ -332,9 +318,7 @@ function MechanicEditor({
                     patch({ name: event.currentTarget.value })
                   }
                   maxLength={200}
-                  placeholder={
-                    item.kind === "capacity" ? "Strength" : "Climbing"
-                  }
+                  placeholder={`${humanize(item.kind)} name`}
                 />
               </Field>
               <Field
@@ -349,7 +333,7 @@ function MechanicEditor({
                     })
                   }
                   rows={3}
-                  placeholder="What does this mean at the table?"
+                  placeholder="Mechanic description"
                 />
               </Field>
             </div>
@@ -357,10 +341,9 @@ function MechanicEditor({
 
           <section className="form-section">
             <div className="section-heading">
-              <span>02</span>
               <div>
-                <h3>How it behaves</h3>
-                <p>Choose the simplest representation that tells the truth.</p>
+                <h3>Behavior</h3>
+                <p>Choose how this mechanic is stored and displayed.</p>
               </div>
             </div>
             <div
@@ -389,7 +372,6 @@ function MechanicEditor({
                     })
                   }
                 />
-                <span aria-hidden="true">●</span>
                 <strong>Input value</strong>
                 <small>Stored on each entity and editable during setup.</small>
               </label>
@@ -417,7 +399,6 @@ function MechanicEditor({
                     })
                   }
                 />
-                <span aria-hidden="true">ƒ</span>
                 <strong>Derived value</strong>
                 <small>Calculated from other values in this world.</small>
               </label>
@@ -446,13 +427,6 @@ function MechanicEditor({
                       patch(changeMechanicMode(item, mode as MechanicMode))
                     }
                   />
-                  <span aria-hidden="true">
-                    {mode === "score" || mode === "rating"
-                      ? "12"
-                      : mode === "pool"
-                        ? "12 / 20"
-                        : "✓"}
-                  </span>
                   <strong>{humanize(mode)}</strong>
                   <small>{modeDescription(mode)}</small>
                 </label>
@@ -527,7 +501,7 @@ function MechanicEditor({
                       onChange={(event) =>
                         patch({ unit: event.currentTarget.value || undefined })
                       }
-                      placeholder="points"
+                      placeholder="Unit"
                     />
                   </Field>
                 </div>
@@ -570,7 +544,7 @@ function MechanicEditor({
                       onChange={(event) =>
                         patch({ unit: event.currentTarget.value || undefined })
                       }
-                      placeholder="points"
+                      placeholder="Unit"
                     />
                   </Field>
                 ) : null}
@@ -590,7 +564,7 @@ function MechanicEditor({
               <span>
                 <strong>May change during play</strong>
                 <small>
-                  Dungeon Masters can include this in a ruling’s effects.
+                  Facilitators can change this value when resolving a problem.
                 </small>
               </span>
               <input
@@ -609,7 +583,7 @@ function MechanicEditor({
           {!creating && !item.archived ? (
             <section className="form-section lifecycle-section">
               <div>
-                <h3>Retire this mechanic</h3>
+                <h3>Archive mechanic</h3>
                 <p>
                   Archive it when new entities should stop using it. Existing
                   state and resolution history remain readable.
@@ -628,11 +602,8 @@ function MechanicEditor({
         </div>
 
         <aside className="sheet-preview">
-          <p className="eyebrow">Entity sheet preview</p>
+          <h3>Preview</h3>
           <div className={`preview-card preview-${item.kind}`}>
-            <span className="preview-icon" aria-hidden="true">
-              {item.kind === "capacity" ? "◇" : "✦"}
-            </span>
             <div>
               <strong>
                 {previewName === "" ? `Untitled ${item.kind}` : previewName}
@@ -647,8 +618,7 @@ function MechanicEditor({
           </div>
           <p>
             Every entity in this world receives this configured definition.
-            Values can be adjusted when the roster is prepared or through a DM
-            ruling.
+            Values can be adjusted during roster setup or problem resolution.
           </p>
         </aside>
       </div>

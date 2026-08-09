@@ -2,7 +2,7 @@
 
 ## Purpose and boundaries
 
-Worldwright is a world-centered typed state-transition system. Authors define
+dnd is a world-centered typed state-transition system. Authors define
 only the capacities, capabilities, character fields, and entities that matter
 to their world. Problems are improvised in the multiplayer loop rather than
 authored as reusable configuration.
@@ -90,7 +90,7 @@ flowchart TD
 ### Browser layer
 
 The browser starts with a data-free choice between `/build` and `/play`.
-Build owns the owner/editor world library and configuration studio. Play owns
+Build owns the owner/editor world library and configuration. Play owns
 the admitted-world table picker, player onboarding, and live table. Both areas
 share the authenticated account boundary, API types, fetch helpers, route
 helpers, and UI primitives.

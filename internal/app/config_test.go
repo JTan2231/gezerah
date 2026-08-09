@@ -10,7 +10,7 @@ func TestLoadConfigPrefersDNDVariables(t *testing.T) {
 	t.Setenv("PORT", "7070")
 	t.Setenv("DND_DATABASE_URL", "postgres://dnd-primary")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
-	t.Setenv("DND_PUBLIC_ORIGIN", " https://worldwright.example ")
+	t.Setenv("DND_PUBLIC_ORIGIN", " https://app.example ")
 	t.Setenv("DND_LOG_LEVEL", "warning")
 
 	config := LoadConfig()
@@ -20,7 +20,7 @@ func TestLoadConfigPrefersDNDVariables(t *testing.T) {
 	if config.DatabaseURL != "postgres://dnd-primary" {
 		t.Fatalf("DatabaseURL = %q, want DND_DATABASE_URL", config.DatabaseURL)
 	}
-	if config.PublicOrigin != "https://worldwright.example" {
+	if config.PublicOrigin != "https://app.example" {
 		t.Fatalf("PublicOrigin = %q, want configured origin", config.PublicOrigin)
 	}
 	if config.LogLevel != slog.LevelWarn {

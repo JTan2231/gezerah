@@ -58,7 +58,7 @@ The current application has one clean baseline followed by forward upgrades:
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
 database and let the application install `001_worldwright.sql`.
-For a local database that already has a Worldwright migration ledger,
+For a local database that already has a dnd migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
 backend start.
 Any one-time data salvage belongs outside the runtime repository and must be

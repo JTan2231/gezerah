@@ -1,5 +1,5 @@
 {
-  "name": "dnd-rule-composer-frontend",
+  "name": "dnd-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",

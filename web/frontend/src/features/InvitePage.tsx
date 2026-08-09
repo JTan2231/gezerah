@@ -8,7 +8,6 @@ import type {
   WorldInvitePreview,
 } from "../api/types";
 import {
-  Avatar,
   Brand,
   ErrorMessage,
   LoadingState,
@@ -95,14 +94,11 @@ export function InvitePage({
           />
         </div>
       </header>
-      {invite.loading ? <LoadingState label="Reading the invitation" /> : null}
+      {invite.loading ? <LoadingState label="Loading invitation" /> : null}
       {invite.error === null ? null : (
         <div className="invite-card invite-card-error">
-          <span className="invite-seal" aria-hidden="true">
-            ×
-          </span>
-          <h1>This invitation has closed.</h1>
-          <p>It may have expired or been revoked by the world’s authors.</p>
+          <h1>Invitation unavailable</h1>
+          <p>This invitation may have expired or been revoked.</p>
           <ErrorMessage error={invite.error} />
           <button
             className="button button-ink"
@@ -115,20 +111,16 @@ export function InvitePage({
       )}
       {invite.value === null ? null : (
         <section className="invite-card">
-          <span className="invite-seal" aria-hidden="true">
-            ✦
-          </span>
-          <p className="eyebrow">
-            An invitation from {invite.value.invited_by_display_name}
-          </p>
-          <h1>Come to {invite.value.world_name}.</h1>
-          <p className="invite-description">
-            {invite.value.world_description ?? "There is room at the table."}
-          </p>
+          <h1>Invitation to {invite.value.world_name}</h1>
+          <p>Invited by {invite.value.invited_by_display_name}</p>
+          {invite.value.world_description === undefined ? null : (
+            <p className="invite-description">
+              {invite.value.world_description}
+            </p>
+          )}
           <div className="invite-role-row">
-            <Avatar name={user.display_name} />
             <div>
-              <span>This invitation offers</span>
+              <span>Role</span>
               <RolePill role={invite.value.role} />
             </div>
           </div>

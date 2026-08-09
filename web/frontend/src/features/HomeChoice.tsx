@@ -6,8 +6,7 @@ export function HomeChoice({ navigate }: { navigate: Navigate }) {
     <main className="home-choice">
       <header>
         <Brand />
-        <p className="eyebrow">Choose your side of the table</p>
-        <h1>What are you here to do?</h1>
+        <h1>Play or Build</h1>
       </header>
       <nav className="home-choice-grid" aria-label="Application area">
         <a
@@ -18,17 +17,7 @@ export function HomeChoice({ navigate }: { navigate: Navigate }) {
             navigate("/play");
           }}
         >
-          <span className="home-choice-symbol" aria-hidden="true">
-            ✦
-          </span>
-          <span>
-            <small>At the table</small>
-            <strong>Play</strong>
-            <em>
-              Join your table, prepare your character, or return to the story.
-            </em>
-          </span>
-          <b aria-hidden="true">→</b>
+          <strong>Play</strong>
         </a>
         <a
           className="home-choice-card home-choice-build"
@@ -38,17 +27,7 @@ export function HomeChoice({ navigate }: { navigate: Navigate }) {
             navigate("/build");
           }}
         >
-          <span className="home-choice-symbol" aria-hidden="true">
-            ◇
-          </span>
-          <span>
-            <small>In the studio</small>
-            <strong>Build</strong>
-            <em>
-              Create a world, define its mechanics, and prepare the table.
-            </em>
-          </span>
-          <b aria-hidden="true">→</b>
+          <strong>Build</strong>
         </a>
       </nav>
     </main>

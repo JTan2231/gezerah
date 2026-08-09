@@ -56,7 +56,7 @@ export function NewEntityModal({
             value={name}
             onChange={(event) => setName(event.currentTarget.value)}
             maxLength={200}
-            placeholder="Aria Vale"
+            placeholder="Entity name"
           />
         </Field>
         {players.length === 0 ? null : (
@@ -162,7 +162,7 @@ export function ManageControllersModal({
   return (
     <Modal
       title="Manage character control"
-      description={`Choose which players may author ${entity.display_name}’s story and act as this entity.`}
+      description={`Choose which players control ${entity.display_name}.`}
       onClose={onClose}
     >
       <form className="modal-form" onSubmit={(event) => void save(event)}>

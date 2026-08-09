@@ -1,6 +1,6 @@
-# Worldwright
+# dnd
 
-Worldwright is a collaborative world editor and live play table. Authors define
+dnd is a collaborative world editor and live play table. Authors define
 the capacities and capabilities that matter in a world, create people and other
 stateful subjects from that vocabulary, and invite the table with expiring
 links. During play, a facilitator presents problems in the moment, players
@@ -15,8 +15,8 @@ inside problem Consequences during play. Status modifiers are snapshotted onto
 entity instances and layer over calculated state. The engine has no built-in
 world ontology, entity classes, privileged configured keys, or seed vocabulary.
 Real users and world memberships are separate from the fictional subjects they
-control; “Dungeon Master” is a product role, not a special mechanic or
-configured key.
+control; facilitator authority comes from owner/editor membership, not a
+special mechanic or configured key.
 
 ## Documentation
 

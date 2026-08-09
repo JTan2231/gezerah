@@ -42,7 +42,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(`${baseURL}/this-route-does-not-exist`);
     await expect(
-      page.getByRole("heading", { name: "That page is not in this world" }),
+      page.getByRole("heading", { name: "Page not found" }),
     ).toBeVisible();
   });
 
@@ -60,7 +60,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("heading", { name: "What are you here to do?" }),
+      page.getByRole("heading", { name: "Play or Build" }),
     ).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(page.getByRole("link", { name: /Play/ })).toBeFocused();
@@ -95,7 +95,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     await authenticateBrowserContext(page.context(), player);
     await page.goto(`${baseURL}/build/${world.id}/capacities`);
     await expect(page.getByRole("alert")).toContainText(
-      "Builder access is not available",
+      "Build access is not available",
     );
     await page.getByRole("button", { name: "Open in Play" }).click();
     await expect(page.getByRole("heading", { name: world.name })).toBeVisible();

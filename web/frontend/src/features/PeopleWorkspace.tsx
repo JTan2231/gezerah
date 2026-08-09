@@ -85,21 +85,14 @@ export function PeopleWorkspace({ world }: { world: World }) {
   return (
     <section className="people-page content-narrow">
       <PageIntro
-        eyebrow="World access"
         title="People & invites"
-        description="Invite links give someone a place in this world. Their role decides what they can see and do."
+        description="Invite links add people to this world with a selected role."
       />
 
       <div className="people-layout">
         <section className="panel invite-builder">
           <header>
-            <div>
-              <p className="eyebrow">Invite someone</p>
-              <h2>Make room at the table.</h2>
-            </div>
-            <span className="panel-mark" aria-hidden="true">
-              ↗
-            </span>
+            <h2>Create invite</h2>
           </header>
           <form onSubmit={(event) => void createInvite(event)}>
             <div className="invite-form-grid">
@@ -144,8 +137,8 @@ export function PeopleWorkspace({ world }: { world: World }) {
           {createdLink === "" ? null : (
             <div className="created-invite" role="status">
               <div>
-                <span>Ready to share</span>
-                <strong>{humanize(role)} invitation</strong>
+                <span>{humanize(role)} invitation</span>
+                <strong>Invite link created</strong>
               </div>
               <div className="copy-field">
                 <input
@@ -173,13 +166,8 @@ export function PeopleWorkspace({ world }: { world: World }) {
 
         <section className="panel member-panel">
           <header>
-            <div>
-              <p className="eyebrow">Members</p>
-              <h2>
-                {members.items.length}{" "}
-                {members.items.length === 1 ? "person" : "people"}
-              </h2>
-            </div>
+            <h2>Members</h2>
+            <span>{members.items.length}</span>
           </header>
           {members.loading ? <LoadingState label="Loading members" /> : null}
           {members.error === null ? null : (
@@ -209,12 +197,12 @@ export function PeopleWorkspace({ world }: { world: World }) {
       <section className="panel invite-list-panel">
         <header>
           <div>
-            <p className="eyebrow">Open invitations</p>
-            <h2>
+            <h2>Invitations</h2>
+            <p>
               {activeInvites.length === 0
-                ? "No links are open"
-                : `${activeInvites.length} ${activeInvites.length === 1 ? "link" : "links"} can still be used`}
-            </h2>
+                ? "No active links"
+                : `${activeInvites.length} active ${activeInvites.length === 1 ? "link" : "links"}`}
+            </p>
           </div>
         </header>
         {invites.loading ? <LoadingState label="Loading invitations" /> : null}
@@ -232,9 +220,6 @@ export function PeopleWorkspace({ world }: { world: World }) {
                 }
                 key={invite.id}
               >
-                <span className="invite-row-icon" aria-hidden="true">
-                  ↗
-                </span>
                 <div>
                   <strong>{humanize(invite.role)} link</strong>
                   <small>

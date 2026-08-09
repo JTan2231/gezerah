@@ -64,7 +64,7 @@ describe("deployed application smoke checks", () => {
 
   test("verifies health, the app shell, a deep link, and discovered assets", async () => {
     const attempts = new Map<string, number>();
-    const html = `<!doctype html><html><head><title>Worldwright</title>
+    const html = `<!doctype html><html><head><title>dnd</title>
       <script type="module" src="/assets/app.js"></script>
       <link rel="stylesheet" href="/assets/app.css">
     </head></html>`;

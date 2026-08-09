@@ -149,7 +149,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       const worldCard = ownerPage.locator(".world-card").filter({
         hasText: labels.world,
       });
-      await worldCard.getByRole("button", { name: /Open builder/ }).click();
+      await worldCard.getByRole("button", { name: /^Open$/ }).click();
       await ownerPage.getByRole("button", { name: /Settings/ }).click();
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         editorDescription,
@@ -200,7 +200,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
       dismissNextDialog(ownerPage);
       await ownerPage
-        .locator(".world-identity > button", { hasText: "Builder worlds" })
+        .locator(".world-identity > button", { hasText: "Worlds" })
         .click();
       await expect(ownerPage).toHaveURL(
         new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
@@ -211,7 +211,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
       dismissNextDialog(ownerPage);
       await ownerPage.setViewportSize({ width: 390, height: 844 });
-      await ownerPage.getByRole("button", { name: "Builder worlds" }).click();
+      await ownerPage.getByRole("button", { name: "Build worlds" }).click();
       await expect(ownerPage).toHaveURL(
         new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
       );
