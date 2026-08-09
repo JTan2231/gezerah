@@ -3,10 +3,10 @@
 Audit date: 2026-08-07
 Remediation status: **Implemented; deployment controls remain conditional**
 
-There is no hosted deployment, production database, production user base,
-external audience, release commitment, or concerned external party. This audit
-records implementation evidence and future target conditions; it is not the
-status of a running service or an active launch.
+At this audit's 2026-08-07 date, there was no hosted deployment, production
+database, production user base, external audience, or release commitment. A
+public-addressable Railway preview was activated afterward. That operational
+preview does not convert this audit into a public-production sign-off.
 
 ## Conclusion
 
@@ -210,17 +210,18 @@ evidence.
 
 ## Remaining deployment conditions
 
-No public-release gate is active. If a public target is proposed,
-identity operations remain conditional on the following:
+The Railway preview does not open a public-release gate. Identity operations on
+that preview—and before any public-production use—remain conditional on the
+following:
 
-1. Terminate and redirect HTTPS correctly, set the exact external HTTPS
+1. Maintain correct HTTPS termination/redirection and the exact external HTTPS
    `DND_PUBLIC_ORIGIN`, and verify `__Host-dnd_session` in the deployed browser.
 2. Decide how support handles a forgotten password when no email/recovery proof
    exists; do not invent an administrator bypass ad hoc.
 3. Decide whether the production threat model requires MFA or federated login.
 4. Replace per-process peer-address throttles with trusted, shared proxy-aware
-   abuse controls before public traffic passes through a shared reverse proxy
-   or the service scales to multiple replicas.
+   abuse controls before treating the proxy-fronted service as safe for
+   unrestricted traffic or scaling it to multiple replicas.
 5. Add account disable/delete/export administration and privacy retention if
    real personal data will be stored.
 6. Add actor-attributed audit history for privileged membership/configuration
@@ -254,7 +255,7 @@ The identity impersonation finding is closed by CI evidence that:
 
 The last two checks are deliberately scoped. They do not prove secret absence
 from every PostgreSQL, reverse-proxy, hosting-provider, or future diagnostic log;
-those logging paths require separate review when a deployment target exists.
+the active target's logging paths require separate review before broader use.
 
 If public production is proposed, its broader gate starts closed and is tracked
-in this directory. There is no production audience to gate today.
+in this directory. No public-production gate is open today.

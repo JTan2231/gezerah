@@ -299,8 +299,8 @@ clients reconnect with their last cursor.
 | `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                        |
 | `web/frontend/`                 | React/Vite Build and Play SPA.                                             |
 | `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.         |
-| `test/`                         | Playwright harness and clean-database acceptance scenarios.                |
-| `ci.sh`, `run.sh`               | Validation and managed local development.                                  |
+| `test/`                         | Playwright harness, clean-database scenarios, and deployed-system smoke tooling. |
+| `ci.sh`, `run.sh`, `deploy.sh`  | Validation, managed local development, and Railway release orchestration.   |
 | `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                |
 
 ## Design constraints for future changes

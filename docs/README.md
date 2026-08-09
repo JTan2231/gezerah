@@ -26,8 +26,8 @@ constraints.
 | [Frontend](frontend.md)         | React application structure, screens, state management, API integration, and styling.                 |
 | [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, receipts, and immutability.            |
 | [Development](development.md)   | Prerequisites, local setup, managed services, change workflows, and troubleshooting.                  |
-| [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, and browser tests.          |
-| [Operations](operations.md)     | Production build, configuration, deployment, health, logging, backups, and recovery.                  |
+| [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |
+| [Operations](operations.md)     | Production build, configuration, scripted Railway deployment and verification, health, backups, and recovery. |
 | [Security](security.md)         | Current trust boundary, authorization rules, visibility filtering, known gaps, and hardening path.    |
 | [Deployment readiness](deployment-readiness/README.md) | Audits, blockers, decisions, and exit criteria for trusted staging and public release. |
 
@@ -128,8 +128,8 @@ authority when behavior and prose diverge:
 - `internal/migrations/*.sql` for persisted shape and database constraints.
 - `web/frontend/src/api/types.ts` for the frontend's view of API payloads.
 - `web/frontend/src/features/` for screen behavior.
-- `ci.sh`, `run.sh`, `railway.toml`, and `railpack.json` for tooling and runtime
-  operations.
+- `ci.sh`, `run.sh`, `deploy.sh`, `test/src/deployment/`, `railway.toml`, and
+  `railpack.json` for tooling and runtime operations.
 
 When changing one of those areas, update the corresponding document in the
 same change.

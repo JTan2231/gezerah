@@ -72,7 +72,7 @@ build does not repeat the TypeScript check performed in the validation group.
 3. `go vet` over application packages;
 4. `go test` over application packages;
 5. trimmed `cmd/dnd` binary build;
-6. shell syntax checking for `ci.sh`, `run.sh`, and `reset-db.sh`;
+6. shell syntax checking for `ci.sh`, `deploy.sh`, `run.sh`, and `reset-db.sh`;
 7. optional application-startup/migration smoke test.
 
 Application tests cover the five-minute session-touch boundary, immediate
@@ -103,6 +103,44 @@ are printed on every E2E run; exceeding the budget fails the target.
 
 Even without the optional backend smoke variable, E2E requires a reachable
 PostgreSQL admin database.
+
+### Deployed smoke
+
+The operator-initiated deployment path adds a narrow check of the actual hosted
+system after the broader local suite:
+
+```sh
+./deploy.sh verify
+```
+
+Both successful deploy mode and verify mode require the selected Railway web and
+PostgreSQL services and database volume to be healthy and the active web
+manifest to use `/api/health`, one replica, and more than ten seconds of
+draining. Database health includes Railway's non-migrating flag, the pinned
+volume name, `READY` state, at least 5 GB, and the standard
+`/var/lib/postgresql/data` mount. They refuse to attest while another web
+rollout is unresolved. HTTP checks then require HTTPS with no redirects, `ok:true` health JSON, the
+Worldwright app shell at `/`, the same shell at a direct SPA route, and every
+same-origin JavaScript and stylesheet discovered from the returned HTML.
+
+Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
+homepage, validates its title and entry heading, navigates to Play, and submits
+an intentionally unknown randomized username. It requires the expected 401 and
+generic credential error and fails on page exceptions, console warnings/errors,
+same-origin request failures, or unexpected same-origin 4xx/5xx responses. The
+probe creates no account or other durable application fixture. Chrome's generic
+console noise is tolerated only when accounted for by the expected anonymous
+`GET /api/me` and invalid-signin `POST /api/auth/signin` 401 responses; those UI
+and response boundaries are asserted directly.
+
+This smoke test deliberately does not replay the 141-scenario suite against the
+hosted database. `./ci.sh` owns broad, deterministic product behavior against a
+disposable database; deployed smoke owns the narrower Railway build, service,
+public TLS/proxy, deployed-origin, asset, and database-read-path boundary.
+Passing runs write an allowlisted, secret-free record with private file
+permissions. Deploy mode reserves `.dnd/deployments/<deployment-id>.json`; verify
+mode writes a distinct `<deployment-id>.verify.<run-id>.json` record so it cannot
+replace deploy provenance.
 
 ## Test layers
 
@@ -319,6 +357,16 @@ On E2E runs, inspect:
 | `test/artifacts/report/`                           | HTML report.                                                    |
 | `test/artifacts/scenario-test-results.json`        | Exact Playwright owner results and durations.                   |
 | `test/artifacts/scenario-coverage.json`            | Final 141-row scenario inventory; root E2E requires all passed. |
+
+Deployment verification records are separate from test artifacts. They live at
+`.dnd/deployments/`, are ignored by Git, and contain only allowlisted
+project/service IDs and names, whether CI passed/was skipped/was not run,
+deployment state, manifest and database-volume facts, public URL, check
+measurements, and timestamps. Deploy records identify the clean commit
+uploaded; verify records label `localCommit` only as local checkout context and
+do not infer the hosted source identity. They never contain database URLs,
+Railway variables, cookies, authorization headers, CSRF values, or response
+bodies.
 
 The active checkout usually receives no artifacts when invoked through root
 `ci.sh`, because the entire run occurs in the disposable worktree that is

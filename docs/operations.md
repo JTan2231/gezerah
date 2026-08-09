@@ -1,16 +1,17 @@
 # Operations
 
-> **Current state (2026-08-08):** Worldwright has no hosted deployment,
-> production database, production users, external audience, release
-> commitment, or concerned external party. The deployment material below is a
-> dormant runbook. It creates no current launch work and does not block trusted
-> local development.
+> **Current state (2026-08-09):** Worldwright has a public-addressable Railway
+> preview at <https://worldwright-web-production.up.railway.app>, backed by a
+> managed PostgreSQL service that was created fresh for this target. Railway
+> names the environment `production`; that provider name is not a declaration
+> of public-production readiness. This runbook governs the active preview, while
+> the separate public-release gate remains closed.
 
 ## Deployable artifact
 
-If deployed, Worldwright is one statically built Go application plus
-PostgreSQL. The browser assets are compiled by Vite into `web/static` and
-embedded in the Go binary. That binary:
+Worldwright deploys as one statically built Go application plus PostgreSQL. The
+browser assets are compiled by Vite into `web/static` and embedded in the Go
+binary. That binary:
 
 - connects to PostgreSQL;
 - applies all pending migrations before listening;
@@ -82,9 +83,9 @@ Startup is fail-fast:
 This is both liveness and database readiness. It does not validate every table,
 frontend asset, write permission, disk capacity, or complete schema contents.
 
-For a future deployment, do not send traffic until startup migrations finish
-and health is green. A long migration delays listening and may exceed platform
-startup deadlines.
+For each new release, do not treat the revision as ready until startup
+migrations finish and health is green. A long migration delays listening and
+may exceed platform startup deadlines.
 
 ## Shutdown
 
@@ -96,11 +97,12 @@ for other handlers.
 The ordinary HTTP write timeout remains 30 seconds. SSE overrides that absolute
 deadline: each write/flush gets a five-second deadline, which is cleared after
 a successful flush. Healthy streams can therefore remain open, while a stalled
-client does not block a write indefinitely. If a deployment is ever activated,
-configure its termination grace period to exceed ten seconds. A forced kill can
-still interrupt in-flight requests, but PostgreSQL transactions roll back when
-their connections close. Clients resolving live interactions should retry the
-identical request with the same idempotency key after ambiguous failure.
+client does not block a write indefinitely. The active Railway target uses a
+15-second drain, which exceeds the application deadline; retain that ordering on
+other targets. A forced kill can still interrupt in-flight requests, but
+PostgreSQL transactions roll back when their connections close. Clients
+resolving live interactions should retry the identical request with the same
+idempotency key after ambiguous failure.
 
 ## Logging and observability
 
@@ -138,8 +140,15 @@ careful not to add private notes or player action text to telemetry.
 
 ## Railway deployment
 
-The repository contains Railway configuration, but no Railway deployment is
-currently running or planned. The checked-in definition is:
+The active Railway project is `worldwright`, with environment `production` and
+these existing resources:
+
+- `worldwright-web`, one public web replica at
+  <https://worldwright-web-production.up.railway.app>;
+- `Postgres`, one managed PostgreSQL replica;
+- `postgres-volume`, a 5 GB persistent database volume.
+
+The checked-in deployment definition is:
 
 - `railpack.json` selects the Go provider and pins Bun 1.1.42 plus Node
   22.12.0;
@@ -150,6 +159,79 @@ currently running or planned. The checked-in definition is:
 - configured replica count is one;
 - deployment draining is configured for 15 seconds.
 
+### Scripted release and verification
+
+`deploy.sh` is an operator-initiated release orchestrator. It requires Bun, Git,
+an authenticated Railway CLI, a checkout linked to the intended project, and
+the project/environment/services/domain/variables to exist already. It does not
+create or reconfigure a Railway project, service, database, volume, domain, or
+variable.
+
+Deploy the current committed revision with the full validation gate and hosted
+checks:
+
+```sh
+./deploy.sh
+```
+
+Deploy mode:
+
+1. resolves `HEAD` and requires a clean checkout, including no untracked files;
+2. requires the expected linked project, environment, web service, and database
+   service and refuses to overlap another active web deployment;
+3. runs the complete `./ci.sh`, then proves that `HEAD` and the checkout stayed
+   unchanged;
+4. checks the verified commit out into a temporary detached Git worktree and
+   uploads that immutable source with `railway up --detach --json` and a unique
+   release message—the locally built CI binary is not the deployed artifact;
+5. polls that exact deployment ID to `SUCCESS` rather than trusting whichever
+   release happens to be latest, and prints build/runtime diagnostics on failure;
+6. waits until that deployment is the healthy web release, both services have
+   their configured replica running, and the PostgreSQL volume is ready;
+7. verifies the deployed manifest, public HTTPS responses, and real-browser
+   journey described in [Testing](testing.md#deployed-smoke);
+8. re-reads Railway service state and refuses evidence if the active deployment,
+   public URL, replica health, or database-volume health changed during smoke,
+   or if another rollout is unresolved;
+9. writes passing, allowlisted evidence to
+   `.dnd/deployments/<deployment-id>.json` and prints its path.
+
+Inspect the active release without uploading source or running CI with:
+
+```sh
+./deploy.sh verify
+```
+
+Verify records the local checkout only as local context, not as the identity of
+the already-running release. Each passing run writes a distinct
+`<deployment-id>.verify.<run-id>.json` record, preserving the original deploy
+record.
+
+Both modes run the HTTP and browser checks by default. `--no-browser` is an
+explicit escape hatch for either mode. Deploy mode alone accepts `--skip-ci`,
+which still requires clean committed source but omits the normal correctness
+gate. Use `./deploy.sh --help` for the accepted forms.
+
+The default target pins both immutable Railway IDs and display names. Alternate
+existing targets must set the matching `DND_DEPLOY_PROJECT_ID`,
+`DND_DEPLOY_ENVIRONMENT_ID`, `DND_DEPLOY_WEB_SERVICE_ID`, and
+`DND_DEPLOY_DATABASE_SERVICE_ID` together with `DND_DEPLOY_PROJECT`,
+`DND_DEPLOY_ENVIRONMENT`, `DND_DEPLOY_WEB_SERVICE`, and
+`DND_DEPLOY_DATABASE_SERVICE`; `DND_DEPLOY_DATABASE_VOLUME` pins that service's
+volume name. The database check also requires no volume migration, exactly one
+ready volume of at least 5 GB mounted at `/var/lib/postgresql/data`.
+`DND_DEPLOY_URL` can assert a credential-free exact HTTPS origin, but it must
+equal the URL Railway reports for the selected web service; it cannot redirect
+evidence to another host.
+`DND_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
+timeout and accepts 30 through 3600 seconds. Overrides select already-existing
+resources; they do not bootstrap them.
+
+The script never rolls back automatically. On deployment failure it exits
+nonzero after printing available diagnostics. HTTP/browser failure also exits
+nonzero and leaves the Railway release in place for explicit investigation or
+manual rollback. Evidence is written only after all selected checks pass.
+
 Adding a Railway PostgreSQL service does not by itself inject its variables into
 the application service. Define a reference variable such as
 `DATABASE_URL=${{Postgres.DATABASE_URL}}`, using the actual database service
@@ -157,20 +239,24 @@ name, or set `DND_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
 
 The checked-in 15-second Railway drain exceeds the application's ten-second
-shutdown deadline. If this target is activated, verify that Railway applies that
-setting and do not reduce it to ten seconds or less before relying on signal-
-based shutdown. The remaining hardening and operational conditions in
-[Security](security.md) apply only in proportion to the target and its audience.
+shutdown deadline. The deployment script verifies that the active manifest
+retains more than ten seconds of draining; do not reduce it to ten seconds or
+less before relying on signal-based shutdown. The remaining hardening and
+operational conditions in [Security](security.md) apply in proportion to the
+target and its audience.
 
-### Dormant deployment activation checklist
+### New-target and extended release checklist
 
-Do not run this checklist until a person explicitly proposes a deployment. At
-activation:
+The routine script automates source validation, upload, rollout observation, and
+a non-persisting smoke journey. Use the additional portions of this checklist
+when activating a different target, changing its audience/data policy, or
+preparing for broader public use:
 
 1. Record the target, owner, intended audience, data sensitivity, lifetime, and
    rollback authority. For a public target, start with the release gate closed.
-2. Run the complete `./ci.sh` repeatedly against the exact source to be built;
-   investigate any nondeterminism rather than treating one pass as evidence.
+2. Run the complete `./ci.sh` against the exact clean committed source to be
+   built; investigate any nondeterminism rather than treating a later pass as a
+   substitute for a failure.
 3. Review every migration for existing-data assumptions, backfill, lock time,
    and application/schema ordering. Migration `004_password_auth.sql` requires
    an empty `users` table, so use a fresh database unless a separately reviewed
@@ -183,8 +269,9 @@ activation:
    remains greater than the ten-second application shutdown deadline, then
    deploy one instance and inspect migration, startup, request, and shutdown
    logs.
-7. Verify `/api/health`, an SPA deep link, signup/signin, `/api/me`, logout
-   revocation, and representative authorized API reads.
+7. Beyond the script's health/deep-link/invalid-signin smoke, verify signup,
+   successful signin, `/api/me`, logout revocation, and representative
+   authorized API reads against an explicitly managed canary account.
 8. In a real HTTPS browser, verify `__Host-dnd_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
    missing-CSRF mutations fail.
@@ -217,8 +304,8 @@ not bake database credentials into an image layer.
 
 ## Scaling characteristics
 
-The checked-in Railway configuration would request one replica. Important
-properties for any future horizontal scaling:
+The checked-in Railway configuration requests one replica. Important properties
+for any future horizontal scaling:
 
 - durable state, events, revisions, and idempotency are in PostgreSQL;
 - migrations serialize through a database advisory lock;
@@ -360,10 +447,10 @@ be treated as an idempotency conflict and investigated rather than forced.
    The three-second poll is limited to player onboarding while the world is not
    play-ready, so distinguish that state from a ready-table stream failure.
 
-## Future deployment gaps
+## Current operational gaps
 
-These are not current blockers because no non-local target or audience exists.
-Re-evaluate only the items relevant to an explicitly proposed target:
+These do not prevent the current disposable preview, but they constrain any
+broader audience, durable real-user data, or production commitment:
 
 - no built-in TLS termination; the reverse proxy must enforce HTTPS;
 - authentication throttling is in-memory, per-process, and direct-peer based;
@@ -373,7 +460,8 @@ Re-evaluate only the items relevant to an explicitly proposed target:
 - no metrics/tracing/alerts or audit trail for configuration changes;
 - no pool tuning or capacity test;
 - no multi-replica/load/SSE soak test;
-- no container/release pipeline beyond Railway configuration;
+- only an operator-initiated deployment script; no hosted CI/CD or automatic
+  rollback;
 - no documented provider-specific incident response or disaster-recovery SLO.
 
 Username/password sessions close the former impersonation gap. If a public

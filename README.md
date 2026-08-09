@@ -127,11 +127,39 @@ authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 
 ## Deployment
 
+As of 2026-08-09, a public-addressable Railway preview is running at
+<https://worldwright-web-production.up.railway.app>. It is an operational
+preview, not a declaration of public-production readiness.
+
+For the existing linked Railway project, deploy a clean committed checkout with:
+
+```sh
+./deploy.sh
+```
+
+The command runs the complete `./ci.sh` validator, confirms that the checkout
+remains unchanged, uploads the exact commit from a temporary detached worktree
+with `railway up`, follows the exact deployment to a terminal state, verifies
+the web service plus PostgreSQL replica and volume, and then checks the public
+HTTPS health endpoint, app shell, SPA deep link, built assets, and a short
+real-browser login-boundary journey. Passing deploy evidence is written to
+ignored `.dnd/deployments/<deployment-id>.json` without credentials, cookies,
+or Railway variables; later verify runs use distinct `.verify.<run-id>.json`
+records and do not replace it.
+
+Use `./deploy.sh verify` to inspect and smoke-test the currently active release
+without uploading source or running CI. `--no-browser` explicitly omits the
+browser check, while deploy mode alone accepts `--skip-ci`. The script expects
+already-created and configured Railway infrastructure; it does not create a
+project, database, volume, domain, or variables, and it does not automatically
+roll back a failed release.
+
 Railway configuration is included. Railpack installs Bun, builds the frontend,
 compiles a static Go binary, starts it as `./out`, and checks `/api/health`.
-Attach a Railway PostgreSQL database, then define a reference variable on the
-application service, such as `DATABASE_URL=${{Postgres.DATABASE_URL}}` using the
-actual database service name. Attaching the database alone does not inject its
-variables into the application service.
+When activating another target, attach PostgreSQL and define a reference
+variable on the application service, such as
+`DATABASE_URL=${{Postgres.DATABASE_URL}}` using the actual database service
+name. Attaching the database alone does not inject its variables into the
+application service.
 
 Generated files under `web/static` are build output and are not committed.

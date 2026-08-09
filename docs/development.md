@@ -276,7 +276,7 @@ from non-facilitator JSON.
 
 | Path                         | Producer/content                                |
 | ---------------------------- | ----------------------------------------------- |
-| `.dnd/`                      | `run.sh` state plus persistent CI tool caches.  |
+| `.dnd/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
 | `out`                        | Production/Railway-style binary.                |
 | `web/frontend/node_modules/` | Frontend install.                               |
 | `web/static/*`               | Vite production assets; placeholder is tracked. |

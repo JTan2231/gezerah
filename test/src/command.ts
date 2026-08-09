@@ -3,12 +3,18 @@ import { spawn } from "node:child_process";
 export async function runCommand(
   command: string,
   args: string[],
-  options: { cwd?: string; env?: NodeJS.ProcessEnv; quiet?: boolean } = {},
+  options: {
+    cwd?: string;
+    env?: NodeJS.ProcessEnv;
+    quiet?: boolean;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const child = spawn(command, args, {
       ...(options.cwd === undefined ? {} : { cwd: options.cwd }),
       ...(options.env === undefined ? {} : { env: options.env }),
+      ...(options.signal === undefined ? {} : { signal: options.signal }),
       stdio: options.quiet === true ? ["ignore", "pipe", "pipe"] : "inherit",
     });
     let stdout = "";

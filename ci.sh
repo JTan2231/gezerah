@@ -425,7 +425,7 @@ run_backend_checks() {
 	fi
 
 	section "Developer tooling: checking shell syntax"
-	sh -n ci.sh run.sh reset-db.sh || return 1
+	sh -n ci.sh deploy.sh run.sh reset-db.sh || return 1
 
 	return 0
 }
@@ -512,7 +512,7 @@ run_test_scenario_checks() {
 	(
 		cd test || exit 1
 		mkdir -p artifacts || exit 1
-		bun test src/scenario/architecture-tests \
+		bun test src/deployment src/scenario/architecture-tests \
 			--reporter=junit \
 			--reporter-outfile artifacts/scenario-architecture-results.xml || exit 1
 		bun run verify:scenarios

@@ -2,10 +2,11 @@
 
 ## Current deployment classification
 
-As of 2026-08-08, Worldwright has no hosted deployment, production data or
-users, external audience, release commitment, or concerned external party.
-Trusted local development is the only active target; public-release conditions
-in this document are dormant unless someone proposes that target.
+As of 2026-08-09, Worldwright has a public-addressable Railway preview backed by
+managed PostgreSQL. It is not designated public production, and no
+public-release gate or production-audience commitment has been opened. The
+conditions in this document therefore remain requirements before broader or
+real-user use; reachability and a healthy smoke check do not satisfy them.
 
 Worldwright now has native username/password authentication and revocable
 server sessions. A caller-supplied user UUID is not an authentication mechanism:
@@ -13,11 +14,12 @@ the former `X-DND-User-ID` adapter and public user directory are gone. Health,
 signup, and signin are the explicit public API exceptions; every other product
 endpoint derives its actor from a valid session.
 
-This closes the direct impersonation gap identified in the identity audit. A
-public deployment still needs correct HTTPS/proxy configuration, backups,
-monitoring, capacity/abuse testing, and an explicit support policy. The account
-model intentionally collects no email and therefore provides no password
-recovery.
+This closes the direct impersonation gap identified in the identity audit. The
+active preview has Railway HTTPS termination and an exact external
+`DND_PUBLIC_ORIGIN`, but broader public use still needs deployed secure-cookie
+verification, backups, monitoring, capacity/abuse testing, and an explicit
+support policy. The account model intentionally collects no email and therefore
+provides no password recovery.
 
 ## Authentication model
 
