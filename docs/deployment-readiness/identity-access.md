@@ -46,8 +46,8 @@ system, at the cost of no automated password reset.
 
 `POST /api/auth/signup` accepts username, display name, and password. Usernames
 contain 3–64 ASCII characters, start with a letter or number, and otherwise use
-letters, numbers, dots, underscores, or hyphens. New passwords contain 15–128
-Unicode code points.
+letters, numbers, dots, underscores, or hyphens. New passwords must contain at
+least 8 Unicode code points.
 
 The command hashes the password before insertion, creates the user and first
 session in one transaction, sets the session cookie, and returns the user plus

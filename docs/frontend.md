@@ -88,10 +88,10 @@ access boundary and offers a deliberate transition to Play.
 
 The root choice remains data-free. On entering Play, Build, or an invite URL,
 the application bootstraps with `GET /api/me`. An anonymous browser sees a
-username/password gate; signup asks for username, display name, and a 15–128
-character password with confirmation, while signin asks only for username and
-password. Password change also confirms the new value because this release has
-no recovery channel. The
+username/password gate; signup asks for username, display name, and a password
+of at least 8 characters with confirmation, while signin asks only for username
+and password. Password change also confirms the new value because this release
+has no recovery channel. The
 requested URL remains in the address bar, so authentication returns the user
 to the intended area or opaque invite without storing a redirect target.
 

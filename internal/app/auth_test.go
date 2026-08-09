@@ -125,9 +125,12 @@ func TestAccountCredentialValidation(t *testing.T) {
 		t.Fatalf("minimum-length Unicode password rejected: %#v", fields)
 	}
 	validatePassword(fields, "short", strings.Repeat("a", passwordMinimumRunes-1))
-	validatePassword(fields, "long", strings.Repeat("a", passwordMaximumRunes+1))
-	if fields["short"] == "" || fields["long"] == "" {
-		t.Fatalf("password bounds were not enforced: %#v", fields)
+	validatePassword(fields, "long", strings.Repeat("a", 129))
+	if fields["short"] != "must be at least 8 characters" {
+		t.Fatalf("short password result = %#v", fields)
+	}
+	if fields["long"] != "" {
+		t.Fatalf("long password rejected: %#v", fields)
 	}
 }
 

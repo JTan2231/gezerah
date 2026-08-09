@@ -1040,6 +1040,9 @@ async function createAccount(
     page.getByRole("heading", { name: "Create your account." }),
   ).toBeVisible();
   const form = page.locator("form.identity-form");
+  await expect(
+    form.getByText("Minimum 8 characters.", { exact: true }),
+  ).toHaveCount(1);
   await form.locator('input[name="username"]').fill(username);
   await form.locator('input[name="display_name"]').fill(displayName);
   await form.locator('input[name="password"]').fill(LIFECYCLE_PASSWORD);

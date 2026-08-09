@@ -28,8 +28,7 @@ const (
 	secureSessionCookieName = "__Host-dnd_session"
 	csrfHeaderName          = "X-DND-CSRF"
 
-	passwordMinimumRunes = 15
-	passwordMaximumRunes = 128
+	passwordMinimumRunes = 8
 
 	argonMemory      = 19 * 1024
 	argonIterations  = 2
@@ -312,15 +311,9 @@ func validateUsername(fields map[string]string, username string) (string, string
 }
 
 func validatePassword(fields map[string]string, path, password string) {
-	if !utf8.ValidString(password) {
-		fields[path] = "must be valid Unicode"
-		return
-	}
 	length := utf8.RuneCountInString(password)
 	if length < passwordMinimumRunes {
 		fields[path] = fmt.Sprintf("must be at least %d characters", passwordMinimumRunes)
-	} else if length > passwordMaximumRunes {
-		fields[path] = fmt.Sprintf("must be at most %d characters", passwordMaximumRunes)
 	}
 }
 

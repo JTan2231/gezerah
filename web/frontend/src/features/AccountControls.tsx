@@ -3,6 +3,10 @@ import { useState } from "react";
 import { api, ApiError, jsonBody } from "../api/client";
 import type { AuthenticatedSession, User } from "../api/types";
 import { ErrorMessage, Field, Modal } from "../components/StudioUI";
+import {
+  minimumPasswordCharacters,
+  passwordMeetsMinimumLength,
+} from "../domain/password";
 
 export function AccountControls({
   user,
@@ -23,11 +27,9 @@ export function AccountControls({
   const [signingOut, setSigningOut] = useState<"current" | "all" | null>(null);
   const [changed, setChanged] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const newPasswordLength = Array.from(newPassword).length;
   const canChangePassword =
     currentPassword !== "" &&
-    newPasswordLength >= 15 &&
-    newPasswordLength <= 128 &&
+    passwordMeetsMinimumLength(newPassword) &&
     newPasswordConfirmation === newPassword;
   const newPasswordConfirmationError =
     newPasswordConfirmation !== "" && newPasswordConfirmation !== newPassword
@@ -142,7 +144,7 @@ export function AccountControls({
             </Field>
             <Field
               label="New password"
-              hint="Use 15–128 characters. Changing it signs out your other sessions."
+              hint={`Minimum ${minimumPasswordCharacters} characters.`}
               error={error?.fields["new_password"]}
             >
               <input

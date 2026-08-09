@@ -13,7 +13,7 @@ test("UI authentication: signin, password changes, and logout use server session
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
   const actor = await signupActor(baseURL, `Returning builder ${unique}`);
-  const newPassword = "returning-builder-keeps-a-new-long-passphrase";
+  const newPassword = "new-pass";
 
   await test.step("IDN-005 signin resumes the protected destination and survives reload", async () => {
     await page.goto(`${baseURL}/build`);
@@ -59,12 +59,20 @@ test("UI authentication: signin, password changes, and logout use server session
     await expect(
       dialog.getByRole("heading", { name: "Your account" }),
     ).toBeVisible();
+    await expect(
+      dialog.getByText("Minimum 8 characters.", { exact: true }),
+    ).toHaveCount(1);
     await dialog.locator('input[name="current_password"]').fill(actor.password);
-    await dialog.locator('input[name="new_password"]').fill(newPassword);
     const changePassword = dialog.getByRole("button", {
       name: "Change password",
       exact: true,
     });
+    await dialog.locator('input[name="new_password"]').fill("1234567");
+    await dialog
+      .locator('input[name="new_password_confirmation"]')
+      .fill("1234567");
+    await expect(changePassword).toBeDisabled();
+    await dialog.locator('input[name="new_password"]').fill(newPassword);
     await expect(changePassword).toBeDisabled();
     await dialog
       .locator('input[name="new_password_confirmation"]')

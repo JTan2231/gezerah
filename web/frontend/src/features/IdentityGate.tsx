@@ -3,6 +3,10 @@ import { useState } from "react";
 import { api, ApiError, jsonBody } from "../api/client";
 import type { AuthenticatedSession } from "../api/types";
 import { Brand, ErrorMessage, Field } from "../components/StudioUI";
+import {
+  minimumPasswordCharacters,
+  passwordMeetsMinimumLength,
+} from "../domain/password";
 
 type AuthenticationMode = "signin" | "signup";
 
@@ -22,14 +26,12 @@ export function IdentityGate({
   const [passwordConfirmation, setPasswordConfirmation] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const passwordLength = Array.from(password).length;
   const canSubmit =
     username.trim() !== "" &&
     password !== "" &&
     (mode === "signin" ||
       (displayName.trim() !== "" &&
-        passwordLength >= 15 &&
-        passwordLength <= 128 &&
+        passwordMeetsMinimumLength(password) &&
         passwordConfirmation === password));
   const passwordConfirmationError =
     mode === "signup" &&
@@ -116,7 +118,7 @@ export function IdentityGate({
           <p className="muted-copy">
             {mode === "signin"
               ? "Sign in to return to your worlds and tables."
-              : "Choose a username and a strong password. No email is required."}
+              : "Choose a username and password. No email is required."}
           </p>
 
           <div className="auth-mode-switch" aria-label="Authentication mode">
@@ -189,7 +191,7 @@ export function IdentityGate({
               label="Password"
               hint={
                 mode === "signup"
-                  ? "Use 15–128 characters. Spaces and passphrases are welcome."
+                  ? `Minimum ${minimumPasswordCharacters} characters.`
                   : undefined
               }
               error={error?.fields["password"]}

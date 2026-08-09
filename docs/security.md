@@ -29,8 +29,7 @@ recovery.
   otherwise contain letters, numbers, `.`, `_`, and `-`.
 - The chosen casing is preserved for display; normalized lowercase usernames
   are unique and signin is case-insensitive.
-- New passwords are 15–128 Unicode code points. Long passphrases and spaces are
-  accepted.
+- New passwords must contain at least 8 Unicode code points.
 - PostgreSQL stores only an Argon2id PHC string with a random salt. The current
   work factor is 19 MiB, two iterations, and one lane; supported hashes are
   parsed with explicit parameter and decoded-length bounds.

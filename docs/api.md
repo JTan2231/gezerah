@@ -150,8 +150,9 @@ Path placeholders are UUIDs unless noted otherwise.
 
 Usernames contain 3–64 ASCII characters, begin with a letter or number, and
 otherwise accept letters, numbers, `.`, `_`, and `-`. Uniqueness is
-case-insensitive. New passwords contain 15–128 Unicode code points. Because no
-email is collected, this release intentionally has no password-recovery flow.
+case-insensitive. New passwords must contain at least 8 Unicode code points.
+Because no email is collected, this release intentionally has no
+password-recovery flow.
 An incorrect current password on the change endpoint is a field-specific
 `422 validation_failed`; it does not invalidate the still-valid session.
 
