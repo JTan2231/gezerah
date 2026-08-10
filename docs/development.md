@@ -6,15 +6,24 @@ Install the following locally:
 
 | Tool                                   | Purpose                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
-| Go 1.25                                | Backend build, tests, and executable.                      |
+| Go 1.25.12                             | Pinned backend build, tests, and executable.               |
 | Bun 1.1.42                             | Intended frontend and E2E package manager/runtime version. |
 | PostgreSQL                             | Application data and tests.                                |
 | `createdb`                             | Initial local database creation.                           |
 | `psql`                                 | End-to-end disposable database management.                 |
 | Git                                    | Source control and isolated `ci.sh` worktrees.             |
-| `curl`                                 | `run.sh` service probes.                                   |
+| `curl`                                 | Pinned CI tool downloads and `run.sh` service probes.       |
+| `tar` and SHA-256 tooling              | Verification and extraction of pinned CI tools.             |
 | Chrome/Chromium or Playwright Chromium | Browser acceptance tests.                                  |
 | POSIX shell                            | Root scripts.                                              |
+
+The backend validator rejects any Go toolchain other than 1.25.12. It downloads
+the official golangci-lint 2.12.2 release archive into the shared CI tool cache
+and verifies its checked-in published SHA-256 checksum before use. It also installs
+govulncheck 1.6.0 into its disposable run directory with
+`go install package@version`. Neither tool needs a separate installation. A
+cold run requires network access, and every vulnerability scan queries the live
+Go vulnerability database.
 
 The application database role must be able to install/use `pgcrypto` and create
 the migration schema on a new database. End-to-end admin credentials also need
@@ -102,14 +111,15 @@ shell/process manager that launches the application. Vite independently loads
 | `PORT`              | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                                     |
 | `DND_DATABASE_URL`  | First database URL                 | Preferred PostgreSQL connection URL.                                                     |
 | `DATABASE_URL`      | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                   |
-| `DND_PUBLIC_ORIGIN` | Request origin                     | Exact origin accepted for auth/unsafe requests; HTTPS selects the secure session cookie. |
+| `DND_PUBLIC_ORIGIN` | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
 | `DND_LOG_LEVEL`     | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                 |
 
 When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
-uses the incoming request's scheme and host. Managed `run.sh` instead supplies
-`http://127.0.0.1:5173` unless the variable is already exported. A proxied
-deployment must set the exact browser-visible HTTP(S) origin, without a path,
-query, or fragment.
+uses the incoming request's scheme and host; plain HTTP authentication is
+accepted only when both that host and the network peer are loopback. Managed
+`run.sh` supplies `http://127.0.0.1:5173` unless the variable is already
+exported. A proxied deployment must set the exact browser-visible HTTPS origin,
+without a path, query, or fragment.
 
 ### Local process variables
 
@@ -119,9 +129,10 @@ query, or fragment.
 | `DND_RUN_LOG_DIR`   | `.dnd/log` | Managed development logs.       |
 
 Managed `run.sh` expects the backend at port 8080 because the Vite proxy is
-fixed. It accepts `DND_ADDR=:8080`, `localhost:8080`, or `127.0.0.1:8080` and
-rejects other addresses. `PORT` is therefore useful when running the binary
-directly, not when using the managed local workflow.
+fixed. It defaults to `127.0.0.1:8080`, also accepts `localhost:8080`, and
+rejects wildcard or non-loopback addresses so the local HTTP session boundary
+cannot become network-accessible. `PORT` is therefore useful when running the
+binary directly, not when using the managed local workflow.
 
 ### Test variables
 

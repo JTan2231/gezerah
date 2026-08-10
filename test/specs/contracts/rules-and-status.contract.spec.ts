@@ -19,8 +19,10 @@ import {
   signupActor,
 } from "../support/auth";
 
+type DecimalText = string;
+
 type TaggedValue =
-  { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+  { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
 test.afterEach(async () => disposeAuthenticatedActors());
 
@@ -42,6 +44,10 @@ interface Expression {
 interface MechanicResponse extends IdentifiedResource {
   name: string;
   source_kind: "input" | "derived";
+  minimum?: DecimalText;
+  maximum?: DecimalText;
+  step?: DecimalText;
+  default_number?: DecimalText;
   expression?: Expression;
 }
 
@@ -142,6 +148,8 @@ test("contract: typed rules publish atomically and statuses change effective sta
   );
   expect(world.rules_revision).toBe(0);
 
+  const exactMaximum = "9007199254740993";
+
   const inputMutation = await postJSON<MechanicMutationResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/mechanics`,
@@ -150,10 +158,10 @@ test("contract: typed rules publish atomically and statuses change effective sta
       mode: "score",
       source_kind: "input",
       name: "Vigor",
-      minimum: 0,
-      maximum: 20,
-      step: 1,
-      default_number: 10,
+      minimum: "0",
+      maximum: exactMaximum,
+      step: "1",
+      default_number: "10",
       mutable_during_play: true,
       archived: false,
       expected_rules_revision: world.rules_revision,
@@ -162,7 +170,14 @@ test("contract: typed rules publish atomically and statuses change effective sta
   );
   expect(inputMutation).toMatchObject({
     revision: 1,
-    mechanic: { name: "Vigor", source_kind: "input" },
+    mechanic: {
+      name: "Vigor",
+      source_kind: "input",
+      minimum: "0",
+      maximum: exactMaximum,
+      step: "1",
+      default_number: "10",
+    },
   });
   const vigor = inputMutation.mechanic;
 
@@ -178,7 +193,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
       operation: "multiply-number",
       operands: [
         { operation: "mechanic-reference", mechanic_id: vigor.id },
-        { operation: "literal", value: numberValue(2) },
+        { operation: "literal", value: numberValue("2") },
       ],
     },
   };
@@ -267,10 +282,10 @@ test("contract: typed rules publish atomically and statuses change effective sta
     { display_name: "Ilya Stone" },
     owner.id,
   );
-  expect(entity.state.values).toEqual({ [vigor.id]: numberValue(10) });
+  expect(entity.state.values).toEqual({ [vigor.id]: numberValue("10") });
   expect(entity.state.effective_values).toMatchObject({
-    [vigor.id]: numberValue(10),
-    [impact.id]: numberValue(20),
+    [vigor.id]: numberValue("10"),
+    [impact.id]: numberValue("20"),
   });
 
   const authoredState =
@@ -281,7 +296,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
           data: {
             expected_revision: entity.state.revision,
             expected_rules_revision: rulesRevision - 1,
-            values: { [vigor.id]: numberValue(6) },
+            values: { [vigor.id]: numberValue("6") },
           },
         },
       );
@@ -293,7 +308,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
         {
           expected_revision: entity.state.revision,
           expected_rules_revision: rulesRevision,
-          values: { [vigor.id]: numberValue(6) },
+          values: { [vigor.id]: numberValue("6") },
         },
         owner.id,
       );
@@ -301,24 +316,24 @@ test("contract: typed rules publish atomically and statuses change effective sta
         revision: 1,
         status_revision: 0,
         rules_revision: rulesRevision,
-        values: { [vigor.id]: numberValue(6) },
+        values: { [vigor.id]: numberValue("6") },
         effective_values: {
-          [vigor.id]: numberValue(6),
-          [impact.id]: numberValue(12),
+          [vigor.id]: numberValue("6"),
+          [impact.id]: numberValue("12"),
         },
         evaluations: {
           [vigor.id]: {
             source_kind: "input",
             presence: "stored",
-            intrinsic: numberValue(6),
-            effective: numberValue(6),
+            intrinsic: numberValue("6"),
+            effective: numberValue("6"),
             modifiers: [],
           },
           [impact.id]: {
             source_kind: "derived",
             presence: "derived",
-            intrinsic: numberValue(12),
-            effective: numberValue(12),
+            intrinsic: numberValue("12"),
+            effective: numberValue("12"),
             modifiers: [],
           },
         },
@@ -353,7 +368,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
             {
               mechanic_id: vigor.id,
               operation: "add-number",
-              value: numberValue(-2),
+              value: numberValue("-2"),
               priority: 10,
             },
           ],
@@ -396,8 +411,8 @@ test("contract: typed rules publish atomically and statuses change effective sta
   expect(applyPreview.applied_effects[0]?.status_instance_id).toBeTruthy();
   expect(applyPreview.effective_changes).toEqual(
     expect.arrayContaining([
-      effectiveChange(entity.id, vigor.id, 6, 4),
-      effectiveChange(entity.id, impact.id, 12, 8),
+      effectiveChange(entity.id, vigor.id, "6", "4"),
+      effectiveChange(entity.id, impact.id, "12", "8"),
     ]),
   );
   expect(applyPreview.state.records[entity.id]?.active_statuses).toMatchObject([
@@ -445,8 +460,8 @@ test("contract: typed rules publish atomically and statuses change effective sta
   });
   expect(applyResult.effective_changes).toEqual(
     expect.arrayContaining([
-      effectiveChange(entity.id, vigor.id, 6, 4),
-      effectiveChange(entity.id, impact.id, 12, 8),
+      effectiveChange(entity.id, vigor.id, "6", "4"),
+      effectiveChange(entity.id, impact.id, "12", "8"),
     ]),
   );
 
@@ -486,10 +501,10 @@ test("contract: typed rules publish atomically and statuses change effective sta
     revision: authoredState.revision,
     status_revision: 1,
     rules_revision: rulesRevision,
-    values: { [vigor.id]: numberValue(6) },
+    values: { [vigor.id]: numberValue("6") },
     effective_values: {
-      [vigor.id]: numberValue(4),
-      [impact.id]: numberValue(8),
+      [vigor.id]: numberValue("4"),
+      [impact.id]: numberValue("8"),
     },
     active_statuses: [
       {
@@ -503,23 +518,23 @@ test("contract: typed rules publish atomically and statuses change effective sta
       [vigor.id]: {
         source_kind: "input",
         presence: "stored",
-        intrinsic: numberValue(6),
-        effective: numberValue(4),
+        intrinsic: numberValue("6"),
+        effective: numberValue("4"),
         modifiers: [
           {
             status_name: "Weakened",
             operation: "add-number",
-            operand: numberValue(-2),
-            before: numberValue(6),
-            after: numberValue(4),
+            operand: numberValue("-2"),
+            before: numberValue("6"),
+            after: numberValue("4"),
           },
         ],
       },
       [impact.id]: {
         source_kind: "derived",
         presence: "derived",
-        intrinsic: numberValue(8),
-        effective: numberValue(8),
+        intrinsic: numberValue("8"),
+        effective: numberValue("8"),
         modifiers: [],
       },
     },
@@ -578,8 +593,8 @@ test("contract: typed rules publish atomically and statuses change effective sta
   ]);
   expect(removePreview.effective_changes).toEqual(
     expect.arrayContaining([
-      effectiveChange(entity.id, vigor.id, 4, 6),
-      effectiveChange(entity.id, impact.id, 8, 12),
+      effectiveChange(entity.id, vigor.id, "4", "6"),
+      effectiveChange(entity.id, impact.id, "8", "12"),
     ]),
   );
 
@@ -608,8 +623,8 @@ test("contract: typed rules publish atomically and statuses change effective sta
   });
   expect(removeResult.effective_changes).toEqual(
     expect.arrayContaining([
-      effectiveChange(entity.id, vigor.id, 4, 6),
-      effectiveChange(entity.id, impact.id, 8, 12),
+      effectiveChange(entity.id, vigor.id, "4", "6"),
+      effectiveChange(entity.id, impact.id, "8", "12"),
     ]),
   );
 
@@ -622,10 +637,10 @@ test("contract: typed rules publish atomically and statuses change effective sta
     revision: authoredState.revision,
     status_revision: 2,
     rules_revision: rulesRevision,
-    values: { [vigor.id]: numberValue(6) },
+    values: { [vigor.id]: numberValue("6") },
     effective_values: {
-      [vigor.id]: numberValue(6),
-      [impact.id]: numberValue(12),
+      [vigor.id]: numberValue("6"),
+      [impact.id]: numberValue("12"),
     },
     active_statuses: [],
   });
@@ -722,7 +737,7 @@ async function createAdjudicatingInteraction(
   return adjudicating;
 }
 
-function numberValue(value: number): TaggedValue {
+function numberValue(value: DecimalText): TaggedValue {
   return { kind: "number", value };
 }
 
@@ -733,8 +748,8 @@ function booleanValue(value: boolean): TaggedValue {
 function effectiveChange(
   entityID: string,
   mechanicID: string,
-  before: number,
-  after: number,
+  before: DecimalText,
+  after: DecimalText,
 ): EffectiveChange {
   return {
     entity_id: entityID,

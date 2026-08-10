@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -37,7 +36,7 @@ func (s *Server) handleListWorldMechanics(w http.ResponseWriter, r *http.Request
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	revision, err := loadRulesRevision(r.Context(), tx, member.WorldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -96,7 +95,7 @@ func (s *Server) handleGetWorldMechanic(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	revision, err := loadRulesRevision(r.Context(), tx, member.WorldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -188,7 +187,7 @@ func (s *Server) saveWorldMechanic(ctx context.Context, worldID, mechanicID, act
 	if err != nil {
 		return zero, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	actualRevision, err := lockRulesRevision(ctx, tx, worldID, request.ExpectedRulesRevision)
 	if err != nil {
 		return zero, err
@@ -305,7 +304,7 @@ func (s *Server) archiveWorldMechanic(ctx context.Context, worldID, mechanicID, 
 	if err != nil {
 		return zero, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	actualRevision, err := lockRulesRevision(ctx, tx, worldID, request.ExpectedRulesRevision)
 	if err != nil {
 		return zero, err
@@ -390,16 +389,16 @@ func validateWorldMechanicRequest(worldID, mechanicID string, request saveWorldM
 			if definition.SourceKind == rules.SourceInput {
 				fields["default_number"] = "is required"
 			}
-		} else if value, err := rules.ParseDecimal(request.DefaultNumber.String()); err != nil {
+		} else if value, err := request.DefaultNumber.Decimal(); err != nil {
 			fields["default_number"] = "must be a finite exact decimal"
 		} else {
 			definition.DefaultValue = rules.NewNumberValue(value)
 		}
-		for path, source := range map[string]*json.Number{"minimum": request.Minimum, "maximum": request.Maximum, "step": request.Step} {
+		for path, source := range map[string]*decimalText{"minimum": request.Minimum, "maximum": request.Maximum, "step": request.Step} {
 			if source == nil {
 				continue
 			}
-			parsed, err := rules.ParseDecimal(source.String())
+			parsed, err := source.Decimal()
 			if err != nil {
 				fields[path] = "must be a finite exact decimal"
 				continue
@@ -772,10 +771,6 @@ func scanWorldMechanic(row rowScanner, worldID string) (loadedMechanic, error) {
 		return item, err
 	}
 	item.Response.SourceKind = sourceKind
-	item.Response.Minimum = numberPointer(minimum)
-	item.Response.Maximum = numberPointer(maximum)
-	item.Response.Step = numberPointer(step)
-	item.Response.DefaultNumber = numberPointer(defaultNumber)
 	definition := rules.MechanicDefinition{
 		ID: rules.ID(item.Response.ID), WorldID: rules.ID(worldID), SourceKind: rules.SourceKind(sourceKind), ValueKind: rules.ValueKind(valueKind),
 		Mutable: item.Response.MutableDuringPlay, Archived: item.Response.Archived,
@@ -789,17 +784,21 @@ func scanWorldMechanic(row rowScanner, worldID string) (loadedMechanic, error) {
 	if parseErr == nil {
 		definition.Step, parseErr = parseDecimalPointer(step)
 	}
+	var parsedDefault *rules.Decimal
+	if parseErr == nil {
+		parsedDefault, parseErr = parseDecimalPointer(defaultNumber)
+	}
 	if parseErr != nil {
 		return item, parseErr
 	}
+	item.Response.Minimum = decimalTextPointer(definition.Minimum)
+	item.Response.Maximum = decimalTextPointer(definition.Maximum)
+	item.Response.Step = decimalTextPointer(definition.Step)
+	item.Response.DefaultNumber = decimalTextPointer(parsedDefault)
 	if definition.SourceKind == rules.SourceInput && definition.ValueKind == rules.ValueBoolean {
 		definition.DefaultValue = rules.NewBooleanValue(false)
-	} else if definition.SourceKind == rules.SourceInput && defaultNumber != nil {
-		value, err := rules.ParseDecimal(*defaultNumber)
-		if err != nil {
-			return item, err
-		}
-		definition.DefaultValue = rules.NewNumberValue(value)
+	} else if definition.SourceKind == rules.SourceInput && parsedDefault != nil {
+		definition.DefaultValue = rules.NewNumberValue(*parsedDefault)
 	}
 	item.Definition = definition
 	return item, nil
@@ -902,14 +901,6 @@ func buildStoredExpression(node storedExpressionNode, children map[string][]stor
 	delete(visiting, node.ID)
 	visited[node.ID] = true
 	return result, nil
-}
-
-func numberPointer(value *string) *json.Number {
-	if value == nil {
-		return nil
-	}
-	number := json.Number(*value)
-	return &number
 }
 
 func parseDecimalPointer(value *string) (*rules.Decimal, error) {

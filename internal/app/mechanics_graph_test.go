@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"testing"
 
@@ -10,7 +9,7 @@ import (
 
 func TestExpressionDTORoundTripPreservesTypedTreeAndExactNumbers(t *testing.T) {
 	t.Parallel()
-	number := json.Number("9007199254740993.125")
+	number := decimalText("9007199254740993.125")
 	input := expressionDTO{
 		Operation: string(rules.ExpressionAddNumber),
 		Operands: []expressionDTO{
@@ -40,8 +39,8 @@ func TestExpressionDTORoundTripPreservesTypedTreeAndExactNumbers(t *testing.T) {
 
 func TestValidateWorldMechanicRequestEnforcesDerivedShape(t *testing.T) {
 	t.Parallel()
-	defaultNumber := json.Number("2")
-	minimum := json.Number("0")
+	defaultNumber := decimalText("2")
+	minimum := decimalText("0")
 	request := saveWorldMechanicRequest{
 		Kind: "capacity", Mode: "score", SourceKind: "derived", Name: "Calculated",
 		DefaultNumber: &defaultNumber, Minimum: &minimum, MutableDuringPlay: true,

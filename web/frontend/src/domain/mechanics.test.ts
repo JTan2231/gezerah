@@ -8,8 +8,8 @@ describe("mechanic draft mode changes", () => {
     const expression: MechanicExpression = {
       operation: "add-number",
       operands: [
-        { operation: "literal", value: { kind: "number", value: 2 } },
-        { operation: "literal", value: { kind: "number", value: 3 } },
+        { operation: "literal", value: { kind: "number", value: "2" } },
+        { operation: "literal", value: { kind: "number", value: "3" } },
       ],
     };
 
@@ -17,10 +17,10 @@ describe("mechanic draft mode changes", () => {
       {
         mode: "score",
         source_kind: "derived",
-        minimum: -5,
-        maximum: 10,
-        step: 1,
-        default_number: 4,
+        minimum: "-5",
+        maximum: "10",
+        step: "1",
+        default_number: "4",
         unit: "points",
         expression,
       },
@@ -65,7 +65,7 @@ describe("mechanic draft mode changes", () => {
       unit: undefined,
       expression: {
         operation: "literal",
-        value: { kind: "number", value: 0 },
+        value: { kind: "number", value: "0" },
       },
     });
   });

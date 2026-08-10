@@ -24,7 +24,7 @@ describe("consequence transport", () => {
       mechanicId: numberMechanic.id,
       valueKind: "number",
       operation: "adjust-number",
-      amount: -2,
+      amount: "-2",
       booleanValue: false,
     };
 
@@ -33,7 +33,31 @@ describe("consequence transport", () => {
       type: "adjust-number",
       entity_ids: ["entity-1"],
       mechanic_id: "resolve",
-      amount: -2,
+      amount: "-2",
+    });
+  });
+
+  test("preserves precise decimal text and canonicalizes it for transport", () => {
+    const draft: EffectDraft = {
+      id: "effect-precise",
+      kind: "mechanic",
+      entityId: "entity-1",
+      mechanicId: numberMechanic.id,
+      valueKind: "number",
+      operation: "set",
+      amount: "09007199254740993.000000000000000100",
+      booleanValue: false,
+    };
+
+    expect(effectToAPI(draft)).toEqual({
+      id: "effect-precise",
+      type: "set",
+      entity_ids: ["entity-1"],
+      mechanic_id: "resolve",
+      value: {
+        kind: "number",
+        value: "9007199254740993.0000000000000001",
+      },
     });
   });
 
@@ -45,7 +69,7 @@ describe("consequence transport", () => {
       mechanicId: "hidden",
       valueKind: "boolean",
       operation: "set",
-      amount: 0,
+      amount: "0",
       booleanValue: true,
     };
 
@@ -71,7 +95,7 @@ describe("consequence transport", () => {
             id: "modifier-1",
             mechanic_id: "resolve",
             operation: "add-number",
-            value: { kind: "number", value: -2 },
+            value: { kind: "number", value: "-2" },
             priority: 10,
           },
         ],
@@ -90,7 +114,7 @@ describe("consequence transport", () => {
             id: "modifier-1",
             mechanic_id: "resolve",
             operation: "add-number",
-            value: { kind: "number", value: -2 },
+            value: { kind: "number", value: "-2" },
             priority: 10,
           },
         ],

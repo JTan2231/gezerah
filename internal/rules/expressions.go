@@ -289,9 +289,6 @@ func validateExpressionLiteral(value StateValue) ValidationErrors {
 	if !validValueKind(value.Kind) || !validStateValueShape(value) {
 		return ValidationErrors{validation("invalid_typed_value", "", "literal must contain exactly one number or boolean value")}
 	}
-	if value.Kind == ValueNumber && (value.Number == nil || !value.Number.Valid()) {
-		return ValidationErrors{validation("invalid_number", "number", "literal number must be a finite exact decimal")}
-	}
 	return nil
 }
 

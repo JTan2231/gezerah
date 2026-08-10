@@ -66,18 +66,15 @@ func validStateValueShape(value StateValue) bool {
 
 func validateDecimalAgainstBounds(value Decimal, minimum, maximum, step *Decimal, path string) ValidationErrors {
 	var errs ValidationErrors
-	if !value.Valid() {
-		return append(errs, validation("invalid_number", path, "number must be a finite exact decimal"))
-	}
-	if minimum != nil && minimum.Valid() && value.Cmp(*minimum) < 0 {
+	if minimum != nil && value.Cmp(*minimum) < 0 {
 		errs = append(errs, validation("below_minimum", path, "number is below the configured minimum"))
 	}
-	if maximum != nil && maximum.Valid() && value.Cmp(*maximum) > 0 {
+	if maximum != nil && value.Cmp(*maximum) > 0 {
 		errs = append(errs, validation("above_maximum", path, "number is above the configured maximum"))
 	}
-	if step != nil && step.Valid() && step.IsPositive() {
-		base := MustDecimal("0")
-		if minimum != nil && minimum.Valid() {
+	if step != nil && step.IsPositive() {
+		base := Decimal{}
+		if minimum != nil {
 			base = *minimum
 		}
 		if !value.AlignsTo(*step, base) {

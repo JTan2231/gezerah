@@ -68,7 +68,7 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	access, err := loadWorldEntityProfileAccess(r.Context(), tx, r, worldID, entityID)
 	if err != nil {

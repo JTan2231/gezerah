@@ -109,7 +109,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
             type: "adjust-number",
             entity_ids: [entity.id],
             mechanic_id: independent.mechanic.id,
-            amount: 1,
+            amount: "1",
           },
         ],
       },

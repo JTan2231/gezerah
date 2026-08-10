@@ -28,6 +28,11 @@ import {
   type EffectDraft,
   type StatusModifierDraft,
 } from "../domain/consequences";
+import {
+  canonicalDecimalText,
+  decimalTextIsNegative,
+  isDecimalText,
+} from "../domain/decimal";
 import { useCollection } from "../hooks/useCollection";
 import { useResource } from "../hooks/useResource";
 import { useWorldEvents, type WorldEvent } from "../hooks/useWorldEvents";
@@ -1304,7 +1309,7 @@ function EffectBuilder({
   const [operation, setOperation] = useState<"adjust-number" | "set">(
     firstMechanic?.mode === "binary" ? "set" : "adjust-number",
   );
-  const [amount, setAmount] = useState(0);
+  const [amount, setAmount] = useState("0");
   const [booleanValue, setBooleanValue] = useState(true);
   const [statusName, setStatusName] = useState("");
   const [statusDescription, setStatusDescription] = useState("");
@@ -1340,12 +1345,14 @@ function EffectBuilder({
     setMechanicId(id);
     const selected = mutableMechanics.find((item) => item.id === id);
     setOperation(selected?.mode === "binary" ? "set" : "adjust-number");
-    setAmount(0);
+    setAmount("0");
   }
 
   function addMechanicEffect() {
     if (effectiveEntityId === "") return;
     if (mechanic === undefined) return;
+    const canonicalAmount = canonicalDecimalText(amount);
+    if (mechanic.mode !== "binary" && canonicalAmount === undefined) return;
     onChange([
       ...effects,
       {
@@ -1355,11 +1362,11 @@ function EffectBuilder({
         mechanicId: effectiveMechanicId,
         valueKind: mechanic.mode === "binary" ? "boolean" : "number",
         operation: mechanic.mode === "binary" ? "set" : operation,
-        amount,
+        amount: canonicalAmount ?? "0",
         booleanValue,
       },
     ]);
-    setAmount(0);
+    setAmount("0");
   }
 
   function addStatusEffect() {
@@ -1378,7 +1385,7 @@ function EffectBuilder({
         status: {
           name: statusName.trim(),
           description: statusDescription.trim(),
-          modifiers: statusModifiers,
+          modifiers: statusModifiers.map(canonicalStatusModifier),
         },
       },
     ]);
@@ -1503,12 +1510,11 @@ function EffectBuilder({
                     <option value="set">Set to</option>
                   </select>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     value={amount}
-                    onChange={(event) =>
-                      setAmount(event.currentTarget.valueAsNumber || 0)
-                    }
-                    step="any"
+                    onChange={(event) => setAmount(event.currentTarget.value)}
+                    required
                     aria-label="Effect amount"
                   />
                 </>
@@ -1517,7 +1523,10 @@ function EffectBuilder({
                 className="button button-ink"
                 type="button"
                 onClick={addMechanicEffect}
-                disabled={mechanic === undefined}
+                disabled={
+                  mechanic === undefined ||
+                  (mechanic.mode !== "binary" && !isDecimalText(amount))
+                }
               >
                 Add effect
               </button>
@@ -1767,7 +1776,7 @@ function StatusModifierEditor({
               mechanic_id: nextMechanic.id,
               operation: nextNumeric ? "add-number" : "set",
               value: nextNumeric
-                ? { kind: "number", value: 0 }
+                ? { kind: "number", value: "0" }
                 : { kind: "boolean", value: true },
             });
           }}
@@ -1801,15 +1810,18 @@ function StatusModifierEditor({
         <span>Literal value</span>
         {numeric ? (
           <input
-            type="number"
-            step="any"
-            value={modifier.value.kind === "number" ? modifier.value.value : 0}
+            type="text"
+            inputMode="decimal"
+            value={
+              modifier.value.kind === "number" ? modifier.value.value : "0"
+            }
+            required
             onChange={(event) =>
               onChange({
                 ...modifier,
                 value: {
                   kind: "number",
-                  value: event.currentTarget.valueAsNumber || 0,
+                  value: event.currentTarget.value,
                 },
               })
             }
@@ -1862,7 +1874,7 @@ function newStatusModifier(mechanic: WorldMechanic): StatusModifierDraft {
     mechanic_id: mechanic.id,
     operation: numeric ? "add-number" : "set",
     value: numeric
-      ? { kind: "number", value: 0 }
+      ? { kind: "number", value: "0" }
       : { kind: "boolean", value: true },
     priority: 0,
   };
@@ -2044,7 +2056,7 @@ function effectDraftIsCurrent(
       mechanic.mutable_during_play &&
       effect.valueKind ===
         (mechanic.mode === "binary" ? "boolean" : "number") &&
-      (effect.valueKind === "boolean" || Number.isFinite(effect.amount))
+      (effect.valueKind === "boolean" || isDecimalText(effect.amount))
     );
   }
   if (effect.kind === "apply-status")
@@ -2087,13 +2099,12 @@ function statusModifierIsCurrent(
   if (modifier.operation === "set")
     return (
       modifier.value.kind === (numeric ? "number" : "boolean") &&
-      (modifier.value.kind === "boolean" ||
-        Number.isFinite(modifier.value.value))
+      (modifier.value.kind === "boolean" || isDecimalText(modifier.value.value))
     );
   return (
     numeric &&
     modifier.value.kind === "number" &&
-    Number.isFinite(modifier.value.value)
+    isDecimalText(modifier.value.value)
   );
 }
 
@@ -2110,7 +2121,7 @@ function effectDescription(
   if (mechanic === undefined) return "Unknown mechanic";
   if (effect.valueKind === "boolean")
     return `${effect.booleanValue ? "Grant" : "Remove"} ${mechanic.name}`;
-  return `${effect.operation === "set" ? "Set" : "Adjust"} ${mechanic.name} ${effect.operation === "adjust-number" && effect.amount >= 0 ? "+" : ""}${effect.amount}`;
+  return `${effect.operation === "set" ? "Set" : "Adjust"} ${mechanic.name} ${effect.operation === "adjust-number" && !decimalTextIsNegative(effect.amount) ? "+" : ""}${effect.amount}`;
 }
 
 function effectTargetLabel(
@@ -2133,11 +2144,20 @@ function effectTargetLabel(
 
 function displayValue(value?: StateValue): string {
   if (value === undefined) return "unknown";
-  return value.kind === "number"
-    ? String(value.value)
-    : value.value
-      ? "yes"
-      : "no";
+  return value.kind === "number" ? value.value : value.value ? "yes" : "no";
+}
+
+function canonicalStatusModifier(
+  modifier: StatusModifierDraft,
+): StatusModifierDraft {
+  if (modifier.value.kind !== "number") return modifier;
+  return {
+    ...modifier,
+    value: {
+      kind: "number",
+      value: canonicalDecimalText(modifier.value.value) ?? modifier.value.value,
+    },
+  };
 }
 
 function shortIdentifier(id: string): string {

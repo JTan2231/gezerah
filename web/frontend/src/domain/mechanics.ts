@@ -39,8 +39,8 @@ export function changeMechanicMode(
     mode,
     minimum: input && numeric ? item.minimum : undefined,
     maximum: input && numeric ? item.maximum : undefined,
-    step: input && numeric ? (item.step ?? 1) : undefined,
-    default_number: input && numeric ? (item.default_number ?? 0) : undefined,
+    step: input && numeric ? (item.step ?? "1") : undefined,
+    default_number: input && numeric ? (item.default_number ?? "0") : undefined,
     unit: numeric && wasNumeric ? item.unit : undefined,
     expression:
       item.source_kind === "derived"
@@ -57,6 +57,6 @@ function literalExpression(kind: "number" | "boolean"): MechanicExpression {
     value:
       kind === "boolean"
         ? { kind: "boolean", value: false }
-        : { kind: "number", value: 0 },
+        : { kind: "number", value: "0" },
   };
 }

@@ -64,7 +64,7 @@ func (s *Server) previewInteractionResolution(ctx context.Context, r *http.Reque
 	if err != nil {
 		return zero, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	_, err = requireFacilitator(ctx, tx, r, worldID)
 	if err != nil {
 		return zero, err
@@ -130,7 +130,7 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 	if err != nil {
 		return zero, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	member, err := requireFacilitator(ctx, tx, r, worldID)
 	if err != nil {
 		return zero, err
@@ -327,6 +327,11 @@ func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireI
 			}
 			if effect.Amount == nil || effect.Value != nil || effect.Status != nil {
 				fields[path] = "adjust-number requires amount and no value"
+			}
+			if effect.Amount != nil {
+				if _, err := effect.Amount.Decimal(); err != nil {
+					fields[path+".amount"] = "must be a finite exact decimal"
+				}
 			}
 			validateScalarEffectTargets(fields, path, effect)
 		case "apply-status":
@@ -646,8 +651,12 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			dto := stateValueDomainToDTO(value)
 			effect.Value = &dto
 		} else if stored.Adjustment != nil {
-			number := jsonNumber(*stored.Adjustment)
-			effect.Amount = &number
+			amount, err := rules.ParseDecimal(*stored.Adjustment)
+			if err != nil {
+				return nil, err
+			}
+			text := decimalTextFromDomain(amount)
+			effect.Amount = &text
 		}
 		item.Effects = append(item.Effects, effect)
 	}
@@ -867,9 +876,15 @@ func resolutionRequestMatches(ctx context.Context, db queryer, worldID, interact
 			if left.Amount == nil || right.Amount == nil {
 				return false, nil
 			}
-			leftDecimal, leftErr := rules.ParseDecimal(left.Amount.String())
-			rightDecimal, rightErr := rules.ParseDecimal(right.Amount.String())
-			if leftErr != nil || rightErr != nil || !leftDecimal.Equal(rightDecimal) {
+			leftDecimal, leftErr := left.Amount.Decimal()
+			if leftErr != nil {
+				return false, fmt.Errorf("validated adjustment amount is invalid: %w", leftErr)
+			}
+			rightDecimal, rightErr := right.Amount.Decimal()
+			if rightErr != nil {
+				return false, fmt.Errorf("stored adjustment amount is invalid: %w", rightErr)
+			}
+			if !leftDecimal.Equal(rightDecimal) {
 				return false, nil
 			}
 		case "apply-status":

@@ -2,7 +2,7 @@
 
 ## Stack and process model
 
-The backend is a Go 1.25 application with two direct runtime dependencies:
+The backend is a Go 1.25.12 application with two direct runtime dependencies:
 `github.com/jackc/pgx/v5` and `golang.org/x/crypto` for Argon2id. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
 the PostgreSQL schema and production frontend.
@@ -60,7 +60,7 @@ Pure graph evaluation and runtime transitions:
 | `state.go`               | Input defaults, sparse overrides, materialization, normalization, cloning.       |
 | `effects.go`             | Backward-compatible ordered scalar transition validation/application.            |
 | `runtime_transitions.go` | Combined scalar and persistent-status lifecycle transition.                      |
-| `decimal.go`             | Exact finite base-10 parsing, arithmetic, canonicalization, and JSON text.       |
+| `decimal.go`             | Immutable exact finite base-10 parsing, arithmetic, and canonicalization.        |
 | `errors.go`              | Validation paths and domain error categories.                                    |
 
 The package takes fully loaded maps/snapshots and returns values. It must not
@@ -141,17 +141,20 @@ already-built production binary.
 
 ### Strict JSON and scalar values
 
-`decodeJSON` rejects unknown fields, reads one JSON value, and preserves exact
-numbers. The state scalar DTO accepts only:
+`decodeJSON` rejects unknown fields and reads one JSON value. Exact decimals
+cross HTTP as strings, are parsed into immutable domain values at the
+application boundary, and are canonicalized in responses. The state scalar DTO
+accepts only:
 
 ```json
-{ "kind": "number", "value": 1.25 }
+{ "kind": "number", "value": "1.25" }
 { "kind": "boolean", "value": true }
 ```
 
 Custom union decoding ensures the number/Boolean shape cannot carry fields from
-another variant. Do not replace it with `map[string]any`, which would weaken the
-boundary and round through `float64`.
+another variant. JSON number tokens are rejected for exact decimal fields; this
+prevents generic decoders and JavaScript clients from rounding through
+`float64`/`number`. Do not replace the union with `map[string]any`.
 
 ### Validation order
 

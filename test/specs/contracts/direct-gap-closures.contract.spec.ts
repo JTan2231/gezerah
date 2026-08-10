@@ -172,8 +172,10 @@ interface WorldEvent {
   resolution_id?: string;
 }
 
+type DecimalText = string;
+
 type TaggedValue =
-  { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+  { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
 test("contract: direct scenario gap closures preserve state, privacy, and authority", async ({
   request,
@@ -731,7 +733,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     {
       expected_revision: initialPrimaryState.revision,
       expected_rules_revision: rulesRevision,
-      values: { [baseMechanic.mechanic.id]: numberValue(5) },
+      values: { [baseMechanic.mechanic.id]: numberValue("5") },
     },
     owner.id,
   );
@@ -753,7 +755,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
             expected_rules_revision: before.rules_revision,
             values: {
               ...before.values,
-              [derivedMechanic.mechanic.id]: numberValue(99),
+              [derivedMechanic.mechanic.id]: numberValue("99"),
             },
           },
         },
@@ -783,7 +785,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
             expected_rules_revision: before.rules_revision,
             values: {
               ...before.values,
-              [baseMechanic.mechanic.id]: numberValue(7),
+              [baseMechanic.mechanic.id]: numberValue("7"),
             },
           },
         },
@@ -1000,7 +1002,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
             type: "set",
             entity_ids: [primary.id],
             mechanic_id: baseMechanic.mechanic.id,
-            value: numberValue(6),
+            value: numberValue("6"),
           },
         ],
       },
@@ -1164,7 +1166,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
             type: "set",
             entity_ids: [primary.id],
             mechanic_id: scenarioCase.mechanicID,
-            value: numberValue(4),
+            value: numberValue("4"),
           },
         ],
       );
@@ -1181,7 +1183,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       {
         name: "unknown target",
         mechanicID: randomUUID(),
-        value: numberValue(1),
+        value: numberValue("1"),
       },
     ] as const;
     for (const scenarioCase of cases) {
@@ -1228,13 +1230,13 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
           type: "set",
           entity_ids: [primary.id],
           mechanic_id: baseMechanic.mechanic.id,
-          value: numberValue(7),
+          value: numberValue("7"),
         },
         {
           type: "adjust-number",
           entity_ids: [primary.id],
           mechanic_id: baseMechanic.mechanic.id,
-          amount: 10,
+          amount: "10",
         },
       ],
     );
@@ -1267,7 +1269,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
                 {
                   mechanic_id: statusTarget.mechanic.id,
                   operation: "add-number",
-                  value: numberValue(1),
+                  value: numberValue("1"),
                   priority: 0,
                 },
               ],
@@ -1564,7 +1566,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     ).toEqual(before);
   });
 
-  expect(primaryState.values[baseMechanic.mechanic.id]).toEqual(numberValue(6));
+  expect(primaryState.values[baseMechanic.mechanic.id]).toEqual(
+    numberValue("6"),
+  );
 });
 
 async function authoritativeSnapshot(
@@ -1854,10 +1858,10 @@ function inputMechanic(
     mode: "score",
     source_kind: "input",
     name,
-    minimum: 0,
-    maximum: 10,
-    step: 1,
-    default_number: 0,
+    minimum: "0",
+    maximum: "10",
+    step: "1",
+    default_number: "0",
     mutable_during_play: mutableDuringPlay,
     archived: false,
     expected_rules_revision: expectedRulesRevision,
@@ -2005,7 +2009,7 @@ async function getInteraction(
   );
 }
 
-function numberValue(value: number): TaggedValue {
+function numberValue(value: DecimalText): TaggedValue {
   return { kind: "number", value };
 }
 

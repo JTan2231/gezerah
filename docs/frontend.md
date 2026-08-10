@@ -245,9 +245,11 @@ or reload the authoritative collection.
 
 `api<T>()` sends same-origin JSON, maps the server error envelope to `ApiError`,
 and exposes field errors where forms can attach them. Successful payloads are
-compile-time typed but are not runtime-schema validated. Numeric controls use
-JavaScript numbers, so arbitrary-precision decimal authoring is still an API-
-only capability.
+compile-time typed but are not runtime-schema validated. Exact ruleset decimals
+remain strings in API models, form state, and consequence drafts; outgoing
+payloads canonicalize valid decimal text. Ordinary JavaScript JSON parsing
+therefore cannot round these values. Revisions, counts, positions, and
+priorities remain JavaScript numbers.
 
 ## Accessibility and responsive behavior
 

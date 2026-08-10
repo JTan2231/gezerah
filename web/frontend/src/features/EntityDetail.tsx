@@ -3,12 +3,14 @@ import { useMemo, useState } from "react";
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
   ActiveStatus,
+  DecimalText,
   StateValue,
   World,
   WorldEntity,
   WorldMechanic,
 } from "../api/types";
 import { ErrorMessage } from "../components/StudioUI";
+import { canonicalDecimalText } from "../domain/decimal";
 import { formatRelativeDate } from "../domain/display";
 import { confirmDiscardDraft, useDirtyGuard } from "../hooks/useDraft";
 import { EntityProfilePanel } from "./EntityProfilePanel";
@@ -138,7 +140,7 @@ function EntitySheet({
     [activeMechanics, entity],
   );
   const [values, setValues] =
-    useState<Record<string, number | boolean>>(initial);
+    useState<Record<string, DecimalText | boolean>>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const dirty = JSON.stringify(values) !== JSON.stringify(initial);
@@ -157,10 +159,27 @@ function EntitySheet({
       (candidate) => candidate.source_kind === "input",
     )) {
       const value = values[mechanic.id];
-      stateValues[mechanic.id] =
-        mechanic.mode === "binary"
-          ? { kind: "boolean", value: Boolean(value) }
-          : { kind: "number", value: Number(value ?? 0) };
+      if (mechanic.mode === "binary") {
+        stateValues[mechanic.id] = {
+          kind: "boolean",
+          value: Boolean(value),
+        };
+        continue;
+      }
+      const decimal =
+        typeof value === "string" ? canonicalDecimalText(value) : undefined;
+      if (decimal === undefined) {
+        setSaving(false);
+        setError(
+          new ApiError(
+            0,
+            "invalid_decimal",
+            `${mechanic.name} must be a finite decimal.`,
+          ),
+        );
+        return;
+      }
+      stateValues[mechanic.id] = { kind: "number", value: decimal };
     }
     try {
       await api(worldPath(world.id, `entities/${entity.id}/state`), {
@@ -265,13 +284,12 @@ function EntitySheet({
                   <span className="sheet-number">
                     <input
                       aria-label={mechanic.name}
-                      type="number"
-                      value={Number(values[mechanic.id] ?? 0)}
-                      min={mechanic.minimum}
-                      max={mechanic.maximum}
-                      step={mechanic.step ?? "any"}
+                      type="text"
+                      inputMode="decimal"
+                      value={decimalInputValue(values[mechanic.id])}
+                      required
                       onChange={(event) => {
-                        const value = event.currentTarget.valueAsNumber || 0;
+                        const value = event.currentTarget.value;
                         setValues((current) => ({
                           ...current,
                           [mechanic.id]: value,
@@ -353,12 +371,18 @@ function EntitySheet({
 function mechanicValue(
   value: StateValue | undefined,
   mechanic: WorldMechanic,
-): number | boolean {
+): DecimalText | boolean {
   if (value === undefined)
-    return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
+    return mechanic.mode === "binary"
+      ? false
+      : (mechanic.default_number ?? "0");
   if (value.kind === "boolean") return value.value;
   if (value.kind === "number") return value.value;
-  return mechanic.mode === "binary" ? false : (mechanic.default_number ?? 0);
+  return mechanic.mode === "binary" ? false : (mechanic.default_number ?? "0");
+}
+
+function decimalInputValue(value: DecimalText | boolean | undefined): string {
+  return typeof value === "string" ? value : "0";
 }
 
 function formatMechanicValue(
@@ -374,11 +398,7 @@ function formatMechanicValue(
 
 function formatStateValue(value: StateValue | undefined): string {
   if (value === undefined) return "Unavailable";
-  return value.kind === "number"
-    ? String(value.value)
-    : value.value
-      ? "Yes"
-      : "No";
+  return value.kind === "number" ? value.value : value.value ? "Yes" : "No";
 }
 
 function modifierOperationLabel(operation: string): string {

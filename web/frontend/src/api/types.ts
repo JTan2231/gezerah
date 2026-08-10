@@ -58,6 +58,7 @@ export interface WorldInvitePreview {
 export type MechanicKind = "capacity" | "capability";
 export type MechanicMode = "score" | "pool" | "binary" | "rating";
 export type MechanicSourceKind = "input" | "derived";
+export type DecimalText = string;
 
 export type MechanicExpression =
   | { operation: "literal"; value: StateValue }
@@ -91,10 +92,10 @@ export interface WorldMechanic {
   source_kind: MechanicSourceKind;
   name: string;
   description?: string | undefined;
-  minimum?: number | undefined;
-  maximum?: number | undefined;
-  step?: number | undefined;
-  default_number?: number | undefined;
+  minimum?: DecimalText | undefined;
+  maximum?: DecimalText | undefined;
+  step?: DecimalText | undefined;
+  default_number?: DecimalText | undefined;
   unit?: string | undefined;
   mutable_during_play: boolean;
   expression?: MechanicExpression | undefined;
@@ -171,7 +172,7 @@ export type PlayStatus =
 export type CharacterStatus = "not-controlled" | "setup-required" | "ready";
 
 export type StateValue =
-  { kind: "number"; value: number } | { kind: "boolean"; value: boolean };
+  { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
 export type ConcreteEffect =
   | {
@@ -186,7 +187,7 @@ export type ConcreteEffect =
       type: "adjust-number";
       entity_ids: string[];
       mechanic_id: string;
-      amount: number;
+      amount: DecimalText;
     }
   | {
       id?: string | undefined;

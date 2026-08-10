@@ -160,9 +160,11 @@ func validateEffectOperand(effect ConcreteEffect, definition MechanicDefinition)
 			}
 		}
 	case EffectAdjustNumber:
-		if effect.Value != nil || effect.AdjustmentAmount == nil || !effect.AdjustmentAmount.Valid() {
+		if effect.Value != nil || effect.AdjustmentAmount == nil {
 			errs = append(errs, validation("invalid_effect_operand", "", "adjust-number requires one finite adjustment amount and no value"))
 		}
+	case EffectApplyStatus, EffectRemoveStatus:
+		errs = append(errs, validation("unsupported", "operation", "unsupported scalar effect operation"))
 	default:
 		errs = append(errs, validation("unsupported", "operation", "unsupported effect operation"))
 	}
@@ -178,6 +180,8 @@ func operationAllowed(operation EffectOperation, definition MechanicDefinition) 
 		return validValueKind(definition.ValueKind)
 	case EffectAdjustNumber:
 		return definition.ValueKind == ValueNumber
+	case EffectApplyStatus, EffectRemoveStatus:
+		return false
 	default:
 		return false
 	}
@@ -219,6 +223,8 @@ func applyEffectToRecord(effect ConcreteEffect, definition MechanicDefinition, e
 			return record, nil
 		}
 		updated.Values[definition.ID] = value
+	case EffectApplyStatus, EffectRemoveStatus:
+		return StateRecord{}, effectApplicationError(effect, entity, "unsupported scalar effect operation")
 	default:
 		return StateRecord{}, effectApplicationError(effect, entity, "unsupported effect operation")
 	}

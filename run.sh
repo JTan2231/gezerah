@@ -146,10 +146,10 @@ start_backend() {
 		return 0
 	fi
 
-	backend_addr="${DND_ADDR:-:8080}"
+	backend_addr="${DND_ADDR:-127.0.0.1:8080}"
 	backend_public_origin="${DND_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
 	case "$backend_addr" in
-	:8080 | localhost:8080 | 127.0.0.1:8080)
+	localhost:8080 | 127.0.0.1:8080)
 		;;
 	*)
 		printf 'DND_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2

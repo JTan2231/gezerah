@@ -1,9 +1,11 @@
 import type {
   ConcreteEffect,
+  DecimalText,
   InlineStatus,
   StateValue,
   StatusModifierInput,
 } from "../api/types";
+import { canonicalDecimalText } from "./decimal";
 
 export interface StatusModifierDraft extends StatusModifierInput {
   id: string;
@@ -23,7 +25,7 @@ export type EffectDraft =
       mechanicId: string;
       valueKind: StateValue["kind"];
       operation: "adjust-number" | "set";
-      amount: number;
+      amount: DecimalText;
       booleanValue: boolean;
     }
   | {
@@ -51,7 +53,7 @@ export function effectToAPI(effect: EffectDraft): ConcreteEffect {
         id: modifier.id,
         mechanic_id: modifier.mechanic_id,
         operation: modifier.operation,
-        value: modifier.value,
+        value: canonicalStateValue(modifier.value),
         priority: modifier.priority,
       })),
     };
@@ -87,13 +89,24 @@ export function effectToAPI(effect: EffectDraft): ConcreteEffect {
       type: "set",
       entity_ids: [effect.entityId],
       mechanic_id: effect.mechanicId,
-      value: { kind: "number", value: effect.amount },
+      value: {
+        kind: "number",
+        value: canonicalDecimalText(effect.amount) ?? effect.amount,
+      },
     };
   return {
     id: effect.id,
     type: "adjust-number",
     entity_ids: [effect.entityId],
     mechanic_id: effect.mechanicId,
-    amount: effect.amount,
+    amount: canonicalDecimalText(effect.amount) ?? effect.amount,
+  };
+}
+
+function canonicalStateValue(value: StateValue): StateValue {
+  if (value.kind === "boolean") return value;
+  return {
+    kind: "number",
+    value: canonicalDecimalText(value.value) ?? value.value,
   };
 }

@@ -193,7 +193,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           ownerPage.getByRole("heading", { name: labels.entity }),
         ).toBeVisible();
         await ownerPage
-          .getByRole("spinbutton", { name: labels.numeric, exact: true })
+          .getByRole("textbox", { name: labels.numeric, exact: true })
           .fill("9");
         await ownerPage.getByLabel(labels.boolean).check();
         await ownerPage.getByRole("button", { name: "Save sheet" }).click();
@@ -209,7 +209,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .getByRole("button", { name: /Roster & sheets/ })
           .click();
         await expect(
-          ownerPage.getByRole("spinbutton", {
+          ownerPage.getByRole("textbox", {
             name: labels.numeric,
             exact: true,
           }),
@@ -703,7 +703,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               editorPage,
               labels.entity,
               labels.numeric,
-              -20,
+              "-20",
             );
             await editorPage
               .getByRole("button", { name: "Preview changes" })
@@ -749,7 +749,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               editorPage,
               labels.entity,
               labels.numeric,
-              -2,
+              "-2",
             );
             await addStatusEffect(
               editorPage,
@@ -757,7 +757,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               labels.numeric,
               labels.status,
               labels.firstStatusDescription,
-              1,
+              "1",
             );
             await editorPage
               .getByRole("button", { name: "Resolve problem" })
@@ -833,7 +833,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           labels.numeric,
           labels.status,
           labels.secondStatusDescription,
-          2,
+          "2",
         );
         await editorPage
           .getByRole("button", { name: "Resolve problem" })
@@ -1196,7 +1196,7 @@ async function addScalarEffect(
   page: Page,
   entityName: string,
   mechanicName: string,
-  amount: number,
+  amount: string,
 ) {
   await page
     .getByLabel("Effect type")
@@ -1205,7 +1205,7 @@ async function addScalarEffect(
   await page
     .getByLabel("Effect mechanic")
     .selectOption({ label: mechanicName });
-  await page.getByLabel("Effect amount").fill(String(amount));
+  await page.getByLabel("Effect amount").fill(amount);
   await page
     .locator(".effect-composer")
     .getByRole("button", { name: "Add effect" })
@@ -1218,7 +1218,7 @@ async function addStatusEffect(
   mechanicName: string,
   statusName: string,
   description: string,
-  modifierAmount: number,
+  modifierAmount: string,
 ) {
   await page
     .getByLabel("Effect type")
@@ -1234,7 +1234,7 @@ async function addStatusEffect(
     .getByLabel("Target value")
     .selectOption({ label: mechanicName });
   await modifier.getByLabel("Operation").selectOption({ label: "Add" });
-  await modifier.getByLabel("Literal value").fill(String(modifierAmount));
+  await modifier.getByLabel("Literal value").fill(modifierAmount);
   await composer.getByRole("button", { name: "Add status effect" }).click();
 }
 
