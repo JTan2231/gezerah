@@ -324,13 +324,13 @@ function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
   return {
     expectedProjectId:
       env.DND_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    expectedProject: env.DND_DEPLOY_PROJECT ?? "worldwright",
+    expectedProject: env.DND_DEPLOY_PROJECT ?? "dnd",
     expectedEnvironmentId:
       env.DND_DEPLOY_ENVIRONMENT_ID ?? "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
     expectedEnvironment: env.DND_DEPLOY_ENVIRONMENT ?? "production",
     expectedWebId:
       env.DND_DEPLOY_WEB_SERVICE_ID ?? "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    expectedWeb: env.DND_DEPLOY_WEB_SERVICE ?? "worldwright-web",
+    expectedWeb: env.DND_DEPLOY_WEB_SERVICE ?? "dnd-web",
     expectedDatabaseId:
       env.DND_DEPLOY_DATABASE_SERVICE_ID ??
       "beb083b4-4ca6-4b3d-b2df-c429e9746f44",

@@ -26,21 +26,18 @@ describe("Railway deployment adapter", () => {
       project,
       services,
       expectedProjectId: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-      expectedProject: "worldwright",
+      expectedProject: "dnd",
       expectedEnvironmentId: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
       expectedEnvironment: "production",
       expectedWebId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-      expectedWeb: "worldwright-web",
+      expectedWeb: "dnd-web",
       expectedDatabaseId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
       expectedDatabase: "Postgres",
     });
 
     assert.equal(target.project.id, "0bc0c39c-c630-4898-b4af-d7f0ebe459db");
     assert.equal(target.environment.name, "production");
-    assert.equal(
-      target.web.url,
-      "https://worldwright-web-production.up.railway.app",
-    );
+    assert.equal(target.web.url, "https://dnd-web-production.up.railway.app");
     assert.deepEqual(target.web.replicas, {
       configured: 1,
       running: 1,
@@ -90,11 +87,11 @@ describe("Railway deployment adapter", () => {
           project,
           services,
           expectedProjectId: "00000000-0000-4000-8000-000000000000",
-          expectedProject: "worldwright",
+          expectedProject: "dnd",
           expectedEnvironmentId: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
           expectedEnvironment: "production",
           expectedWebId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-          expectedWeb: "worldwright-web",
+          expectedWeb: "dnd-web",
           expectedDatabaseId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
           expectedDatabase: "Postgres",
         }),
@@ -279,7 +276,7 @@ describe("Railway deployment adapter", () => {
       {
         targetDeploymentId: deploymentID,
         webServiceId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-        webService: "worldwright-web",
+        webService: "dnd-web",
         databaseServiceId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
         databaseService: "Postgres",
         databaseVolume: "postgres-volume",
@@ -299,7 +296,7 @@ describe("Railway deployment adapter", () => {
 function projectFixture(): unknown {
   return {
     id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    name: "worldwright",
+    name: "dnd",
     environments: {
       edges: [
         {
@@ -341,12 +338,12 @@ function serviceFixture(webDeploymentID: string): unknown {
     },
     {
       id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-      name: "worldwright-web",
+      name: "dnd-web",
       status: "SUCCESS",
       deploymentId: webDeploymentID,
       deploymentStopped: false,
       volumeMigrating: false,
-      url: "https://worldwright-web-production.up.railway.app",
+      url: "https://dnd-web-production.up.railway.app",
       replicas: {
         configured: 1,
         running: 1,

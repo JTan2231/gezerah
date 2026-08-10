@@ -128,7 +128,7 @@ authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 ## Deployment
 
 As of 2026-08-09, a public-addressable Railway preview is running at
-<https://worldwright-web-production.up.railway.app>. It is an operational
+<https://dnd-web-production.up.railway.app>. It is an operational
 preview, not a declaration of public-production readiness.
 
 For the existing linked Railway project, deploy a clean committed checkout with:

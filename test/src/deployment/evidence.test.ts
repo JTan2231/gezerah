@@ -80,7 +80,7 @@ describe("deployment evidence", () => {
 function fixture(mode: "deploy" | "verify" = "deploy") {
   const project: RailwayProject = {
     id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    name: "worldwright",
+    name: "dnd",
     environments: [],
   };
   const environment: RailwayEnvironment = {
@@ -89,9 +89,9 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   };
   const web = service({
     id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    name: "worldwright-web",
+    name: "dnd-web",
     deploymentId: deploymentID,
-    url: "https://worldwright-web-production.up.railway.app",
+    url: "https://dnd-web-production.up.railway.app",
   });
   const database = service({
     id: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
@@ -126,11 +126,11 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     database,
     deployment,
     localCommit: "a".repeat(40),
-    publicURL: "https://worldwright-web-production.up.railway.app",
+    publicURL: "https://dnd-web-production.up.railway.app",
     http: [
       {
         name: "health",
-        url: "https://worldwright-web-production.up.railway.app/api/health",
+        url: "https://dnd-web-production.up.railway.app/api/health",
         status: 200,
         contentType: "application/json",
         bytes: 57,

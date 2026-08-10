@@ -1,7 +1,7 @@
 # Operations
 
 > **Current state (2026-08-09):** dnd has a public-addressable Railway
-> preview at <https://worldwright-web-production.up.railway.app>, backed by a
+> preview at <https://dnd-web-production.up.railway.app>, backed by a
 > managed PostgreSQL service that was created fresh for this target. Railway
 > names the environment `production`; that provider name is not a declaration
 > of public-production readiness. This runbook governs the active preview, while
@@ -140,11 +140,11 @@ careful not to add private notes or player action text to telemetry.
 
 ## Railway deployment
 
-The active Railway project is `worldwright`, with environment `production` and
+The active Railway project is `dnd`, with environment `production` and
 these existing resources:
 
-- `worldwright-web`, one public web replica at
-  <https://worldwright-web-production.up.railway.app>;
+- `dnd-web`, one public web replica at
+  <https://dnd-web-production.up.railway.app>;
 - `Postgres`, one managed PostgreSQL replica;
 - `postgres-volume`, a 5 GB persistent database volume.
 
