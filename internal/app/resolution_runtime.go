@@ -119,7 +119,7 @@ func loadResolutionRuntimeInput(
 			effect.Value = &value
 		}
 		if item.Amount != nil {
-			amount, parseErr := rules.ParseDecimal(item.Amount.String())
+			amount, parseErr := item.Amount.Decimal()
 			if parseErr != nil {
 				return result, &statusError{Status: http.StatusUnprocessableEntity, Code: "validation_failed", Message: "effect amount is invalid", Fields: map[string]string{fmt.Sprintf("effects[%d].amount", index): "must be a finite exact decimal"}}
 			}
@@ -157,7 +157,7 @@ func loadResolutionRuntimeInput(
 				}
 				response.Modifiers[modifierIndex] = statusModifierResponse{
 					ID: modifierID, MechanicID: itemModifier.MechanicID,
-					Operation: itemModifier.Operation, Value: itemModifier.Value,
+					Operation: itemModifier.Operation, Value: stateValueDomainToDTO(value),
 					Priority: itemModifier.Priority, Position: modifierIndex,
 				}
 			}
@@ -180,6 +180,10 @@ func loadResolutionRuntimeInput(
 			for _, target := range item.Targets {
 				effect.StatusInstanceIDs[rules.ID(target.EntityID)] = rules.ID(target.StatusInstanceID)
 			}
+		case rules.EffectSet, rules.EffectAdjustNumber:
+			// Scalar operands were converted above; no status configuration is needed.
+		default:
+			return result, fmt.Errorf("unsupported effect operation %q", effect.Operation)
 		}
 		result.Plan.Effects[index] = effect
 	}
@@ -281,6 +285,8 @@ func statusReceipts(
 				return nil, fmt.Errorf("active status instance %s is missing", command.StatusInstanceID)
 			}
 			delete(activeNames, command.StatusInstanceID)
+		case rules.EffectSet, rules.EffectAdjustNumber:
+			return nil, fmt.Errorf("scalar operation %s is not a status command", command.Operation)
 		default:
 			return nil, fmt.Errorf("unsupported status command %s", command.Operation)
 		}
@@ -514,6 +520,8 @@ func persistStatusCommands(
 			if commandTag.RowsAffected() != 1 {
 				return errors.New("active status changed while resolution was being applied")
 			}
+		case rules.EffectSet, rules.EffectAdjustNumber:
+			return fmt.Errorf("scalar operation %s is not a status command", command.Operation)
 		default:
 			return fmt.Errorf("unsupported status command %s", command.Operation)
 		}
@@ -570,6 +578,10 @@ func insertRuntimeResolutionEffects(
 		case rules.EffectApplyStatus:
 			configured := configuration.Responses[effect.ID]
 			statusName, statusDescription = configured.Name, configured.Description
+		case rules.EffectRemoveStatus:
+			// Removal effects carry their status instance on each target row.
+		default:
+			return fmt.Errorf("unsupported effect operation %q", effect.Operation)
 		}
 		if _, err := tx.Exec(ctx, `
 			insert into interaction_resolution_effects

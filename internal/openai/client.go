@@ -293,11 +293,17 @@ func (c *Client) generate(
 	if err != nil {
 		return Generation{}, fmt.Errorf("send OpenAI Responses request: %w", err)
 	}
-	defer response.Body.Close()
 
-	responseBody, err := readResponseBody(response.Body)
-	if err != nil {
-		return Generation{}, err
+	responseBody, readErr := readResponseBody(response.Body)
+	closeErr := response.Body.Close()
+	if readErr != nil {
+		if closeErr != nil {
+			return Generation{}, errors.Join(readErr, fmt.Errorf("close OpenAI Responses response: %w", closeErr))
+		}
+		return Generation{}, readErr
+	}
+	if closeErr != nil {
+		return Generation{}, fmt.Errorf("close OpenAI Responses response: %w", closeErr)
 	}
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
 		return Generation{}, parseAPIError(response.StatusCode, responseBody)
@@ -325,7 +331,7 @@ func (c *Client) generate(
 		}
 	}
 
-	var output strings.Builder
+	output := make([]string, 0)
 	for _, item := range decoded.Output {
 		if item.Type != "message" {
 			continue
@@ -338,11 +344,12 @@ func (c *Client) generate(
 					Message:    content.Refusal,
 				}
 			case "output_text":
-				output.WriteString(content.Text)
+				output = append(output, content.Text)
 			}
 		}
 	}
-	if output.Len() == 0 {
+	outputText := strings.Join(output, "")
+	if outputText == "" {
 		return Generation{}, &GenerationError{
 			ResponseID: decoded.ID,
 			Status:     decoded.Status,
@@ -353,7 +360,7 @@ func (c *Client) generate(
 	return Generation{
 		ResponseID: decoded.ID,
 		Model:      decoded.Model,
-		Text:       output.String(),
+		Text:       outputText,
 	}, nil
 }
 
@@ -379,11 +386,11 @@ func validateSchema(schema JSONSchema) error {
 
 func validateDestination(destination any) error {
 	if destination == nil {
-		return errors.New("Luna structured output destination is required")
+		return errors.New("luna structured output destination is required")
 	}
 	value := reflect.ValueOf(destination)
 	if value.Kind() != reflect.Pointer || value.IsNil() {
-		return errors.New("Luna structured output destination must be a non-nil pointer")
+		return errors.New("luna structured output destination must be a non-nil pointer")
 	}
 	return nil
 }

@@ -26,8 +26,10 @@ the browser and session boundaries.
 - Create DTOs may accept an optional caller-supplied UUID; otherwise the server
   generates one.
 
-Numeric decoding uses `json.Number` and exact decimals. Send finite JSON
-numbers, not quoted numbers, `NaN`, or infinities.
+Exact decimal fields use JSON strings, such as `"1.25"`. Inputs may use any
+finite decimal spelling accepted by the domain parser and responses canonicalize
+it; JSON number tokens, `NaN`, and infinities are rejected for these fields.
+Revisions, counts, positions, and priorities remain JSON numbers.
 
 ### Authentication and CSRF
 
@@ -48,12 +50,15 @@ sets an opaque HttpOnly session cookie:
 }
 ```
 
-The cookie is `dnd_session` for HTTP development and `__Host-dnd_session` for
-an HTTPS public origin. It is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
+The cookie is `dnd_session` only for loopback HTTP development and
+`__Host-dnd_session` for an HTTPS public origin. Non-loopback configured origins
+must use HTTPS. The cookie is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
 Clients must send the returned token as `X-DND-CSRF` on authenticated methods
 other than GET, HEAD, and OPTIONS. Those requests must also have an `Origin`
 matching `DND_PUBLIC_ORIGIN`, or the request's own origin when that setting is
-empty. The token is session-bound and changes when the password is changed.
+empty. An unset origin permits plain HTTP authentication only when both the
+request host and network peer are loopback. The token is session-bound and
+changes when the password is changed.
 
 The server stores only a SHA-256 digest of the random session token. Passwords
 are stored as Argon2id hashes. Command bodies and headers never select the
@@ -311,10 +316,10 @@ An input mechanic request is a normal stored/defaulted definition:
   "source_kind": "input",
   "name": "Resolve",
   "description": "Composure under pressure.",
-  "minimum": 0,
-  "maximum": 12,
-  "step": 1,
-  "default_number": 8,
+  "minimum": "0",
+  "maximum": "12",
+  "step": "1",
+  "default_number": "8",
   "unit": "grit",
   "mutable_during_play": true,
   "archived": false,
@@ -340,7 +345,7 @@ typed expression:
     "operation": "add-number",
     "operands": [
       { "operation": "mechanic-reference", "mechanic_id": "armor UUID" },
-      { "operation": "literal", "value": { "kind": "number", "value": 10 } }
+      { "operation": "literal", "value": { "kind": "number", "value": "10" } }
     ]
   },
   "archived": false,
@@ -374,7 +379,7 @@ active status modifiers before making the mechanic terminally archived.
 State values are tagged number or Boolean scalars:
 
 ```json
-{ "kind": "number", "value": 6 }
+{ "kind": "number", "value": "6" }
 { "kind": "boolean", "value": true }
 ```
 
@@ -385,7 +390,7 @@ Replacement:
   "expected_revision": 3,
   "expected_rules_revision": 7,
   "values": {
-    "input mechanic UUID": { "kind": "number", "value": 6 }
+    "input mechanic UUID": { "kind": "number", "value": "6" }
   }
 }
 ```
@@ -399,18 +404,18 @@ Response:
   "status_revision": 2,
   "rules_revision": 7,
   "values": {
-    "input mechanic UUID": { "kind": "number", "value": 6 }
+    "input mechanic UUID": { "kind": "number", "value": "6" }
   },
   "effective_values": {
-    "input mechanic UUID": { "kind": "number", "value": 8 },
-    "derived mechanic UUID": { "kind": "number", "value": 18 }
+    "input mechanic UUID": { "kind": "number", "value": "8" },
+    "derived mechanic UUID": { "kind": "number", "value": "18" }
   },
   "evaluations": {
     "input mechanic UUID": {
       "source_kind": "input",
       "presence": "stored",
-      "intrinsic": { "kind": "number", "value": 6 },
-      "effective": { "kind": "number", "value": 8 },
+      "intrinsic": { "kind": "number", "value": "6" },
+      "effective": { "kind": "number", "value": "8" },
       "modifiers": [
         {
           "status_instance_id": "instance UUID",
@@ -418,17 +423,17 @@ Response:
           "modifier_id": "snapshotted modifier UUID",
           "operation": "add-number",
           "priority": 10,
-          "operand": { "kind": "number", "value": 2 },
-          "before": { "kind": "number", "value": 6 },
-          "after": { "kind": "number", "value": 8 }
+          "operand": { "kind": "number", "value": "2" },
+          "before": { "kind": "number", "value": "6" },
+          "after": { "kind": "number", "value": "8" }
         }
       ]
     },
     "derived mechanic UUID": {
       "source_kind": "derived",
       "presence": "derived",
-      "intrinsic": { "kind": "number", "value": 18 },
-      "effective": { "kind": "number", "value": 18 },
+      "intrinsic": { "kind": "number", "value": "18" },
+      "effective": { "kind": "number", "value": "18" },
       "modifiers": []
     }
   },
@@ -447,7 +452,7 @@ Response:
           "id": "snapshotted modifier UUID",
           "mechanic_id": "input mechanic UUID",
           "operation": "add-number",
-          "value": { "kind": "number", "value": 2 },
+          "value": { "kind": "number", "value": "2" },
           "priority": 10,
           "position": 0
         }
@@ -537,7 +542,7 @@ table-visible values only.
 Draft replacement adds `expected_revision`. Audience/responders/entities must
 belong to the same world; responders must be active ready players in the
 audience, and context entities must be active and eligible. Omitting
-`audience_membership_ids` preserves the compatible table-audience default;
+`audience_membership_ids` applies the table-audience default;
 supplying an explicit empty array persists an audience-free draft. Such a
 draft remains editable, but `present: true` or a later presentation command is
 rejected atomically until it has at least one audience member.
@@ -622,7 +627,7 @@ an ordered `effects` array. Live effects are exactly these four tagged shapes:
 
 ```json
 { "id": "optional UUID", "type": "set", "entity_ids": ["UUID"], "mechanic_id": "UUID", "value": { "kind": "boolean", "value": true } }
-{ "id": "optional UUID", "type": "adjust-number", "entity_ids": ["UUID"], "mechanic_id": "UUID", "amount": -2 }
+{ "id": "optional UUID", "type": "adjust-number", "entity_ids": ["UUID"], "mechanic_id": "UUID", "amount": "-2" }
 {
   "id": "optional UUID",
   "type": "apply-status",
@@ -635,7 +640,7 @@ an ordered `effects` array. Live effects are exactly these four tagged shapes:
         "id": "optional modifier UUID",
         "mechanic_id": "Resolve UUID",
         "operation": "add-number",
-        "value": { "kind": "number", "value": -2 },
+        "value": { "kind": "number", "value": "-2" },
         "priority": 10
       }
     ]
@@ -683,7 +688,7 @@ Consequence request:
       "type": "adjust-number",
       "entity_ids": ["Aria UUID"],
       "mechanic_id": "Resolve UUID",
-      "amount": -2
+      "amount": "-2"
     },
     {
       "type": "apply-status",
@@ -695,7 +700,7 @@ Consequence request:
           {
             "mechanic_id": "Resolve UUID",
             "operation": "add-number",
-            "value": { "kind": "number", "value": -2 },
+            "value": { "kind": "number", "value": "-2" },
             "priority": 10
           }
         ]

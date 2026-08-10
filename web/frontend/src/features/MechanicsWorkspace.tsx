@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
+  DecimalText,
   MechanicExpression,
   MechanicKind,
   MechanicMode,
@@ -19,6 +20,7 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 import { humanize } from "../domain/display";
+import { canonicalDecimalText } from "../domain/decimal";
 import { changeMechanicMode } from "../domain/mechanics";
 import { useDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
@@ -366,9 +368,9 @@ function MechanicEditor({
                       source_kind: "input",
                       expression: undefined,
                       default_number: numericKind
-                        ? (item.default_number ?? 0)
+                        ? (item.default_number ?? "0")
                         : undefined,
-                      step: numericKind ? (item.step ?? 1) : undefined,
+                      step: numericKind ? (item.step ?? "1") : undefined,
                     })
                   }
                 />
@@ -441,41 +443,46 @@ function MechanicEditor({
                     error={error?.fields["default_number"]}
                   >
                     <input
-                      type="number"
-                      value={item.default_number ?? 0}
+                      type="text"
+                      inputMode="decimal"
+                      value={item.default_number ?? "0"}
                       onChange={(event) =>
                         patch({
-                          default_number: optionalNumber(
+                          default_number: optionalDecimalText(
                             event.currentTarget.value,
                           ),
                         })
                       }
-                      step="any"
+                      required
                     />
                   </Field>
                   <Field label="Minimum" error={error?.fields["minimum"]}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={item.minimum ?? ""}
                       onChange={(event) =>
                         patch({
-                          minimum: optionalNumber(event.currentTarget.value),
+                          minimum: optionalDecimalText(
+                            event.currentTarget.value,
+                          ),
                         })
                       }
-                      step="any"
                       placeholder="None"
                     />
                   </Field>
                   <Field label="Maximum" error={error?.fields["maximum"]}>
                     <input
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       value={item.maximum ?? ""}
                       onChange={(event) =>
                         patch({
-                          maximum: optionalNumber(event.currentTarget.value),
+                          maximum: optionalDecimalText(
+                            event.currentTarget.value,
+                          ),
                         })
                       }
-                      step="any"
                       placeholder="None"
                     />
                   </Field>
@@ -483,15 +490,14 @@ function MechanicEditor({
                 <div className="numeric-row numeric-row-short">
                   <Field label="Step">
                     <input
-                      type="number"
-                      min="0"
+                      type="text"
+                      inputMode="decimal"
                       value={item.step ?? ""}
                       onChange={(event) =>
                         patch({
-                          step: optionalNumber(event.currentTarget.value),
+                          step: optionalDecimalText(event.currentTarget.value),
                         })
                       }
-                      step="any"
                       placeholder="Any"
                     />
                   </Field>
@@ -682,7 +688,7 @@ function PreviewValue({ mechanic }: { mechanic: WorldMechanic }) {
     return <span className="preview-check">Calculated</span>;
   if (mechanic.mode === "binary")
     return <span className="preview-check">Not trained</span>;
-  const value = mechanic.default_number ?? 0;
+  const value = mechanic.default_number ?? "0";
   if (mechanic.mode === "pool" && mechanic.maximum !== undefined)
     return (
       <span className="preview-number">
@@ -709,8 +715,8 @@ function newMechanic(kind: MechanicKind): WorldMechanic {
     source_kind: "input",
     name: "",
     description: undefined,
-    step: kind === "capacity" ? 1 : undefined,
-    default_number: kind === "capacity" ? 0 : undefined,
+    step: kind === "capacity" ? "1" : undefined,
+    default_number: kind === "capacity" ? "0" : undefined,
     mutable_during_play: true,
     archived: false,
     created_at: "",
@@ -733,16 +739,19 @@ function mechanicPayload(
       item.description === undefined || item.description.trim() === ""
         ? undefined
         : item.description.trim(),
-    minimum: item.minimum,
-    maximum: item.maximum,
-    step: item.step,
-    default_number: item.default_number,
+    minimum: canonicalOrOriginal(item.minimum),
+    maximum: canonicalOrOriginal(item.maximum),
+    step: canonicalOrOriginal(item.step),
+    default_number: canonicalOrOriginal(item.default_number),
     unit:
       item.unit === undefined || item.unit.trim() === ""
         ? undefined
         : item.unit.trim(),
     mutable_during_play: item.mutable_during_play,
-    expression: item.source_kind === "derived" ? item.expression : undefined,
+    expression:
+      item.source_kind === "derived"
+        ? canonicalExpression(item.expression)
+        : undefined,
     archived: item.archived,
     expected_rules_revision: rulesRevision,
   };
@@ -865,15 +874,16 @@ function ExpressionEditor({
         ) : (
           <input
             aria-label={`${label} literal value`}
-            type="number"
-            step="any"
+            type="text"
+            inputMode="decimal"
             value={expression.value.value}
+            required
             onChange={(event) =>
               onChange({
                 operation: "literal",
                 value: {
                   kind: "number",
-                  value: event.currentTarget.valueAsNumber || 0,
+                  value: event.currentTarget.value,
                 },
               })
             }
@@ -1029,7 +1039,7 @@ function defaultExpression(kind: ValueKind): MechanicExpression {
     value:
       kind === "boolean"
         ? { kind: "boolean", value: false }
-        : { kind: "number", value: 0 },
+        : { kind: "number", value: "0" },
   };
 }
 
@@ -1147,10 +1157,42 @@ function expressionReferences(
   return result;
 }
 
-function optionalNumber(value: string): number | undefined {
+function optionalDecimalText(value: string): DecimalText | undefined {
   if (value.trim() === "") return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
+  return value;
+}
+
+function canonicalOrOriginal(
+  value: DecimalText | undefined,
+): DecimalText | undefined {
+  if (value === undefined) return undefined;
+  return canonicalDecimalText(value) ?? value;
+}
+
+function canonicalExpression(
+  expression: MechanicExpression | undefined,
+): MechanicExpression | undefined {
+  if (expression === undefined) return undefined;
+  if (expression.operation === "literal")
+    return expression.value.kind === "number"
+      ? {
+          ...expression,
+          value: {
+            kind: "number",
+            value:
+              canonicalDecimalText(expression.value.value) ??
+              expression.value.value,
+          },
+        }
+      : expression;
+  if ("operands" in expression)
+    return {
+      ...expression,
+      operands: expression.operands.map(
+        (operand) => canonicalExpression(operand) ?? operand,
+      ),
+    } as MechanicExpression;
+  return expression;
 }
 
 function mechanicSummary(item: WorldMechanic): string {

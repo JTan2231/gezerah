@@ -129,14 +129,21 @@ func TestWorldEventStreamChunkOverridesGlobalWriteTimeout(t *testing.T) {
 	server.Start()
 	defer server.Close()
 
-	response, err := server.Client().Get(server.URL)
+	request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, server.URL, nil)
+	if err != nil {
+		t.Fatalf("build stream request: %v", err)
+	}
+	response, err := server.Client().Do(request)
 	if err != nil {
 		t.Fatalf("open stream: %v", err)
 	}
 	body, readErr := io.ReadAll(response.Body)
-	response.Body.Close()
+	closeErr := response.Body.Close()
 	if readErr != nil {
 		t.Fatalf("read stream: %v", readErr)
+	}
+	if closeErr != nil {
+		t.Fatalf("close stream response: %v", closeErr)
 	}
 	if err := <-writeResult; err != nil {
 		t.Fatalf("write delayed stream chunk: %v", err)

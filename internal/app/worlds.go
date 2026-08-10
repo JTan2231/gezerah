@@ -95,7 +95,7 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	if _, err := tx.Exec(r.Context(), `
 		insert into worlds (id, name, description, created_by_user_id)
 		values ($1, $2, $3, $4)`, worldID, strings.TrimSpace(request.Name), request.Description, userID); err != nil {
@@ -227,7 +227,7 @@ func (s *Server) handleArchiveWorld(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var actual int64
 	var status string
 	if err := tx.QueryRow(r.Context(), `select revision, status from worlds where id = $1 for update`, member.WorldID).Scan(&actual, &status); err != nil {
@@ -521,7 +521,7 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var inviteID, worldID, role string
 	err = tx.QueryRow(r.Context(), `
 		select invite.id::text, invite.world_id::text, invite.role

@@ -61,7 +61,7 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	member, err := requirePlayReadyWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
@@ -140,7 +140,7 @@ func (s *Server) handleGetInteraction(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	member, err := requirePlayReadyWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
@@ -193,7 +193,7 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	actor, err := lockInteractionWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
@@ -288,7 +288,7 @@ func (s *Server) handlePutInteraction(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	actor, err := lockInteractionWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
@@ -413,7 +413,7 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	actor, err := lockInteractionWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -446,11 +446,11 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 			handleAppError(w, interactionLifecycleConflict("only a draft interaction can be presented"))
 			return
 		}
-		fields, err := validateStoredInteractionForPresentation(
+		fields, validationErr := validateStoredInteractionForPresentation(
 			r.Context(), tx, worldID, interactionID,
 		)
-		if err != nil {
-			handleAppError(w, err)
+		if validationErr != nil {
+			handleAppError(w, validationErr)
 			return
 		}
 		if len(fields) > 0 {
@@ -552,7 +552,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	member, err := lockInteractionWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
@@ -749,7 +749,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	member, err := lockInteractionWorldMember(r.Context(), tx, r, worldID)
 	if err != nil {
 		handleAppError(w, err)
@@ -859,7 +859,7 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, authenticationRequired())
 		return
 	}
-	member, err := requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
+	_, err := requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -887,7 +887,7 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 		if err != nil || !validSession {
 			return
 		}
-		member, err = requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
+		member, err := requirePlayReadyWorldMember(r.Context(), s.db, r, worldID)
 		if err != nil {
 			return
 		}
@@ -900,17 +900,17 @@ func (s *Server) handleWorldEvents(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		} else {
-			var chunk strings.Builder
+			var chunk []byte
 			batchAfter := after
 			for _, event := range events {
 				payload, err := json.Marshal(event)
 				if err != nil {
 					return
 				}
-				fmt.Fprintf(&chunk, "id: %d\nevent: world-event\ndata: %s\n\n", event.ID, payload)
+				chunk = fmt.Appendf(chunk, "id: %d\nevent: world-event\ndata: %s\n\n", event.ID, payload)
 				batchAfter = event.ID
 			}
-			if err := writeWorldEventStreamChunk(w, controller, chunk.String()); err != nil {
+			if err := writeWorldEventStreamChunk(w, controller, string(chunk)); err != nil {
 				return
 			}
 			after = batchAfter
@@ -1050,7 +1050,7 @@ func (s *Server) loadInteractionResponseSnapshot(
 	if err != nil {
 		return interactionResponse{}, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	item, err := loadInteractionResponse(ctx, tx, worldID, interactionID, includePrivate)
 	if err != nil {
 		return interactionResponse{}, err

@@ -5,7 +5,8 @@ import (
 	"testing"
 )
 
-func inlineStatusEffect(id ID, position int, entityID, instanceID ID, modifier StatusModifier) ConcreteEffect {
+func inlineStatusEffect(id ID, position int, instanceID ID, modifier StatusModifier) ConcreteEffect {
+	const entityID ID = "e1"
 	status := StatusSnapshot{ID: id, WorldID: "world", Modifiers: []StatusModifier{modifier}}
 	return ConcreteEffect{
 		ID: id, Position: position, Operation: EffectApplyStatus, EntityIDs: []ID{entityID},
@@ -23,8 +24,8 @@ func TestRuntimeTransitionAppliesDistinctInlineStatusesAndRemovesExactInstance(t
 		ID: "boost-score", Position: 0, MechanicID: score.ID,
 		Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("2")),
 	}
-	first := inlineStatusEffect("first-effect", 0, "e1", "first-instance", modifier)
-	second := inlineStatusEffect("second-effect", 1, "e1", "second-instance", modifier)
+	first := inlineStatusEffect("first-effect", 0, "first-instance", modifier)
+	second := inlineStatusEffect("second-effect", 1, "second-instance", modifier)
 	remove := ConcreteEffect{
 		ID: "remove-effect", Position: 2, Operation: EffectRemoveStatus, EntityIDs: []ID{"e1"},
 		StatusInstanceIDs: map[ID]ID{"e1": "first-instance"},
@@ -84,7 +85,7 @@ func TestRuntimeTransitionFailureIsAtomicAcrossStatusAndScalarState(t *testing.T
 		ID: "boost-score", Position: 0, MechanicID: score.ID,
 		Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("2")),
 	}
-	apply := inlineStatusEffect("apply-first", 0, "e1", "new-active", modifier)
+	apply := inlineStatusEffect("apply-first", 0, "new-active", modifier)
 	plusOne := MustDecimal("1")
 	plan := TransitionPlan{Effects: []ConcreteEffect{
 		apply,
@@ -118,7 +119,7 @@ func TestRuntimeTransitionRejectsDirectDerivedMutationAndMismatchedInlineInstanc
 		ID: "boost-derived", Position: 0, MechanicID: derived.ID,
 		Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("1")),
 	}
-	apply := inlineStatusEffect("bad-apply", 1, "e1", "bad", modifier)
+	apply := inlineStatusEffect("bad-apply", 1, "bad", modifier)
 	bad := apply.StatusInstances["e1"]
 	bad.EntityID = "e2"
 	apply.StatusInstances["e1"] = bad
@@ -289,7 +290,7 @@ func TestCONV03InvalidStatusModifiersProduceNoRuntimeTransition(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
 			effect := inlineStatusEffect(
-				"invalid-status", 0, "e1", "never-active", testCase.modifier,
+				"invalid-status", 0, "never-active", testCase.modifier,
 			)
 			statuses := map[ID]StatusSnapshot{effect.ID: *effect.Status}
 			errs := ValidateStatusSnapshots(statuses, mechanics)
@@ -325,8 +326,8 @@ func TestRuntimeTransitionAutoAssignsAppliedOrderInAuthoredSequence(t *testing.T
 		ID: "modifier", Position: 0, MechanicID: score.ID,
 		Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("1")),
 	}
-	first := inlineStatusEffect("first-effect", 0, "e1", "first-active", modifier)
-	second := inlineStatusEffect("second-effect", 1, "e1", "second-active", modifier)
+	first := inlineStatusEffect("first-effect", 0, "first-active", modifier)
+	second := inlineStatusEffect("second-effect", 1, "second-active", modifier)
 	statusSnapshots := map[ID]StatusSnapshot{
 		"existing": {ID: "existing", WorldID: "world"},
 		first.ID:   *first.Status,

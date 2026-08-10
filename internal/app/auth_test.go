@@ -77,13 +77,14 @@ func TestPasswordWorkHasAProcessWideConcurrencyLimit(t *testing.T) {
 	}
 
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequest(http.MethodPost, "http://example.test/api/auth/signup", strings.NewReader(`{
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signup", strings.NewReader(`{
 		"username":"capacity-test",
 		"display_name":"Capacity Test",
 		"password":"a sufficiently long password"
 	}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Origin", "http://example.test")
+	request.Header.Set("Origin", "http://127.0.0.1")
+	request.RemoteAddr = "127.0.0.1:12345"
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "1" {
@@ -192,8 +193,9 @@ func TestAuthThrottleKeysDoNotRetainAttackerInput(t *testing.T) {
 
 func TestSameOriginPolicy(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequest(http.MethodPost, "http://example.test/api/auth/signin", nil)
-	request.Host = "example.test"
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", nil)
+	request.Host = "127.0.0.1"
+	request.RemoteAddr = "127.0.0.1:12345"
 	if err := server.requireSameOrigin(request); err == nil {
 		t.Fatal("missing Origin was accepted")
 	}
@@ -201,13 +203,24 @@ func TestSameOriginPolicy(t *testing.T) {
 	if err := server.requireSameOrigin(request); err == nil {
 		t.Fatal("cross-scheme Origin was accepted")
 	}
-	request.Header.Set("Origin", "http://example.test")
+	request.Header.Set("Origin", "http://127.0.0.1")
 	if err := server.requireSameOrigin(request); err != nil {
 		t.Fatalf("same Origin rejected: %v", err)
 	}
+	remoteHTTP := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://app.example/api/auth/signin", nil)
+	remoteHTTP.Header.Set("Origin", "http://app.example")
+	if err := server.requireSameOrigin(remoteHTTP); err == nil {
+		t.Fatal("non-loopback HTTP origin was accepted without an explicit secure origin")
+	}
+	spoofedLoopback := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", nil)
+	spoofedLoopback.Header.Set("Origin", "http://127.0.0.1")
+	spoofedLoopback.RemoteAddr = "203.0.113.10:4321"
+	if err := server.requireSameOrigin(spoofedLoopback); err == nil {
+		t.Fatal("remote HTTP peer with a spoofed loopback Host was accepted")
+	}
 
 	server.publicOrigin = "https://app.example"
-	request.Header.Set("Origin", "http://example.test")
+	request.Header.Set("Origin", "http://127.0.0.1")
 	if err := server.requireSameOrigin(request); err == nil {
 		t.Fatal("request-host Origin bypassed configured public origin")
 	}
@@ -222,7 +235,9 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
 
 	local := httptest.NewRecorder()
-	server.setSessionCookie(local, httptest.NewRequest(http.MethodGet, "http://example.test/api/me", nil), session)
+	localRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
+	localRequest.RemoteAddr = "127.0.0.1:12345"
+	server.setSessionCookie(local, localRequest, session)
 	localCookies := local.Result().Cookies()
 	if len(localCookies) != 1 {
 		t.Fatalf("local cookies = %#v", localCookies)
@@ -233,7 +248,7 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 
 	server.securePublicOrigin = true
 	secure := httptest.NewRecorder()
-	server.setSessionCookie(secure, httptest.NewRequest(http.MethodGet, "http://internal/api/me", nil), session)
+	server.setSessionCookie(secure, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://internal/api/me", nil), session)
 	secureCookies := secure.Result().Cookies()
 	if len(secureCookies) != 1 {
 		t.Fatalf("secure cookies = %#v", secureCookies)
@@ -245,9 +260,9 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 
 func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequest(http.MethodGet, "http://internal/api/me", nil)
-	request.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "local-token"})
-	request.AddCookie(&http.Cookie{Name: secureSessionCookieName, Value: "secure-token"})
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
+	request.RemoteAddr = "127.0.0.1:12345"
+	request.Header.Set("Cookie", localSessionCookieName+"=local-token; "+secureSessionCookieName+"=secure-token")
 	if got := server.sessionCookieToken(request); got != "local-token" {
 		t.Fatalf("HTTP session token = %q, want local cookie", got)
 	}
@@ -256,10 +271,19 @@ func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 		t.Fatalf("HTTPS session token = %q, want __Host- cookie", got)
 	}
 
-	secureWithOnlyLegacy := httptest.NewRequest(http.MethodGet, "http://internal/api/me", nil)
-	secureWithOnlyLegacy.AddCookie(&http.Cookie{Name: localSessionCookieName, Value: "legacy-token"})
+	secureWithOnlyLegacy := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
+	secureWithOnlyLegacy.Header.Set("Cookie", localSessionCookieName+"=legacy-token")
 	if got := server.sessionCookieToken(secureWithOnlyLegacy); got != "" {
 		t.Fatalf("secure mode accepted legacy cookie %q", got)
+	}
+}
+
+func TestUnconfiguredRemoteHTTPFailsClosedToSecureCookies(t *testing.T) {
+	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
+	request.RemoteAddr = "203.0.113.10:4321"
+	if !server.secureCookies(request) {
+		t.Fatal("remote HTTP peer with a spoofed loopback Host selected an insecure cookie")
 	}
 }
 
@@ -268,8 +292,8 @@ func TestAuthenticationRoutesAreDenyByDefaultAndLegacyUsersAreGone(t *testing.T)
 	handler := server.Routes()
 
 	for _, path := range []string{"/api/worlds", "/api/world-invites/not-a-real-token"} {
-		request := httptest.NewRequest(http.MethodGet, path, nil)
-		request.Header.Set("X-DND-User-ID", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
+		request.Header.Set("X-Dnd-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusUnauthorized {
@@ -281,13 +305,13 @@ func TestAuthenticationRoutesAreDenyByDefaultAndLegacyUsersAreGone(t *testing.T)
 	}
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/users", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/users", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("legacy GET /api/users status = %d, want 404", response.Code)
 	}
 
 	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/auth/signup", strings.NewReader(`{}`)))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/signup", strings.NewReader(`{}`)))
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("signup without Origin status = %d, want 403", response.Code)
 	}
@@ -301,35 +325,36 @@ func TestAuthThrottleAllowsNormalFixtureVolumeAndExpires(t *testing.T) {
 	throttle := newAuthThrottle()
 	throttle.now = func() time.Time { return now }
 	for attempt := 0; attempt < 40; attempt++ {
-		if !throttle.take("signup:loopback", 120, 10*time.Minute) {
+		if !throttle.take("signup:loopback", 10*time.Minute) {
 			t.Fatalf("normal fixture signup %d was throttled", attempt+1)
 		}
 	}
-	for attempt := 40; attempt < 120; attempt++ {
-		if !throttle.take("signup:loopback", 120, 10*time.Minute) {
+	for attempt := 40; attempt < authAttemptLimit; attempt++ {
+		if !throttle.take("signup:loopback", 10*time.Minute) {
 			t.Fatalf("allowed signup %d was throttled", attempt+1)
 		}
 	}
-	if throttle.take("signup:loopback", 120, 10*time.Minute) {
+	if throttle.take("signup:loopback", 10*time.Minute) {
 		t.Fatal("signup above the limit was accepted")
 	}
 	now = now.Add(11 * time.Minute)
-	if !throttle.take("signup:loopback", 120, 10*time.Minute) {
+	if !throttle.take("signup:loopback", 10*time.Minute) {
 		t.Fatal("expired throttle window remained blocked")
 	}
 }
 
 func TestSigninAttemptBucketLimitsSuccessfulOrFailedArgonWork(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequest(http.MethodPost, "http://example.test/api/auth/signin", strings.NewReader(`{
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", strings.NewReader(`{
 		"username":"attempt-limit",
 		"password":"a sufficiently long password"
 	}`))
 	request.Header.Set("Content-Type", "application/json")
-	request.Header.Set("Origin", "http://example.test")
+	request.Header.Set("Origin", "http://127.0.0.1")
+	request.RemoteAddr = "127.0.0.1:12345"
 	key := authThrottleKey("signin:attempt:ip", clientAddress(request))
-	for attempt := 0; attempt < signinAttemptIPLimit; attempt++ {
-		if !server.authThrottle.take(key, signinAttemptIPLimit, signinAttemptWindow) {
+	for attempt := 0; attempt < authAttemptLimit; attempt++ {
+		if !server.authThrottle.take(key, signinAttemptWindow) {
 			t.Fatalf("signin attempt %d was throttled before the documented limit", attempt+1)
 		}
 	}

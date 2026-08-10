@@ -132,9 +132,6 @@ func validateStatusModifier(modifier StatusModifier, mechanic MechanicDefinition
 	if !validStateValueShape(modifier.Value) {
 		return ValidationErrors{validation("invalid_typed_value", "value", "modifier requires exactly one literal number or boolean value")}
 	}
-	if modifier.Value.Kind == ValueNumber && (modifier.Value.Number == nil || !modifier.Value.Number.Valid()) {
-		errs = append(errs, validation("invalid_number", "value.number", "modifier number must be a finite exact decimal"))
-	}
 	switch modifier.Operation {
 	case ModifierSet:
 		if modifier.Value.Kind != mechanic.ValueKind {
@@ -148,20 +145,6 @@ func validateStatusModifier(modifier StatusModifier, mechanic MechanicDefinition
 		errs = append(errs, validation("unsupported", "operation", "unsupported modifier operation"))
 	}
 	return errs
-}
-
-func cloneStatusSnapshots(snapshots map[ID]StatusSnapshot) map[ID]StatusSnapshot {
-	result := make(map[ID]StatusSnapshot, len(snapshots))
-	for id, snapshot := range snapshots {
-		cloned := snapshot
-		cloned.Modifiers = make([]StatusModifier, len(snapshot.Modifiers))
-		for index, modifier := range snapshot.Modifiers {
-			cloned.Modifiers[index] = modifier
-			cloned.Modifiers[index].Value = CloneStateValue(modifier.Value)
-		}
-		result[id] = cloned
-	}
-	return result
 }
 
 func cloneActiveStatuses(active []ActiveStatus) []ActiveStatus {

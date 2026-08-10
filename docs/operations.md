@@ -35,16 +35,16 @@ binary whose SPA routes return 503.
 
 ## Runtime configuration
 
-| Variable            | Default/precedence             | Operational use                                                                               |
-| ------------------- | ------------------------------ | --------------------------------------------------------------------------------------------- |
-| `DND_ADDR`          | Preferred; `:8080` default     | Bind address.                                                                                 |
-| `PORT`              | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                        |
-| `DND_DATABASE_URL`  | Preferred                      | PostgreSQL URL.                                                                               |
-| `DATABASE_URL`      | Fallback                       | Hosting-provider database URL.                                                                |
-| `DND_LOG_LEVEL`     | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                   |
-| `DND_PUBLIC_ORIGIN` | Request origin                 | Exact browser origin accepted for unsafe/auth requests; HTTPS also selects the secure cookie. |
-| `OPENAI_API_KEY`    | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                            |
-| `DND_OPENAI_BASE_URL` | Official OpenAI API          | Optional Responses API base URL override.                                                     |
+| Variable              | Default/precedence             | Operational use                                                                                          |
+| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `DND_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                            |
+| `PORT`                | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                                   |
+| `DND_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                          |
+| `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                           |
+| `DND_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                              |
+| `DND_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS.    |
+| `OPENAI_API_KEY`      | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                       |
+| `DND_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                                |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
@@ -52,11 +52,14 @@ development; a deployed process with no database variable would try that local
 address rather than fail configuration parsing. Unknown log-level values also
 silently select `info`.
 
-The default bind address `:8080` listens on all interfaces. Use
-`DND_ADDR=127.0.0.1:8080` for strictly local direct access. `./run.sh` starts the
-Vite-facing backend with `DND_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the
-variable is already set. For any HTTPS deployment, set `DND_PUBLIC_ORIGIN` to
-the exact external origin (scheme and authority, with no
+The binary's default bind address `:8080` listens on all interfaces, but an
+unset public origin permits HTTP authentication only when both the request host
+and network peer are loopback. `./run.sh` instead binds its Vite-facing backend
+to `127.0.0.1:8080` and supplies
+`DND_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
+Configuration rejects a non-loopback HTTP public origin and also rejects a
+wildcard listener paired with a loopback HTTP origin. For every deployment,
+set `DND_PUBLIC_ORIGIN` to the exact external HTTPS origin (scheme and authority, with no
 path/query/fragment); this is required when a reverse proxy changes the request
 host and ensures the `Secure` `__Host-dnd_session` cookie is issued.
 

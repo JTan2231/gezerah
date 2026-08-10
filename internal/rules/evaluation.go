@@ -297,9 +297,7 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 		}
 		return *operands[index].Boolean, nil
 	}
-
-	switch operation {
-	case ExpressionAddNumber, ExpressionMultiplyNumber, ExpressionMinNumber, ExpressionMaxNumber:
+	foldNumbers := func(combine func(Decimal, Decimal) (Decimal, error)) (StateValue, error) {
 		if len(operands) < 2 {
 			return StateValue{}, fmt.Errorf("%s requires at least two operands", operation)
 		}
@@ -308,29 +306,57 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 			return StateValue{}, err
 		}
 		for index := 1; index < len(operands); index++ {
-			next, nextErr := numberAt(index)
-			if nextErr != nil {
-				return StateValue{}, nextErr
+			next, err := numberAt(index)
+			if err != nil {
+				return StateValue{}, err
 			}
-			switch operation {
-			case ExpressionAddNumber:
-				result, err = result.Add(next)
-			case ExpressionMultiplyNumber:
-				result, err = result.Multiply(next)
-			case ExpressionMinNumber:
-				if next.Cmp(result) < 0 {
-					result = next
-				}
-			case ExpressionMaxNumber:
-				if next.Cmp(result) > 0 {
-					result = next
-				}
-			}
+			result, err = combine(result, next)
 			if err != nil {
 				return StateValue{}, err
 			}
 		}
 		return NewNumberValue(result), nil
+	}
+	compareNumbers := func(matches func(int) bool) (StateValue, error) {
+		if len(operands) != 2 {
+			return StateValue{}, fmt.Errorf("%s requires exactly two operands", operation)
+		}
+		left, err := numberAt(0)
+		if err != nil {
+			return StateValue{}, err
+		}
+		right, err := numberAt(1)
+		if err != nil {
+			return StateValue{}, err
+		}
+		return NewBooleanValue(matches(left.Cmp(right))), nil
+	}
+
+	switch operation {
+	case ExpressionLiteral, ExpressionMechanicReference:
+		return StateValue{}, fmt.Errorf("%s must be evaluated before operand dispatch", operation)
+
+	case ExpressionAddNumber:
+		return foldNumbers(func(left, right Decimal) (Decimal, error) { return left.Add(right) })
+
+	case ExpressionMultiplyNumber:
+		return foldNumbers(func(left, right Decimal) (Decimal, error) { return left.Multiply(right) })
+
+	case ExpressionMinNumber:
+		return foldNumbers(func(left, right Decimal) (Decimal, error) {
+			if right.Cmp(left) < 0 {
+				return right, nil
+			}
+			return left, nil
+		})
+
+	case ExpressionMaxNumber:
+		return foldNumbers(func(left, right Decimal) (Decimal, error) {
+			if right.Cmp(left) > 0 {
+				return right, nil
+			}
+			return left, nil
+		})
 
 	case ExpressionSubtractNumber:
 		if len(operands) != 2 {
@@ -398,31 +424,17 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 		}
 		return NewBooleanValue(StateValuesEqual(operands[0], operands[1])), nil
 
-	case ExpressionLessNumber, ExpressionLessOrEqualNumber, ExpressionGreaterNumber, ExpressionGreaterOrEqualNumber:
-		if len(operands) != 2 {
-			return StateValue{}, fmt.Errorf("%s requires exactly two operands", operation)
-		}
-		left, err := numberAt(0)
-		if err != nil {
-			return StateValue{}, err
-		}
-		right, err := numberAt(1)
-		if err != nil {
-			return StateValue{}, err
-		}
-		comparison := left.Cmp(right)
-		result := false
-		switch operation {
-		case ExpressionLessNumber:
-			result = comparison < 0
-		case ExpressionLessOrEqualNumber:
-			result = comparison <= 0
-		case ExpressionGreaterNumber:
-			result = comparison > 0
-		case ExpressionGreaterOrEqualNumber:
-			result = comparison >= 0
-		}
-		return NewBooleanValue(result), nil
+	case ExpressionLessNumber:
+		return compareNumbers(func(comparison int) bool { return comparison < 0 })
+
+	case ExpressionLessOrEqualNumber:
+		return compareNumbers(func(comparison int) bool { return comparison <= 0 })
+
+	case ExpressionGreaterNumber:
+		return compareNumbers(func(comparison int) bool { return comparison > 0 })
+
+	case ExpressionGreaterOrEqualNumber:
+		return compareNumbers(func(comparison int) bool { return comparison >= 0 })
 
 	case ExpressionIf:
 		if len(operands) != 3 || operands[0].Kind != ValueBoolean || operands[0].Boolean == nil || operands[1].Kind != operands[2].Kind {

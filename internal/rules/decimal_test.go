@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"encoding/json"
 	"testing"
 )
 
@@ -48,27 +47,27 @@ func TestParseDecimalCanonicalAndExactArithmetic(t *testing.T) {
 	}
 }
 
-func TestParseDecimalRejectsInvalidAndJSONIsLossless(t *testing.T) {
+func TestParseDecimalRejectsInvalid(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"", " 1", "1 ", ".", "1.2.3", "NaN", "Inf", "1e", "1e10001"} {
 		if _, err := ParseDecimal(input); err == nil {
 			t.Errorf("ParseDecimal(%q) unexpectedly succeeded", input)
 		}
 	}
-	value := MustDecimal("9007199254740993.0000000000000001")
-	data, err := json.Marshal(value)
-	if err != nil {
-		t.Fatal(err)
+}
+
+func TestDecimalZeroValueIsNumericZero(t *testing.T) {
+	t.Parallel()
+
+	parsed := MustDecimal("-0.000")
+	if parsed != (Decimal{}) {
+		t.Fatalf("parsed zero = %#v, want the Decimal zero value", parsed)
 	}
-	if string(data) != `"9007199254740993.0000000000000001"` {
-		t.Fatalf("JSON = %s", data)
+	if got := (Decimal{}).String(); got != "0" {
+		t.Fatalf("zero String() = %q, want 0", got)
 	}
-	var roundTrip Decimal
-	if err := json.Unmarshal(data, &roundTrip); err != nil {
-		t.Fatal(err)
-	}
-	if !roundTrip.Equal(value) {
-		t.Fatalf("round trip = %s, want %s", roundTrip, value)
+	if !parsed.IsZero() || !parsed.Equal(Decimal{}) || parsed.Cmp(Decimal{}) != 0 {
+		t.Fatal("parsed zero and the Decimal zero value must be equal numeric zero")
 	}
 }
 

@@ -2,6 +2,7 @@ package rules
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -358,15 +359,7 @@ func stateValuePointer(value StateValue) *StateValue {
 }
 
 func equalIDs(left, right []ID) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for index := range left {
-		if left[index] != right[index] {
-			return false
-		}
-	}
-	return true
+	return slices.Equal(left, right)
 }
 
 func hasValidationAt(errs ValidationErrors, code, path string) bool {

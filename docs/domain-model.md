@@ -137,10 +137,14 @@ from:
 | Capability   | `binary` | Boolean | Boolean default                    | Boolean expression        |
 | Capability   | `rating` | Number  | Default, optional bounds/step/unit | Expression, optional unit |
 
-Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic. HTTP
-numbers are decoded with `json.Number`; the backend does not intentionally
-round-trip them through `float64`. The TypeScript client uses JavaScript
-numbers, so extremely large or precise values still require care in a browser.
+Numbers use exact PostgreSQL `numeric` and immutable exact Go decimal
+arithmetic. Exact decimal values cross HTTP as strings, responses are
+canonicalized, and the values remain strings in the TypeScript client, so
+ordinary JSON parsing cannot round large or highly precise values. JSON number
+tokens are reserved for inherently integral transport values such as revisions,
+counts, positions, and priorities.
+The Go `Decimal` zero value is numeric zero; optionality is represented only by
+`*Decimal` fields, and external text enters the domain through `ParseDecimal`.
 
 Every mechanic applies to every entity in the world. There is no applicability
 taxonomy, built-in class, or manufactured catch-all resource. Derived
@@ -311,8 +315,8 @@ Presentation requires at least one audience member. Eligible responders are an
 active, ready player subset of the audience.
 
 Each eligible player may have at most one submitted action. The player may
-withdraw it while the interaction is open. During adjudication the facilitator
-may select one submitted action or explicitly select none.
+withdraw it while the interaction is open. During adjudication the compiled
+Consequence may identify one submitted action or explicitly select none.
 
 Non-facilitators may read only open/resolved interactions in whose audience they
 participate. Responses omit private notes and facilitator-only receipt fields.

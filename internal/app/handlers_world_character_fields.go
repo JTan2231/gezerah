@@ -65,7 +65,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 
 	member, err := requireWorldEditor(r.Context(), tx, r, worldID)
 	if err != nil {

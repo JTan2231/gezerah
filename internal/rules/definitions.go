@@ -73,16 +73,10 @@ func validateBounds(minimum, maximum, step *Decimal, path string) ValidationErro
 		}
 		return path + "." + name
 	}
-	if minimum != nil && !minimum.Valid() {
-		errs = append(errs, validation("invalid_number", field("minimum"), "minimum must be a finite exact decimal"))
-	}
-	if maximum != nil && !maximum.Valid() {
-		errs = append(errs, validation("invalid_number", field("maximum"), "maximum must be a finite exact decimal"))
-	}
-	if minimum != nil && maximum != nil && minimum.Valid() && maximum.Valid() && minimum.Cmp(*maximum) > 0 {
+	if minimum != nil && maximum != nil && minimum.Cmp(*maximum) > 0 {
 		errs = append(errs, validation("invalid_bounds", field("maximum"), "maximum must be greater than or equal to minimum"))
 	}
-	if step != nil && (!step.Valid() || !step.IsPositive()) {
+	if step != nil && !step.IsPositive() {
 		errs = append(errs, validation("invalid_step", field("step"), "step must be a positive finite exact decimal"))
 	}
 	return errs

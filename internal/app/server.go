@@ -58,12 +58,6 @@ func NewServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	return newServerWithStaticFS(db, staticFS)
 }
 
-func newServerWithStaticFSAndAutoDM(db *pgxpool.Pool, staticFS fs.FS, provider autoDMProvider) *Server {
-	server := newServerWithStaticFS(db, staticFS)
-	server.autoDM = provider
-	return server
-}
-
 func newServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	server := &Server{
 		db:             db,

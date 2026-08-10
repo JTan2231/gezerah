@@ -339,7 +339,7 @@ restricted history references. It is not a supported operational action.
 After the existing migration chain is released:
 
 1. add the next zero-padded file after the current tip
-   (`004_password_auth.sql`, so currently `005_*.sql`);
+   (`005_auto_dm.sql`, so currently `006_*.sql`);
 2. never edit a migration already recorded in a durable database;
 3. keep each file valid inside one transaction;
 4. preserve user-authored, world-scoped vocabulary—do not seed canonical

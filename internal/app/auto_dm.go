@@ -1,10 +1,12 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -83,10 +85,10 @@ type autoDMMechanicContext struct {
 	ValueKind         string                   `json:"value_kind"`
 	Name              string                   `json:"name"`
 	Description       *string                  `json:"description,omitempty"`
-	Minimum           *json.Number             `json:"minimum,omitempty"`
-	Maximum           *json.Number             `json:"maximum,omitempty"`
-	Step              *json.Number             `json:"step,omitempty"`
-	DefaultNumber     *json.Number             `json:"default_number,omitempty"`
+	Minimum           *decimalText             `json:"minimum,omitempty"`
+	Maximum           *decimalText             `json:"maximum,omitempty"`
+	Step              *decimalText             `json:"step,omitempty"`
+	DefaultNumber     *decimalText             `json:"default_number,omitempty"`
 	Unit              *string                  `json:"unit,omitempty"`
 	MutableDuringPlay bool                     `json:"mutable_during_play"`
 	Expression        *autoDMExpressionContext `json:"expression,omitempty"`
@@ -286,6 +288,10 @@ func (s *Server) handleGenerateAutoDMProblem(w http.ResponseWriter, r *http.Requ
 		handleAppError(w, autoDMUnavailable())
 		return
 	}
+	if err := requireEmptyAutoDMRequest(r); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
+		return
+	}
 	snapshot, err := s.loadAutoDMContextSnapshot(r.Context(), worldID, "", nil, nil)
 	if err != nil {
 		handleAppError(w, err)
@@ -330,7 +336,7 @@ func (s *Server) handleGenerateAutoDMConsequence(w http.ResponseWriter, r *http.
 		return
 	}
 	var request autoDMConsequenceRequest
-	if err := decodeJSON(r, &request); err != nil {
+	if err := decodeAutoDMRequest(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
@@ -388,7 +394,7 @@ func (s *Server) handleCompileConsequence(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var request compileConsequenceRequest
-	if err := decodeJSON(r, &request); err != nil {
+	if err := decodeAutoDMRequest(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
@@ -485,6 +491,30 @@ func validateAutoDMRevisions(expectedRevision, expectedRulesRevision *int64) map
 	return fields
 }
 
+func requireEmptyAutoDMRequest(r *http.Request) error {
+	var body json.RawMessage
+	err := decodeJSON(r, &body)
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return errors.New("request body must be empty")
+}
+
+func decodeAutoDMRequest(r *http.Request, target any) error {
+	var body json.RawMessage
+	if err := decodeJSON(r, &body); err != nil {
+		return err
+	}
+	trimmed := bytes.TrimSpace(body)
+	if len(trimmed) == 0 || trimmed[0] != '{' {
+		return errors.New("request body must be a JSON object")
+	}
+	return decodeStrictBytes(trimmed, target)
+}
+
 func autoDMUnavailable() error {
 	return &statusError{
 		Status: http.StatusServiceUnavailable, Code: "auto_dm_unavailable",
@@ -521,7 +551,7 @@ func (s *Server) loadAutoDMContextSnapshot(
 	if err != nil {
 		return autoDMContext{}, err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer rollbackTx(ctx, tx)
 	result, err := loadAutoDMContext(
 		ctx, tx, worldID, interactionID, expectedInteractionRevision, expectedRulesRevision,
 	)
@@ -975,7 +1005,7 @@ func autoDMStateValue(kind, number *string, boolean *bool) (stateValueDTO, error
 	}
 }
 
-func autoDMDecimal(value *string) (*json.Number, error) {
+func autoDMDecimal(value *string) (*decimalText, error) {
 	if value == nil {
 		return nil, errors.New("number is required")
 	}
@@ -983,8 +1013,8 @@ func autoDMDecimal(value *string) (*json.Number, error) {
 	if err != nil {
 		return nil, errors.New("must be a finite exact decimal")
 	}
-	number := json.Number(parsed.String())
-	return &number, nil
+	text := decimalTextFromDomain(parsed)
+	return &text, nil
 }
 
 func hasAutoDMStatusFields(effect autoDMStructuredEffect) bool {

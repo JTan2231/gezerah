@@ -339,7 +339,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
               {
                 mechanic_id: foreignMechanic.mechanic.id,
                 operation: "add-number",
-                value: numberValue(1),
+                value: numberValue("1"),
                 priority: 0,
               },
             ],
@@ -710,7 +710,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
                       type: "set",
                       entity_ids: [primaryEntity.id],
                       mechanic_id: foreignMechanic.mechanic.id,
-                      value: numberValue(4),
+                      value: numberValue("4"),
                     },
                   ],
                 ),
@@ -738,7 +738,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
                       type: "set",
                       entity_ids: [foreignEntity.id],
                       mechanic_id: primaryMechanic.mechanic.id,
-                      value: numberValue(4),
+                      value: numberValue("4"),
                     },
                   ],
                 ),
@@ -970,10 +970,10 @@ function inputMechanicRequest(name: string, expectedRulesRevision: number) {
     mode: "score",
     source_kind: "input",
     name,
-    minimum: 0,
-    maximum: 10,
-    step: 1,
-    default_number: 5,
+    minimum: "0",
+    maximum: "10",
+    step: "1",
+    default_number: "5",
     mutable_during_play: true,
     archived: false,
     expected_rules_revision: expectedRulesRevision,
@@ -1037,7 +1037,7 @@ function resolutionRequest(
   };
 }
 
-function numberValue(value: number) {
+function numberValue(value: string) {
   return { kind: "number", value } as const;
 }
 

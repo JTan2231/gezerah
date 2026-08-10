@@ -72,9 +72,11 @@ reads of `users.password_hash` and `auth_sessions.token_hash` for signup-created
 fixtures. Those reads verify the inspected rows; they are not an exhaustive
 inspection of PostgreSQL or platform diagnostic logging.
 
-Local HTTP uses `dnd_session`. HTTPS uses `__Host-dnd_session`, which is
+Loopback-only local HTTP uses `dnd_session`. HTTPS uses `__Host-dnd_session`, which is
 `Secure`, host-only by construction, and scoped to `/`. Both variants are
-`HttpOnly` and `SameSite=Lax`; logout clears both names. Configure the exact
+`HttpOnly` and `SameSite=Lax`; logout clears both names. Configured non-loopback
+HTTP origins are rejected, and an unset origin fails closed to secure cookies
+unless both the request host and network peer are loopback. Configure the exact
 external HTTPS origin in `DND_PUBLIC_ORIGIN` when deploying behind a proxy.
 
 `POST /api/auth/logout` revokes the current session. `POST
@@ -87,7 +89,8 @@ checked in PostgreSQL rather than trusted from the cookie.
 Every unsafe authenticated request requires both:
 
 - one `Origin` header exactly matching `DND_PUBLIC_ORIGIN`, or the request's own
-  scheme and host when the setting is empty; and
+  scheme and host when the setting is empty (with plain HTTP requiring both a
+  loopback request host and loopback network peer); and
 - `X-DND-CSRF` equal to a token derived with a domain-separated SHA-256 digest
   from that session's random token.
 

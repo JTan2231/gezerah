@@ -12,4 +12,6 @@ services when debugging is complete.
 Do not add built-in entity classes, privileged configured keys, canonical JSON
 storage, or seed vocabulary. Configuration is user-authored and ruleset-scoped.
 
+We do not have active users. Please do not consider them in your design considerations.
+
 Please refer `docs/` before making any code changes or considerations.

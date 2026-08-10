@@ -27,7 +27,7 @@ development, testing, operations, and security.
 
 ## Stack
 
-- Go 1.25, standard-library HTTP routing, and embedded static assets.
+- Go 1.25.12, standard-library HTTP routing, and embedded static assets.
 - PostgreSQL through `pgx/v5`, with forward-only embedded SQL migrations.
 - React 19 and TypeScript, built by Vite and managed with Bun 1.1.42.
 - One production Go binary serving both `/api/*` and the frontend.
@@ -93,7 +93,7 @@ concurrent starts serialize schema upgrades.
 | `DND_DATABASE_URL`  | `postgres://localhost:5432/dnd?sslmode=disable` | PostgreSQL connection URL.                                                      |
 | `DATABASE_URL`      | unset                                           | Hosting fallback when `DND_DATABASE_URL` is unset.                              |
 | `DND_LOG_LEVEL`     | `info`                                          | `debug`, `info`, `warn`, or `error`.                                            |
-| `DND_PUBLIC_ORIGIN` | request origin                                  | Exact browser origin allowed for authenticated writes; set this behind a proxy. |
+| `DND_PUBLIC_ORIGIN` | request origin                                  | Exact browser origin for authenticated writes; HTTP is loopback-only.            |
 
 World roles, lifecycle states, visibility, and mutation permissions are
 enforced by the server. Username/password authentication creates an opaque,

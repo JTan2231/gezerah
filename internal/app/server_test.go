@@ -29,7 +29,7 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path, nil)
 			response := httptest.NewRecorder()
 			server.Routes().ServeHTTP(response, request)
 			if response.Code != test.wantStatus {
@@ -46,7 +46,7 @@ func TestSecurityHeadersAndHTTPSOnlyHSTS(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("index")},
 	})
-	request := httptest.NewRequest(http.MethodGet, "/", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	for name, want := range map[string]string{
@@ -66,7 +66,7 @@ func TestSecurityHeadersAndHTTPSOnlyHSTS(t *testing.T) {
 
 	server.securePublicOrigin = true
 	response = httptest.NewRecorder()
-	server.Routes().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	server.Routes().ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
 	if hsts := response.Header().Get("Strict-Transport-Security"); !strings.Contains(hsts, "max-age=") {
 		t.Fatalf("HTTPS Strict-Transport-Security = %q", hsts)
 	}
@@ -86,7 +86,7 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 
 	wake := server.currentWorldEventWake()
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/test/wake", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/test/wake", nil))
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)
 	}
@@ -101,7 +101,7 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 		t.Fatal("event wake generation did not rotate")
 	}
 	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/api/test/reject", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/test/reject", nil))
 	select {
 	case <-nextWake:
 		t.Fatal("rejected API mutation woke event handlers")
@@ -117,12 +117,12 @@ func TestAuthenticationMutationsDoNotBroadcastWorldEventWakeups(t *testing.T) {
 		"/api/auth/logout-all",
 		"/api/me/password",
 	} {
-		request := httptest.NewRequest(http.MethodPost, path, nil)
+		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)
 		if successfulAPIMutation(request, http.StatusNoContent) {
 			t.Errorf("successfulAPIMutation(%q) woke world streams for account-only work", path)
 		}
 	}
-	request := httptest.NewRequest(http.MethodPost, "/api/worlds", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/worlds", nil)
 	if !successfulAPIMutation(request, http.StatusCreated) {
 		t.Fatal("world mutation no longer wakes world event streams")
 	}
@@ -137,8 +137,8 @@ func TestExportedAPIRouteRegistrationIsAuthenticatedByDefault(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusNoContent)
 	})
-	request := httptest.NewRequest(http.MethodGet, "/api/test/protected", nil)
-	request.Header.Set("X-DND-User-ID", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/test/protected", nil)
+	request.Header.Set("X-Dnd-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {
@@ -157,7 +157,7 @@ func TestRecoveryReturnsJSONForAPIPanic(t *testing.T) {
 		panic("test panic")
 	})
 
-	request := httptest.NewRequest(http.MethodGet, "/api/panic-test", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/panic-test", nil)
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != http.StatusInternalServerError {
@@ -170,8 +170,8 @@ func TestRecoveryReturnsJSONForAPIPanic(t *testing.T) {
 
 func TestRequestLogPathRedactsInviteBearersAndOmitsQueries(t *testing.T) {
 	const (
-		bearerSecret = "opaque-bearer-must-not-be-logged"
-		querySecret  = "query-secret-must-not-be-logged"
+		pathMarker  = "opaque-bearer-must-not-be-logged"
+		queryMarker = "query-secret-must-not-be-logged"
 	)
 	tests := []struct {
 		name   string
@@ -180,68 +180,68 @@ func TestRequestLogPathRedactsInviteBearersAndOmitsQueries(t *testing.T) {
 	}{
 		{
 			name:   "play invitation",
-			target: "/play/invite/" + bearerSecret + "?token=" + querySecret,
+			target: "/play/invite/" + pathMarker + "?token=" + queryMarker,
 			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "build invitation",
-			target: "/build/invite/" + bearerSecret + "?invite=" + querySecret,
+			target: "/build/invite/" + pathMarker + "?invite=" + queryMarker,
 			want:   "/build/invite/[REDACTED]",
 		},
 		{
 			name:   "API invitation preview",
-			target: "/api/world-invites/" + bearerSecret + "?secret=" + querySecret,
+			target: "/api/world-invites/" + pathMarker + "?secret=" + queryMarker,
 			want:   "/api/world-invites/[REDACTED]",
 		},
 		{
 			name:   "API invitation redemption",
-			target: "/api/world-invites/" + bearerSecret + "/redeem?key=" + querySecret,
+			target: "/api/world-invites/" + pathMarker + "/redeem?key=" + queryMarker,
 			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "encoded slash cannot expose a bearer suffix",
-			target: "/api/world-invites/opaque%2F" + bearerSecret + "/redeem",
+			target: "/api/world-invites/opaque%2F" + pathMarker + "/redeem",
 			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "malformed frontend suffix is entirely redacted",
-			target: "/play/invite/" + bearerSecret + "/unexpected/suffix",
+			target: "/play/invite/" + pathMarker + "/unexpected/suffix",
 			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "canonical redirect cannot expose a play bearer",
-			target: "/other/../play/./invite/" + bearerSecret,
+			target: "/other/../play/./invite/" + pathMarker,
 			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "canonical redirect cannot expose an API bearer",
-			target: "/api/./world-invites/" + bearerSecret + "/redeem",
+			target: "/api/./world-invites/" + pathMarker + "/redeem",
 			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "normal API path",
-			target: "/api/worlds/world-id/invites?token=" + querySecret,
+			target: "/api/worlds/world-id/invites?token=" + queryMarker,
 			want:   "/api/worlds/world-id/invites",
 		},
 		{
 			name:   "normal frontend path",
-			target: "/play/world-id?invite=" + querySecret,
+			target: "/play/world-id?invite=" + queryMarker,
 			want:   "/play/world-id",
 		},
 		{
 			name:   "invitation prefix without bearer",
-			target: "/api/world-invites?token=" + querySecret,
+			target: "/api/world-invites?token=" + queryMarker,
 			want:   "/api/world-invites",
 		},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			request := httptest.NewRequest(http.MethodGet, test.target, nil)
+			request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.target, nil)
 			if got := requestLogPath(request); got != test.want {
 				t.Fatalf("requestLogPath() = %q, want %q", got, test.want)
 			}
-			if got := requestLogPath(request); strings.Contains(got, querySecret) || strings.Contains(got, "?") {
+			if got := requestLogPath(request); strings.Contains(got, queryMarker) || strings.Contains(got, "?") {
 				t.Fatalf("requestLogPath() included query data: %q", got)
 			}
 		})
@@ -254,8 +254,8 @@ func TestRequestLogPathRedactsInviteBearersAndOmitsQueries(t *testing.T) {
 
 func TestRequestAndRecoveryLogsRedactEveryInviteBearerPath(t *testing.T) {
 	const (
-		bearerSecret = "opaque-bearer-must-not-be-logged"
-		querySecret  = "query-secret-must-not-be-logged"
+		pathMarker  = "opaque-bearer-must-not-be-logged"
+		queryMarker = "query-secret-must-not-be-logged"
 	)
 	tests := []struct {
 		name   string
@@ -264,22 +264,22 @@ func TestRequestAndRecoveryLogsRedactEveryInviteBearerPath(t *testing.T) {
 	}{
 		{
 			name:   "play invitation",
-			target: "/play/invite/" + bearerSecret + "?token=" + querySecret,
+			target: "/play/invite/" + pathMarker + "?token=" + queryMarker,
 			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "build invitation",
-			target: "/build/invite/" + bearerSecret + "?token=" + querySecret,
+			target: "/build/invite/" + pathMarker + "?token=" + queryMarker,
 			want:   "/build/invite/[REDACTED]",
 		},
 		{
 			name:   "API invitation preview",
-			target: "/api/world-invites/" + bearerSecret + "?token=" + querySecret,
+			target: "/api/world-invites/" + pathMarker + "?token=" + queryMarker,
 			want:   "/api/world-invites/[REDACTED]",
 		},
 		{
 			name:   "API invitation redemption",
-			target: "/api/world-invites/" + bearerSecret + "/redeem?token=" + querySecret,
+			target: "/api/world-invites/" + pathMarker + "/redeem?token=" + queryMarker,
 			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 	}
@@ -293,16 +293,16 @@ func TestRequestAndRecoveryLogsRedactEveryInviteBearerPath(t *testing.T) {
 
 			server := &Server{}
 			handler := server.withRequestLog(server.withRecovery(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-				panic("test panic " + bearerSecret)
+				panic("test panic " + pathMarker)
 			})))
 			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, test.target, nil))
+			handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.target, nil))
 			if response.Code != http.StatusInternalServerError {
 				t.Fatalf("status = %d, want %d", response.Code, http.StatusInternalServerError)
 			}
 
 			logOutput := logs.String()
-			if strings.Contains(logOutput, bearerSecret) || strings.Contains(logOutput, querySecret) {
+			if strings.Contains(logOutput, pathMarker) || strings.Contains(logOutput, queryMarker) {
 				t.Fatalf("logs exposed invitation secret: %s", logOutput)
 			}
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -21,10 +22,19 @@ type errorEnvelope struct {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	payload, err := json.Marshal(value)
+	if err != nil {
+		slog.Error("encode JSON response", "error", err)
+		status = http.StatusInternalServerError
+		payload = []byte(`{"error":{"code":"internal_error","message":"internal server error"}}`)
+	}
+	payload = append(payload, '\n')
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(value)
+	if _, err := w.Write(payload); err != nil {
+		slog.Error("write JSON response", "error", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, code, message string, fields map[string]string) {

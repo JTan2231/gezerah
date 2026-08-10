@@ -37,10 +37,11 @@ installs and generated frontend assets out of the active checkout. Ignored
 files are not copied, so tests must not depend on local `.dnd`, `node_modules`,
 `web/static` output, or test artifacts.
 
-Bun, Go, and Node compile caches live under the ignored `.dnd/cache/ci`
-directory by default, or under `DND_CI_CACHE_DIR` when configured. The detached
-worktree still owns dependency installations, build output, and runtime state;
-only content-addressed/download caches survive between invocations. An explicit
+Bun downloads, Go build and module data, and Node compile caches live under the
+ignored `.dnd/cache/ci` directory by default, or under `DND_CI_CACHE_DIR` when
+configured. The detached worktree still owns dependency installations, build
+output, installed tool binaries, and runtime state; only
+content-addressed/download caches survive between invocations. An explicit
 `PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user browser
 cache is reused on macOS/Linux when one can be resolved.
 
@@ -70,10 +71,28 @@ build does not repeat the TypeScript check performed in the validation group.
 1. `gofmt` cleanliness check over Go files;
 2. `go mod tidy -diff`;
 3. `go vet` over application packages;
-4. `go test` over application packages;
-5. trimmed `cmd/dnd` binary build;
-6. shell syntax checking for `ci.sh`, `deploy.sh`, `run.sh`, and `reset-db.sh`;
-7. optional application-startup/migration smoke test.
+4. golangci-lint 2.12.2 with the repository's curated strict configuration;
+5. `go test` over application packages;
+6. govulncheck 1.6.0 over production and test reachability;
+7. shell syntax checking for `ci.sh`, `deploy.sh`, `run.sh`, and `reset-db.sh`;
+8. trimmed `cmd/dnd` binary build;
+9. optional application-startup/migration smoke test.
+
+The validator downloads the official golangci-lint 2.12.2 archive into the
+shared CI tool cache, verifies its published SHA-256 checksum, and invokes that
+exact binary directly. The accepted macOS/Linux amd64/arm64 checksums are pinned
+in `ci.sh`. Its checked-in configuration uses an explicit analyzer
+allowlist, analyzes tests, enables strict ignored-error checks, and requires
+every `//nolint` directive to be specific, used, and explained. The validator
+passes only first-party package directories, as individually quoted arguments,
+so Go source found under frontend dependencies is not analyzed and checkout
+paths containing spaces remain valid.
+
+The validator installs the pinned govulncheck command into the disposable run
+directory without modifying `go.mod` or `go.sum`, then invokes it directly with
+`-test`. Reachable production or test vulnerabilities fail the target. The tool
+uses the shared Go caches, but its vulnerability database query is live and
+therefore requires network access.
 
 Application tests cover the five-minute session-touch boundary, immediate
 continuation after a full SSE event batch, cancellation while waiting, rolling
@@ -149,7 +168,9 @@ replace deploy provenance.
 Files under `internal/rules/*_test.go` construct storage-neutral domain maps and
 snapshots. Coverage includes:
 
-- exact decimal canonicalization, arithmetic, and JSON;
+- zero-valid immutable decimal canonicalization and arithmetic;
+- exact decimal-string HTTP transport, canonical responses, and rejection of
+  JSON number tokens for decimal fields;
 - input/derived numeric/Boolean definition and value validation;
 - authored-default input state and normalization;
 - recursive expression type inference with precise field paths;
@@ -194,13 +215,14 @@ root-creation triggers, normalized storage (no JSON/JSONB aggregate),
 resolution-owned inline status modifiers, status source-provenance columns,
 expanded receipt tables, immutable receipt triggers, the `003` constrained
 audience-invalidation event flag, and the `004` empty-user cutover to normalized
-usernames/Argon2id/session-token digests. They assert that status authoring rows
-are owned by the resolution rather than world configuration. For authentication,
-the static migration contract requires the password-hash/token-digest columns
-and shape constraints and rejects raw-token/session-token/CSRF columns in
-`auth_sessions`; it does not inspect stored runtime values. The authentication
-contract's targeted SQL reads perform the value comparison for signup-created
-rows against the presented password and cookie token.
+usernames/Argon2id/session-token digests, plus the `005` constrained human/Terra
+world DM source. They assert that status authoring rows are owned by the
+resolution rather than world configuration. For authentication, the static
+migration contract requires the password-hash/token-digest columns and shape
+constraints and rejects raw-token/session-token/CSRF columns in `auth_sessions`;
+it does not inspect stored runtime values. The authentication contract's
+targeted SQL reads perform the value comparison for signup-created rows against
+the presented password and cookie token.
 
 The current PostgreSQL-backed HTTP integration coverage comes primarily from
 Playwright rather than a dedicated Go handler/database suite.
@@ -211,8 +233,8 @@ Bun tests under `web/frontend/src/**/*.test.ts` cover pure helpers and the API
 adapter:
 
 - human-readable API vocabulary and past/future relative timestamps;
-- consequence draft-to-API mapping for scalar values, inline status
-  applications, status-only targets, and exact active-instance removal;
+- exact-decimal text validation, canonicalization, and sign handling without
+  JavaScript number coercion;
 - derived mechanic mode/result-kind changes, including expression preservation
   and reset behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic

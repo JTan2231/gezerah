@@ -3,12 +3,14 @@ package migrations
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"io/fs"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -17,7 +19,7 @@ const migrationAdvisoryLockID int64 = 3016533762926936644
 //go:embed *.sql
 var files embed.FS
 
-func Run(ctx context.Context, db *pgxpool.Pool) error {
+func Run(ctx context.Context, db *pgxpool.Pool) (runErr error) {
 	conn, err := db.Acquire(ctx)
 	if err != nil {
 		return fmt.Errorf("acquire migration connection: %w", err)
@@ -28,9 +30,14 @@ func Run(ctx context.Context, db *pgxpool.Pool) error {
 		return fmt.Errorf("acquire migration advisory lock: %w", err)
 	}
 	defer func() {
-		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		unlockCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		_, _ = conn.Exec(unlockCtx, `select pg_advisory_unlock($1)`, migrationAdvisoryLockID)
+		var unlocked bool
+		if err := conn.QueryRow(unlockCtx, `select pg_advisory_unlock($1)`, migrationAdvisoryLockID).Scan(&unlocked); err != nil {
+			runErr = errors.Join(runErr, fmt.Errorf("release migration advisory lock: %w", err))
+		} else if !unlocked {
+			runErr = errors.Join(runErr, errors.New("release migration advisory lock: lock was not held by the migration connection"))
+		}
 	}()
 
 	entries, err := fs.ReadDir(files, ".")
@@ -122,29 +129,39 @@ func Run(ctx context.Context, db *pgxpool.Pool) error {
 		if err != nil {
 			return fmt.Errorf("read migration %s: %w", name, err)
 		}
-
-		tx, err := conn.Begin(ctx)
-		if err != nil {
-			return fmt.Errorf("begin migration %s: %w", name, err)
-		}
-
-		if _, err := tx.Exec(ctx, `set local search_path = public, pg_catalog`); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("set migration search path for %s: %w", name, err)
-		}
-		if _, err := tx.Exec(ctx, string(sql)); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("apply migration %s: %w", name, err)
-		}
-		if _, err := tx.Exec(ctx, `insert into public.schema_migrations (version) values ($1)`, name); err != nil {
-			_ = tx.Rollback(ctx)
-			return fmt.Errorf("record migration %s: %w", name, err)
-		}
-		if err := tx.Commit(ctx); err != nil {
-			return fmt.Errorf("commit migration %s: %w", name, err)
+		if err := applyMigration(ctx, conn, name, sql); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+func applyMigration(ctx context.Context, conn *pgxpool.Conn, name string, sql []byte) (applyErr error) {
+	tx, err := conn.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin migration %s: %w", name, err)
+	}
+	defer func() {
+		rollbackCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+		defer cancel()
+		if err := tx.Rollback(rollbackCtx); err != nil && !errors.Is(err, pgx.ErrTxClosed) {
+			applyErr = errors.Join(applyErr, fmt.Errorf("rollback migration %s: %w", name, err))
+		}
+	}()
+
+	if _, err := tx.Exec(ctx, `set local search_path = public, pg_catalog`); err != nil {
+		return fmt.Errorf("set migration search path for %s: %w", name, err)
+	}
+	if _, err := tx.Exec(ctx, string(sql)); err != nil {
+		return fmt.Errorf("apply migration %s: %w", name, err)
+	}
+	if _, err := tx.Exec(ctx, `insert into public.schema_migrations (version) values ($1)`, name); err != nil {
+		return fmt.Errorf("record migration %s: %w", name, err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit migration %s: %w", name, err)
+	}
 	return nil
 }
 

@@ -193,7 +193,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           ownerPage.getByRole("heading", { name: labels.entity }),
         ).toBeVisible();
         await ownerPage
-          .getByRole("spinbutton", { name: labels.numeric, exact: true })
+          .getByRole("textbox", { name: labels.numeric, exact: true })
           .fill("9");
         await ownerPage.getByLabel(labels.boolean).check();
         await ownerPage.getByRole("button", { name: "Save sheet" }).click();
@@ -209,7 +209,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .getByRole("button", { name: /Roster & sheets/ })
           .click();
         await expect(
-          ownerPage.getByRole("spinbutton", {
+          ownerPage.getByRole("textbox", {
             name: labels.numeric,
             exact: true,
           }),

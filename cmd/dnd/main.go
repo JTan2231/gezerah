@@ -55,7 +55,8 @@ func run(config app.Config) error {
 	}
 
 	httpServer := newHTTPServer(ctx, config, server.Routes())
-	listener, err := net.Listen("tcp", config.Addr)
+	var listenConfig net.ListenConfig
+	listener, err := listenConfig.Listen(ctx, "tcp", config.Addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", config.Addr, err)
 	}

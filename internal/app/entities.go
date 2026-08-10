@@ -2,7 +2,6 @@ package app
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -106,7 +105,7 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	if err := validateControllerMembershipIDs(r.Context(), tx, member.WorldID, request.ControllerWorldMembershipIDs); err != nil {
 		handleAppError(w, err)
 		return
@@ -204,7 +203,7 @@ func (s *Server) handlePutWorldEntity(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var archived bool
 	if err := tx.QueryRow(r.Context(), `
 		select archived from entities where world_id = $1 and id = $2 for update`,
@@ -326,7 +325,7 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	if _, err := lockRulesRevision(r.Context(), tx, member.WorldID, request.ExpectedRulesRevision); err != nil {
 		handleAppError(w, err)
 		return
@@ -443,7 +442,7 @@ func (s *Server) handleReplaceWorldEntityControllers(w http.ResponseWriter, r *h
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var actual int64
 	if err := tx.QueryRow(r.Context(), `select table_revision from worlds where id = $1 for update`, member.WorldID).Scan(&actual); err != nil {
 		handleAppError(w, err)
@@ -603,7 +602,7 @@ func stateValueDTOToDomain(value stateValueDTO) (rules.StateValue, error) {
 		if value.Number == nil {
 			return rules.StateValue{}, errors.New("number value is required")
 		}
-		parsed, err := rules.ParseDecimal(value.Number.String())
+		parsed, err := value.Number.Decimal()
 		if err != nil {
 			return rules.StateValue{}, errors.New("number must be a finite exact decimal")
 		}
@@ -620,7 +619,7 @@ func stateValueDTOToDomain(value stateValueDTO) (rules.StateValue, error) {
 
 func stateValueDomainToDTO(value rules.StateValue) stateValueDTO {
 	if value.Kind == rules.ValueNumber && value.Number != nil {
-		number := jsonNumber(value.Number.String())
+		number := decimalTextFromDomain(*value.Number)
 		return stateValueDTO{Kind: "number", Number: &number}
 	}
 	if value.Kind == rules.ValueBoolean && value.Boolean != nil {
@@ -642,7 +641,5 @@ func insertStateValue(ctx context.Context, tx pgx.Tx, worldID, entityID string, 
 		values ($1, $2, $3, $4, $5, $6)`, entityID, worldID, mechanicID, value.Kind, number, boolean)
 	return err
 }
-
-func jsonNumber(value string) json.Number { return json.Number(value) }
 
 func stringInt(value int64) string { return strconv.FormatInt(value, 10) }

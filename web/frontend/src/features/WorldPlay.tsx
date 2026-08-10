@@ -1506,11 +1506,7 @@ function HistoryCard({
 
 function displayValue(value?: StateValue): string {
   if (value === undefined) return "unknown";
-  return value.kind === "number"
-    ? String(value.value)
-    : value.value
-      ? "yes"
-      : "no";
+  return value.kind === "number" ? value.value : value.value ? "yes" : "no";
 }
 
 function entitySubtitle(

@@ -76,6 +76,8 @@ func TestParsePublicOrigin(t *testing.T) {
 		"example.test",
 		"https://éxample.test",
 		"https://[fe80::1%25en0]",
+		"http://example.test",
+		"http://[2001:db8::1]",
 	} {
 		if _, _, err := parsePublicOrigin(value); err == nil {
 			t.Errorf("parsePublicOrigin(%q) accepted a non-origin value", value)
@@ -88,9 +90,10 @@ func TestParsePublicOrigin(t *testing.T) {
 	}{
 		{value: "https://example.test/", wantOrigin: "https://example.test", wantSecure: true},
 		{value: "HTTPS://EXAMPLE.TEST:443", wantOrigin: "https://example.test", wantSecure: true},
-		{value: "http://EXAMPLE.TEST:80", wantOrigin: "http://example.test"},
+		{value: "http://LOCALHOST:80", wantOrigin: "http://localhost"},
+		{value: "http://127.0.0.1:8080", wantOrigin: "http://127.0.0.1:8080"},
 		{value: "https://EXAMPLE.TEST:8443", wantOrigin: "https://example.test:8443", wantSecure: true},
-		{value: "http://[2001:0DB8:0:0::1]:80", wantOrigin: "http://[2001:db8::1]"},
+		{value: "http://[0:0:0:0:0:0:0:1]:80", wantOrigin: "http://[::1]"},
 	} {
 		origin, secure, err := parsePublicOrigin(test.value)
 		if err != nil || origin != test.wantOrigin || secure != test.wantSecure {
@@ -106,5 +109,14 @@ func TestValidateConfigRejectsInvalidPublicOrigin(t *testing.T) {
 	}
 	if err := ValidateConfig(Config{PublicOrigin: "https://example.test"}); err != nil {
 		t.Fatalf("ValidateConfig rejected a valid origin: %v", err)
+	}
+	if err := ValidateConfig(Config{Addr: "127.0.0.1:8080", PublicOrigin: "http://example.test"}); err == nil {
+		t.Fatal("ValidateConfig accepted non-loopback plain HTTP")
+	}
+	if err := ValidateConfig(Config{Addr: ":8080", PublicOrigin: "http://127.0.0.1:5173"}); err == nil {
+		t.Fatal("ValidateConfig accepted a wildcard listener for a loopback HTTP origin")
+	}
+	if err := ValidateConfig(Config{Addr: "127.0.0.1:8080", PublicOrigin: "http://127.0.0.1:5173"}); err != nil {
+		t.Fatalf("ValidateConfig rejected loopback-only HTTP development: %v", err)
 	}
 }

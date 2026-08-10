@@ -26,7 +26,7 @@ import (
 const (
 	localSessionCookieName  = "dnd_session"
 	secureSessionCookieName = "__Host-dnd_session"
-	csrfHeaderName          = "X-DND-CSRF"
+	csrfHeaderName          = "X-Dnd-Csrf"
 
 	passwordMinimumRunes = 8
 
@@ -42,7 +42,7 @@ const (
 	maxAuthThrottleEntries  = 8192
 	passwordWorkConcurrency = 4
 	maxActiveUserSessions   = 20
-	signinAttemptIPLimit    = 120
+	authAttemptLimit        = 120
 	signinAttemptWindow     = 5 * time.Minute
 )
 
@@ -106,12 +106,12 @@ func newAuthThrottle() *authThrottle {
 	return &authThrottle{entries: make(map[string]authThrottleEntry), now: time.Now}
 }
 
-func (t *authThrottle) take(key string, limit int, window time.Duration) bool {
+func (t *authThrottle) take(key string, window time.Duration) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.now()
 	entry := t.activeEntry(key, now, window)
-	if entry.count >= limit {
+	if entry.count >= authAttemptLimit {
 		entry.lastSeen = now
 		t.entries[key] = entry
 		return false
@@ -123,7 +123,7 @@ func (t *authThrottle) take(key string, limit int, window time.Duration) bool {
 	return true
 }
 
-func (t *authThrottle) blocked(key string, limit int, window time.Duration) bool {
+func (t *authThrottle) blocked(key string, limit int) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	now := t.now()
@@ -224,7 +224,7 @@ func verifyPassword(password, encoded string) (bool, error) {
 	defer releasePasswordWork()
 	actual := argon2.IDKey(
 		[]byte(password), salt, parameters.iterations, parameters.memory,
-		parameters.parallelism, uint32(len(expected)),
+		parameters.parallelism, parameters.keyLength,
 	)
 	return subtle.ConstantTimeCompare(actual, expected) == 1, nil
 }
@@ -265,21 +265,37 @@ func decodePasswordHash(encoded string) (passwordParameters, []byte, []byte, err
 		return parameters, nil, nil, errors.New("password hash parallelism parameter is invalid")
 	}
 	salt, err := base64.RawStdEncoding.Strict().DecodeString(parts[4])
-	if err != nil || len(salt) < 16 || len(salt) > 64 {
+	if err != nil {
+		return parameters, nil, nil, errors.New("password hash salt is invalid")
+	}
+	if len(salt) < 16 || len(salt) > 64 {
 		return parameters, nil, nil, errors.New("password hash salt is invalid")
 	}
 	hash, err := base64.RawStdEncoding.Strict().DecodeString(parts[5])
-	if err != nil || len(hash) < 16 || len(hash) > 64 {
+	if err != nil {
+		return parameters, nil, nil, errors.New("password hash output is invalid")
+	}
+	if len(hash) < 16 || len(hash) > 64 {
 		return parameters, nil, nil, errors.New("password hash output is invalid")
 	}
 	parameters = passwordParameters{
 		memory:      uint32(memory),
 		iterations:  uint32(iterations),
 		parallelism: uint8(parallelism),
-		saltLength:  uint32(len(salt)),
-		keyLength:   uint32(len(hash)),
+		saltLength:  passwordHashComponentLength(salt),
+		keyLength:   passwordHashComponentLength(hash),
 	}
 	return parameters, salt, hash, nil
+}
+
+func passwordHashComponentLength(value []byte) uint32 {
+	// Decoded password-hash components are bounded to 64 bytes above, so this
+	// count cannot overflow and avoids narrowing the platform-sized len value.
+	var length uint32
+	for range value {
+		length++
+	}
+	return length
 }
 
 func parsePasswordParameter(value, prefix string) (uint64, error) {
@@ -556,6 +572,8 @@ func (s *Server) requireSameOrigin(r *http.Request) error {
 		scheme := "http"
 		if r.TLS != nil {
 			scheme = "https"
+		} else if !loopbackAuthority(r.Host) || !loopbackRemoteAddress(r.RemoteAddr) {
+			return &statusError{Status: http.StatusForbidden, Code: "origin_forbidden", Message: "plain HTTP authentication is available only on a loopback origin"}
 		}
 		if r.Host == "" {
 			return &statusError{Status: http.StatusForbidden, Code: "origin_forbidden", Message: "request origin is not allowed"}
@@ -593,7 +611,13 @@ func (s *Server) sessionCookieToken(r *http.Request) string {
 }
 
 func (s *Server) secureCookies(r *http.Request) bool {
-	return r.TLS != nil || s.securePublicOrigin
+	if r.TLS != nil || s.securePublicOrigin {
+		return true
+	}
+	// Configured HTTP origins are validated as loopback-only. With no explicit
+	// origin, fail closed unless both the request authority and network peer are
+	// loopback.
+	return s.publicOrigin == "" && (!loopbackAuthority(r.Host) || !loopbackRemoteAddress(r.RemoteAddr))
 }
 
 func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, session issuedSession) {
@@ -606,19 +630,23 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, sessio
 	if maxAge < 1 {
 		maxAge = 1
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: name, Value: session.Token, Path: "/", Expires: session.AbsoluteExpiresAt,
-		MaxAge: maxAge, HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
-	})
+	http.SetCookie(w, newSessionCookie(name, session.Token, session.AbsoluteExpiresAt, maxAge, secure))
 }
 
 func (s *Server) clearSessionCookies(w http.ResponseWriter, r *http.Request) {
 	expires := time.Unix(1, 0).UTC()
 	for _, cookie := range []*http.Cookie{
-		{Name: localSessionCookieName, Path: "/", Expires: expires, MaxAge: -1, HttpOnly: true, Secure: s.secureCookies(r), SameSite: http.SameSiteLaxMode},
-		{Name: secureSessionCookieName, Path: "/", Expires: expires, MaxAge: -1, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode},
+		newSessionCookie(localSessionCookieName, "", expires, -1, s.secureCookies(r)),
+		newSessionCookie(secureSessionCookieName, "", expires, -1, true),
 	} {
 		http.SetCookie(w, cookie)
+	}
+}
+
+func newSessionCookie(name, value string, expires time.Time, maxAge int, secure bool) *http.Cookie {
+	return &http.Cookie{ //nolint:gosec // Secure is false only for the supported local HTTP development origin; HTTPS always passes true.
+		Name: name, Value: value, Path: "/", Expires: expires, MaxAge: maxAge,
+		HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode,
 	}
 }
 
@@ -648,7 +676,7 @@ func handlePasswordWorkError(w http.ResponseWriter, err error) bool {
 }
 
 func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
-	if !s.authThrottle.take(authThrottleKey("signup:ip", clientAddress(r)), 120, 10*time.Minute) {
+	if !s.authThrottle.take(authThrottleKey("signup:ip", clientAddress(r)), 10*time.Minute) {
 		writeRateLimited(w)
 		return
 	}
@@ -678,7 +706,7 @@ func (s *Server) handleSignup(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var user userResponse
 	err = tx.QueryRow(r.Context(), `
 		insert into users (username, normalized_username, display_name, password_hash)
@@ -721,13 +749,13 @@ func (s *Server) handleSignin(w http.ResponseWriter, r *http.Request) {
 	}
 	normalizedUsername := strings.ToLower(strings.TrimSpace(request.Username))
 	clientIP := clientAddress(r)
-	if !s.authThrottle.take(authThrottleKey("signin:attempt:ip", clientIP), signinAttemptIPLimit, signinAttemptWindow) {
+	if !s.authThrottle.take(authThrottleKey("signin:attempt:ip", clientIP), signinAttemptWindow) {
 		writeRateLimited(w)
 		return
 	}
 	ipKey := authThrottleKey("signin:ip", clientIP)
 	accountKey := authThrottleKey("signin:account", normalizedUsername)
-	if s.authThrottle.blocked(ipKey, 100, 5*time.Minute) || s.authThrottle.blocked(accountKey, 10, 5*time.Minute) {
+	if s.authThrottle.blocked(ipKey, 100) || s.authThrottle.blocked(accountKey, 10) {
 		writeRateLimited(w)
 		return
 	}
@@ -783,7 +811,7 @@ func (s *Server) handleSignin(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var lockedPasswordHash, lockedStatus string
 	err = tx.QueryRow(r.Context(), `
 		select id::text, username, display_name, password_hash, status, created_at, updated_at
@@ -875,7 +903,7 @@ func (s *Server) handleLogoutAll(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var lockedUserID string
 	if err := tx.QueryRow(r.Context(), `select id::text from users where id = $1 for update`, actor.User.ID).Scan(&lockedUserID); err != nil {
 		handleAppError(w, err)
@@ -917,7 +945,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	throttleKey := "password:user:" + actor.User.ID
-	if s.authThrottle.blocked(throttleKey, 10, 5*time.Minute) {
+	if s.authThrottle.blocked(throttleKey, 10) {
 		writeRateLimited(w)
 		return
 	}
@@ -934,7 +962,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	defer tx.Rollback(r.Context()) //nolint:errcheck
+	defer rollbackTx(r.Context(), tx)
 	var currentHash, status string
 	err = tx.QueryRow(r.Context(), `select password_hash, status from users where id = $1 for update`, actor.User.ID).Scan(&currentHash, &status)
 	if err != nil {

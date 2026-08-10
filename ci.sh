@@ -29,6 +29,11 @@ esac
 
 cd "$(dirname "$0")"
 
+go_required_version="go1.25.12"
+golangci_lint_required_version="2.12.2"
+govulncheck_version="v1.6.0"
+golangci_lint_binary=""
+
 section() {
 	printf '\n==> %s\n' "$1"
 }
@@ -38,6 +43,126 @@ require_command() {
 		printf '%s is required but was not found in PATH\n' "$1" >&2
 		return 1
 	fi
+}
+
+require_go() {
+	require_command go || return 1
+	go_actual_version="$(go env GOVERSION)" || return 1
+	if [ "$go_actual_version" != "$go_required_version" ]; then
+		printf '%s is required, but the active Go toolchain is %s\n' \
+			"$go_required_version" "$go_actual_version" >&2
+		return 1
+	fi
+}
+
+require_golangci_lint() {
+	golangci_lint_actual_version="$("$golangci_lint_binary" version --short)" || return 1
+	if [ "$golangci_lint_actual_version" != "$golangci_lint_required_version" ]; then
+		printf 'golangci-lint %s is required, but the cached binary reports %s\n' \
+			"$golangci_lint_required_version" "$golangci_lint_actual_version" >&2
+		return 1
+	fi
+}
+
+download_ci_file() {
+	download_url="$1"
+	download_destination="$2"
+	download_temporary="$download_destination.tmp.$$"
+	if ! curl --fail --location --silent --show-error --retry 3 \
+		--output "$download_temporary" "$download_url"; then
+		rm -f "$download_temporary"
+		return 1
+	fi
+	mv "$download_temporary" "$download_destination"
+}
+
+file_sha256() {
+	if command -v sha256sum >/dev/null 2>&1; then
+		sha256sum "$1" | awk '{print $1}'
+		return
+	fi
+	if command -v shasum >/dev/null 2>&1; then
+		shasum -a 256 "$1" | awk '{print $1}'
+		return
+	fi
+	printf 'sha256sum or shasum is required to verify downloaded CI tools\n' >&2
+	return 1
+}
+
+provision_golangci_lint() {
+	require_command curl || return 1
+	require_command tar || return 1
+
+	tool_os="$(go env GOOS)" || return 1
+	tool_arch="$(go env GOARCH)" || return 1
+	case "$tool_os/$tool_arch" in
+	darwin/amd64)
+		expected_sha256="f6f06d94b6241521c53d15450c5209b028270bf966f842afb11c030c79f5bc16"
+		;;
+	darwin/arm64)
+		expected_sha256="a9c54498731b3128f79e090be6110f3e5fffccc617b08142ed244d4126c73f29"
+		;;
+	linux/amd64)
+		expected_sha256="8df580d2670fed8fa984aac0507099af8df275e665215f5c7a2ae3943893a553"
+		;;
+	linux/arm64)
+		expected_sha256="44cd40a8c76c86755375adfeea52cfd3533cb43d7bd647771e0ae065e166df3a"
+		;;
+	*)
+		printf 'golangci-lint provisioning does not support GOOS/GOARCH=%s/%s\n' \
+			"$tool_os" "$tool_arch" >&2
+		return 1
+		;;
+	esac
+
+	tool_name="golangci-lint-$golangci_lint_required_version-$tool_os-$tool_arch"
+	tool_dir="$ci_cache_dir/tools/golangci-lint/$golangci_lint_required_version"
+	golangci_lint_binary="$tool_dir/$tool_name/golangci-lint"
+	mkdir -p "$tool_dir" || return 1
+	archive_name="$tool_name.tar.gz"
+	archive_path="$tool_dir/$archive_name"
+	release_url="https://github.com/golangci/golangci-lint/releases/download/v$golangci_lint_required_version"
+
+	if [ ! -f "$archive_path" ]; then
+		download_ci_file "$release_url/$archive_name" "$archive_path" || return 1
+	fi
+	actual_sha256="$(file_sha256 "$archive_path")" || return 1
+	if [ "$actual_sha256" != "$expected_sha256" ]; then
+		printf 'Checksum verification failed for %s\n' "$archive_name" >&2
+		return 1
+	fi
+
+	extract_dir="$(mktemp -d "$tmp_dir/golangci-lint-install.XXXXXX")" || return 1
+	if ! tar -xzf "$archive_path" -C "$extract_dir"; then
+		rm -rf "$extract_dir"
+		return 1
+	fi
+	if [ ! -x "$extract_dir/$tool_name/golangci-lint" ]; then
+		printf 'Downloaded golangci-lint archive has an unexpected layout\n' >&2
+		rm -rf "$extract_dir"
+		return 1
+	fi
+	mkdir -p "$tool_dir/$tool_name" || {
+		rm -rf "$extract_dir"
+		return 1
+	}
+	staged_binary="$golangci_lint_binary.tmp.$$"
+	cp "$extract_dir/$tool_name/golangci-lint" "$staged_binary" || {
+		rm -rf "$extract_dir"
+		return 1
+	}
+	chmod +x "$staged_binary" || {
+		rm -f "$staged_binary"
+		rm -rf "$extract_dir"
+		return 1
+	}
+	mv "$staged_binary" "$golangci_lint_binary" || {
+		rm -f "$staged_binary"
+		rm -rf "$extract_dir"
+		return 1
+	}
+	rm -rf "$extract_dir"
+	require_golangci_lint
 }
 
 report_timing() {
@@ -225,13 +350,15 @@ configure_ci_caches() {
 		"$ci_cache_dir/go-tmp" \
 		"$ci_cache_dir/node-compile" \
 		"$ci_cache_dir/tmp" \
-		"$ci_cache_dir/xdg" || return 1
+		"$ci_cache_dir/xdg" \
+		"$tmp_dir/golangci-lint" || return 1
 
 	export TMPDIR="$ci_cache_dir/tmp"
 	export XDG_CACHE_HOME="$ci_cache_dir/xdg"
 	export GOCACHE="$ci_cache_dir/go-build"
 	export GOMODCACHE="$ci_cache_dir/go-mod"
 	export GOTMPDIR="$ci_cache_dir/go-tmp"
+	export GOLANGCI_LINT_CACHE="$tmp_dir/golangci-lint"
 	export NODE_COMPILE_CACHE="$ci_cache_dir/node-compile"
 	export PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path"
 	export DND_BUN_CACHE_DIR="$ci_cache_dir/bun"
@@ -393,8 +520,13 @@ run_backend() {
 }
 
 run_backend_checks() {
-	require_command go || return 1
+	require_go || return 1
 	go_packages="$(go list ./... | grep -v '/web/frontend/node_modules/')" || return 1
+	set --
+	for go_package in $go_packages; do
+		go_package_dir="$(go list -f '{{.Dir}}' "$go_package")" || return 1
+		set -- "$@" "$go_package_dir"
+	done
 
 	section "Backend: checking Go formatting"
 	find . \
@@ -416,6 +548,11 @@ run_backend_checks() {
 	section "Backend: running go vet"
 	go vet $go_packages || return 1
 
+	section "Backend: running golangci-lint $golangci_lint_required_version"
+	provision_golangci_lint || return 1
+	"$golangci_lint_binary" config verify || return 1
+	"$golangci_lint_binary" run "$@" || return 1
+
 	section "Backend: running tests"
 	mkdir -p test/artifacts || return 1
 	go_test_results="test/artifacts/go-test-results.jsonl"
@@ -424,6 +561,13 @@ run_backend_checks() {
 		return 1
 	fi
 
+	section "Backend: checking reachable vulnerabilities with govulncheck $govulncheck_version"
+	go_tools_dir="$tmp_dir/go-tools"
+	mkdir -p "$go_tools_dir" || return 1
+	GOBIN="$go_tools_dir" \
+		go install "golang.org/x/vuln/cmd/govulncheck@$govulncheck_version" || return 1
+	"$go_tools_dir/govulncheck" -test $go_packages || return 1
+
 	section "Developer tooling: checking shell syntax"
 	sh -n ci.sh deploy.sh run.sh reset-db.sh || return 1
 
@@ -431,7 +575,7 @@ run_backend_checks() {
 }
 
 run_backend_build() {
-	require_command go || return 1
+	require_go || return 1
 
 	section "Backend: building dnd binary"
 	go build -trimpath -o "$tmp_dir/dnd" ./cmd/dnd || return 1
@@ -609,7 +753,7 @@ run_e2e() {
 	fi
 
 	require_command bun || return 1
-	require_command go || return 1
+	require_go || return 1
 
 	section "E2E: running browser scenarios"
 	run_timed_stage "E2E browser scenarios" run_browser_scenarios || return 1

@@ -7,7 +7,31 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"dnd/internal/rules"
 )
+
+// decimalText is the HTTP representation of an exact decimal. Keeping it as
+// JSON text prevents JavaScript and generic JSON decoders from rounding it.
+type decimalText string
+
+func (value decimalText) Decimal() (rules.Decimal, error) {
+	return rules.ParseDecimal(string(value))
+}
+
+func (value decimalText) String() string { return string(value) }
+
+func decimalTextFromDomain(value rules.Decimal) decimalText {
+	return decimalText(value.String())
+}
+
+func decimalTextPointer(value *rules.Decimal) *decimalText {
+	if value == nil {
+		return nil
+	}
+	text := decimalTextFromDomain(*value)
+	return &text
+}
 
 type userResponse struct {
 	ID          string    `json:"id"`
@@ -141,10 +165,10 @@ type worldMechanicResponse struct {
 	SourceKind        string         `json:"source_kind"`
 	Name              string         `json:"name"`
 	Description       *string        `json:"description,omitempty"`
-	Minimum           *json.Number   `json:"minimum,omitempty"`
-	Maximum           *json.Number   `json:"maximum,omitempty"`
-	Step              *json.Number   `json:"step,omitempty"`
-	DefaultNumber     *json.Number   `json:"default_number,omitempty"`
+	Minimum           *decimalText   `json:"minimum,omitempty"`
+	Maximum           *decimalText   `json:"maximum,omitempty"`
+	Step              *decimalText   `json:"step,omitempty"`
+	DefaultNumber     *decimalText   `json:"default_number,omitempty"`
 	Unit              *string        `json:"unit,omitempty"`
 	MutableDuringPlay bool           `json:"mutable_during_play"`
 	Expression        *expressionDTO `json:"expression,omitempty"`
@@ -160,10 +184,10 @@ type saveWorldMechanicRequest struct {
 	SourceKind            string         `json:"source_kind"`
 	Name                  string         `json:"name"`
 	Description           *string        `json:"description,omitempty"`
-	Minimum               *json.Number   `json:"minimum,omitempty"`
-	Maximum               *json.Number   `json:"maximum,omitempty"`
-	Step                  *json.Number   `json:"step,omitempty"`
-	DefaultNumber         *json.Number   `json:"default_number,omitempty"`
+	Minimum               *decimalText   `json:"minimum,omitempty"`
+	Maximum               *decimalText   `json:"maximum,omitempty"`
+	Step                  *decimalText   `json:"step,omitempty"`
+	DefaultNumber         *decimalText   `json:"default_number,omitempty"`
 	Unit                  *string        `json:"unit,omitempty"`
 	MutableDuringPlay     bool           `json:"mutable_during_play"`
 	Expression            *expressionDTO `json:"expression,omitempty"`
@@ -187,7 +211,7 @@ type worldMechanicMutationResponse struct {
 
 type stateValueDTO struct {
 	Kind    string
-	Number  *json.Number
+	Number  *decimalText
 	Boolean *bool
 }
 
@@ -199,7 +223,7 @@ func (value stateValueDTO) MarshalJSON() ([]byte, error) {
 		}
 		return json.Marshal(struct {
 			Kind  string      `json:"kind"`
-			Value json.Number `json:"value"`
+			Value decimalText `json:"value"`
 		}{value.Kind, *value.Number})
 	case "boolean":
 		if value.Boolean == nil {
@@ -225,7 +249,7 @@ func (value *stateValueDTO) UnmarshalJSON(data []byte) error {
 	case "number":
 		var decoded struct {
 			Kind  string       `json:"kind"`
-			Value *json.Number `json:"value"`
+			Value *decimalText `json:"value"`
 		}
 		if err := decodeStrictBytes(data, &decoded); err != nil {
 			return err
@@ -425,7 +449,7 @@ type concreteEffectDTO struct {
 	MechanicID string                  `json:"mechanic_id,omitempty"`
 	Status     *statusEffectSpecDTO    `json:"status,omitempty"`
 	Value      *stateValueDTO          `json:"value,omitempty"`
-	Amount     *json.Number            `json:"amount,omitempty"`
+	Amount     *decimalText            `json:"amount,omitempty"`
 }
 
 type adjudicateInteractionRequest struct {
@@ -550,9 +574,4 @@ type worldEventResponse struct {
 	ResolutionID      *string   `json:"resolution_id,omitempty"`
 	ActorMembershipID *string   `json:"actor_membership_id,omitempty"`
 	CreatedAt         time.Time `json:"created_at"`
-}
-
-type worldEventBatchResponse struct {
-	Events     []worldEventResponse `json:"events"`
-	NextCursor int64                `json:"next_cursor"`
 }

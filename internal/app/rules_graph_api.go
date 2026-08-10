@@ -1,7 +1,6 @@
 package app
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -79,6 +78,3 @@ type effectiveChangeResponse struct {
 	Before     stateValueDTO `json:"before"`
 	After      stateValueDTO `json:"after"`
 }
-
-// Exact numeric columns remain json.Number at the HTTP boundary.
-func numberFromString(value string) json.Number { return json.Number(value) }

@@ -49,8 +49,124 @@ func TestAutoDMConsequenceSchemaIsStrictAtEveryObjectLevel(t *testing.T) {
 	})
 }
 
+func TestAutoDMRequestBodyStrictness(t *testing.T) {
+	t.Parallel()
+
+	t.Run("required object", func(t *testing.T) {
+		t.Parallel()
+		request := httptest.NewRequestWithContext(
+			t.Context(), http.MethodPost, "/auto-dm",
+			strings.NewReader(`{"expected_revision":4,"expected_rules_revision":7}`),
+		)
+		var decoded autoDMConsequenceRequest
+		if err := decodeAutoDMRequest(request, &decoded); err != nil {
+			t.Fatalf("decode valid request: %v", err)
+		}
+		if decoded.ExpectedRevision == nil || *decoded.ExpectedRevision != 4 ||
+			decoded.ExpectedRulesRevision == nil || *decoded.ExpectedRulesRevision != 7 {
+			t.Fatalf("decoded request = %#v", decoded)
+		}
+	})
+
+	for name, body := range map[string]string{
+		"empty":         "",
+		"null":          "null",
+		"array":         "[]",
+		"unknown field": `{"expected_revision":4,"expected_rules_revision":7,"extra":true}`,
+		"trailing value": `{"expected_revision":4,"expected_rules_revision":7}` +
+			` {"expected_revision":5,"expected_rules_revision":8}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequestWithContext(
+				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+			)
+			var decoded autoDMConsequenceRequest
+			if err := decodeAutoDMRequest(request, &decoded); err == nil {
+				t.Fatalf("decodeAutoDMRequest(%q) unexpectedly succeeded", body)
+			}
+		})
+	}
+}
+
+func TestAutoDMProblemRequiresEmptyRequestBody(t *testing.T) {
+	t.Parallel()
+
+	for name, body := range map[string]string{
+		"empty":      "",
+		"whitespace": " \n\t",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequestWithContext(
+				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+			)
+			if err := requireEmptyAutoDMRequest(request); err != nil {
+				t.Fatalf("requireEmptyAutoDMRequest(%q): %v", body, err)
+			}
+		})
+	}
+
+	for name, body := range map[string]string{
+		"null":   "null",
+		"object": `{}`,
+		"scalar": `true`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			request := httptest.NewRequestWithContext(
+				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+			)
+			if err := requireEmptyAutoDMRequest(request); err == nil {
+				t.Fatalf("requireEmptyAutoDMRequest(%q) unexpectedly succeeded", body)
+			}
+		})
+	}
+}
+
+func TestAutoDMExactDecimalsRemainQuotedAndCanonical(t *testing.T) {
+	t.Parallel()
+
+	const (
+		raw       = "9007199254740993.00000000000000010"
+		canonical = "9007199254740993.0000000000000001"
+	)
+	kind := "number"
+	value, err := autoDMStateValue(&kind, autoDMTestString(raw), nil)
+	if err != nil {
+		t.Fatalf("autoDMStateValue: %v", err)
+	}
+	snapshot := autoDMContext{
+		Mechanics: []autoDMMechanicContext{{Ref: "m1", Minimum: value.Number}},
+		Sheets: []autoDMSheetContext{{
+			Ref: "e1",
+			Values: []autoDMSheetValue{{
+				MechanicRef: "m1", Intrinsic: value, Effective: value,
+			}},
+		}},
+		Recent: []autoDMHistoryContext{},
+	}
+	encoded, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal Auto DM context: %v", err)
+	}
+	quoted := `"` + canonical + `"`
+	if occurrences := strings.Count(string(encoded), quoted); occurrences != 3 {
+		t.Fatalf("exact decimal occurred %d times in context, want 3: %s", occurrences, encoded)
+	}
+
+	zero, err := autoDMDecimal(autoDMTestString("-0.000"))
+	if err != nil {
+		t.Fatalf("autoDMDecimal zero: %v", err)
+	}
+	if zero.String() != "0" {
+		t.Fatalf("canonical zero = %q, want 0", zero.String())
+	}
+}
+
 func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 	t.Parallel()
+	const exactSetValue = "9007199254740993.0000000000000001"
 
 	context := autoDMContext{
 		entityIDs: map[string]string{
@@ -73,7 +189,7 @@ func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 		Effects: []autoDMStructuredEffect{
 			{
 				Type: "set", EntityRef: "e1", MechanicRef: autoDMTestString("m1"),
-				ValueKind: autoDMTestString("number"), NumberValue: autoDMTestString("12.500"),
+				ValueKind: autoDMTestString("number"), NumberValue: autoDMTestString(exactSetValue + "0"),
 			},
 			{
 				Type: "adjust-number", EntityRef: "e2", MechanicRef: autoDMTestString("m1"),
@@ -131,7 +247,7 @@ func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 	set := effects[0]
 	if set.Type != "set" || set.MechanicID != autoDMTestMechanicOne ||
 		len(set.EntityIDs) != 1 || set.EntityIDs[0] != autoDMTestEntityOne ||
-		set.Value == nil || set.Value.Kind != "number" || set.Value.Number == nil || set.Value.Number.String() != "12.5" {
+		set.Value == nil || set.Value.Kind != "number" || set.Value.Number == nil || set.Value.Number.String() != exactSetValue {
 		t.Fatalf("set effect = %#v", set)
 	}
 
@@ -265,13 +381,15 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 		output := responses[responseIndex]
 		responseIndex++
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
+		if err := json.NewEncoder(w).Encode(map[string]any{
 			"id": "resp_test", "model": request["model"], "status": "completed",
 			"output": []any{map[string]any{
 				"type":    "message",
 				"content": []any{map[string]any{"type": "output_text", "text": output}},
 			}},
-		})
+		}); err != nil {
+			t.Errorf("encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -293,7 +411,7 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 	if problemRequest["input"] != string(contextJSON) {
 		t.Fatalf("problem input = %#v", problemRequest["input"])
 	}
-	if instructions, _ := problemRequest["instructions"].(string); !strings.Contains(instructions, "plain public prose") || !strings.Contains(instructions, "untrusted game data") {
+	if instructions := autoDMStringField(t, problemRequest, "instructions"); !strings.Contains(instructions, "plain public prose") || !strings.Contains(instructions, "untrusted game data") {
 		t.Fatalf("problem instructions = %q", instructions)
 	}
 
@@ -303,7 +421,7 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 	}
 	consequenceRequest := <-requests
 	assertAutoDMProviderRequest(t, consequenceRequest, openaiapi.TerraModel, 1600, false)
-	if instructions, _ := consequenceRequest["instructions"].(string); !strings.Contains(instructions, "public fictional consequence") || !strings.Contains(instructions, "separate compiler") {
+	if instructions := autoDMStringField(t, consequenceRequest, "instructions"); !strings.Contains(instructions, "public fictional consequence") || !strings.Contains(instructions, "separate compiler") {
 		t.Fatalf("consequence instructions = %q", instructions)
 	}
 
@@ -317,7 +435,7 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 	}
 	compileRequest := <-requests
 	assertAutoDMProviderRequest(t, compileRequest, openaiapi.LunaModel, 2400, true)
-	if instructions, _ := compileRequest["instructions"].(string); !strings.Contains(instructions, "narrative is immutable") || !strings.Contains(instructions, "untrusted game data") {
+	if instructions := autoDMStringField(t, compileRequest, "instructions"); !strings.Contains(instructions, "narrative is immutable") || !strings.Contains(instructions, "untrusted game data") {
 		t.Fatalf("compiler instructions = %q", instructions)
 	}
 	input, ok := compileRequest["input"].(string)
@@ -372,6 +490,15 @@ func autoDMSchemaMap(t *testing.T, path string, value any) map[string]any {
 		t.Fatalf("%s = %#v, want object", path, value)
 	}
 	return result
+}
+
+func autoDMStringField(t *testing.T, object map[string]any, key string) string {
+	t.Helper()
+	value, ok := object[key].(string)
+	if !ok {
+		t.Fatalf("%s = %#v, want string", key, object[key])
+	}
+	return value
 }
 
 func assertAutoDMProviderRequest(t *testing.T, request map[string]any, model string, maxTokens int, structured bool) {
