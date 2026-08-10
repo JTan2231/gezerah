@@ -1,6 +1,12 @@
 import { useMemo, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
+import {
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
 import type {
   ActiveStatus,
   DecimalText,
@@ -9,10 +15,14 @@ import type {
   WorldEntity,
   WorldMechanic,
 } from "../api/types";
-import { ErrorMessage } from "../components/StudioUI";
 import { canonicalDecimalText } from "../domain/decimal";
 import { formatRelativeDate } from "../domain/display";
 import { confirmDiscardDraft, useDirtyGuard } from "../hooks/useDraft";
+import {
+  EntityDetailView,
+  EntitySheetView,
+  type EntitySheetIssue,
+} from "./EntityDetailView";
 import { EntityProfilePanel } from "./EntityProfilePanel";
 
 export function EntityDetail({
@@ -50,43 +60,12 @@ export function EntityDetail({
   }
 
   return (
-    <div className="entity-detail">
-      <div className="entity-detail-toolbar">
-        <div
-          className="entity-detail-tabs"
-          role="tablist"
-          aria-label="Entity detail"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "story"}
-            className={tab === "story" ? "active" : ""}
-            onClick={() => selectTab("story")}
-          >
-            Character
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === "sheet"}
-            className={tab === "sheet" ? "active" : ""}
-            onClick={() => selectTab("sheet")}
-          >
-            Sheet
-          </button>
-        </div>
-        {facilitator && world.status === "active" ? (
-          <button
-            className="text-button"
-            type="button"
-            onClick={onManageControllers}
-          >
-            Controllers
-          </button>
-        ) : null}
-      </div>
-      {tab === "story" ? (
+    <EntityDetailView
+      tab={tab}
+      showControllers={facilitator && world.status === "active"}
+      onSelectTab={selectTab}
+      onManageControllers={onManageControllers}
+      characterPanel={
         <EntityProfilePanel
           world={world}
           entity={entity}
@@ -94,8 +73,9 @@ export function EntityDetail({
           onChanged={onProfileChanged}
           editable={controlledByCurrentMember || facilitator}
         />
-      ) : (
-        <EntitySheet
+      }
+      sheetPanel={
+        <EntitySheetController
           entity={entity}
           mechanics={mechanics}
           rulesRevision={rulesRevision}
@@ -103,12 +83,12 @@ export function EntityDetail({
           world={world}
           onSaved={onSaved}
         />
-      )}
-    </div>
+      }
+    />
   );
 }
 
-function EntitySheet({
+function EntitySheetController({
   entity,
   mechanics,
   rulesRevision,
@@ -142,14 +122,13 @@ function EntitySheet({
   const [values, setValues] =
     useState<Record<string, DecimalText | boolean>>(initial);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [issue, setIssue] = useState<EntitySheetIssue | null>(null);
   const dirty = JSON.stringify(values) !== JSON.stringify(initial);
   const clearDirtyGuard = useDirtyGuard(dirty);
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
+  async function save() {
     setSaving(true);
-    setError(null);
+    setIssue(null);
     const stateValues: Record<string, StateValue> = {};
     for (const mechanic of inputMechanics) {
       const current = entity.state.values[mechanic.id];
@@ -170,13 +149,10 @@ function EntitySheet({
         typeof value === "string" ? canonicalDecimalText(value) : undefined;
       if (decimal === undefined) {
         setSaving(false);
-        setError(
-          new ApiError(
-            0,
-            "invalid_decimal",
-            `${mechanic.name} must be a finite decimal.`,
-          ),
-        );
+        setIssue({
+          kind: "request",
+          message: `${mechanic.name} must be a finite decimal.`,
+        });
         return;
       }
       stateValues[mechanic.id] = { kind: "number", value: decimal };
@@ -193,178 +169,55 @@ function EntitySheet({
       clearDirtyGuard();
       onSaved();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not save this sheet."),
-      );
+      setIssue(toEntitySheetIssue(reason));
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <form className="entity-sheet" onSubmit={(event) => void save(event)}>
-      <header>
-        <div>
-          <h2>{entity.display_name}</h2>
-          <span>
-            Entity sheet · state r{entity.state.revision} · statuses r
-            {entity.state.status_revision} · rules r{rulesRevision}
-          </span>
-        </div>
-      </header>
-      {entity.state.active_statuses.length > 0 ? (
-        <section className="active-statuses" aria-label="Active statuses">
-          <h3>Active statuses</h3>
-          <div>
-            {entity.state.active_statuses.map((status) => (
-              <span
-                className="active-status-chip"
-                key={status.id}
-                title={activeStatusDetails(status)}
-                aria-label={`${status.name}. ${activeStatusDetails(status)}`}
-              >
-                <span>
-                  <strong>{status.name}</strong>
-                  <small>{activeStatusDetails(status)}</small>
-                </span>
-              </span>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {activeMechanics.length === 0 ? (
-        <p className="sheet-empty">
-          Configure a capacity or capability to generate this sheet.
-        </p>
-      ) : null}
-      {(["capacity", "capability"] as const).map((kind) => {
-        const group = activeMechanics.filter(
-          (mechanic) => mechanic.kind === kind,
-        );
-        if (group.length === 0) return null;
-        return (
-          <section className="sheet-group" key={kind}>
-            <h3>{kind === "capacity" ? "Capacities" : "Capabilities"}</h3>
-            {group.map((mechanic) => (
-              <div
-                key={mechanic.id}
-                className={`sheet-field sheet-${mechanic.mode} sheet-source-${mechanic.source_kind}`}
-              >
-                <span>
-                  <strong>
-                    {mechanic.name}
-                    <small className="mechanic-source-pill">
-                      {mechanic.source_kind === "derived"
-                        ? "Calculated"
-                        : "Input"}
-                    </small>
-                  </strong>
-                  {mechanic.description === undefined ? null : (
-                    <small>{mechanic.description}</small>
-                  )}
-                </span>
-                {mechanic.source_kind === "input" &&
-                editable &&
-                mechanic.mode === "binary" ? (
-                  <input
-                    aria-label={mechanic.name}
-                    type="checkbox"
-                    checked={Boolean(values[mechanic.id])}
-                    onChange={(event) => {
-                      const checked = event.currentTarget.checked;
-                      setValues((current) => ({
-                        ...current,
-                        [mechanic.id]: checked,
-                      }));
-                    }}
-                  />
-                ) : mechanic.source_kind === "input" && editable ? (
-                  <span className="sheet-number">
-                    <input
-                      aria-label={mechanic.name}
-                      type="text"
-                      inputMode="decimal"
-                      value={decimalInputValue(values[mechanic.id])}
-                      required
-                      onChange={(event) => {
-                        const value = event.currentTarget.value;
-                        setValues((current) => ({
-                          ...current,
-                          [mechanic.id]: value,
-                        }));
-                      }}
-                    />
-                    <em>
-                      {mechanic.mode === "pool" &&
-                      mechanic.maximum !== undefined
-                        ? `/ ${mechanic.maximum}`
-                        : (mechanic.unit ?? "")}
-                    </em>
-                  </span>
-                ) : (
-                  <output
-                    className="sheet-effective-value"
-                    aria-label={`${mechanic.name} effective value`}
-                  >
-                    {formatMechanicValue(
-                      entity.state.effective_values[mechanic.id] ??
-                        entity.state.evaluations[mechanic.id]?.effective ??
-                        entity.state.values[mechanic.id],
-                      mechanic,
-                    )}
-                  </output>
-                )}
-                {mechanic.source_kind === "input" && editable ? (
-                  <span className="sheet-effective-summary">
-                    Effective:{" "}
-                    <strong>
-                      {formatMechanicValue(
-                        entity.state.effective_values[mechanic.id] ??
-                          entity.state.evaluations[mechanic.id]?.effective ??
-                          entity.state.values[mechanic.id],
-                        mechanic,
-                      )}
-                    </strong>
-                  </span>
-                ) : null}
-                {(entity.state.evaluations[mechanic.id]?.modifiers.length ??
-                  0) > 0 ? (
-                  <ol className="modifier-explanation">
-                    {entity.state.evaluations[mechanic.id]?.modifiers.map(
-                      (modifier) => (
-                        <li
-                          key={`${modifier.status_instance_id}:${modifier.modifier_id}`}
-                        >
-                          <span>{modifier.status_name}</span>
-                          <small>
-                            {modifierOperationLabel(modifier.operation)}{" "}
-                            {formatStateValue(modifier.operand)} ·{" "}
-                            {formatStateValue(modifier.before)} →{" "}
-                            {formatStateValue(modifier.after)}
-                          </small>
-                        </li>
-                      ),
-                    )}
-                  </ol>
-                ) : null}
-              </div>
-            ))}
-          </section>
-        );
+    <EntitySheetView
+      displayName={entity.display_name}
+      metadata={`Entity sheet · state r${entity.state.revision} · statuses r${entity.state.status_revision} · rules r${rulesRevision}`}
+      statuses={entity.state.active_statuses.map((status) => ({
+        id: status.id,
+        name: status.name,
+        details: activeStatusDetails(status),
+      }))}
+      mechanics={activeMechanics.map((mechanic) => {
+        const effective =
+          entity.state.effective_values[mechanic.id] ??
+          entity.state.evaluations[mechanic.id]?.effective ??
+          entity.state.values[mechanic.id];
+        return {
+          id: mechanic.id,
+          kind: mechanic.kind,
+          mode: mechanic.mode,
+          sourceKind: mechanic.source_kind,
+          name: mechanic.name,
+          description: mechanic.description,
+          maximum: mechanic.maximum,
+          unit: mechanic.unit,
+          effectiveValue: formatMechanicValue(effective, mechanic),
+          modifiers:
+            entity.state.evaluations[mechanic.id]?.modifiers.map(
+              (modifier) => ({
+                id: `${modifier.status_instance_id}:${modifier.modifier_id}`,
+                statusName: modifier.status_name,
+                summary: `${modifierOperationLabel(modifier.operation)} ${formatStateValue(modifier.operand)} · ${formatStateValue(modifier.before)} → ${formatStateValue(modifier.after)}`,
+              }),
+            ) ?? [],
+        };
       })}
-      {error === null ? null : <ErrorMessage error={error} />}
-      {editable &&
-      activeMechanics.some((mechanic) => mechanic.source_kind === "input") ? (
-        <footer>
-          <span>Direct setup edit</span>
-          <button className="button button-ink" type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save sheet"}
-          </button>
-        </footer>
-      ) : null}
-    </form>
+      editable={editable}
+      values={values}
+      saving={saving}
+      issue={issue}
+      onValueChange={(mechanicId, value) =>
+        setValues((current) => ({ ...current, [mechanicId]: value }))
+      }
+      onSubmit={() => void save()}
+    />
   );
 }
 
@@ -379,10 +232,6 @@ function mechanicValue(
   if (value.kind === "boolean") return value.value;
   if (value.kind === "number") return value.value;
   return mechanic.mode === "binary" ? false : (mechanic.default_number ?? "0");
-}
-
-function decimalInputValue(value: DecimalText | boolean | undefined): string {
-  return typeof value === "string" ? value : "0";
 }
 
 function formatMechanicValue(
@@ -410,6 +259,12 @@ function modifierOperationLabel(operation: string): string {
     default:
       return "set to";
   }
+}
+
+function toEntitySheetIssue(reason: unknown): EntitySheetIssue {
+  if (!(reason instanceof ApiError))
+    return { kind: "request", message: "Could not save this sheet." };
+  return toErrorNotice(reason);
 }
 
 function activeStatusDetails(status: ActiveStatus): string {

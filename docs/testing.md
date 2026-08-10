@@ -229,21 +229,42 @@ Playwright rather than a dedicated Go handler/database suite.
 
 ### Frontend unit tests
 
-Bun tests under `web/frontend/src/**/*.test.ts` cover pure helpers and the API
-adapter:
+Bun tests under `web/frontend/src/**/*.test.{ts,tsx}` cover pure helpers, the
+API adapter, and backend-independent view rendering:
 
 - human-readable API vocabulary and past/future relative timestamps;
 - exact-decimal text validation, canonicalization, and sign handling without
   JavaScript number coercion;
 - derived mechanic mode/result-kind changes, including expression preservation
   and reset behavior;
+- password minimum-length behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
   round trips, removed routes, and unknown-route rejection;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   legacy UUID header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown.
 
-There are no current component-rendering unit tests.
+Backend-independent `*View.tsx` components also have fixture-driven rendering
+tests. They use `react-dom/server`'s `renderToStaticMarkup`, which is already
+available through the React runtime, so ordinary presentation tests need no DOM
+emulator, browser, server process, API mock, or new test framework. Fixtures
+cover materially different semantic states such as loading/empty, populated,
+dirty, busy, validation failure, unavailable access, onboarding, and live
+content as applicable.
+
+View tests make focused semantic assertions against headings, status copy,
+field values, disabled commands, and important accessibility attributes. They
+do not use large markup snapshots. Pure mapping helpers should be tested
+separately when a controller performs nontrivial DTO-to-view or
+draft-to-command translation.
+
+Static rendering intentionally does not execute effects or pointer/keyboard
+events. Keep deterministic state changes in pure helpers, and use Playwright
+when correctness depends on interaction, focus, routing, the API, revisions,
+authorization, privacy, SSE, or multiple browser identities. The architectural
+lint rule is the complementary proof that shared components, `*View.tsx`, and
+`*ViewModel.{ts,tsx}` modules cannot acquire an API, route, resource-hook,
+`fetch`, or event-stream dependency.
 
 ### Scenario and contract tests
 
@@ -471,7 +492,8 @@ database that can be destroyed or modified without consequence.
 
 - no hosted CI workflow in the repository;
 - no dedicated Go PostgreSQL integration-test fixture;
-- no component-level React tests;
+- no DOM-emulated component interaction suite or automated visual-regression
+  comparison beyond static view rendering and Playwright workflows;
 - no source line/branch coverage threshold in the root validator;
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;

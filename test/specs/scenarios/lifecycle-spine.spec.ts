@@ -988,10 +988,10 @@ async function createAccount(
     form.getByText("Minimum 8 characters.", { exact: true }),
   ).toHaveCount(1);
   await form.locator('input[name="username"]').fill(username);
-  await form.locator('input[name="display_name"]').fill(displayName);
+  await form.locator('input[name="displayName"]').fill(displayName);
   await form.locator('input[name="password"]').fill(LIFECYCLE_PASSWORD);
   await form
-    .locator('input[name="password_confirmation"]')
+    .locator('input[name="passwordConfirmation"]')
     .fill(LIFECYCLE_PASSWORD);
   await form
     .getByRole("button", { name: "Create account", exact: true })

@@ -12,8 +12,8 @@ Install the following locally:
 | `createdb`                             | Initial local database creation.                           |
 | `psql`                                 | End-to-end disposable database management.                 |
 | Git                                    | Source control and isolated `ci.sh` worktrees.             |
-| `curl`                                 | Pinned CI tool downloads and `run.sh` service probes.       |
-| `tar` and SHA-256 tooling              | Verification and extraction of pinned CI tools.             |
+| `curl`                                 | Pinned CI tool downloads and `run.sh` service probes.      |
+| `tar` and SHA-256 tooling              | Verification and extraction of pinned CI tools.            |
 | Chrome/Chromium or Playwright Chromium | Browser acceptance tests.                                  |
 | POSIX shell                            | Root scripts.                                              |
 
@@ -62,13 +62,14 @@ postgres://localhost:5432/dnd?sslmode=disable
 Migrations run automatically when the backend starts. The repository has no
 seed step; create all world vocabulary through the application/API. New
 databases install the `001` baseline, the `002` derived-graph/problem-status
-upgrade, the `003` audience-invalidation event upgrade, and the `004` password-
-authentication cutover. Existing databases at a recorded migration prefix
-upgrade forward, but `004_password_auth.sql` deliberately refuses a nonempty
-`users` table because the repository has no safe way to invent credentials for
-UUID-only accounts. Use a fresh database for that cutover unless a separately
-reviewed data transition exists. Databases created by the removed pre-baseline
-schema remain unsupported.
+upgrade, the `003` audience-invalidation event upgrade, the `004` password-
+authentication cutover, and `005_auto_dm.sql`, which adds the world-level
+`human`/`terra` DM-source setting. Existing databases at a recorded migration
+prefix upgrade forward, but `004_password_auth.sql` deliberately refuses a
+nonempty `users` table because the repository has no safe way to invent
+credentials for UUID-only accounts. Use a fresh database for that cutover
+unless a separately reviewed data transition exists. Databases created by the
+removed pre-baseline schema remain unsupported.
 
 ## Resetting local data
 
@@ -105,16 +106,16 @@ shell/process manager that launches the application. Vite independently loads
 
 ### Runtime variables
 
-| Variable            | Default/precedence                 | Purpose                                                                                  |
-| ------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------- |
-| `DND_ADDR`          | First; default `:8080`             | HTTP listen address.                                                                     |
-| `PORT`              | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                                     |
-| `DND_DATABASE_URL`  | First database URL                 | Preferred PostgreSQL connection URL.                                                     |
-| `DATABASE_URL`      | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                   |
-| `DND_PUBLIC_ORIGIN` | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
-| `DND_LOG_LEVEL`     | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                 |
-| `OPENAI_API_KEY`    | Empty                              | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                       |
-| `DND_OPENAI_BASE_URL` | Official OpenAI API              | Overrides the Responses API base URL, primarily for local integration tests.             |
+| Variable              | Default/precedence                 | Purpose                                                                                           |
+| --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `DND_ADDR`            | First; default `:8080`             | HTTP listen address.                                                                              |
+| `PORT`                | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                                              |
+| `DND_DATABASE_URL`    | First database URL                 | Preferred PostgreSQL connection URL.                                                              |
+| `DATABASE_URL`        | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                            |
+| `DND_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
+| `DND_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
+| `OPENAI_API_KEY`      | Empty                              | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                |
+| `DND_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
 
 When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
 uses the incoming request's scheme and host; plain HTTP authentication is
@@ -261,10 +262,25 @@ Validation details are in [Testing](testing.md).
 ### Frontend-only behavior
 
 1. Preserve the API types and server authority boundary.
-2. Put pure default/summary logic in `src/domain` when possible.
-3. Reuse shared editors/workspaces.
-4. Add Bun tests and browser coverage for a workflow change.
-5. Run `./ci.sh frontend`.
+2. Keep API paths, DTOs, revisions, event handling, and navigation in the
+   operational feature component. `*View.tsx` and `*ViewModel.{ts,tsx}` files
+   receive only semantic models and intent callbacks.
+3. Put pure default/summary/draft transformation logic in `src/domain` when
+   possible. Do not create a second mirror of the complete API type catalog.
+4. Reuse shared UI primitives and editors. Keep CSS selectors in presentation
+   files rather than operational controllers.
+5. Add or update backend-free view fixtures when layout or presentation state
+   changes. Use `react-dom/server` for static rendering unless interaction
+   behavior specifically warrants browser coverage.
+6. Add Playwright coverage when the change involves server data, routing,
+   keyboard workflow, revisions, authorization, privacy, or multiple users.
+7. Run `./ci.sh frontend`.
+
+For a new feature, start with its semantic view contract. The view should be
+renderable using fixture props before the controller is connected to API
+resources. ESLint rejects API, route, API-backed hook, `fetch`, and event-stream
+dependencies in shared components, `*View.tsx`, and `*ViewModel.{ts,tsx}`; do
+not suppress that rule to save a mapping step.
 
 ### HTTP contract change
 
@@ -292,15 +308,15 @@ from non-facilitator JSON.
 
 ## Generated and ignored files
 
-| Path                         | Producer/content                                |
-| ---------------------------- | ----------------------------------------------- |
+| Path                         | Producer/content                                               |
+| ---------------------------- | -------------------------------------------------------------- |
 | `.dnd/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
-| `out`                        | Production/Railway-style binary.                |
-| `web/frontend/node_modules/` | Frontend install.                               |
-| `web/static/*`               | Vite production assets; placeholder is tracked. |
-| `test/node_modules/`         | E2E install.                                    |
-| `test/artifacts/`            | App log, Playwright results/report/media.       |
-| `coverage/`                  | Reserved coverage output.                       |
+| `out`                        | Production/Railway-style binary.                               |
+| `web/frontend/node_modules/` | Frontend install.                                              |
+| `web/static/*`               | Vite production assets; placeholder is tracked.                |
+| `test/node_modules/`         | E2E install.                                                   |
+| `test/artifacts/`            | App log, Playwright results/report/media.                      |
+| `coverage/`                  | Reserved coverage output.                                      |
 
 Do not hand-edit generated Vite assets. Change `web/frontend/src`, rebuild, and
 let the next Go compilation embed them.

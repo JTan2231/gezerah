@@ -1,15 +1,24 @@
 import { useEffect, useMemo, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
-import type { EntityProfile, World, WorldEntity } from "../api/types";
 import {
-  EmptyState,
-  ErrorMessage,
-  Field,
-  LoadingState,
-} from "../components/StudioUI";
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
+import type { EntityProfile, World, WorldEntity } from "../api/types";
 import { useDirtyGuard } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
+import {
+  EntityProfileEditorView,
+  EntityProfileLoadErrorView,
+  EntityProfileLoadingView,
+  EntityProfileView,
+  type EntityProfileFieldViewModel,
+  type EntityProfileIssue,
+  type EntityProfileViewModel,
+} from "./EntityProfileView";
 
 export function EntityProfilePanel({
   world,
@@ -34,86 +43,52 @@ export function EntityProfilePanel({
   }, [refreshToken, reloadProfile]);
 
   if (profile.loading && profile.value === null)
-    return <LoadingState label="Opening this character" />;
+    return <EntityProfileLoadingView />;
   if (profile.error !== null)
-    return <ErrorMessage error={profile.error} onRetry={profile.reload} />;
-  if (profile.value === null) return null;
-
-  return (
-    <article className="entity-profile">
-      <header>
-        <div>
-          <h2>{entity.display_name}</h2>
-          <span>
-            {profile.value.completed_field_count} of{" "}
-            {profile.value.required_field_count} required fields · profile r
-            {profile.value.revision}
-          </span>
-        </div>
-        <CharacterStatus profile={profile.value} />
-      </header>
-      {editable && profile.value.can_edit ? (
-        <EntityProfileEditor
-          key={`${entity.id}:${profile.value.revision}:${profile.value.character_fields_revision}`}
-          entity={entity}
-          profile={profile.value}
-          world={world}
-          onSaved={() => {
-            profile.reload();
-            onChanged();
-          }}
-        />
-      ) : (
-        <EntityProfileReader profile={profile.value} />
-      )}
-    </article>
-  );
-}
-
-function CharacterStatus({ profile }: { profile: EntityProfile }) {
-  if (profile.character_status === "not-controlled")
     return (
-      <span className="character-status status-neutral">Uncontrolled</span>
-    );
-  if (profile.character_status === "ready")
-    return <span className="character-status status-ready">Ready</span>;
-  return <span className="character-status status-setup">Setup required</span>;
-}
-
-function EntityProfileReader({ profile }: { profile: EntityProfile }) {
-  if (profile.fields.length === 0)
-    return (
-      <EmptyState
-        title="No visible profile fields"
-        description="There are no completed fields visible to you."
+      <EntityProfileLoadErrorView
+        issue={toErrorNotice(profile.error)}
+        onRetry={profile.reload}
       />
     );
+  if (profile.value === null) return null;
+
+  const profileView = toEntityProfileView(entity, profile.value);
+  const canEdit = editable && profile.value.can_edit;
+
   return (
-    <div className="profile-section-list">
-      {profile.fields.map((characterField) => (
-        <section className="profile-section" key={characterField.id}>
-          <header>
-            <h3>{characterField.label}</h3>
-            {characterField.visibility === "controllers-and-facilitators" ? (
-              <span>Private</span>
-            ) : null}
-          </header>
-          <p>{characterField.value}</p>
-        </section>
-      ))}
-    </div>
+    <EntityProfileView
+      profile={profileView}
+      editor={
+        canEdit ? (
+          <EntityProfileEditorController
+            key={`${entity.id}:${profile.value.revision}:${profile.value.character_fields_revision}`}
+            entity={entity}
+            profile={profile.value}
+            fields={profileView.fields}
+            world={world}
+            onSaved={() => {
+              profile.reload();
+              onChanged();
+            }}
+          />
+        ) : null
+      }
+    />
   );
 }
 
-function EntityProfileEditor({
+function EntityProfileEditorController({
   world,
   entity,
   profile,
+  fields,
   onSaved,
 }: {
   world: World;
   entity: WorldEntity;
   profile: EntityProfile;
+  fields: EntityProfileFieldViewModel[];
   onSaved: () => void;
 }) {
   const initial = useMemo(
@@ -128,17 +103,16 @@ function EntityProfileEditor({
   );
   const [values, setValues] = useState<Record<string, string>>(initial);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [issue, setIssue] = useState<EntityProfileIssue | null>(null);
   const dirty = profile.fields.some(
     (characterField) =>
       (values[characterField.id] ?? "") !== (characterField.value ?? ""),
   );
   const clearDirtyGuard = useDirtyGuard(dirty);
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
+  async function save() {
     setSaving(true);
-    setError(null);
+    setIssue(null);
     try {
       await api<EntityProfile>(
         worldPath(world.id, `entities/${entity.id}/profile`),
@@ -158,68 +132,66 @@ function EntityProfileEditor({
       clearDirtyGuard();
       onSaved();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not save this character."),
+      setIssue(
+        toEntityProfileIssue(
+          reason,
+          profile.fields.map((field) => field.id),
+        ),
       );
       setSaving(false);
     }
   }
 
   return (
-    <form className="profile-editor" onSubmit={(event) => void save(event)}>
-      {profile.fields.length === 0 ? (
-        <EmptyState
-          title="No character fields configured"
-          description="A facilitator can publish required fields in Build. This controlled entity is ready without them."
-        />
-      ) : (
-        <div className="character-profile-fields">
-          {profile.fields.map((characterField, index) => (
-            <Field
-              key={characterField.id}
-              label={characterField.label}
-              hint={characterField.help_text}
-              error={error?.fields[`values[${index}].value`]}
-            >
-              <textarea
-                value={values[characterField.id] ?? ""}
-                rows={6}
-                maxLength={20_000}
-                placeholder={`Write ${characterField.label.toLowerCase()}…`}
-                onChange={(event) => {
-                  const value = event.currentTarget.value;
-                  setValues((current) => ({
-                    ...current,
-                    [characterField.id]: value,
-                  }));
-                }}
-              />
-              <span className="character-field-visibility">
-                {characterField.visibility === "table"
-                  ? "Visible to everyone at the table"
-                  : "Visible only to controllers and facilitators"}
-              </span>
-            </Field>
-          ))}
-        </div>
-      )}
-      {error === null ? null : <ErrorMessage error={error} />}
-      {profile.fields.length > 0 ? (
-        <footer>
-          <span>
-            Drafts may be incomplete. Every field is required before play.
-          </span>
-          <button
-            className="button button-ink"
-            type="submit"
-            disabled={saving || !dirty}
-          >
-            {saving ? "Saving…" : "Save character"}
-          </button>
-        </footer>
-      ) : null}
-    </form>
+    <EntityProfileEditorView
+      fields={fields}
+      values={values}
+      saving={saving}
+      dirty={dirty}
+      issue={issue}
+      onValueChange={(fieldId, value) =>
+        setValues((current) => ({ ...current, [fieldId]: value }))
+      }
+      onSubmit={() => void save()}
+    />
   );
+}
+
+function toEntityProfileView(
+  entity: WorldEntity,
+  profile: EntityProfile,
+): EntityProfileViewModel {
+  return {
+    displayName: entity.display_name,
+    summary: `${profile.completed_field_count} of ${profile.required_field_count} required fields · profile r${profile.revision}`,
+    characterStatus: profile.character_status,
+    fields: profile.fields.map((field) => ({
+      id: field.id,
+      label: field.label,
+      helpText: field.help_text,
+      visibility: field.visibility,
+      value: field.value,
+    })),
+  };
+}
+
+function toEntityProfileIssue(
+  reason: unknown,
+  fieldIds: string[],
+): EntityProfileIssue {
+  if (!(reason instanceof ApiError))
+    return {
+      kind: "request",
+      message: "Could not save this character.",
+      fieldErrors: {},
+    };
+  return {
+    ...toErrorNotice(reason),
+    fieldErrors: Object.fromEntries(
+      fieldIds.map((fieldId, index) => [
+        fieldId,
+        reason.fields[`values[${index}].value`],
+      ]),
+    ),
+  };
 }

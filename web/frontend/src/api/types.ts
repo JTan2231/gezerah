@@ -222,7 +222,7 @@ export interface InteractionAction {
   updated_at?: string | undefined;
 }
 
-export type EntityProfileVisibility = "table" | "controllers-and-facilitators";
+type EntityProfileVisibility = "table" | "controllers-and-facilitators";
 
 export interface WorldCharacterField {
   id: string;

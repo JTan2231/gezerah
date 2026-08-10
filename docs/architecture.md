@@ -97,6 +97,39 @@ the admitted-world table picker, player onboarding, and live table. Both areas
 share the authenticated account boundary, API types, fetch helpers, route
 helpers, and UI primitives.
 
+Within the browser, operational dependencies point inward through feature
+controllers and stop at a semantic presentation contract:
+
+```mermaid
+flowchart LR
+    Routes[Routes and application session]
+    Transport[API DTOs, fetch adapter, resource hooks, SSE]
+    Controller[Feature controller]
+    Contract[View model and intent callbacks]
+    View[View markup and layout]
+    Styles[UI primitives and CSS]
+
+    Routes --> Controller
+    Transport --> Controller
+    Controller --> Contract
+    Contract --> View
+    View --> Styles
+```
+
+Files matching `*View.tsx` or `*ViewModel.{ts,tsx}`, together with shared
+components, form the presentation boundary. They may express product semantics
+and local interaction but cannot import transport DTOs, API functions,
+API-backed resource hooks, event streams, or route construction. Controllers map
+authoritative resources into display state and translate user intent back into
+revision- and idempotency-bearing commands. The boundary is enforced by
+frontend linting and exercised with server-rendered fixture tests, so layout
+can be developed without a running API.
+
+This is intentionally a feature-level separation rather than an
+interchangeable-backend architecture. The same-origin API and browser client
+remain one coordinated product artifact; there is no generic repository,
+dependency-injection container, or duplicated canonical frontend model.
+
 World configuration is a master-detail editor for capacities/capabilities,
 their derived expressions, character fields, roster setup, people, and
 settings. Build never mounts the event stream; Play does not render
@@ -336,17 +369,17 @@ clients reconnect with their last cursor.
 
 ## Repository layout
 
-| Path                            | Responsibility                                                             |
-| ------------------------------- | -------------------------------------------------------------------------- |
-| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                               |
-| `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions. |
-| `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                 |
-| `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                        |
-| `web/frontend/`                 | React/Vite Build and Play SPA.                                             |
-| `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.         |
+| Path                            | Responsibility                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------- |
+| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                                     |
+| `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions.       |
+| `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                       |
+| `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                              |
+| `web/frontend/`                 | React/Vite Build and Play SPA.                                                   |
+| `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.               |
 | `test/`                         | Playwright harness, clean-database scenarios, and deployed-system smoke tooling. |
-| `ci.sh`, `run.sh`, `deploy.sh`  | Validation, managed local development, and Railway release orchestration.   |
-| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                |
+| `ci.sh`, `run.sh`, `deploy.sh`  | Validation, managed local development, and Railway release orchestration.        |
+| `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                      |
 
 ## Design constraints for future changes
 
@@ -369,3 +402,7 @@ clients reconnect with their last cursor.
 - Treat receipts and events as history; add new facts instead of rewriting
   applied history.
 - Keep player reads world-scoped and visibility-filtered.
+- Keep browser presentation modules independent of transport DTOs, API-backed
+  hooks, route construction, and event streams. Cross into views only through
+  semantic models and user-intent callbacks; keep authorization authoritative
+  on the server.

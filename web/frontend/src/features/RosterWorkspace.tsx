@@ -1,23 +1,18 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { worldPath } from "../api/client";
+import { toErrorNotice, worldPath } from "../api/client";
 import type {
   World,
   WorldEntity,
   WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
-import {
-  EmptyState,
-  ErrorMessage,
-  LoadingState,
-  PageIntro,
-} from "../components/StudioUI";
 import { useCollection } from "../hooks/useCollection";
 import { confirmDiscardDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
 import { EntityDetail } from "./EntityDetail";
 import { ManageControllersModal, NewEntityModal } from "./RosterModals";
+import { RosterView } from "./RosterView";
 
 export function RosterWorkspace({
   world,
@@ -54,9 +49,10 @@ export function RosterWorkspace({
   const refresh = useCallback(() => {
     reloadEntities();
     reloadMembers();
+    reloadMechanics();
     onWorldChanged();
     setProfileRefreshToken((value) => value + 1);
-  }, [onWorldChanged, reloadEntities, reloadMembers]);
+  }, [onWorldChanged, reloadEntities, reloadMechanics, reloadMembers]);
 
   function selectEntity(entityId: string) {
     if (!confirmDiscardDraft()) return;
@@ -90,149 +86,87 @@ export function RosterWorkspace({
     reloadMechanics,
   ]);
 
-  if (
-    (entities.loading && entities.items.length === 0) ||
-    (mechanics.loading && mechanics.value === null) ||
-    (members.loading && members.items.length === 0)
-  )
-    return <LoadingState label="Preparing the roster" />;
-
   const currentMembership = members.items.find(
     (membership) => membership.id === world.membership_id,
   );
   const firstError = entities.error ?? mechanics.error ?? members.error;
   const mechanicItems = mechanics.value?.mechanics ?? [];
+  const preparing =
+    (entities.loading && entities.items.length === 0) ||
+    (mechanics.loading && mechanics.value === null) ||
+    (members.loading && members.items.length === 0);
 
   return (
-    <section className="roster-workspace content-narrow">
-      <PageIntro
-        title="Roster & sheets"
-        description="Create ordinary world entities, assign player control, complete profiles, and make direct setup edits before entering Play."
-        actions={
-          world.status === "active" ? (
-            <button
-              className="button button-primary"
-              type="button"
-              onClick={startAddingEntity}
-            >
-              Create entity
-            </button>
-          ) : undefined
-        }
-      />
-
-      {entities.loading && entities.items.length === 0 ? (
-        <LoadingState label="Loading roster" />
-      ) : null}
-      {firstError === null ? null : (
-        <ErrorMessage error={firstError} onRetry={refresh} />
-      )}
-
-      {!entities.loading &&
-      firstError === null &&
-      activeEntities.length === 0 ? (
-        <div className="panel roster-builder-empty">
-          <EmptyState
-            title="No entities"
-            description="Create an entity to generate a sheet from the active capacities and capabilities."
-            action={
-              world.status === "active" ? (
-                <button
-                  className="button button-primary"
-                  type="button"
-                  onClick={startAddingEntity}
-                >
-                  Create the first entity
-                </button>
-              ) : undefined
+    <RosterView
+      preparing={preparing}
+      active={world.status === "active"}
+      loading={entities.loading}
+      issue={firstError === null ? null : toErrorNotice(firstError)}
+      entities={activeEntities.map((entity) => ({
+        id: entity.id,
+        displayName: entity.display_name,
+        subtitle: rosterSubtitle(
+          entity,
+          members.items,
+          currentMembership?.id ?? "",
+        ),
+      }))}
+      selectedEntityId={selectedEntity?.id}
+      onCreateEntity={startAddingEntity}
+      onRetry={refresh}
+      onSelectEntity={selectEntity}
+      detail={
+        selectedEntity === undefined ? null : (
+          <EntityDetail
+            key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
+            entity={selectedEntity}
+            mechanics={mechanicItems}
+            rulesRevision={mechanicCollection?.revision ?? world.rules_revision}
+            mechanicsEditable={world.status === "active"}
+            controlledByCurrentMember={false}
+            facilitator
+            world={world}
+            profileRefreshToken={profileRefreshToken}
+            onManageControllers={() =>
+              setManagingControllersFor(selectedEntity.id)
             }
+            onProfileChanged={refresh}
+            onSaved={refresh}
           />
-        </div>
-      ) : null}
-
-      {activeEntities.length > 0 ? (
-        <div className="roster-builder-grid">
-          <aside className="panel roster-builder-catalog">
-            <header>
-              <h2>Entities</h2>
-              <span>{activeEntities.length}</span>
-            </header>
-            <div className="roster-builder-list">
-              {activeEntities.map((entity) => (
-                <button
-                  className={entity.id === selectedEntity?.id ? "active" : ""}
-                  type="button"
-                  key={entity.id}
-                  onClick={() => selectEntity(entity.id)}
-                >
-                  <span>
-                    <strong>{entity.display_name}</strong>
-                    <small>
-                      {rosterSubtitle(
-                        entity,
-                        members.items,
-                        currentMembership?.id ?? "",
-                      )}
-                    </small>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </aside>
-
-          <div className="builder-entity-detail">
-            {selectedEntity === undefined ? null : (
-              <EntityDetail
-                key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
-                entity={selectedEntity}
-                mechanics={mechanicItems}
-                rulesRevision={
-                  mechanicCollection?.revision ?? world.rules_revision
-                }
-                mechanicsEditable={world.status === "active"}
-                controlledByCurrentMember={false}
-                facilitator
-                world={world}
-                profileRefreshToken={profileRefreshToken}
-                onManageControllers={() =>
-                  setManagingControllersFor(selectedEntity.id)
-                }
-                onProfileChanged={refresh}
-                onSaved={refresh}
-              />
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {addingEntity ? (
-        <NewEntityModal
-          world={world}
-          members={members.items}
-          onClose={() => setAddingEntity(false)}
-          onCreated={(entity) => {
-            entities.replaceItem(entity, (item) => item.id);
-            setSelectedEntityId(entity.id);
-            setAddingEntity(false);
-            refresh();
-          }}
-        />
-      ) : null}
-      {managingControllersFor === undefined ? null : (
-        <ManageControllersModal
-          world={world}
-          entity={entities.items.find(
-            (entity) => entity.id === managingControllersFor,
+        )
+      }
+      overlays={
+        <>
+          {addingEntity ? (
+            <NewEntityModal
+              world={world}
+              members={members.items}
+              onClose={() => setAddingEntity(false)}
+              onCreated={(entity) => {
+                entities.replaceItem(entity, (item) => item.id);
+                setSelectedEntityId(entity.id);
+                setAddingEntity(false);
+                refresh();
+              }}
+            />
+          ) : null}
+          {managingControllersFor === undefined ? null : (
+            <ManageControllersModal
+              world={world}
+              entity={entities.items.find(
+                (entity) => entity.id === managingControllersFor,
+              )}
+              members={members.items}
+              onClose={() => setManagingControllersFor(undefined)}
+              onSaved={() => {
+                setManagingControllersFor(undefined);
+                refresh();
+              }}
+            />
           )}
-          members={members.items}
-          onClose={() => setManagingControllersFor(undefined)}
-          onSaved={() => {
-            setManagingControllersFor(undefined);
-            refresh();
-          }}
-        />
-      )}
-    </section>
+        </>
+      }
+    />
   );
 }
 

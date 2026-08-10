@@ -6,9 +6,10 @@ import {
   clearAuthentication,
   onAuthenticationRequired,
   setCSRFToken,
+  toErrorNotice,
 } from "./api/client";
 import type { AuthenticatedSession, User } from "./api/types";
-import { Brand, ErrorMessage, LoadingState } from "./components/StudioUI";
+import { AppFailureView, AppLoadingView } from "./AppView";
 import { HomeChoice } from "./features/HomeChoice";
 import { IdentityGate } from "./features/IdentityGate";
 import { InvitePage } from "./features/InvitePage";
@@ -138,25 +139,17 @@ export default function App() {
   if (location.type === "redirect") return null;
 
   if (authenticationStatus === "checking") {
-    return (
-      <main className="app-boot">
-        <Brand />
-        <LoadingState label="Opening your account" />
-      </main>
-    );
+    return <AppLoadingView />;
   }
 
   if (authenticationStatus === "error" && authenticationError !== null) {
     return (
-      <main className="app-boot">
-        <Brand />
-        <ErrorMessage
-          error={authenticationError}
-          onRetry={() => {
-            setAuthenticationStatus("checking");
-          }}
-        />
-      </main>
+      <AppFailureView
+        error={toErrorNotice(authenticationError)}
+        onRetry={() => {
+          setAuthenticationStatus("checking");
+        }}
+      />
     );
   }
 

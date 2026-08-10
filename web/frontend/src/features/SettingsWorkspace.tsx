@@ -1,15 +1,16 @@
 import { useMemo, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
-import type { World } from "../api/types";
 import {
-  ErrorMessage,
-  Field,
-  PageIntro,
-  RolePill,
-} from "../components/StudioUI";
-import { confirmDiscardDraft, useDirtyGuard } from "../hooks/useDraft";
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
+import type { World } from "../api/types";
+import { confirmDiscardDraft, useDraft } from "../hooks/useDraft";
 import type { Navigate } from "../worldRoutes";
+import { SettingsView, type SettingsDMSource } from "./SettingsView";
 
 export function SettingsWorkspace({
   world,
@@ -20,43 +21,37 @@ export function SettingsWorkspace({
   navigate: Navigate;
   onWorldChanged: () => void;
 }) {
-  const [name, setName] = useState(world.name);
-  const [description, setDescription] = useState(world.description ?? "");
-  const [dmSource, setDMSource] = useState<World["dm_source"]>(world.dm_source);
+  const source = useMemo(
+    () => ({
+      name: world.name,
+      description: world.description ?? "",
+      dmSource: world.dm_source,
+    }),
+    [world.description, world.dm_source, world.name],
+  );
+  const draft = useDraft(source);
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
-  const dirty = useMemo(
-    () =>
-      name !== world.name ||
-      description !== (world.description ?? "") ||
-      dmSource !== world.dm_source,
-    [
-      description,
-      dmSource,
-      name,
-      world.description,
-      world.dm_source,
-      world.name,
-    ],
-  );
-  const clearDirtyGuard = useDirtyGuard(dirty);
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
+  async function save() {
     setSaving(true);
     setError(null);
     try {
-      await api<World>(worldPath(world.id), {
+      const saved = await api<World>(worldPath(world.id), {
         method: "PATCH",
         ...jsonBody({
-          name: name.trim(),
-          description: description.trim() || null,
-          dm_source: dmSource,
+          name: draft.draft.name.trim(),
+          description: draft.draft.description.trim() || null,
+          dm_source: draft.draft.dmSource,
           expected_revision: world.revision,
         }),
       });
-      clearDirtyGuard();
+      draft.accept({
+        name: saved.name,
+        description: saved.description ?? "",
+        dmSource: saved.dm_source,
+      });
       onWorldChanged();
     } catch (reason) {
       setError(
@@ -84,7 +79,7 @@ export function SettingsWorkspace({
         method: "POST",
         ...jsonBody({ expected_revision: world.revision }),
       });
-      clearDirtyGuard();
+      draft.accept(draft.draft);
       navigate("/build");
     } catch (reason) {
       setError(
@@ -97,109 +92,34 @@ export function SettingsWorkspace({
   }
 
   return (
-    <section className="settings-page content-narrow">
-      <PageIntro
-        title="Settings"
-        description="Update world details or archive the world."
-      />
-      <div className="settings-layout">
-        <form
-          className="panel settings-form"
-          onSubmit={(event) => void save(event)}
-        >
-          <header>
-            <h2>World details</h2>
-          </header>
-          <Field label="World name" error={error?.fields["name"]}>
-            <input
-              value={name}
-              onChange={(event) => setName(event.currentTarget.value)}
-              maxLength={200}
-            />
-          </Field>
-          <Field
-            label="Description"
-            hint="Keep it short enough to orient a newly invited player."
-          >
-            <textarea
-              value={description}
-              onChange={(event) => setDescription(event.currentTarget.value)}
-              rows={4}
-            />
-          </Field>
-          <Field
-            label="DM source"
-            hint="A human writes problems and outcomes, or Terra can generate them from the live world."
-            error={error?.fields["dm_source"]}
-          >
-            <select
-              value={dmSource}
-              onChange={(event) =>
-                setDMSource(event.currentTarget.value as World["dm_source"])
-              }
-            >
-              <option value="human">Human facilitator</option>
-              <option value="terra">Terra Auto DM</option>
-            </select>
-          </Field>
-          {error === null ? null : <ErrorMessage error={error} />}
-          <footer className="form-actions">
-            <span>{dirty ? "Unsaved changes" : "Up to date"}</span>
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={!dirty || saving || name.trim() === ""}
-            >
-              {saving ? "Saving…" : "Save details"}
-            </button>
-          </footer>
-        </form>
-
-        <aside className="settings-summary">
-          <h2>Access</h2>
-          <RolePill role={world.role} />
-          <p>
-            {world.role === "owner"
-              ? "You can configure mechanics, invite members, facilitate play, and archive this world."
-              : "You can configure mechanics and facilitate play."}
-          </p>
-          <dl>
-            <div>
-              <dt>Members</dt>
-              <dd>{world.member_count}</dd>
-            </div>
-            <div>
-              <dt>Mechanics</dt>
-              <dd>{world.capacity_count + world.capability_count}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>{world.status}</dd>
-            </div>
-          </dl>
-        </aside>
-      </div>
-
-      {world.role === "owner" && world.status === "active" ? (
-        <section className="panel danger-zone">
-          <div>
-            <h2>Archive world</h2>
-            <p>
-              Archiving keeps every entity, resolved problem, and resolution
-              record readable. Active problems must be resolved or cancelled
-              first.
-            </p>
-          </div>
-          <button
-            className="button button-danger"
-            type="button"
-            onClick={() => void archive()}
-            disabled={archiving}
-          >
-            {archiving ? "Archiving…" : "Archive world"}
-          </button>
-        </section>
-      ) : null}
-    </section>
+    <SettingsView
+      model={{
+        draft: draft.draft,
+        dirty: draft.dirty,
+        busy: saving ? "saving" : archiving ? "archiving" : null,
+        issue: error === null ? null : toErrorNotice(error),
+        fieldIssues: {
+          name: error?.fields["name"],
+          dmSource: error?.fields["dm_source"],
+        },
+        access: {
+          role: world.role === "owner" ? "owner" : "editor",
+          memberCount: world.member_count,
+          mechanicCount: world.capacity_count + world.capability_count,
+          status: world.status,
+        },
+        canArchive: world.role === "owner" && world.status === "active",
+      }}
+      actions={{
+        changeName: (name) =>
+          draft.setDraft((current) => ({ ...current, name })),
+        changeDescription: (description) =>
+          draft.setDraft((current) => ({ ...current, description })),
+        changeDMSource: (dmSource: SettingsDMSource) =>
+          draft.setDraft((current) => ({ ...current, dmSource })),
+        save: () => void save(),
+        archive: () => void archive(),
+      }}
+    />
   );
 }

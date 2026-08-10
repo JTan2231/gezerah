@@ -23,6 +23,16 @@ export class ApiError extends Error {
   }
 }
 
+export function toErrorNotice(error: ApiError): {
+  kind: "connection" | "request";
+  message: string;
+} {
+  return {
+    kind: error.code === "network_error" ? "connection" : "request",
+    message: error.message,
+  };
+}
+
 function isApiErrorPayload(value: unknown): value is ApiErrorPayload {
   if (typeof value !== "object" || value === null || !("error" in value))
     return false;

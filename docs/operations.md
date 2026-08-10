@@ -35,16 +35,16 @@ binary whose SPA routes return 503.
 
 ## Runtime configuration
 
-| Variable              | Default/precedence             | Operational use                                                                                          |
-| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `DND_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                            |
-| `PORT`                | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                                   |
-| `DND_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                          |
-| `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                           |
-| `DND_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                              |
-| `DND_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS.    |
-| `OPENAI_API_KEY`      | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                       |
-| `DND_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                                |
+| Variable              | Default/precedence             | Operational use                                                                                       |
+| --------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `DND_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                         |
+| `PORT`                | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                                |
+| `DND_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                       |
+| `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                        |
+| `DND_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
+| `DND_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
+| `OPENAI_API_KEY`      | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                    |
+| `DND_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                             |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
@@ -344,15 +344,16 @@ schema-change mechanism.
 upgrade from the removed schema. New databases apply `001`,
 `002_rules_graph_statuses.sql`, and
 `003_interaction_audience_invalidations.sql`, then the empty-user account
-cutover in `004_password_auth.sql`; a database at a recorded prefix
+cutover in `004_password_auth.sql`, followed by the constrained `human`/`terra`
+world DM-source setting in `005_auto_dm.sql`; a database at a recorded prefix
 upgrades in place, including mechanic-rules/status-set root backfills and the
 audience-invalidation event flag. `004` deliberately stops if any user row
 exists; this repository has no account-claim or password-invention migration.
-Use a fresh deployment database for this cutover. Do not attach a database with a different
-migration history or unledgered application tables. If unsupported data must
-be retained, use separately reviewed one-time export/transform/import tooling
-outside the running service,
-verify the new database, and retire that tooling.
+Use a fresh deployment database for this cutover. Do not attach a database with
+a different migration history or unledgered application tables. If unsupported
+data must be retained, use separately reviewed one-time
+export/transform/import tooling outside the running service, verify the new
+database, and retire that tooling.
 
 For each migration applied to a deployed database:
 

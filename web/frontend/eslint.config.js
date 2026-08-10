@@ -63,4 +63,50 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    files: [
+      "src/**/*View.tsx",
+      "src/**/*ViewModel.{ts,tsx}",
+      "src/components/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["**/api/**"],
+              message:
+                "Views receive backend-neutral models and intent callbacks; API access belongs in the controller.",
+            },
+            {
+              group: [
+                "**/hooks/useCollection",
+                "**/hooks/useResource",
+                "**/hooks/useWorldEvents",
+              ],
+              message:
+                "Operational resource hooks belong in the controller, not the view.",
+            },
+            {
+              group: ["**/worldRoutes"],
+              message:
+                "Views emit navigation intent; route construction belongs in the controller.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "fetch",
+          message: "Network access belongs in the controller, not the view.",
+        },
+        {
+          name: "EventSource",
+          message: "Event streams belong in the controller, not the view.",
+        },
+      ],
+    },
+  },
 );

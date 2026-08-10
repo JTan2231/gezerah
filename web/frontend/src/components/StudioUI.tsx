@@ -1,7 +1,11 @@
 import { useEffect, type ReactNode } from "react";
 
-import type { ApiError } from "../api/client";
 import { humanize } from "../domain/display";
+
+export interface ErrorNotice {
+  kind: "connection" | "request";
+  message: string;
+}
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return (
@@ -84,14 +88,14 @@ export function ErrorMessage({
   error,
   onRetry,
 }: {
-  error: ApiError;
+  error: ErrorNotice;
   onRetry?: () => void;
 }) {
   return (
     <div className="notice notice-error" role="alert">
       <div>
         <strong>
-          {error.code === "network_error"
+          {error.kind === "connection"
             ? "Connection lost"
             : "That did not work"}
         </strong>

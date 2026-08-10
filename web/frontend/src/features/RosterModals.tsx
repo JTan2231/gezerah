@@ -1,8 +1,18 @@
 import { useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
+import {
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
 import type { World, WorldEntity, WorldMember } from "../api/types";
-import { Avatar, ErrorMessage, Field, Modal } from "../components/StudioUI";
+import {
+  ManageControllersModalView,
+  NewEntityModalView,
+  type RosterModalIssue,
+} from "./RosterModalsView";
 
 export function NewEntityModal({
   world,
@@ -18,14 +28,13 @@ export function NewEntityModal({
   const [name, setName] = useState("");
   const [controllerIDs, setControllerIDs] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [issue, setIssue] = useState<RosterModalIssue | null>(null);
   const players = members.filter(
     (member) => member.status === "active" && member.role === "player",
   );
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setSaving(true);
-    setError(null);
+    setIssue(null);
     try {
       const entity = await api<WorldEntity>(worldPath(world.id, "entities"), {
         method: "POST",
@@ -36,74 +45,31 @@ export function NewEntityModal({
       });
       onCreated(entity);
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not create this entity."),
-      );
+      setIssue(toRosterModalIssue(reason, "Could not create this entity."));
       setSaving(false);
     }
   }
   return (
-    <Modal
-      title="Create an entity"
-      description="Its sheet is generated from every active capacity and capability."
+    <NewEntityModalView
+      name={name}
+      controllerIds={controllerIDs}
+      players={players.map((player) => ({
+        id: player.id,
+        displayName: player.display_name,
+      }))}
+      saving={saving}
+      issue={issue}
+      onNameChange={setName}
+      onToggleController={(membershipId) =>
+        setControllerIDs((current) =>
+          current.includes(membershipId)
+            ? current.filter((id) => id !== membershipId)
+            : [...current, membershipId],
+        )
+      }
       onClose={onClose}
-    >
-      <form className="modal-form" onSubmit={(event) => void submit(event)}>
-        <Field label="Display name" error={error?.fields["display_name"]}>
-          <input
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-            maxLength={200}
-            placeholder="Entity name"
-          />
-        </Field>
-        {players.length === 0 ? null : (
-          <fieldset className="choice-fieldset controller-picker">
-            <legend>
-              Controlled by <small>Optional</small>
-            </legend>
-            <div className="responder-picker">
-              {players.map((member) => (
-                <label key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={controllerIDs.includes(member.id)}
-                    onChange={() =>
-                      setControllerIDs((current) =>
-                        current.includes(member.id)
-                          ? current.filter((id) => id !== member.id)
-                          : [...current, member.id],
-                      )
-                    }
-                  />
-                  <Avatar name={member.display_name} size="small" />
-                  <span>{member.display_name}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="modal-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={saving || name.trim() === ""}
-          >
-            {saving ? "Creating…" : "Create entity"}
-          </button>
-        </footer>
-      </form>
-    </Modal>
+      onSubmit={() => void submit()}
+    />
   );
 }
 
@@ -131,15 +97,14 @@ export function ManageControllersModal({
           .map((member) => member.id);
   const [controllerIDs, setControllerIDs] = useState(initialControllerIDs);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<ApiError | null>(null);
+  const [issue, setIssue] = useState<RosterModalIssue | null>(null);
 
   if (entity === undefined) return null;
   const entityID = entity.id;
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
+  async function save() {
     setSaving(true);
-    setError(null);
+    setIssue(null);
     try {
       await api(worldPath(world.id, `entities/${entityID}/controllers`), {
         method: "PUT",
@@ -150,69 +115,44 @@ export function ManageControllersModal({
       });
       onSaved();
     } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not update character control."),
+      setIssue(
+        toRosterModalIssue(reason, "Could not update character control."),
       );
       setSaving(false);
     }
   }
 
   return (
-    <Modal
-      title="Manage character control"
-      description={`Choose which players control ${entity.display_name}.`}
+    <ManageControllersModalView
+      entityName={entity.display_name}
+      controllerIds={controllerIDs}
+      players={players.map((player) => ({
+        id: player.id,
+        displayName: player.display_name,
+      }))}
+      saving={saving}
+      issue={issue}
+      onToggleController={(membershipId) =>
+        setControllerIDs((current) =>
+          current.includes(membershipId)
+            ? current.filter((id) => id !== membershipId)
+            : [...current, membershipId],
+        )
+      }
       onClose={onClose}
-    >
-      <form className="modal-form" onSubmit={(event) => void save(event)}>
-        {players.length === 0 ? (
-          <p className="modal-note">
-            Invite a player before assigning control. Saving now will leave this
-            as an uncontrolled world entity.
-          </p>
-        ) : (
-          <fieldset className="choice-fieldset controller-picker">
-            <legend>Player controllers</legend>
-            <div className="responder-picker">
-              {players.map((member) => (
-                <label key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={controllerIDs.includes(member.id)}
-                    onChange={() =>
-                      setControllerIDs((current) =>
-                        current.includes(member.id)
-                          ? current.filter((id) => id !== member.id)
-                          : [...current, member.id],
-                      )
-                    }
-                  />
-                  <Avatar name={member.display_name} size="small" />
-                  <span>{member.display_name}</span>
-                </label>
-              ))}
-            </div>
-          </fieldset>
-        )}
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="modal-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={saving}
-          >
-            {saving ? "Saving…" : "Save controllers"}
-          </button>
-        </footer>
-      </form>
-    </Modal>
+      onSubmit={() => void save()}
+    />
   );
+}
+
+function toRosterModalIssue(
+  reason: unknown,
+  fallbackMessage: string,
+): RosterModalIssue {
+  if (!(reason instanceof ApiError))
+    return { kind: "request", message: fallbackMessage, fields: {} };
+  return {
+    ...toErrorNotice(reason),
+    fields: { displayName: reason.fields["display_name"] },
+  };
 }

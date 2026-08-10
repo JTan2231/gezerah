@@ -119,15 +119,20 @@ they do not claim frontend-authentic setup.
 
 ### Frontend
 
-| Test                                           | Responsibility                                                                       |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
-| `web/frontend/src/api/client.test.ts`          | Cookie requests, CSRF injection, authentication teardown, and legacy-header removal. |
-| `web/frontend/src/worldRoutes.test.ts`         | World/invite routing, canonicalization, and unknown-route handling.                  |
-| `web/frontend/src/domain/mechanics.test.ts`    | Mechanic mode/source changes and expression preservation/reset.                      |
-| `web/frontend/src/domain/consequences.test.ts` | Scalar/status draft conversion and exact status-removal targeting.                   |
-| `web/frontend/src/domain/display.test.ts`      | API vocabulary and relative-time display.                                            |
+| Test                                             | Responsibility                                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `web/frontend/src/api/client.test.ts`            | Cookie requests, CSRF injection, authentication teardown, and session-safe replay.     |
+| `web/frontend/src/worldRoutes.test.ts`           | World/invite routing, canonicalization, and unknown-route handling.                    |
+| `web/frontend/src/domain/decimal.test.ts`        | Exact-decimal validation, canonicalization, bounds, and sign handling.                 |
+| `web/frontend/src/domain/mechanics.test.ts`      | Mechanic mode/source changes and expression preservation/reset.                        |
+| `web/frontend/src/domain/display.test.ts`        | API vocabulary and relative-time display.                                              |
+| `web/frontend/src/domain/password.test.ts`       | Password minimum-length policy.                                                        |
+| `web/frontend/src/features/*View.test.tsx`       | Backend-free semantic rendering fixtures for application and feature presentation.     |
+| `web/frontend/src/features/EntityViews.test.tsx` | Entity detail, sheet, profile, loading/error, and controller-modal rendering fixtures. |
 
-There are no component-rendering unit tests or automated axe audit.
+Static component-rendering tests are present. There is no DOM-emulated React
+interaction suite or automated axe audit; Playwright owns browser interaction,
+focus, routing, API, and multi-identity behavior.
 
 ### Go application and rules
 
@@ -154,10 +159,12 @@ The migration contract covers the complete ordered chain:
 - `002_rules_graph_statuses.sql`
 - `003_interaction_audience_invalidations.sql`
 - `004_password_auth.sql`
+- `005_auto_dm.sql`
 
 Migration tests validate the prefix/history contract, normalized rule/status
 storage, audience invalidation, password authentication schema, invite-token
-digests, backfills, provenance, and immutable receipt constraints.
+digests, world DM-source constraints, backfills, provenance, and immutable
+receipt constraints.
 
 ## Runtime and generated evidence
 

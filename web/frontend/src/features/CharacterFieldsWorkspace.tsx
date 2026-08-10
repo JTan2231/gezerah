@@ -1,28 +1,25 @@
 import { useMemo, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
-import type {
-  EntityProfileVisibility,
-  World,
-  WorldCharacterFieldSet,
-} from "../api/types";
 import {
-  EmptyState,
-  ErrorMessage,
-  Field,
-  LoadingState,
-  PageIntro,
-} from "../components/StudioUI";
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
+import type { World, WorldCharacterFieldSet } from "../api/types";
 import { useDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
+import {
+  CharacterFieldsLoadErrorView,
+  CharacterFieldsLoadingView,
+  CharacterFieldsView,
+  type CharacterFieldDraft,
+} from "./CharacterFieldsView";
 
-interface CharacterFieldDraft {
-  clientKey: string;
+type CharacterFieldRecordDraft = CharacterFieldDraft & {
   id?: string | undefined;
-  label: string;
-  helpText: string;
-  visibility: EntityProfileVisibility;
-}
+};
 
 export function CharacterFieldsWorkspace({
   world,
@@ -36,9 +33,14 @@ export function CharacterFieldsWorkspace({
   );
 
   if (resource.loading && resource.value === null)
-    return <LoadingState label="Opening character fields" />;
+    return <CharacterFieldsLoadingView />;
   if (resource.error !== null)
-    return <ErrorMessage error={resource.error} onRetry={resource.reload} />;
+    return (
+      <CharacterFieldsLoadErrorView
+        issue={toErrorNotice(resource.error)}
+        onRetry={resource.reload}
+      />
+    );
   if (resource.value === null) return null;
 
   return (
@@ -63,7 +65,7 @@ function CharacterFieldsEditor({
   fieldSet: WorldCharacterFieldSet;
   onSaved: () => void;
 }) {
-  const source = useMemo<CharacterFieldDraft[]>(
+  const source = useMemo<CharacterFieldRecordDraft[]>(
     () =>
       fieldSet.fields.map((field) => ({
         clientKey: field.id,
@@ -100,8 +102,7 @@ function CharacterFieldsEditor({
     });
   }
 
-  async function save(event: React.FormEvent) {
-    event.preventDefault();
+  async function save() {
     const existingIDs = new Set(fieldSet.fields.map((field) => field.id));
     const desiredIDs = new Set(
       draft.draft.flatMap((field) =>
@@ -158,152 +159,41 @@ function CharacterFieldsEditor({
   );
 
   return (
-    <section className="character-fields-page content-narrow">
-      <PageIntro
-        title="Character fields"
-        description="Define the information every player-controlled character must complete before entering Play."
-      />
-
-      <form
-        className="panel character-fields-form"
-        onSubmit={(event) => void save(event)}
-      >
-        <header>
-          <div>
-            <h2>Requirements</h2>
-            <p>
-              {draft.draft.length} required{" "}
-              {draft.draft.length === 1 ? "field" : "fields"}
-            </p>
-          </div>
-          <span>schema r{fieldSet.revision}</span>
-        </header>
-
-        {draft.draft.length === 0 ? (
-          <EmptyState
-            title="No character fields yet"
-            description="Controlled entities are immediately ready until you publish at least one field."
-          />
-        ) : null}
-
-        <div className="character-field-definition-list">
-          {draft.draft.map((characterField, index) => (
-            <fieldset
-              className="character-field-definition"
-              key={characterField.clientKey}
-            >
-              <legend>Required field {index + 1}</legend>
-              <div className="profile-section-actions">
-                <button
-                  className="text-button"
-                  type="button"
-                  disabled={index === 0}
-                  aria-label={`Move character field ${index + 1} up`}
-                  onClick={() => move(index, -1)}
-                >
-                  ↑
-                </button>
-                <button
-                  className="text-button"
-                  type="button"
-                  disabled={index === draft.draft.length - 1}
-                  aria-label={`Move character field ${index + 1} down`}
-                  onClick={() => move(index, 1)}
-                >
-                  ↓
-                </button>
-                <button
-                  className="text-button danger-text"
-                  type="button"
-                  onClick={() =>
-                    draft.setDraft((current) =>
-                      current.filter(
-                        (_, candidateIndex) => candidateIndex !== index,
-                      ),
-                    )
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-              <Field
-                label="Field label"
-                error={error?.fields[`fields[${index}].label`]}
-              >
-                <input
-                  value={characterField.label}
-                  maxLength={200}
-                  placeholder="Field label"
-                  onChange={(event) =>
-                    update(index, { label: event.currentTarget.value })
-                  }
-                />
-              </Field>
-              <Field
-                label="Guidance"
-                hint="Optional instructions shown while the player writes."
-                error={error?.fields[`fields[${index}].help_text`]}
-              >
-                <textarea
-                  value={characterField.helpText}
-                  rows={3}
-                  maxLength={2000}
-                  placeholder="Instructions for this field"
-                  onChange={(event) =>
-                    update(index, { helpText: event.currentTarget.value })
-                  }
-                />
-              </Field>
-              <Field label="Who can read the answer?">
-                <select
-                  value={characterField.visibility}
-                  onChange={(event) =>
-                    update(index, {
-                      visibility: event.currentTarget
-                        .value as EntityProfileVisibility,
-                    })
-                  }
-                >
-                  <option value="table">Everyone at the table</option>
-                  <option value="controllers-and-facilitators">
-                    Character controllers and facilitators
-                  </option>
-                </select>
-              </Field>
-            </fieldset>
-          ))}
-        </div>
-
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="form-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            disabled={draft.draft.length >= 50}
-            onClick={() =>
-              draft.setDraft((current) => [
-                ...current,
-                {
-                  clientKey: crypto.randomUUID(),
-                  label: "",
-                  helpText: "",
-                  visibility: "table",
-                },
-              ])
-            }
-          >
-            Add required field
-          </button>
-          <span>{draft.dirty ? "Unpublished changes" : "Published"}</span>
-          <button
-            className="button button-primary"
-            type="submit"
-            disabled={!draft.dirty || !valid || saving}
-          >
-            {saving ? "Publishing…" : "Publish requirements"}
-          </button>
-        </footer>
-      </form>
-    </section>
+    <CharacterFieldsView
+      model={{
+        schemaLabel: `schema r${fieldSet.revision}`,
+        fields: draft.draft.map((field, index) => ({
+          clientKey: field.clientKey,
+          label: field.label,
+          helpText: field.helpText,
+          visibility: field.visibility,
+          labelIssue: error?.fields[`fields[${index}].label`],
+          helpTextIssue: error?.fields[`fields[${index}].help_text`],
+        })),
+        dirty: draft.dirty,
+        valid,
+        saving,
+        issue: error === null ? null : toErrorNotice(error),
+      }}
+      actions={{
+        updateField: update,
+        moveField: move,
+        removeField: (index) =>
+          draft.setDraft((current) =>
+            current.filter((_, candidateIndex) => candidateIndex !== index),
+          ),
+        addField: () =>
+          draft.setDraft((current) => [
+            ...current,
+            {
+              clientKey: crypto.randomUUID(),
+              label: "",
+              helpText: "",
+              visibility: "table",
+            },
+          ]),
+        publish: () => void save(),
+      }}
+    />
   );
 }

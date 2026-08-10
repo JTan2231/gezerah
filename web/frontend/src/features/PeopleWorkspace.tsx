@@ -1,30 +1,28 @@
 import { useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
-import type { World, WorldInvite, WorldMember, WorldRole } from "../api/types";
 import {
-  Avatar,
-  ErrorMessage,
-  Field,
-  LoadingState,
-  PageIntro,
-  RolePill,
-} from "../components/StudioUI";
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
+import type { World, WorldInvite, WorldMember } from "../api/types";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
+import { PeopleView, type InviteRole, type PeopleInvite } from "./PeopleView";
 
 export function PeopleWorkspace({ world }: { world: World }) {
   const members = useCollection<WorldMember>(worldPath(world.id, "members"));
   const invites = useCollection<WorldInvite>(worldPath(world.id, "invites"));
-  const [role, setRole] = useState<Exclude<WorldRole, "owner">>("player");
+  const [role, setRole] = useState<InviteRole>("player");
   const [days, setDays] = useState(7);
   const [creating, setCreating] = useState(false);
   const [createdLink, setCreatedLink] = useState("");
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  async function createInvite(event: React.FormEvent) {
-    event.preventDefault();
+  async function createInvite() {
     setCreating(true);
     setCreatedLink("");
     setCopied(false);
@@ -48,7 +46,9 @@ export function PeopleWorkspace({ world }: { world: World }) {
     }
   }
 
-  async function revoke(invite: WorldInvite) {
+  async function revoke(inviteID: string) {
+    const invite = invites.items.find((candidate) => candidate.id === inviteID);
+    if (invite === undefined) return;
     setError(null);
     try {
       const saved = await api<WorldInvite>(
@@ -77,177 +77,60 @@ export function PeopleWorkspace({ world }: { world: World }) {
     }
   }
 
-  const activeInvites = invites.items.filter(
-    (invite) =>
-      invite.revoked_at === undefined &&
-      new Date(invite.expires_at).getTime() > Date.now(),
-  );
+  const now = Date.now();
+  const viewInvites = invites.items.map<PeopleInvite>((invite) => {
+    const expired = new Date(invite.expires_at).getTime() <= now;
+    const closed = invite.revoked_at !== undefined || expired;
+    return {
+      id: invite.id,
+      roleLabel: humanize(invite.role),
+      creatorAndUses: `Created by ${invite.created_by_display_name} · ${invite.use_count} ${invite.use_count === 1 ? "use" : "uses"}`,
+      statusLabel:
+        invite.revoked_at !== undefined
+          ? "Revoked"
+          : expired
+            ? "Expired"
+            : `Expires ${formatRelativeDate(invite.expires_at)}`,
+      closed,
+    };
+  });
+  const activeInviteCount = viewInvites.filter(
+    (invite) => !invite.closed,
+  ).length;
+
   return (
-    <section className="people-page content-narrow">
-      <PageIntro
-        title="People & invites"
-        description="Invite links add people to this world with a selected role."
-      />
-
-      <div className="people-layout">
-        <section className="panel invite-builder">
-          <header>
-            <h2>Create invite</h2>
-          </header>
-          <form onSubmit={(event) => void createInvite(event)}>
-            <div className="invite-form-grid">
-              <Field label="They can join as">
-                <select
-                  value={role}
-                  onChange={(event) =>
-                    setRole(
-                      event.currentTarget.value as Exclude<WorldRole, "owner">,
-                    )
-                  }
-                >
-                  <option value="player">Player — respond in play</option>
-                  <option value="spectator">Spectator — watch the table</option>
-                  <option value="editor">
-                    Editor — configure and facilitate
-                  </option>
-                </select>
-              </Field>
-              <Field label="Link expires">
-                <select
-                  value={days}
-                  onChange={(event) =>
-                    setDays(Number(event.currentTarget.value))
-                  }
-                >
-                  <option value={1}>In 24 hours</option>
-                  <option value={7}>In 7 days</option>
-                  <option value={30}>In 30 days</option>
-                  <option value={90}>In 90 days</option>
-                </select>
-              </Field>
-            </div>
-            <button
-              className="button button-primary"
-              type="submit"
-              disabled={creating}
-            >
-              {creating ? "Creating link…" : "Create invite link"}
-            </button>
-          </form>
-          {createdLink === "" ? null : (
-            <div className="created-invite" role="status">
-              <div>
-                <span>{humanize(role)} invitation</span>
-                <strong>Invite link created</strong>
-              </div>
-              <div className="copy-field">
-                <input
-                  id="created-invite-link"
-                  readOnly
-                  value={createdLink}
-                  aria-label="Invite link"
-                />
-                <button
-                  className="button button-ink"
-                  type="button"
-                  onClick={() => void copyLink()}
-                >
-                  {copied ? "Copied" : "Copy link"}
-                </button>
-              </div>
-              <p>
-                The full token is shown only now. You can revoke the link below
-                at any time.
-              </p>
-            </div>
-          )}
-          {error === null ? null : <ErrorMessage error={error} />}
-        </section>
-
-        <section className="panel member-panel">
-          <header>
-            <h2>Members</h2>
-            <span>{members.items.length}</span>
-          </header>
-          {members.loading ? <LoadingState label="Loading members" /> : null}
-          {members.error === null ? null : (
-            <ErrorMessage error={members.error} onRetry={members.reload} />
-          )}
-          <div className="member-list">
-            {members.items.map((member) => (
-              <div className="member-row" key={member.id}>
-                <Avatar name={member.display_name} />
-                <div>
-                  <strong>{member.display_name}</strong>
-                  <small>
-                    Joined{" "}
-                    {formatRelativeDate(member.joined_at ?? member.created_at)}
-                    {member.role === "player"
-                      ? ` · ${humanize(member.play_status)}`
-                      : ""}
-                  </small>
-                </div>
-                <RolePill role={member.role} />
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <section className="panel invite-list-panel">
-        <header>
-          <div>
-            <h2>Invitations</h2>
-            <p>
-              {activeInvites.length === 0
-                ? "No active links"
-                : `${activeInvites.length} active ${activeInvites.length === 1 ? "link" : "links"}`}
-            </p>
-          </div>
-        </header>
-        {invites.loading ? <LoadingState label="Loading invitations" /> : null}
-        {invites.error === null ? null : (
-          <ErrorMessage error={invites.error} onRetry={invites.reload} />
-        )}
-        <div className="invite-list">
-          {invites.items.map((invite) => {
-            const expired = new Date(invite.expires_at).getTime() <= Date.now();
-            const closed = invite.revoked_at !== undefined || expired;
-            return (
-              <div
-                className={
-                  closed ? "invite-row invite-row-closed" : "invite-row"
-                }
-                key={invite.id}
-              >
-                <div>
-                  <strong>{humanize(invite.role)} link</strong>
-                  <small>
-                    Created by {invite.created_by_display_name} ·{" "}
-                    {invite.use_count} {invite.use_count === 1 ? "use" : "uses"}
-                  </small>
-                </div>
-                <span>
-                  {invite.revoked_at !== undefined
-                    ? "Revoked"
-                    : expired
-                      ? "Expired"
-                      : `Expires ${formatRelativeDate(invite.expires_at)}`}
-                </span>
-                {!closed ? (
-                  <button
-                    className="button button-danger-quiet"
-                    type="button"
-                    onClick={() => void revoke(invite)}
-                  >
-                    Revoke
-                  </button>
-                ) : null}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    </section>
+    <PeopleView
+      model={{
+        inviteDraft: { role, expiresInDays: days },
+        creating,
+        createdLink,
+        createdRoleLabel: humanize(role),
+        copied,
+        issue: error === null ? null : toErrorNotice(error),
+        members: members.items.map((member) => ({
+          id: member.id,
+          displayName: member.display_name,
+          role: member.role,
+          details: `Joined ${formatRelativeDate(member.joined_at ?? member.created_at)}${member.role === "player" ? ` · ${humanize(member.play_status)}` : ""}`,
+        })),
+        membersLoading: members.loading,
+        membersIssue:
+          members.error === null ? null : toErrorNotice(members.error),
+        invites: viewInvites,
+        invitesLoading: invites.loading,
+        invitesIssue:
+          invites.error === null ? null : toErrorNotice(invites.error),
+        activeInviteCount,
+      }}
+      actions={{
+        changeRole: setRole,
+        changeExpiry: setDays,
+        createInvite: () => void createInvite(),
+        copyLink: () => void copyLink(),
+        revokeInvite: (inviteID) => void revoke(inviteID),
+        retryMembers: members.reload,
+        retryInvites: invites.reload,
+      }}
+    />
   );
 }

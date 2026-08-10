@@ -33,36 +33,189 @@ Bun. It uses browser `fetch`, History API routing, and native form controls.
 There is no router, global-state library, form framework,
 component framework, or service worker.
 
-| Path                                        | Responsibility                                                                     |
-| ------------------------------------------- | ---------------------------------------------------------------------------------- |
-| `src/App.tsx`                               | Neutral home, session bootstrap/boundary, redirects, and top-level area selection. |
-| `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                                 |
-| `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers.   |
-| `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                            |
-| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.               |
-| `src/features/HomeChoice.tsx`               | Data-free root choice between Play and Build.                                      |
-| `src/features/IdentityGate.tsx`             | Username/password signup and signin while preserving the requested URL.            |
-| `src/features/AccountControls.tsx`          | Account identity, password change, and server-side signout controls.               |
-| `src/features/BuildLibrary.tsx`             | Owner/editor Build library and world creation.                                     |
-| `src/features/PlayLibrary.tsx`              | Membership-filtered table picker.                                                  |
-| `src/features/BuildWorkspace.tsx`           | Owner/editor-only Build shell.                                                     |
-| `src/features/PlayWorkspace.tsx`            | Independent Play shell and world loader.                                           |
-| `src/features/RosterWorkspace.tsx`          | Build entity, controller, profile, and direct sheet setup.                         |
-| `src/features/RosterModals.tsx`             | Build-only entity creation and controller assignment dialogs.                      |
-| `src/features/EntityDetail.tsx`             | Shared profile tabs and generated sheet reader/editor presentation.                |
-| `src/features/MechanicsWorkspace.tsx`       | Input/derived mechanic and recursive expression master-detail editor.              |
-| `src/features/CharacterFieldsWorkspace.tsx` | Atomic ordered character-requirement editor.                                       |
-| `src/features/PeopleWorkspace.tsx`          | Members, invite creation, one-time token display, and revocation.                  |
-| `src/features/SettingsWorkspace.tsx`        | World details and owner-only archive command.                                      |
-| `src/features/WorldPlay.tsx`                | Read-only live roster/sheets, ad-hoc problem lifecycle, history/receipts.          |
-| `src/features/EntityProfilePanel.tsx`       | Character-field reader/editor with completion and visibility.                      |
-| `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                        |
-| `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                            |
-| `src/styles/app.css`                        | Responsive neutral layouts for libraries, editors, invitations, and live play.     |
+| Path                                        | Responsibility                                                                   |
+| ------------------------------------------- | -------------------------------------------------------------------------------- |
+| `src/App.tsx`                               | Session, route, redirect, and top-level application controller.                  |
+| `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                               |
+| `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers. |
+| `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                          |
+| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.             |
+| `src/**/*View.tsx`                          | Backend-independent markup, layout, accessibility, and local UI interaction.     |
+| `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
+| `src/features/HomeChoice.tsx`               | Data-free root navigation controller for Play and Build.                         |
+| `src/features/IdentityGate.tsx`             | Username/password authentication command controller.                             |
+| `src/features/AccountControls.tsx`          | Password and server-side signout command controller.                             |
+| `src/features/BuildLibrary.tsx`             | Build-world collection and creation controller.                                  |
+| `src/features/PlayLibrary.tsx`              | Membership-filtered world collection controller.                                 |
+| `src/features/BuildWorkspace.tsx`           | Owner/editor gate, world resource, and Build navigation controller.              |
+| `src/features/PlayWorkspace.tsx`            | Play-world resource and shell composition controller.                            |
+| `src/features/RosterWorkspace.tsx`          | Entity, member, mechanic, selection, and refresh controller.                     |
+| `src/features/RosterModals.tsx`             | Entity creation and controller-assignment command controllers.                   |
+| `src/features/EntityDetail.tsx`             | Profile/sheet coordination and direct sheet persistence controller.              |
+| `src/features/MechanicsWorkspace.tsx`       | Mechanic resource, transport mapping, and save/archive controller.               |
+| `src/features/CharacterFieldsWorkspace.tsx` | Ordered character-requirement persistence controller.                            |
+| `src/features/PeopleWorkspace.tsx`          | Member/invite resources and invitation command controller.                       |
+| `src/features/SettingsWorkspace.tsx`        | World-details save and owner-only archive controller.                            |
+| `src/features/WorldPlay.tsx`                | Live resources, SSE/revision coordination, and problem command controllers.      |
+| `src/features/EntityProfilePanel.tsx`       | Character-profile resource and persistence controller.                           |
+| `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                      |
+| `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                          |
+| `src/styles/app.css`                        | Responsive neutral layouts for libraries, editors, invitations, and live play.   |
 
 ESLint includes hooks and JSX accessibility rules. Stylelint enforces tokenized
 colors and bounded selector complexity. Prettier, TypeScript, Bun tests, and
 Knip are all part of frontend CI.
+
+## Presentation and operations boundary
+
+Frontend features use a controller/view boundary so visual work does not depend
+on the HTTP contract. This is an import boundary, not an attempt to make the
+product generic or to support interchangeable backends. Views still speak the
+product language—worlds, mechanics, character readiness, interactions,
+Consequences, and roles—while remaining unaware of how those concepts are
+loaded or persisted.
+
+```mermaid
+flowchart TD
+    Route[App and workspace controller]
+    Data[API client, DTOs, resource hooks, SSE]
+    Feature[Feature controller]
+    Contract[Semantic view model and intent callbacks]
+    View[Backend-independent View component]
+    UI[Studio UI primitives]
+    CSS[Design tokens and layout CSS]
+
+    Route --> Feature
+    Data --> Feature
+    Feature --> Contract
+    Contract --> View
+    View --> UI
+    View --> CSS
+```
+
+The operational component keeps the established public feature name, such as
+`SettingsWorkspace` or `WorldPlay`. It composes one or more adjacent components
+whose names end in `View`. This lets callers and routes remain stable while a
+feature is divided internally.
+
+### Operational controller responsibilities
+
+Controllers may import `src/api`, API-backed hooks, and `worldRoutes`. They own:
+
+- relative API paths, HTTP methods, request headers, and JSON body construction;
+- raw response DTOs and conversion from snake-case transport properties;
+- authentication/session reactions and CSRF behavior supplied by the API client;
+- expected revisions, idempotency keys, and authoritative response handling;
+- resource loading, cancellation, retries, polling, and SSE invalidation;
+- readiness gates that decide which resources are permitted to load;
+- navigation and dirty-draft coordination across application routes;
+- translation of `ApiError` codes and field paths into semantic view problems;
+- refresh decisions after successful commands.
+
+Controllers are allowed to own React state when that state coordinates a
+command or several resources. They should reuse pure helpers in `src/domain`
+instead of embedding deterministic transformation logic in request handlers.
+
+### View responsibilities
+
+Views receive a semantic model and callbacks representing user intent. They own:
+
+- semantic HTML, responsive layout structure, CSS class names, and accessibility;
+- visible loading, empty, unavailable, onboarding, ready, and error states;
+- local visual interaction such as tabs, filters, selection, disclosure, and
+  modal visibility when it does not coordinate a command or dirty draft;
+- controlled form fields or pure frontend drafts when that keeps a complex
+  editor cohesive;
+- frontend validation and display-ready labels, counts, descriptions, and
+  visual tones;
+- intent callbacks such as `save(draft)`, `archive()`, `selectEntity(id)`, or
+  `resolve(draft)`.
+
+A view, shared component, or dedicated view-model module must not import
+`src/api`, API DTO types, `worldRoutes`, `useResource`, `useCollection`, or
+`useWorldEvents`; it must not call `fetch` or create an event stream. ESLint
+enforces this for shared components and every `*View.tsx` and
+`*ViewModel.{ts,tsx}` file. Type-only imports are included in the restriction
+because importing a transport DTO would still make a visual file change when
+the wire contract changes.
+
+Views are not required to be stateless. The architectural test is whether the
+view can render and exercise its local UI with fixture props and intent stubs,
+without a server, API mock, session, route, or `fetch` implementation.
+
+### The feature contract
+
+Contracts are deliberately feature-specific rather than a universal screen or
+repository abstraction. A typical controller passes two grouped values:
+
+```ts
+interface ExampleViewModel {
+  mode: "loading" | "ready" | "unavailable";
+  title: string;
+  busy: "saving" | "archiving" | null;
+  problem: { message: string; fields: Record<string, string> } | null;
+}
+
+interface ExampleViewActions {
+  changeDraft(patch: Partial<ExampleDraft>): void;
+  save(): void;
+  archive(): void;
+}
+```
+
+Only information that changes rendering belongs in the model. Transport-only
+facts such as `expected_revision`, CSRF tokens, endpoint paths, and response
+wrappers remain in the controller. Stable identifiers may cross the boundary
+when a view needs list keys or must report which visible item the user selected.
+
+The frontend does not mirror all of `api/types.ts` into a second canonical
+domain model. Small view models and draft types are introduced where they
+remove transport coupling; unchanged product-domain types may be represented by
+equivalent local semantic types. Mapping remains close to the feature that uses
+it.
+
+For example, `SettingsWorkspace` receives the authoritative `World` DTO and
+maps `name`, optional `description`, and `dm_source` into a camel-case settings
+draft. `SettingsView` edits that draft and emits save/archive intent. The
+controller adds `expected_revision`, maps `dmSource` back to `dm_source`, sends
+the command, accepts the returned `World` as the new draft baseline, refreshes
+the workspace resource, and performs archive navigation. The view never sees
+the world ID, revision, endpoint, HTTP method, or response DTO.
+
+### Errors, permissions, and server authority
+
+`StudioUI` accepts a structural, presentation-safe error notice and has no API
+import. Controllers map API field names to the fields used by their views and
+choose user-facing error state. A revision conflict can therefore become a
+semantic reload/conflict notice without passing raw transport revision fields
+through the view contract. Controllers may still provide a display-ready
+revision label when it is intentionally visible diagnostic information.
+
+Permission booleans and readiness modes may be passed to views because they
+materially change presentation. They are conveniences, not security controls.
+The server remains authoritative for membership, role, readiness, visibility,
+and mutations; restricted properties must still be removed before
+serialization.
+
+### Live Play operational islands
+
+Live Play has several independent command lifecycles, so it uses multiple view
+contracts rather than one universal props object. The root controller owns the
+member/entity/mechanic/interaction resources, polling, SSE reconnect, and rules
+revision synchronization. Problem creation, player action composition,
+adjudication/resolution, compiled-effect preview, and history are separate
+presentation islands. Compile/preview/resolve payload construction, exact
+revisions, idempotency, and post-event authoritative reloads remain operational
+even when the corresponding form and history layout are extracted.
+
+### Styling boundary
+
+CSS depends only on stable classes and data attributes emitted by views.
+`tokens.css` remains the literal-color authority and `app.css` contains the
+current responsive system. Splitting CSS by feature is optional and independent
+of the controller/view architecture; CSS Modules, CSS-in-JS, and a component
+framework are not required. Backend enum values should be mapped to semantic UI
+variants when they are used only to choose a visual tone.
 
 ## Routing and authentication
 

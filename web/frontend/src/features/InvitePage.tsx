@@ -1,18 +1,12 @@
 import { useEffect, useState } from "react";
 
-import { api, ApiError, worldInvitePath } from "../api/client";
+import { api, ApiError, toErrorNotice, worldInvitePath } from "../api/client";
 import type {
   AuthenticatedSession,
   User,
   World,
   WorldInvitePreview,
 } from "../api/types";
-import {
-  Brand,
-  ErrorMessage,
-  LoadingState,
-  RolePill,
-} from "../components/StudioUI";
 import { useResource } from "../hooks/useResource";
 import {
   buildWorldURL,
@@ -22,6 +16,7 @@ import {
   type Navigate,
 } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
+import { InvitePageView } from "./InvitePageView";
 
 export function InvitePage({
   area,
@@ -78,72 +73,37 @@ export function InvitePage({
   }
 
   return (
-    <main className="invite-page">
-      <header>
-        <Brand compact />
-        <div className="invite-account">
-          <span>
-            <strong>{user.display_name}</strong>
-            <small>@{user.username}</small>
-          </span>
-          <AccountControls
-            user={user}
-            onLogout={onLogout}
-            onLogoutAll={onLogoutAll}
-            onSessionChanged={onSessionChanged}
-          />
-        </div>
-      </header>
-      {invite.loading ? <LoadingState label="Loading invitation" /> : null}
-      {invite.error === null ? null : (
-        <div className="invite-card invite-card-error">
-          <h1>Invitation unavailable</h1>
-          <p>This invitation may have expired or been revoked.</p>
-          <ErrorMessage error={invite.error} />
-          <button
-            className="button button-ink"
-            type="button"
-            onClick={() => navigate(`/${area}`)}
-          >
-            Return to your worlds
-          </button>
-        </div>
-      )}
-      {invite.value === null ? null : (
-        <section className="invite-card">
-          <h1>Invitation to {invite.value.world_name}</h1>
-          <p>Invited by {invite.value.invited_by_display_name}</p>
-          {invite.value.world_description === undefined ? null : (
-            <p className="invite-description">
-              {invite.value.world_description}
-            </p>
-          )}
-          <div className="invite-role-row">
-            <div>
-              <span>Role</span>
-              <RolePill role={invite.value.role} />
-            </div>
-          </div>
-          {error === null ? null : <ErrorMessage error={error} />}
-          <div className="invite-actions">
-            <button
-              className="button button-primary button-wide"
-              type="button"
-              onClick={() => void join()}
-              disabled={joining}
-            >
-              {joining ? "Joining…" : `Join ${invite.value.world_name}`}
-            </button>
-            <button
-              className="text-button"
-              type="button"
-              onClick={() => navigate(`/${canonicalArea ?? area}`)}
-            >
-              Not now
-            </button>
-          </div>
-        </section>
-      )}
-    </main>
+    <InvitePageView
+      model={{
+        account: {
+          displayName: user.display_name,
+          username: user.username,
+        },
+        loading: invite.loading,
+        loadIssue: invite.error === null ? null : toErrorNotice(invite.error),
+        joinIssue: error === null ? null : toErrorNotice(error),
+        joining,
+        invitation:
+          invite.value === null
+            ? null
+            : {
+                worldName: invite.value.world_name,
+                worldDescription: invite.value.world_description,
+                invitedByDisplayName: invite.value.invited_by_display_name,
+                role: invite.value.role,
+              },
+      }}
+      accountControls={
+        <AccountControls
+          user={user}
+          onLogout={onLogout}
+          onLogoutAll={onLogoutAll}
+          onSessionChanged={onSessionChanged}
+        />
+      }
+      onJoin={() => void join()}
+      onReturnToWorlds={() => navigate(`/${area}`)}
+      onNotNow={() => navigate(`/${canonicalArea ?? area}`)}
+    />
   );
 }

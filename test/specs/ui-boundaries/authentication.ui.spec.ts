@@ -58,25 +58,25 @@ test("UI authentication: signin, password changes, and logout use server session
     await expect(
       dialog.getByText("Minimum 8 characters.", { exact: true }),
     ).toHaveCount(1);
-    await dialog.locator('input[name="current_password"]').fill(actor.password);
+    await dialog.locator('input[name="currentPassword"]').fill(actor.password);
     const changePassword = dialog.getByRole("button", {
       name: "Change password",
       exact: true,
     });
-    await dialog.locator('input[name="new_password"]').fill("1234567");
+    await dialog.locator('input[name="newPassword"]').fill("1234567");
     await dialog
-      .locator('input[name="new_password_confirmation"]')
+      .locator('input[name="newPasswordConfirmation"]')
       .fill("1234567");
     await expect(changePassword).toBeDisabled();
-    await dialog.locator('input[name="new_password"]').fill(newPassword);
+    await dialog.locator('input[name="newPassword"]').fill(newPassword);
     await expect(changePassword).toBeDisabled();
     await dialog
-      .locator('input[name="new_password_confirmation"]')
+      .locator('input[name="newPasswordConfirmation"]')
       .fill(`${newPassword}-mismatch`);
     await expect(dialog.getByText("must match the new password")).toBeVisible();
     await expect(changePassword).toBeDisabled();
     await dialog
-      .locator('input[name="new_password_confirmation"]')
+      .locator('input[name="newPasswordConfirmation"]')
       .fill(newPassword);
     await changePassword.click();
     await expect(

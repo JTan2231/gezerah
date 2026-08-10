@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
+import {
+  api,
+  ApiError,
+  jsonBody,
+  toErrorNotice,
+  worldPath,
+} from "../api/client";
 import type {
   AutoDMProblem,
   ConsequenceCompilation,
@@ -15,20 +21,26 @@ import type {
   WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
-import {
-  Avatar,
-  EmptyState,
-  ErrorMessage,
-  Field,
-  LoadingState,
-  Modal,
-} from "../components/StudioUI";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { useResource } from "../hooks/useResource";
 import { useWorldEvents, type WorldEvent } from "../hooks/useWorldEvents";
-import { EntityProfilePanel } from "./EntityProfilePanel";
 import { EntityDetail } from "./EntityDetail";
+import { EntityProfilePanel } from "./EntityProfilePanel";
+import {
+  CharacterOnboardingView,
+  LiveInteractionView,
+  WorldPlayBoundaryView,
+  WorldPlayView,
+} from "./WorldPlayView";
+import type {
+  HistoryCardViewModel,
+  PlayViewIssue,
+  RulingPreviewViewModel,
+  SubmittedActionViewModel,
+} from "./WorldPlayViewModel";
+import { NewProblemView, OpenProblemView } from "./WorldProblemView";
+import { RulingView } from "./WorldRulingView";
 
 export function WorldPlay({
   world,
@@ -136,11 +148,16 @@ export function WorldPlay({
     (members.loading && members.items.length === 0) ||
     (mechanics.loading && mechanics.value === null)
   )
-    return <LoadingState label="Loading world" />;
-  if (members.error !== null || mechanics.error !== null)
     return (
-      <ErrorMessage
-        error={(members.error ?? mechanics.error) as ApiError}
+      <WorldPlayBoundaryView
+        model={{ kind: "loading", label: "Loading world" }}
+      />
+    );
+  const loadIssue = toPlayViewIssue(members.error ?? mechanics.error);
+  if (loadIssue !== null)
+    return (
+      <WorldPlayBoundaryView
+        model={{ kind: "issue", issue: loadIssue }}
         onRetry={() => refresh()}
       />
     );
@@ -160,9 +177,12 @@ export function WorldPlay({
   );
   if (membership === undefined)
     return (
-      <EmptyState
-        title="Play access unavailable"
-        description="An active world membership is required to enter play."
+      <WorldPlayBoundaryView
+        model={{
+          kind: "empty",
+          title: "Play access unavailable",
+          description: "An active world membership is required to enter play.",
+        }}
       />
     );
   const facilitator = world.role === "owner" || world.role === "editor";
@@ -186,131 +206,57 @@ export function WorldPlay({
     entities.items[0];
 
   return (
-    <section className="play-page">
-      <header className="play-header">
-        <div>
-          <h1>{world.name}</h1>
-        </div>
-        <div className="play-header-actions">
-          <div className="table-role">
-            <Avatar name={user.display_name} size="small" />
-            <span>
-              <small>Role</small>
-              <strong>
-                {facilitator ? "Facilitator" : humanize(membership.role)}
-              </strong>
-            </span>
-          </div>
-          {facilitator && world.status === "active" ? (
-            <button
-              className="button button-play"
-              type="button"
-              onClick={() => setCreatingProblem(true)}
-              disabled={active !== undefined}
-            >
-              New problem
-            </button>
-          ) : null}
-        </div>
-      </header>
-
-      <div className="play-grid">
-        <aside className="roster-panel">
-          <header>
-            <h2>Entities</h2>
-          </header>
-          {entities.loading && entities.items.length === 0 ? (
-            <LoadingState label="Loading roster" />
-          ) : null}
-          {entities.error === null ? null : (
-            <ErrorMessage error={entities.error} onRetry={entities.reload} />
-          )}
-          <div className="roster-list">
-            {entities.items
-              .filter((entity) => !entity.archived)
-              .map((entity) => (
-                <button
-                  className={[
-                    "roster-item",
-                    selectedEntity?.id === entity.id ? "active" : "",
-                    controlledEntityIDs.includes(entity.id)
-                      ? "roster-item-character"
-                      : "",
-                    entity.character_status === "setup-required"
-                      ? "roster-item-setup"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  type="button"
-                  key={entity.id}
-                  onClick={() => setSelectedEntityId(entity.id)}
-                >
-                  <span className="entity-token" aria-hidden="true">
-                    {entity.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>
-                    <strong>{entity.display_name}</strong>
-                    <small>
-                      {entitySubtitle(
-                        entity,
-                        mechanicItems,
-                        members.items,
-                        membership.id,
-                      )}
-                    </small>
-                  </span>
-                  <b aria-hidden="true">›</b>
-                </button>
-              ))}
-          </div>
-          {!entities.loading && entities.items.length === 0 ? (
-            <div className="roster-empty">
-              <strong>No entities</strong>
-              <p>Create entities and generated sheets in Build.</p>
-            </div>
-          ) : null}
-          <div className="table-members">
-            <p>
-              {
-                members.items.filter(
-                  (item) =>
-                    item.status === "active" && item.play_status === "ready",
-                ).length
-              }{" "}
-              active members
-            </p>
-            <div>
-              {members.items
-                .filter(
-                  (item) =>
-                    item.status === "active" && item.play_status === "ready",
-                )
-                .slice(0, 6)
-                .map((item) => (
-                  <Avatar key={item.id} name={item.display_name} size="small" />
-                ))}
-            </div>
-          </div>
-        </aside>
-
-        <main className="table-stage">
-          {interactions.loading && interactions.items.length === 0 ? (
-            <LoadingState label="Loading problems" />
-          ) : null}
-          {interactions.error === null ? null : (
-            <ErrorMessage
-              error={interactions.error}
-              onRetry={interactions.reload}
-            />
-          )}
-          {active === undefined ? (
-            <IdleTable
-              facilitator={facilitator}
-              canCreate={facilitator && world.status === "active"}
-              onCreate={() => setCreatingProblem(true)}
-            />
-          ) : (
+    <WorldPlayView
+      model={{
+        worldName: world.name,
+        currentUserName: user.display_name,
+        roleLabel: facilitator ? "Facilitator" : humanize(membership.role),
+        facilitator,
+        canCreateProblem: facilitator && world.status === "active",
+        hasActiveProblem: active !== undefined,
+        roster: {
+          loading: entities.loading,
+          showEmpty: !entities.loading && entities.items.length === 0,
+          issue: toPlayViewIssue(entities.error),
+          entities: entities.items
+            .filter((entity) => !entity.archived)
+            .map((entity) => ({
+              id: entity.id,
+              name: entity.display_name,
+              subtitle: entitySubtitle(
+                entity,
+                mechanicItems,
+                members.items,
+                membership.id,
+              ),
+              selected: selectedEntity?.id === entity.id,
+              controlled: controlledEntityIDs.includes(entity.id),
+              setupRequired: entity.character_status === "setup-required",
+            })),
+          readyMembers: members.items
+            .filter(
+              (item) =>
+                item.status === "active" && item.play_status === "ready",
+            )
+            .map((item) => ({ id: item.id, name: item.display_name })),
+        },
+        problems: {
+          loading: interactions.loading && interactions.items.length === 0,
+          issue: toPlayViewIssue(interactions.error),
+        },
+        history: history.map((interaction) =>
+          toHistoryCardViewModel(interaction, entities.items, mechanicItems),
+        ),
+      }}
+      actions={{
+        createProblem: () => setCreatingProblem(true),
+        retryRoster: entities.reload,
+        retryProblems: interactions.reload,
+        selectEntity: setSelectedEntityId,
+      }}
+      slots={{
+        activeProblem:
+          active === undefined ? null : (
             <LiveInteraction
               interaction={active}
               world={world}
@@ -322,32 +268,9 @@ export function WorldPlay({
               facilitator={facilitator}
               onChanged={refresh}
             />
-          )}
-
-          {history.length > 0 ? (
-            <section className="history-feed">
-              <header>
-                <h2>History</h2>
-              </header>
-              {history.map((interaction) => (
-                <HistoryCard
-                  key={interaction.id}
-                  interaction={interaction}
-                  entities={entities.items}
-                  mechanics={mechanicItems}
-                />
-              ))}
-            </section>
-          ) : null}
-        </main>
-
-        <aside className="entity-sheet-panel">
-          {selectedEntity === undefined ? (
-            <EmptyState
-              title="No entity selected"
-              description="Select an entity to view its profile and generated sheet."
-            />
-          ) : (
+          ),
+        selectedEntity:
+          selectedEntity === undefined ? null : (
             <EntityDetail
               key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
               entity={selectedEntity}
@@ -364,23 +287,21 @@ export function WorldPlay({
               onProfileChanged={refresh}
               onSaved={entities.reload}
             />
-          )}
-        </aside>
-      </div>
-
-      {creatingProblem ? (
-        <NewProblemModal
-          world={world}
-          members={members.items}
-          entities={entities.items}
-          onClose={() => setCreatingProblem(false)}
-          onCreated={() => {
-            setCreatingProblem(false);
-            refresh();
-          }}
-        />
-      ) : null}
-    </section>
+          ),
+        problemDialog: creatingProblem ? (
+          <NewProblemController
+            world={world}
+            members={members.items}
+            entities={entities.items}
+            onClose={() => setCreatingProblem(false)}
+            onCreated={() => {
+              setCreatingProblem(false);
+              refresh();
+            }}
+          />
+        ) : null,
+      }}
+    />
   );
 }
 
@@ -412,104 +333,40 @@ function CharacterOnboarding({
     available.find((entity) => entity.id === selectedID) ?? available[0];
 
   return (
-    <section className="character-onboarding-page">
-      <header className="play-header onboarding-header">
-        <div>
-          <h1>{world.name}</h1>
-          <p>
-            {user.display_name}, complete all required fields for a controlled
-            character before entering Play.
-          </p>
-        </div>
-        <span className="character-status status-setup">
-          {world.play_status === "waiting-for-character"
+    <CharacterOnboardingView
+      model={{
+        worldName: world.name,
+        currentUserName: user.display_name,
+        statusLabel:
+          world.play_status === "waiting-for-character"
             ? "Waiting for a character"
-            : "Setup required"}
-        </span>
-      </header>
-
-      {loading && available.length === 0 ? (
-        <LoadingState label="Loading characters" />
-      ) : null}
-      {error === null ? null : <ErrorMessage error={error} onRetry={onRetry} />}
-      {!loading && available.length === 0 ? (
-        <div className="onboarding-waiting panel">
-          <EmptyState
-            title="No character assigned"
-            description="An owner or editor must create an entity and assign you as a controller."
+            : "Setup required",
+        loading,
+        issue: toPlayViewIssue(error),
+        characters: available.map((entity) => ({
+          id: entity.id,
+          name: entity.display_name,
+          completedFieldCount: entity.completed_field_count,
+          requiredFieldCount: entity.required_field_count,
+          selected: selected?.id === entity.id,
+        })),
+      }}
+      actions={{ retry: onRetry, selectCharacter: setSelectedID }}
+      profile={
+        selected === undefined ? null : (
+          <EntityProfilePanel
+            world={world}
+            entity={selected}
+            refreshToken={refreshToken}
+            onChanged={onChanged}
           />
-        </div>
-      ) : null}
-
-      {selected === undefined ? null : (
-        <div className="onboarding-layout">
-          {available.length > 1 ? (
-            <aside className="panel onboarding-characters">
-              <h2>Your characters</h2>
-              {available.map((entity) => (
-                <button
-                  className={entity.id === selected.id ? "active" : ""}
-                  type="button"
-                  key={entity.id}
-                  onClick={() => setSelectedID(entity.id)}
-                >
-                  <span className="entity-token" aria-hidden="true">
-                    {entity.display_name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <span>
-                    <strong>{entity.display_name}</strong>
-                    <small>
-                      {entity.completed_field_count} of{" "}
-                      {entity.required_field_count} complete
-                    </small>
-                  </span>
-                </button>
-              ))}
-            </aside>
-          ) : null}
-          <div className="panel onboarding-profile">
-            <EntityProfilePanel
-              world={world}
-              entity={selected}
-              refreshToken={refreshToken}
-              onChanged={onChanged}
-            />
-          </div>
-        </div>
-      )}
-    </section>
+        )
+      }
+    />
   );
 }
 
-function IdleTable({
-  facilitator,
-  canCreate,
-  onCreate,
-}: {
-  facilitator: boolean;
-  canCreate: boolean;
-  onCreate: () => void;
-}) {
-  return (
-    <section className="idle-table">
-      <h2>No active problem</h2>
-      <p>
-        {facilitator && !canCreate
-          ? "This world is archived."
-          : facilitator
-            ? "Create a problem to begin."
-            : "A facilitator can create the next problem."}
-      </p>
-      {canCreate ? (
-        <button className="button button-play" type="button" onClick={onCreate}>
-          New problem
-        </button>
-      ) : null}
-    </section>
-  );
-}
-
-function NewProblemModal({
+function NewProblemController({
   world,
   members,
   entities,
@@ -596,8 +453,7 @@ function NewProblemModal({
     }
   }
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setSaving(true);
     setError(null);
     try {
@@ -625,126 +481,40 @@ function NewProblemModal({
   }
 
   return (
-    <Modal
-      title="New problem"
-      description="Describe the problem and choose who can respond."
-      onClose={onClose}
-    >
-      <form
-        className="modal-form problem-form"
-        onSubmit={(event) => void submit(event)}
-      >
-        <Field label="Title" hint="Optional. Shown in history.">
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.currentTarget.value)}
-            maxLength={200}
-            placeholder="Problem title"
-          />
-        </Field>
-        <Field label="Description" error={error?.fields["prompt"]}>
-          <textarea
-            value={prompt}
-            onChange={(event) => setPrompt(event.currentTarget.value)}
-            rows={5}
-            maxLength={10_000}
-            placeholder="Describe the problem."
-          />
-        </Field>
-        {world.dm_source === "terra" ? (
-          <div className="auto-dm-generator">
-            <span>
-              Terra can propose the next problem from the current world and
-              table history.
-            </span>
-            <button
-              className="button button-quiet"
-              type="button"
-              disabled={generating || saving}
-              onClick={() => void generateProblem()}
-            >
-              {generating
-                ? "Generating…"
-                : prompt.trim() === ""
-                  ? "Generate problem"
-                  : "Generate again"}
-            </button>
-          </div>
-        ) : null}
-        {entities.length > 0 ? (
-          <fieldset className="choice-fieldset">
-            <legend>
-              Context entities <small>Optional</small>
-            </legend>
-            <div className="chip-picker">
-              {entities
-                .filter(
-                  (entity) =>
-                    !entity.archived &&
-                    entity.character_status !== "setup-required",
-                )
-                .map((entity) => (
-                  <label
-                    key={entity.id}
-                    className={entityIds.includes(entity.id) ? "selected" : ""}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={entityIds.includes(entity.id)}
-                      onChange={() =>
-                        toggle(entityIds, entity.id, setEntityIds)
-                      }
-                    />
-                    <span>{entity.display_name}</span>
-                  </label>
-                ))}
-            </div>
-          </fieldset>
-        ) : null}
-        <fieldset className="choice-fieldset">
-          <legend>Who may respond?</legend>
-          <div className="responder-picker">
-            {responders.length === 0 ? (
-              <p>
-                No active players are available. You can create a problem
-                without responders.
-              </p>
-            ) : (
-              responders.map((member) => (
-                <label key={member.id}>
-                  <input
-                    type="checkbox"
-                    checked={responderIds.includes(member.id)}
-                    onChange={() =>
-                      toggle(responderIds, member.id, setResponderIds)
-                    }
-                  />
-                  <Avatar name={member.display_name} size="small" />
-                  <span>{member.display_name}</span>
-                </label>
-              ))
-            )}
-          </div>
-        </fieldset>
-        {error === null ? null : <ErrorMessage error={error} />}
-        <footer className="modal-actions">
-          <button
-            className="button button-quiet"
-            type="button"
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button
-            className="button button-play"
-            type="submit"
-            disabled={saving || generating || prompt.trim() === ""}
-          >
-            {saving ? "Creating…" : "Create problem"}
-          </button>
-        </footer>
-      </form>
-    </Modal>
+    <NewProblemView
+      model={{
+        draft: {
+          title,
+          description: prompt,
+          selectedEntityIds: entityIds,
+          selectedResponderIds: responderIds,
+        },
+        contextEntities: entities
+          .filter(
+            (entity) =>
+              !entity.archived && entity.character_status !== "setup-required",
+          )
+          .map((entity) => ({ id: entity.id, name: entity.display_name })),
+        showContextChoices: entities.length > 0,
+        responders: responders.map((member) => ({
+          id: member.id,
+          name: member.display_name,
+        })),
+        terraEnabled: world.dm_source === "terra",
+        generating,
+        saving,
+        issue: toPlayViewIssue(error, { prompt: "description" }),
+      }}
+      actions={{
+        changeTitle: setTitle,
+        changeDescription: setPrompt,
+        toggleContextEntity: (id) => toggle(entityIds, id, setEntityIds),
+        toggleResponder: (id) => toggle(responderIds, id, setResponderIds),
+        generate: () => void generateProblem(),
+        submit: () => void submit(),
+        close: onClose,
+      }}
+    />
   );
 }
 
@@ -802,70 +572,52 @@ function LiveInteraction({
   }
 
   return (
-    <article className="live-interaction">
-      <header>
-        <div>
-          <span className={`interaction-status status-${interaction.status}`}>
-            <i aria-hidden="true" />
-            {interaction.status === "open"
-              ? "Accepting actions"
-              : "Closed for actions"}
-          </span>
-          <span>
-            Presented{" "}
-            {formatRelativeDate(
-              interaction.presented_at ?? interaction.created_at,
-            )}
-          </span>
-        </div>
-        {facilitator ? (
-          <button
-            className="text-button danger-text"
-            type="button"
-            disabled={working}
-            onClick={() => void command("cancel")}
-          >
-            Cancel problem
-          </button>
-        ) : null}
-      </header>
-      <div className="problem-prompt">
-        <h2>{interaction.title ?? "Problem"}</h2>
-        <p className="prompt-copy">{interaction.prompt}</p>
-        {context.length > 0 ? (
-          <div className="context-chips">
-            {context.map((entity) => (
-              <span key={entity.id}>{entity.display_name}</span>
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {interaction.status === "open" ? (
-        <OpenProblem
-          interaction={interaction}
-          world={world}
-          membership={membership}
-          entities={entities}
-          facilitator={facilitator}
-          working={working}
-          onAdjudicate={() => void command("adjudicate")}
-          onChanged={onChanged}
-        />
-      ) : null}
-      {interaction.status === "adjudicating" && facilitator ? (
-        <RulingEditor
-          interaction={interaction}
-          world={world}
-          entities={entities}
-          mechanics={mechanics}
-          rulesRevision={rulesRevision}
-          rulesReady={rulesReady}
-          onResolved={onChanged}
-        />
-      ) : null}
-      {error === null ? null : <ErrorMessage error={error} />}
-    </article>
+    <LiveInteractionView
+      model={{
+        status: interaction.status,
+        statusLabel:
+          interaction.status === "open"
+            ? "Accepting actions"
+            : "Closed for actions",
+        presentedLabel: formatRelativeDate(
+          interaction.presented_at ?? interaction.created_at,
+        ),
+        title: interaction.title ?? "Problem",
+        prompt: interaction.prompt,
+        contextEntityNames: context.map((entity) => entity.display_name),
+        facilitator,
+        working,
+        issue: toPlayViewIssue(error),
+      }}
+      content={
+        <>
+          {interaction.status === "open" ? (
+            <OpenProblem
+              interaction={interaction}
+              world={world}
+              membership={membership}
+              entities={entities}
+              facilitator={facilitator}
+              working={working}
+              onAdjudicate={() => void command("adjudicate")}
+              onChanged={onChanged}
+            />
+          ) : null}
+          {interaction.status === "adjudicating" && facilitator ? (
+            <RulingEditor
+              interaction={interaction}
+              world={world}
+              entities={entities}
+              mechanics={mechanics}
+              rulesRevision={rulesRevision}
+              rulesReady={rulesReady}
+              onResolved={onChanged}
+            />
+          ) : null}
+        </>
+      }
+      onCancel={() => void command("cancel")}
+    />
   );
 }
 
@@ -911,8 +663,7 @@ function OpenProblem({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  async function submit(event: React.FormEvent) {
-    event.preventDefault();
+  async function submit() {
     setSaving(true);
     setError(null);
     try {
@@ -971,126 +722,30 @@ function OpenProblem({
     (action) => action.status === "submitted",
   );
   return (
-    <section className="action-stage">
-      <header>
-        <h3>Actions</h3>
-        <p>
-          {submitted.length === 0
-            ? "No actions submitted"
-            : `${submitted.length} ${submitted.length === 1 ? "action" : "actions"} submitted`}
-        </p>
-      </header>
-      {submitted.length > 0 ? (
-        <div className="action-list">
-          {submitted.map((action) => (
-            <blockquote key={action.id}>
-              <Avatar
-                name={
-                  action.acting_entity_name ??
-                  action.submitted_by_name ??
-                  "Player"
-                }
-                size="small"
-              />
-              <div>
-                <strong>
-                  {action.acting_entity_name ??
-                    action.submitted_by_name ??
-                    "Player"}
-                </strong>
-                {action.acting_entity_name === undefined ? null : (
-                  <small>
-                    played by {action.submitted_by_name ?? "Player"}
-                  </small>
-                )}
-                <p>{action.text}</p>
-              </div>
-            </blockquote>
-          ))}
-        </div>
-      ) : null}
-      {!facilitator && eligible ? (
-        currentAction === undefined ? (
-          <form
-            className="action-composer"
-            onSubmit={(event) => void submit(event)}
-          >
-            {controlledEntities.length === 0 ? null : (
-              <Field label="Acting character">
-                <select
-                  value={actingEntityID}
-                  onChange={(event) =>
-                    setActingEntityID(event.currentTarget.value)
-                  }
-                >
-                  <option value="">No character attribution</option>
-                  {controlledEntities.map((entity) => (
-                    <option key={entity.id} value={entity.id}>
-                      {entity.display_name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-            )}
-            <Field label="What do you do?">
-              <textarea
-                value={text}
-                onChange={(event) => setText(event.currentTarget.value)}
-                rows={3}
-                maxLength={10_000}
-                placeholder="Describe your action."
-              />
-            </Field>
-            <button
-              className="button button-play"
-              type="submit"
-              disabled={saving || text.trim() === ""}
-            >
-              {saving ? "Submitting…" : "Submit action"}
-            </button>
-          </form>
-        ) : (
-          <div className="own-action">
-            <span>Action submitted.</span>
-            <button
-              className="text-button"
-              type="button"
-              disabled={saving}
-              onClick={() => void withdraw()}
-            >
-              Withdraw
-            </button>
-          </div>
-        )
-      ) : null}
-      {!facilitator && !eligible ? (
-        <p className="observer-note">
-          You are part of this problem’s audience, but not one of its
-          responders.
-        </p>
-      ) : null}
-      {facilitator ? (
-        <div className="adjudicate-callout">
-          <div>
-            <p>
-              <strong>Close actions</strong>
-              <small>
-                Players cannot submit or withdraw actions after you close them.
-              </small>
-            </p>
-          </div>
-          <button
-            className="button button-ink"
-            type="button"
-            disabled={working}
-            onClick={onAdjudicate}
-          >
-            {working ? "Closing…" : "Close actions"}
-          </button>
-        </div>
-      ) : null}
-      {error === null ? null : <ErrorMessage error={error} />}
-    </section>
+    <OpenProblemView
+      model={{
+        submissions: submitted.map(toSubmittedActionViewModel),
+        facilitator,
+        eligibleResponder: eligible,
+        actionSubmitted: currentAction !== undefined,
+        controlledEntities: controlledEntities.map((entity) => ({
+          id: entity.id,
+          name: entity.display_name,
+        })),
+        actingEntityId: actingEntityID,
+        actionText: text,
+        saving,
+        closing: working,
+        issue: toPlayViewIssue(error),
+      }}
+      actions={{
+        changeActingEntity: setActingEntityID,
+        changeActionText: setText,
+        submitAction: () => void submit(),
+        withdrawAction: () => void withdraw(),
+        closeActions: onAdjudicate,
+      }}
+    />
   );
 }
 
@@ -1226,282 +881,168 @@ function RulingEditor({
   }
 
   return (
-    <section className="ruling-editor">
-      <header>
-        <h3>What transpires?</h3>
-        <p>
-          {terra
-            ? "Terra considers the submitted actions and writes the outcome. Luna then translates it into the world’s mechanics."
-            : "Describe the outcome in plain language. Luna will translate it into the world’s mechanics."}
-        </p>
-      </header>
-      {submitted.length > 0 ? (
-        <section className="consequence-actions" aria-label="Submitted actions">
-          <h4>Actions to consider</h4>
-          <div className="action-list">
-            {submitted.map((action) => (
-              <blockquote key={action.id}>
-                <Avatar
-                  name={
-                    action.acting_entity_name ??
-                    action.submitted_by_name ??
-                    "Player"
-                  }
-                  size="small"
-                />
-                <div>
-                  <strong>
-                    {action.acting_entity_name ??
-                      action.submitted_by_name ??
-                      "Player"}
-                  </strong>
-                  <p>{action.text}</p>
-                </div>
-              </blockquote>
-            ))}
-          </div>
-        </section>
-      ) : null}
-      <Field
-        label="What transpires"
-        hint={
-          terra
-            ? "Generated by Terra from the current problem, actions, and world."
-            : "Include the fictional outcome and any lasting or mechanical consequences."
-        }
-        error={error?.fields["narrative"]}
-      >
-        <textarea
-          value={narrative}
-          readOnly={terra}
-          onChange={(event) => {
-            setNarrative(event.currentTarget.value);
-            setCompilation(null);
-            setError(null);
-          }}
-          rows={6}
-          maxLength={20_000}
-          placeholder={
-            terra
-              ? "Ask Terra to generate the consequence."
-              : "Describe everything that happens as a result of these actions."
-          }
-        />
-      </Field>
-      {compiled === null ? null : (
-        <>
-          {selectedAction === undefined ? null : (
-            <p className="compiled-action-summary">
-              Centered on{" "}
-              <strong>
-                {selectedAction.acting_entity_name ??
+    <RulingView
+      model={{
+        terraEnabled: terra,
+        submissions: submitted.map(toSubmittedActionViewModel),
+        narrative,
+        selectedAction:
+          selectedAction === undefined
+            ? null
+            : {
+                actorName:
+                  selectedAction.acting_entity_name ??
                   selectedAction.submitted_by_name ??
-                  "the selected action"}
-              </strong>
-              : {selectedAction.text}
-            </p>
-          )}
-          <RulingPreview
-            result={compiled.preview}
-            entities={entities}
-            mechanics={mechanics}
-          />
-        </>
-      )}
-      {!rulesReady ? (
-        <p className="ruling-sync-notice" role="status">
-          Refreshing the current rules and entity state before this consequence
-          can be interpreted or resolved.
-        </p>
-      ) : compilation !== null && compiled === null ? (
-        <p className="ruling-sync-notice" role="status">
-          The outcome or table changed after this preview was prepared. Prepare
-          it again before resolving.
-        </p>
-      ) : null}
-      {error === null ? null : <ErrorMessage error={error} />}
-      <footer className="ruling-actions">
-        {terra ? (
-          <button
-            className="button button-quiet"
-            type="button"
-            disabled={saving !== null || !rulesReady}
-            onClick={() => void prepareConsequence("generate")}
-          >
-            {saving === "generate"
-              ? "Terra is deciding…"
-              : compiled === null
-                ? "Generate consequence"
-                : "Generate again"}
-          </button>
-        ) : (
-          <button
-            className="button button-quiet"
-            type="button"
-            disabled={saving !== null || narrative.trim() === "" || !rulesReady}
-            onClick={() => void prepareConsequence("compile")}
-          >
-            {saving === "compile"
-              ? "Interpreting…"
-              : compiled === null
-                ? "Compile & preview"
-                : "Compile again"}
-          </button>
-        )}
-        <button
-          className="button button-play"
-          type="button"
-          disabled={saving !== null || compiled === null || !rulesReady}
-          onClick={() => void resolve()}
-        >
-          {saving === "resolve" ? "Resolving…" : "Resolve problem"}
-        </button>
-      </footer>
-    </section>
-  );
-}
-function RulingPreview({
-  result,
-  entities,
-  mechanics,
-}: {
-  result: InteractionResolutionResult;
-  entities: WorldEntity[];
-  mechanics: WorldMechanic[];
-}) {
-  return (
-    <div className="ruling-preview" role="status" aria-live="polite">
-      <header>
-        <div>
-          <strong>Preview is valid</strong>
-          <small>
-            {result.applied_effects.length === 0
-              ? "Narrative only"
-              : `${result.applied_effects.length} state ${result.applied_effects.length === 1 ? "application" : "applications"}`}
-          </small>
-        </div>
-      </header>
-      {result.applied_effects.length > 0 ? (
-        <div>
-          {result.applied_effects.map((effect, index) => (
-            <p key={`${effect.effect_id}-${effect.entity_id}-${index}`}>
-              <strong>
-                {entities.find((entity) => entity.id === effect.entity_id)
-                  ?.display_name ?? "Entity"}
-              </strong>
-              <span>
-                {effect.type === "apply-status"
-                  ? `Applied ${effect.status_name ?? "status"}`
-                  : effect.type === "remove-status"
-                    ? `Removed ${effect.status_name ?? "status"}`
-                    : (mechanics.find(
-                        (mechanic) => mechanic.id === effect.mechanic_id,
-                      )?.name ?? "Mechanic")}
-              </span>
-              {effect.type === "apply-status" ||
-              effect.type === "remove-status" ? (
-                <em>{effect.changed ? "changed" : "already current"}</em>
-              ) : (
-                <em>
-                  {displayValue(effect.before)} → {displayValue(effect.after)}
-                </em>
-              )}
-            </p>
-          ))}
-        </div>
-      ) : null}
-      {result.effective_changes.length > 0 ? (
-        <div className="effective-change-list">
-          <strong>Final calculated changes</strong>
-          {result.effective_changes.map((change) => (
-            <p key={`${change.entity_id}:${change.mechanic_id}`}>
-              <span>
-                {entities.find((entity) => entity.id === change.entity_id)
-                  ?.display_name ?? "Entity"}
-                {" · "}
-                {mechanics.find(
-                  (mechanic) => mechanic.id === change.mechanic_id,
-                )?.name ?? "Mechanic"}
-              </span>
-              <em>
-                {displayValue(change.before)} → {displayValue(change.after)}
-              </em>
-            </p>
-          ))}
-        </div>
-      ) : null}
-    </div>
+                  "the selected action",
+                text: selectedAction.text,
+              },
+        preview:
+          compiled === null
+            ? null
+            : toRulingPreviewViewModel(compiled.preview, entities, mechanics),
+        rulesReady,
+        previewStale: compilation !== null && compiled === null,
+        saving,
+        issue: toPlayViewIssue(error, { narrative: "narrative" }),
+      }}
+      actions={{
+        changeNarrative: (value) => {
+          setNarrative(value);
+          setCompilation(null);
+          setError(null);
+        },
+        prepare: (mode) => void prepareConsequence(mode),
+        resolve: () => void resolve(),
+      }}
+    />
   );
 }
 
-function HistoryCard({
-  interaction,
-  entities,
-  mechanics,
-}: {
-  interaction: Interaction;
-  entities: WorldEntity[];
-  mechanics: WorldMechanic[];
-}) {
+function toPlayViewIssue(
+  error: ApiError | null,
+  fieldNames: Record<string, string> = {},
+): PlayViewIssue | null {
+  if (error === null) return null;
+  return {
+    ...toErrorNotice(error),
+    fields: Object.fromEntries(
+      Object.entries(fieldNames).flatMap(([transportField, viewField]) => {
+        const message = error.fields[transportField];
+        return message === undefined ? [] : [[viewField, message]];
+      }),
+    ),
+  };
+}
+
+function toSubmittedActionViewModel(
+  action: InteractionAction,
+): SubmittedActionViewModel {
+  return {
+    id: action.id,
+    actorName:
+      action.acting_entity_name ?? action.submitted_by_name ?? "Player",
+    ...(action.acting_entity_name === undefined
+      ? {}
+      : { playerName: action.submitted_by_name ?? "Player" }),
+    text: action.text,
+  };
+}
+
+function toRulingPreviewViewModel(
+  result: InteractionResolutionResult,
+  entities: WorldEntity[],
+  mechanics: WorldMechanic[],
+): RulingPreviewViewModel {
+  return {
+    applicationSummary:
+      result.applied_effects.length === 0
+        ? "Narrative only"
+        : `${result.applied_effects.length} state ${result.applied_effects.length === 1 ? "application" : "applications"}`,
+    applications: result.applied_effects.map((effect, index) => ({
+      id: `${effect.effect_id}:${effect.entity_id}:${index}`,
+      entityName:
+        entities.find((entity) => entity.id === effect.entity_id)
+          ?.display_name ?? "Entity",
+      effectLabel:
+        effect.type === "apply-status"
+          ? `Applied ${effect.status_name ?? "status"}`
+          : effect.type === "remove-status"
+            ? `Removed ${effect.status_name ?? "status"}`
+            : (mechanics.find((mechanic) => mechanic.id === effect.mechanic_id)
+                ?.name ?? "Mechanic"),
+      outcomeLabel:
+        effect.type === "apply-status" || effect.type === "remove-status"
+          ? effect.changed
+            ? "changed"
+            : "already current"
+          : `${displayValue(effect.before)} → ${displayValue(effect.after)}`,
+    })),
+    effectiveChanges: result.effective_changes.map((change) => ({
+      id: `${change.entity_id}:${change.mechanic_id}`,
+      label: `${
+        entities.find((entity) => entity.id === change.entity_id)
+          ?.display_name ?? "Entity"
+      } · ${
+        mechanics.find((mechanic) => mechanic.id === change.mechanic_id)
+          ?.name ?? "Mechanic"
+      }`,
+      outcomeLabel: `${displayValue(change.before)} → ${displayValue(change.after)}`,
+    })),
+  };
+}
+
+function toHistoryCardViewModel(
+  interaction: Interaction,
+  entities: WorldEntity[],
+  mechanics: WorldMechanic[],
+): HistoryCardViewModel {
   if (interaction.status === "cancelled")
-    return (
-      <article className="history-card history-cancelled">
-        <header>
-          <span>Cancelled</span>
-          <time>{formatRelativeDate(interaction.cancelled_at)}</time>
-        </header>
-        <h3>{interaction.title ?? "Untitled problem"}</h3>
-        <p>{interaction.prompt}</p>
-      </article>
-    );
+    return {
+      id: interaction.id,
+      outcome: "cancelled",
+      occurredLabel: formatRelativeDate(interaction.cancelled_at),
+      title: interaction.title ?? "Untitled problem",
+      prompt: interaction.prompt,
+      effects: [],
+      effectiveChanges: [],
+    };
   const resolution = interaction.resolution;
-  return (
-    <article className="history-card">
-      <header>
-        <span>Resolved</span>
-        <time>{formatRelativeDate(interaction.resolved_at)}</time>
-      </header>
-      <h3>{interaction.title ?? "Untitled problem"}</h3>
-      <p className="history-prompt">{interaction.prompt}</p>
-      {resolution === undefined ? null : (
-        <>
-          <blockquote>{resolution.narrative}</blockquote>
-          {resolution.applied_effects.length > 0 ? (
-            <div className="history-effects">
-              {resolution.applied_effects.map((effect, index) => (
-                <span key={`${effect.effect_id}-${effect.entity_id}-${index}`}>
-                  {entities.find((entity) => entity.id === effect.entity_id)
-                    ?.display_name ?? "Entity"}
-                  :{" "}
-                  {effect.type === "apply-status"
-                    ? `applied ${effect.status_name ?? "status"}`
-                    : effect.type === "remove-status"
-                      ? `removed ${effect.status_name ?? "status"}`
-                      : `${mechanics.find((item) => item.id === effect.mechanic_id)?.name ?? "mechanic"} ${displayValue(effect.before)} → ${displayValue(effect.after)}`}
-                </span>
-              ))}
-            </div>
-          ) : null}
-          {resolution.effective_changes.length > 0 ? (
-            <div className="history-effective-changes">
-              <strong>Final values</strong>
-              {resolution.effective_changes.map((change) => (
-                <span key={`${change.entity_id}:${change.mechanic_id}`}>
-                  {entities.find((entity) => entity.id === change.entity_id)
-                    ?.display_name ?? "Entity"}
-                  :{" "}
-                  {mechanics.find(
-                    (mechanic) => mechanic.id === change.mechanic_id,
-                  )?.name ?? "mechanic"}{" "}
-                  {displayValue(change.before)} → {displayValue(change.after)}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </>
-      )}
-    </article>
-  );
+  return {
+    id: interaction.id,
+    outcome: "resolved",
+    occurredLabel: formatRelativeDate(interaction.resolved_at),
+    title: interaction.title ?? "Untitled problem",
+    prompt: interaction.prompt,
+    ...(resolution === undefined ? {} : { narrative: resolution.narrative }),
+    effects:
+      resolution?.applied_effects.map((effect, index) => ({
+        id: `${effect.effect_id}:${effect.entity_id}:${index}`,
+        label: `${
+          entities.find((entity) => entity.id === effect.entity_id)
+            ?.display_name ?? "Entity"
+        }: ${
+          effect.type === "apply-status"
+            ? `applied ${effect.status_name ?? "status"}`
+            : effect.type === "remove-status"
+              ? `removed ${effect.status_name ?? "status"}`
+              : `${
+                  mechanics.find((item) => item.id === effect.mechanic_id)
+                    ?.name ?? "mechanic"
+                } ${displayValue(effect.before)} → ${displayValue(effect.after)}`
+        }`,
+      })) ?? [],
+    effectiveChanges:
+      resolution?.effective_changes.map((change) => ({
+        id: `${change.entity_id}:${change.mechanic_id}`,
+        label: `${
+          entities.find((entity) => entity.id === change.entity_id)
+            ?.display_name ?? "Entity"
+        }: ${
+          mechanics.find((mechanic) => mechanic.id === change.mechanic_id)
+            ?.name ?? "mechanic"
+        } ${displayValue(change.before)} → ${displayValue(change.after)}`,
+      })) ?? [],
+  };
 }
 
 function displayValue(value?: StateValue): string {

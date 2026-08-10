@@ -1,16 +1,10 @@
 import type { AuthenticatedSession, User, World } from "../api/types";
-import {
-  Avatar,
-  Brand,
-  EmptyState,
-  ErrorMessage,
-  LoadingState,
-  RolePill,
-} from "../components/StudioUI";
+import { toErrorNotice } from "../api/client";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { playWorldURL, type Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
+import { PlayLibraryView } from "./PlayLibraryView";
 
 export function PlayLibrary({
   user,
@@ -28,113 +22,40 @@ export function PlayLibrary({
   const worlds = useCollection<World>("/api/worlds");
 
   return (
-    <div className="library-page play-library-page">
-      <header className="library-topbar">
-        <button
-          className="library-brand-button"
-          type="button"
-          onClick={() => navigate("/")}
-          aria-label="Return home"
-        >
-          <Brand compact />
-        </button>
-        <div className="account-menu">
-          <Avatar name={user.display_name} size="small" />
-          <span className="account-copy">
-            <strong>{user.display_name}</strong>
-            <small>@{user.username}</small>
-          </span>
-          <AccountControls
-            user={user}
-            onLogout={onLogout}
-            onLogoutAll={onLogoutAll}
-            onSessionChanged={onSessionChanged}
-          />
-        </div>
-      </header>
-
-      <main className="library-main">
-        <header className="library-heading">
-          <div>
-            <h1>Worlds</h1>
-            <p>Worlds you can play in.</p>
-          </div>
-        </header>
-
-        {worlds.loading ? <LoadingState label="Loading worlds" /> : null}
-        {worlds.error === null ? null : (
-          <ErrorMessage error={worlds.error} onRetry={worlds.reload} />
-        )}
-        {!worlds.loading &&
-        worlds.error === null &&
-        worlds.items.length === 0 ? (
-          <EmptyState
-            title="No worlds"
-            description="Use an invitation link to join a world."
-          />
-        ) : null}
-
-        <div className="world-grid">
-          {worlds.items.map((world) => (
-            <article className="world-card play-world-card" key={world.id}>
-              <header>
-                <RolePill role={world.role} />
-                <span
-                  className={
-                    world.status === "active"
-                      ? "world-status"
-                      : "world-status world-status-archived"
-                  }
-                >
-                  {world.status}
-                </span>
-              </header>
-              <button
-                className="world-card-title"
-                type="button"
-                onClick={() => navigate(playWorldURL(world.id))}
-              >
-                <span>
-                  <strong>{world.name}</strong>
-                  <small>{world.description ?? "No description"}</small>
-                </span>
-              </button>
-              <dl className="world-stats play-world-stats">
-                <div>
-                  <dt>Your role</dt>
-                  <dd>{humanize(world.role)}</dd>
-                </div>
-                <div>
-                  <dt>Readiness</dt>
-                  <dd>{playStatus(world)}</dd>
-                </div>
-                <div>
-                  <dt>Members</dt>
-                  <dd>{world.member_count}</dd>
-                </div>
-              </dl>
-              <footer>
-                <span>
-                  Active{" "}
-                  {formatRelativeDate(
-                    world.last_interaction_at ?? world.updated_at,
-                  )}
-                </span>
-                <div>
-                  <button
-                    className="button button-play"
-                    type="button"
-                    onClick={() => navigate(playWorldURL(world.id))}
-                  >
-                    Open
-                  </button>
-                </div>
-              </footer>
-            </article>
-          ))}
-        </div>
-      </main>
-    </div>
+    <PlayLibraryView
+      model={{
+        account: {
+          displayName: user.display_name,
+          username: user.username,
+        },
+        worlds: worlds.items.map((world) => ({
+          id: world.id,
+          name: world.name,
+          description: world.description ?? "No description",
+          role: world.role,
+          roleLabel: humanize(world.role),
+          status: world.status,
+          readiness: playStatus(world),
+          memberCount: world.member_count,
+          lastActive: formatRelativeDate(
+            world.last_interaction_at ?? world.updated_at,
+          ),
+        })),
+        loading: worlds.loading,
+        issue: worlds.error === null ? null : toErrorNotice(worlds.error),
+      }}
+      accountControls={
+        <AccountControls
+          user={user}
+          onLogout={onLogout}
+          onLogoutAll={onLogoutAll}
+          onSessionChanged={onSessionChanged}
+        />
+      }
+      onReturnHome={() => navigate("/")}
+      onOpenWorld={(worldID) => navigate(playWorldURL(worldID))}
+      onRetry={worlds.reload}
+    />
   );
 }
 
