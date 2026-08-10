@@ -19,10 +19,12 @@ active player is presented as that player's character, with a separately loaded
 profile generated from the world's active character fields. Those values never
 become engine state.
 Problems are not a configuration resource in this UI. A facilitator describes
-each problem at the table, players offer free-form actions, and the facilitator
-resolves the moment with a Consequence: one public prose summary and optional
-ordered typed scalar/status effects. Applying a status defines it in that
-problem and snapshots it onto each affected entity.
+each problem at the table or asks Terra to propose it, depending on the world's
+DM source. Players offer free-form actions, then a human or Terra writes one
+unstructured account of what transpires. Luna compiles that prose into optional
+typed scalar/status effects and the existing preview before resolve. Applying a
+compiled status defines it in that problem and snapshots it onto each affected
+entity.
 
 ## Stack and source layout
 
@@ -78,7 +80,7 @@ Routes are parsed without an external router:
 | `/build/{world-id}/character-fields`            | Required character-field editor.              |
 | `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
 | `/build/{world-id}/people`                      | Members and invite links.                     |
-| `/build/{world-id}/settings`                    | World details/lifecycle.                      |
+| `/build/{world-id}/settings`                    | World details, DM source, and lifecycle.      |
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
 Unknown paths render a not-found screen rather than silently opening a library.
@@ -204,25 +206,26 @@ triggers an authoritative reload.
 
 The interaction lifecycle is:
 
-1. facilitator clicks **New problem** and writes the moment in free text;
+1. facilitator clicks **New problem** and writes the moment in free text, or a
+   `terra` world can generate a draft from the current world snapshot;
 2. the audience is automatically every active member whose play status is
    ready; optional active uncontrolled or ready controlled context entities and
    eligible player responders are selected;
 3. players offer or withdraw one free-form action while the problem is open,
    optionally attributing it to one of their ready controlled entities;
 4. facilitator closes submissions and enters private adjudication;
-5. facilitator optionally selects an action and authors the **Consequence** as
-   one public prose summary plus ordered targeted effects;
-6. each scalar `set`/`adjust-number` effect selects one entity and one input;
-   an `apply-status` effect selects one or more entity targets and defines the
-   status name, optional description, and ordered literal modifiers inline; each
-   `remove-status` effect selects one exact active status instance on one entity;
-7. the facilitator may run an advisory preview with the current mechanic rules
-   revision to validate/evaluate the whole transition without writing; preview
-   is not required and does not reserve that revision;
-8. resolve, with or without a prior preview, atomically stores base state,
-   status instances/snapshots with source problem, resolution, and effect IDs,
-   the receipt, lifecycle change, and event cursor;
+5. in a `human` world the facilitator writes **What transpires?** as
+   unstructured prose; in a `terra` world Terra writes it from the situation,
+   submitted actions, and world snapshot;
+6. Luna compiles that exact prose into an optional selected action/summary and
+   zero or more concrete effects, then the server runs the existing advisory
+   preview with the current interaction and mechanic rules revisions;
+7. the UI shows the preview rather than an effect authoring form. Editing the
+   human prose or observing a changed table/rules snapshot invalidates it and
+   requires compilation again;
+8. resolve the compiled prose/effects; the existing command atomically stores
+   base state, status instances/snapshots with source problem, resolution, and
+   effect IDs, the receipt, lifecycle change, and event cursor;
 9. resolved Consequence summary, direct applications, and effective
    before/after changes appear in world history.
 

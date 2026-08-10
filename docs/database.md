@@ -54,6 +54,7 @@ The current application has one clean baseline followed by forward upgrades:
 | `002_rules_graph_statuses.sql`               | Mechanic rules revisions, typed derived expressions, problem-sourced statuses, and effective receipts. |
 | `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity.                                                |
 | `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
+| `005_auto_dm.sql`                            | World-level human/Terra DM source selection.                                                           |
 
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
@@ -75,6 +76,10 @@ prevents silently inventing credentials or leaving claimable legacy accounts.
 Install it against an empty application database. It stores no email address,
 raw password, raw session token, recovery secret, or seeded account.
 
+`005` adds `worlds.dm_source`, backfilled/defaulted to `human` and constrained
+to `human` or `terra`. It stores only the world setting; model context and
+compiled output are request-scoped and are not canonical JSON persistence.
+
 The baseline and upgrade contain no alternate configuration container,
 secondary live container, reusable simulation aggregate, or superseded profile
 storage.
@@ -87,7 +92,7 @@ storage.
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
 | `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
-| `worlds`                   | Name, description, lifecycle, settings revision, and table revision.                     |
+| `worlds`                   | Name/description, human/Terra DM source, lifecycle, settings revision, and table revision. |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
 | `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.                   |
 | `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |

@@ -42,6 +42,7 @@ type worldResponse struct {
 	ID                  string     `json:"id"`
 	Name                string     `json:"name"`
 	Description         *string    `json:"description,omitempty"`
+	DMSource            string     `json:"dm_source"`
 	Status              string     `json:"status"`
 	Revision            int64      `json:"revision"`
 	TableRevision       int64      `json:"table_revision"`
@@ -65,9 +66,29 @@ type createWorldRequest struct {
 }
 
 type updateWorldRequest struct {
-	Name             *string `json:"name,omitempty"`
-	Description      *string `json:"description,omitempty"`
-	ExpectedRevision *int64  `json:"expected_revision"`
+	Name             *string                `json:"name,omitempty"`
+	Description      optionalNullableString `json:"description"`
+	DMSource         *string                `json:"dm_source,omitempty"`
+	ExpectedRevision *int64                 `json:"expected_revision"`
+}
+
+type optionalNullableString struct {
+	Set   bool
+	Value *string
+}
+
+func (value *optionalNullableString) UnmarshalJSON(data []byte) error {
+	value.Set = true
+	if bytes.Equal(bytes.TrimSpace(data), []byte("null")) {
+		value.Value = nil
+		return nil
+	}
+	var decoded string
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		return err
+	}
+	value.Value = &decoded
+	return nil
 }
 
 type archiveWorldRequest struct {
@@ -416,6 +437,29 @@ type adjudicateInteractionRequest struct {
 	Narrative             string              `json:"narrative"`
 	PrivateNotes          *string             `json:"private_notes,omitempty"`
 	Effects               []concreteEffectDTO `json:"effects"`
+}
+
+type autoDMProblemResponse struct {
+	Prompt string `json:"prompt"`
+}
+
+type autoDMConsequenceRequest struct {
+	ExpectedRevision      *int64 `json:"expected_revision"`
+	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
+}
+
+type compileConsequenceRequest struct {
+	ExpectedRevision      *int64 `json:"expected_revision"`
+	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
+	Narrative             string `json:"narrative"`
+}
+
+type consequenceCompilationResponse struct {
+	Narrative        string                              `json:"narrative"`
+	SelectedActionID *string                             `json:"selected_action_id,omitempty"`
+	ActionSummary    *string                             `json:"action_summary,omitempty"`
+	Effects          []concreteEffectDTO                 `json:"effects"`
+	Preview          interactionResolutionResultResponse `json:"preview"`
 }
 
 type interactionActionResponse struct {

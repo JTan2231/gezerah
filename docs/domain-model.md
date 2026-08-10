@@ -41,6 +41,12 @@ event boundary. It owns lifecycle and table revisions. A world membership has
 an `owner`, `editor`, `player`, or `spectator` role; owners and editors have
 facilitator authority during play.
 
+The world setting `dm_source` is either `human` or `terra` and defaults to
+`human`. It decides whether a facilitator writes consequence prose or asks the
+Auto DM to write it. In Terra mode the world description also serves as the
+campaign brief supplied to generation; it remains ordinary user-authored world
+prose rather than a privileged rules field.
+
 A world mechanic is a typed scalar state definition with an author-facing
 classification and a source:
 
@@ -54,12 +60,13 @@ classification and a source:
 
 The classification adds no canonical name, entity class, or special key.
 
-World problems are interactions: prompt-first, free-form moments created by a
-facilitator during play. Their audience, responders, context entities, player
-actions, Consequence, requested effects, and before/after receipt are captured
-relationally. A Consequence is one prose summary plus ordered targeted effects.
-An apply-status effect defines its name, optional description, and modifiers in
-that problem; it is not selected from world configuration.
+World problems are interactions: prompt-first, free-form moments created during
+play by a facilitator or, in Terra mode, proposed by the Auto DM. Their
+audience, responders, context entities, player actions, Consequence, requested
+effects, and before/after receipt are captured relationally. A Consequence is
+one prose account of what transpires plus ordered targeted effects compiled
+from that prose. An apply-status effect defines its name, optional description,
+and modifiers in that problem; it is not selected from world configuration.
 
 A character is a product projection over an ordinary world entity. It becomes
 a character when at least one active player-control relationship points to it.
@@ -326,6 +333,15 @@ Every target entity must belong to the world, be active and eligible, and own a
 state root. An effect value must match the mechanic kind; numeric results must
 satisfy configured bounds and step.
 
+The prose is the authoring surface and immutable input to compilation. In a
+`human` world the facilitator writes it; in a `terra` world GPT-5.6 Terra writes
+it from the current table snapshot. GPT-5.6 Luna then returns a strict
+structured interpretation containing an optional selected action/summary and
+zero or more effects. Compilation neither rewrites the prose nor persists a
+Consequence. It runs the existing advisory preview and returns its concrete
+effects so the facilitator can submit those same values to the ordinary
+resolve command.
+
 Effects execute in author order. A scalar effect observes earlier scalar
 changes to the same logical base input. Status lifecycle effects validate their
 ordered entity/instance targets, but applying a status does not change the
@@ -337,8 +353,10 @@ usable result. The application adds database transaction atomicity.
 
 Preview optionally runs the same validation and application logic without
 persisting. It is advisory and does not reserve a revision or need to precede
-resolution. Resolve locks the relevant lifecycle/configuration/state roots,
-rechecks revisions, applies the plan, and commits state plus history together.
+resolution. Auto DM compilation uses this same preview path; model output never
+bypasses world scope, mutability, type, bound, status, lifecycle, or revision
+checks. Resolve remains the only path that locks the relevant roots, rechecks
+revisions, applies the plan, and commits state plus history together.
 
 ## Resolution receipts and events
 

@@ -39,12 +39,14 @@ flowchart TB
     Migrations[Embedded SQL migrations]
     Static[Embedded Vite build]
     Postgres[(PostgreSQL)]
+    OpenAI[OpenAI Responses API]
 
     Client -->|GET application routes| Binary
     Binary --> Static
     Client -->|JSON commands and queries| Binary
     Client -->|world event stream| Binary
     Binary -->|pgx pool| Postgres
+    Binary -->|optional Auto DM calls| OpenAI
     Binary -->|startup, advisory lock| Migrations
     Migrations --> Postgres
 ```
@@ -125,6 +127,8 @@ cursor, and reconnects after a stream ends unless the session has ended.
   advances its world-rules revision;
 - state reads call the pure evaluator to separate intrinsic and effective
   values with modifier explanations;
+- Auto DM handlers assemble revision-consistent world snapshots, generate
+  optional prose, and compile Consequence prose into concrete effect DTOs;
 - live Consequences call the pure runtime transition/evaluation engine and
   persist base state, status lifecycle, and history atomically;
 - visibility filtering removes private fields before serialization.
@@ -233,6 +237,47 @@ provenance, the receipt, selected/declined action statuses, interaction
 lifecycle, and event either all commit or all roll back. Equivalent idempotent
 replay returns the immutable Consequence with
 `replayed: true`; different content conflicts.
+
+### Narrative-first Auto DM
+
+```mermaid
+sequenceDiagram
+    participant A as Human or GPT-5.6 Terra
+    participant H as Auto DM handler
+    participant L as GPT-5.6 Luna
+    participant P as Existing preview path
+    participant R as Existing resolve path
+
+    A->>H: Plain prose describing what transpires
+    H->>L: Prose + revision-consistent world snapshot
+    L-->>H: Strict selected action/summary + effects
+    H->>P: Existing Consequence DTO + current revisions
+    P-->>H: Validated hypothetical receipt
+    H-->>A: Original prose + effects + preview
+    A->>R: Returned prose/effects + fresh idempotency key
+```
+
+`dm_source` is a world setting: `human` keeps prose authoring with the
+facilitator, while `terra` enables problem and consequence generation. Terra
+uses `gpt-5.6-terra` for plain text. Luna uses `gpt-5.6-luna` with a strict JSON
+Schema for the mechanical interpretation. Both one-shot Responses API calls set
+`reasoning.effort` to `none` and `store` to `false`.
+
+Each call receives a read-only `REPEATABLE READ` snapshot containing the world
+description as campaign brief, all active mechanics with their exact authored
+constraints and expressions, every non-archived character sheet with all
+facilitator-visible profile fields, current logical/intrinsic/effective state
+and active statuses, and the three most recent resolved
+situation/Consequence pairs. Consequence generation and compilation also
+include the current situation and all submitted actions. Short per-request
+references stand in for UUIDs, then the server maps Luna's references back to
+world-owned resources before preview.
+
+Generation and compilation are advisory and persist nothing. Luna does not
+rewrite the original narrative, an empty effects list is valid, and every
+compiled transition must pass the same deterministic preview used by a
+human-authored request. Only the existing resolve path can lock state, recheck
+revisions, write a receipt, or advance the interaction.
 
 ## Consistency and concurrency
 

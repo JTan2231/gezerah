@@ -22,12 +22,23 @@ export function SettingsWorkspace({
 }) {
   const [name, setName] = useState(world.name);
   const [description, setDescription] = useState(world.description ?? "");
+  const [dmSource, setDMSource] = useState<World["dm_source"]>(world.dm_source);
   const [saving, setSaving] = useState(false);
   const [archiving, setArchiving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
   const dirty = useMemo(
-    () => name !== world.name || description !== (world.description ?? ""),
-    [description, name, world.description, world.name],
+    () =>
+      name !== world.name ||
+      description !== (world.description ?? "") ||
+      dmSource !== world.dm_source,
+    [
+      description,
+      dmSource,
+      name,
+      world.description,
+      world.dm_source,
+      world.name,
+    ],
   );
   const clearDirtyGuard = useDirtyGuard(dirty);
 
@@ -41,6 +52,7 @@ export function SettingsWorkspace({
         ...jsonBody({
           name: name.trim(),
           description: description.trim() || null,
+          dm_source: dmSource,
           expected_revision: world.revision,
         }),
       });
@@ -114,6 +126,21 @@ export function SettingsWorkspace({
               onChange={(event) => setDescription(event.currentTarget.value)}
               rows={4}
             />
+          </Field>
+          <Field
+            label="DM source"
+            hint="A human writes problems and outcomes, or Terra can generate them from the live world."
+            error={error?.fields["dm_source"]}
+          >
+            <select
+              value={dmSource}
+              onChange={(event) =>
+                setDMSource(event.currentTarget.value as World["dm_source"])
+              }
+            >
+              <option value="human">Human facilitator</option>
+              <option value="terra">Terra Auto DM</option>
+            </select>
           </Field>
           {error === null ? null : <ErrorMessage error={error} />}
           <footer className="form-actions">

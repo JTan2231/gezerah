@@ -137,6 +137,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         .fill(`Owner stale description ${unique}`);
       const editorDescription = `Editor winning description ${unique}`;
       await editorPage.getByLabel("Description").fill(editorDescription);
+      await editorPage.getByLabel("DM source").selectOption("terra");
       await editorPage.getByRole("button", { name: "Save details" }).click();
       await expect(editorPage.getByText("Up to date")).toBeVisible();
 
@@ -154,6 +155,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         editorDescription,
       );
+      await expect(ownerPage.getByLabel("DM source")).toHaveValue("terra");
 
       const retriedDescription = `Owner intentional retry ${unique}`;
       await ownerPage.getByLabel("Description").fill(retriedDescription);

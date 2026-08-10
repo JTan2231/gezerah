@@ -695,19 +695,8 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await scenario.behavior(
           "consequence.preview",
           async () => {
-            await editorPage
-              .getByRole("radio", { name: new RegExp(escapeRegExp(action)) })
-              .check();
-            await editorPage.getByLabel("Resolution summary").fill(outcome);
-            await addScalarEffect(
-              editorPage,
-              labels.entity,
-              labels.numeric,
-              -20,
-            );
-            await editorPage
-              .getByRole("button", { name: "Preview changes" })
-              .click();
+            const invalidOutcome = `${outcome} The courier loses twenty bearing.`;
+            await compileNarrative(editorPage, invalidOutcome);
             await expect(
               editorPage.getByText("number is below the configured minimum"),
             ).toBeVisible();
@@ -717,12 +706,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             await expect(editorPage.locator(".active-status-chip")).toHaveCount(
               0,
             );
-            await editorPage
-              .getByRole("button", { name: "Remove effect" })
-              .click();
-            await editorPage
-              .getByRole("button", { name: "Preview changes" })
-              .click();
+            await compileNarrative(editorPage, outcome);
             await expect(
               editorPage.getByText("Preview is valid"),
             ).toBeVisible();
@@ -745,20 +729,6 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await scenario.behavior(
           "consequence.resolve",
           async () => {
-            await addScalarEffect(
-              editorPage,
-              labels.entity,
-              labels.numeric,
-              -2,
-            );
-            await addStatusEffect(
-              editorPage,
-              labels.entity,
-              labels.numeric,
-              labels.status,
-              labels.firstStatusDescription,
-              1,
-            );
             await editorPage
               .getByRole("button", { name: "Resolve problem" })
               .click();
@@ -826,15 +796,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           labels.entity,
         );
         await editorPage.getByRole("button", { name: "Close actions" }).click();
-        await editorPage.getByLabel("Resolution summary").fill(secondOutcome);
-        await addStatusEffect(
-          editorPage,
-          labels.entity,
-          labels.numeric,
-          labels.status,
-          labels.secondStatusDescription,
-          2,
-        );
+        await compileNarrative(editorPage, secondOutcome);
         await editorPage
           .getByRole("button", { name: "Resolve problem" })
           .click();
@@ -897,26 +859,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           labels.entity,
         );
         await editorPage.getByRole("button", { name: "Close actions" }).click();
-        await editorPage.getByLabel("Resolution summary").fill(removalOutcome);
-        await editorPage
-          .getByLabel("Effect type")
-          .selectOption({ label: "Remove an active status" });
-        const statusInstanceSelect = editorPage.getByLabel(
-          "Active status instance",
-        );
-        const firstVisibleOption = statusInstanceSelect
-          .locator("option")
-          .filter({ hasText: `instance ${firstStatusInstance}` });
-        await expect(firstVisibleOption).toHaveCount(1);
-        const firstVisibleLabel = (
-          (await firstVisibleOption.textContent()) ?? ""
-        ).trim();
-        expect(firstVisibleLabel).not.toBe("");
-        await statusInstanceSelect.selectOption({ label: firstVisibleLabel });
-        await editorPage
-          .locator(".remove-status-composer")
-          .getByRole("button", { name: "Add effect" })
-          .click();
+        await compileNarrative(editorPage, removalOutcome);
         await editorPage
           .getByRole("button", { name: "Resolve problem" })
           .click();
@@ -1192,50 +1135,9 @@ async function presentProblem(
   await expect(page.getByText(prompt, { exact: true })).toBeVisible();
 }
 
-async function addScalarEffect(
-  page: Page,
-  entityName: string,
-  mechanicName: string,
-  amount: number,
-) {
-  await page
-    .getByLabel("Effect type")
-    .selectOption({ label: "Change a value" });
-  await page.getByLabel("Effect entity").selectOption({ label: entityName });
-  await page
-    .getByLabel("Effect mechanic")
-    .selectOption({ label: mechanicName });
-  await page.getByLabel("Effect amount").fill(String(amount));
-  await page
-    .locator(".effect-composer")
-    .getByRole("button", { name: "Add effect" })
-    .click();
-}
-
-async function addStatusEffect(
-  page: Page,
-  entityName: string,
-  mechanicName: string,
-  statusName: string,
-  description: string,
-  modifierAmount: number,
-) {
-  await page
-    .getByLabel("Effect type")
-    .selectOption({ label: "Apply a status" });
-  const composer = page.locator(".status-consequence-composer");
-  await composer.getByLabel("Status name").fill(statusName);
-  await composer.getByLabel("Description").fill(description);
-  const target = composer.getByRole("checkbox", { name: entityName });
-  if (!(await target.isChecked())) await target.check();
-  await composer.getByRole("button", { name: "Add modifier" }).click();
-  const modifier = composer.locator(".status-modifier").last();
-  await modifier
-    .getByLabel("Target value")
-    .selectOption({ label: mechanicName });
-  await modifier.getByLabel("Operation").selectOption({ label: "Add" });
-  await modifier.getByLabel("Literal value").fill(String(modifierAmount));
-  await composer.getByRole("button", { name: "Add status effect" }).click();
+async function compileNarrative(page: Page, narrative: string) {
+  await page.getByLabel("What transpires").fill(narrative);
+  await page.getByRole("button", { name: "Compile & preview" }).click();
 }
 
 function visibleStatusInstance(label: string | null): string {
@@ -1245,8 +1147,4 @@ function visibleStatusInstance(label: string | null): string {
       `active status did not expose its visible identity: ${label}`,
     );
   return instance;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

@@ -2,11 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
+  AutoDMProblem,
+  ConsequenceCompilation,
   Interaction,
   InteractionAction,
   InteractionResolutionResult,
   StateValue,
-  StatusModifierOperation,
   User,
   World,
   WorldEntity,
@@ -23,11 +24,6 @@ import {
   Modal,
 } from "../components/StudioUI";
 import { formatRelativeDate, humanize } from "../domain/display";
-import {
-  effectToAPI,
-  type EffectDraft,
-  type StatusModifierDraft,
-} from "../domain/consequences";
 import { useCollection } from "../hooks/useCollection";
 import { useResource } from "../hooks/useResource";
 import { useWorldEvents, type WorldEvent } from "../hooks/useWorldEvents";
@@ -547,6 +543,7 @@ function NewProblemModal({
   const previousResponderIds = useRef(
     new Set(responders.map((member) => member.id)),
   );
+  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -571,6 +568,32 @@ function NewProblemModal({
         ? values.filter((value) => value !== id)
         : [...values, id],
     );
+  }
+
+  async function generateProblem() {
+    setGenerating(true);
+    setError(null);
+    try {
+      const result = await api<AutoDMProblem>(
+        worldPath(world.id, "auto-dm/problem"),
+        { method: "POST" },
+      );
+      if (result.prompt.trim() === "")
+        throw new ApiError(
+          502,
+          "invalid_response",
+          "The Auto DM returned an empty problem.",
+        );
+      setPrompt(result.prompt.trim());
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(0, "unknown", "Could not generate a problem."),
+      );
+    } finally {
+      setGenerating(false);
+    }
   }
 
   async function submit(event: React.FormEvent) {
@@ -628,6 +651,26 @@ function NewProblemModal({
             placeholder="Describe the problem."
           />
         </Field>
+        {world.dm_source === "terra" ? (
+          <div className="auto-dm-generator">
+            <span>
+              Terra can propose the next problem from the current world and
+              table history.
+            </span>
+            <button
+              className="button button-quiet"
+              type="button"
+              disabled={generating || saving}
+              onClick={() => void generateProblem()}
+            >
+              {generating
+                ? "Generating…"
+                : prompt.trim() === ""
+                  ? "Generate problem"
+                  : "Generate again"}
+            </button>
+          </div>
+        ) : null}
         {entities.length > 0 ? (
           <fieldset className="choice-fieldset">
             <legend>
@@ -695,7 +738,7 @@ function NewProblemModal({
           <button
             className="button button-play"
             type="submit"
-            disabled={saving || prompt.trim() === ""}
+            disabled={saving || generating || prompt.trim() === ""}
           >
             {saving ? "Creating…" : "Create problem"}
           </button>
@@ -1068,31 +1111,24 @@ function RulingEditor({
   rulesReady: boolean;
   onResolved: () => void;
 }) {
-  const mutable = mechanics.filter(
-    (mechanic) => mechanic.mutable_during_play && !mechanic.archived,
-  );
   const submitted = interaction.actions.filter(
     (action) => action.status === "submitted",
   );
-  const [selectedActionId, setSelectedActionId] = useState("");
   const [narrative, setNarrative] = useState("");
-  const [effects, setEffects] = useState<EffectDraft[]>([]);
-  const [preview, setPreview] = useState<{
-    key: string;
-    result: InteractionResolutionResult;
+  const [compilation, setCompilation] = useState<{
+    contextKey: string;
+    result: ConsequenceCompilation;
   } | null>(null);
-  const [saving, setSaving] = useState<"preview" | "resolve" | null>(null);
+  const [saving, setSaving] = useState<
+    "compile" | "generate" | "resolve" | null
+  >(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const requestBody = {
-    expected_revision: interaction.revision,
-    expected_rules_revision: rulesRevision,
-    selected_action_id: selectedActionId || undefined,
-    narrative: narrative.trim(),
-    effects: effects.map(effectToAPI),
-  };
-  const previewKey = JSON.stringify({
-    ...requestBody,
+  const terra = world.dm_source === "terra";
+  const contextKey = JSON.stringify({
+    world_revision: world.revision,
+    interaction_revision: interaction.revision,
+    rules_revision: rulesRevision,
     entity_versions: entities.map((entity) => [
       entity.id,
       entity.archived,
@@ -1102,28 +1138,82 @@ function RulingEditor({
       entity.state.rules_revision,
     ]),
   });
-  const visiblePreview = preview?.key === previewKey ? preview.result : null;
-  const effectsCurrent = effects.every((effect) =>
-    effectDraftIsCurrent(effect, entities, mechanics),
-  );
+  const compiled =
+    compilation?.contextKey === contextKey &&
+    compilation.result.narrative.trim() === narrative.trim()
+      ? compilation.result
+      : null;
+  const selectedAction =
+    compiled?.selected_action_id === undefined
+      ? undefined
+      : submitted.find((action) => action.id === compiled.selected_action_id);
 
-  async function adjudicate(mode: "preview" | "resolve") {
-    const requestKey = previewKey;
+  async function prepareConsequence(mode: "compile" | "generate") {
+    const requestContextKey = contextKey;
     setSaving(mode);
     setError(null);
     try {
-      const result = await api<InteractionResolutionResult>(
-        worldPath(world.id, `interactions/${interaction.id}/${mode}`),
+      const path =
+        mode === "generate"
+          ? `interactions/${interaction.id}/auto-dm/consequence`
+          : `interactions/${interaction.id}/compile-consequence`;
+      const result = await api<ConsequenceCompilation>(
+        worldPath(world.id, path),
         {
           method: "POST",
           ...jsonBody({
-            ...requestBody,
-            idempotency_key: mode === "resolve" ? idempotencyKey : undefined,
+            expected_revision: interaction.revision,
+            expected_rules_revision: rulesRevision,
+            ...(mode === "compile" ? { narrative: narrative.trim() } : {}),
           }),
         },
       );
-      setPreview({ key: requestKey, result });
-      if (mode === "resolve") onResolved();
+      if (result.narrative.trim() === "")
+        throw new ApiError(
+          502,
+          "invalid_response",
+          "The consequence did not include what transpires.",
+        );
+      setNarrative(result.narrative.trim());
+      setCompilation({ contextKey: requestContextKey, result });
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(
+              0,
+              "unknown",
+              mode === "generate"
+                ? "Could not generate a consequence."
+                : "Could not interpret this consequence.",
+            ),
+      );
+    } finally {
+      setSaving(null);
+    }
+  }
+
+  async function resolve() {
+    if (compiled === null) return;
+    setSaving("resolve");
+    setError(null);
+    try {
+      await api<InteractionResolutionResult>(
+        worldPath(world.id, `interactions/${interaction.id}/resolve`),
+        {
+          method: "POST",
+          ...jsonBody({
+            expected_revision: interaction.revision,
+            expected_rules_revision: rulesRevision,
+            idempotency_key: idempotencyKey,
+            selected_action_id: compiled.selected_action_id,
+            action_summary: compiled.action_summary,
+            narrative: compiled.narrative,
+            effects: compiled.effects,
+          }),
+        },
+      );
+      onResolved();
     } catch (reason) {
       setError(
         reason instanceof ApiError
@@ -1138,118 +1228,131 @@ function RulingEditor({
   return (
     <section className="ruling-editor">
       <header>
-        <h3>Resolve problem</h3>
-        <p>Optionally select an action, then enter a summary and effects.</p>
+        <h3>What transpires?</h3>
+        <p>
+          {terra
+            ? "Terra considers the submitted actions and writes the outcome. Luna then translates it into the world’s mechanics."
+            : "Describe the outcome in plain language. Luna will translate it into the world’s mechanics."}
+        </p>
       </header>
       {submitted.length > 0 ? (
-        <fieldset className="action-selection">
-          <legend>
-            Selected action <small>Optional</small>
-          </legend>
-          <label className={selectedActionId === "" ? "selected" : ""}>
-            <input
-              type="radio"
-              name="selected-action"
-              checked={selectedActionId === ""}
-              onChange={() => {
-                setSelectedActionId("");
-                setPreview(null);
-              }}
-            />
-            <span>No single action</span>
-          </label>
-          {submitted.map((action) => (
-            <label
-              className={selectedActionId === action.id ? "selected" : ""}
-              key={action.id}
-            >
-              <input
-                type="radio"
-                name="selected-action"
-                checked={selectedActionId === action.id}
-                onChange={() => {
-                  setSelectedActionId(action.id);
-                  setPreview(null);
-                }}
-              />
-              <span>
-                <strong>
-                  {action.acting_entity_name ?? action.submitted_by_name}
-                </strong>
-                {action.acting_entity_name === undefined
-                  ? null
-                  : ` (${action.submitted_by_name})`}{" "}
-                {action.text}
-              </span>
-            </label>
-          ))}
-        </fieldset>
+        <section className="consequence-actions" aria-label="Submitted actions">
+          <h4>Actions to consider</h4>
+          <div className="action-list">
+            {submitted.map((action) => (
+              <blockquote key={action.id}>
+                <Avatar
+                  name={
+                    action.acting_entity_name ??
+                    action.submitted_by_name ??
+                    "Player"
+                  }
+                  size="small"
+                />
+                <div>
+                  <strong>
+                    {action.acting_entity_name ??
+                      action.submitted_by_name ??
+                      "Player"}
+                  </strong>
+                  <p>{action.text}</p>
+                </div>
+              </blockquote>
+            ))}
+          </div>
+        </section>
       ) : null}
-      <Field label="Resolution summary">
+      <Field
+        label="What transpires"
+        hint={
+          terra
+            ? "Generated by Terra from the current problem, actions, and world."
+            : "Include the fictional outcome and any lasting or mechanical consequences."
+        }
+        error={error?.fields["narrative"]}
+      >
         <textarea
           value={narrative}
+          readOnly={terra}
           onChange={(event) => {
             setNarrative(event.currentTarget.value);
-            setPreview(null);
+            setCompilation(null);
+            setError(null);
           }}
-          rows={4}
+          rows={6}
           maxLength={20_000}
-          placeholder="Describe the outcome."
+          placeholder={
+            terra
+              ? "Ask Terra to generate the consequence."
+              : "Describe everything that happens as a result of these actions."
+          }
         />
       </Field>
-      <EffectBuilder
-        entities={entities}
-        mechanics={mechanics.filter((mechanic) => !mechanic.archived)}
-        mutableMechanics={mutable}
-        effects={effects}
-        onChange={(nextEffects) => {
-          setEffects(nextEffects);
-          setPreview(null);
-        }}
-      />
-      {visiblePreview === null ? null : (
-        <RulingPreview
-          result={visiblePreview}
-          entities={entities}
-          mechanics={mechanics}
-        />
+      {compiled === null ? null : (
+        <>
+          {selectedAction === undefined ? null : (
+            <p className="compiled-action-summary">
+              Centered on{" "}
+              <strong>
+                {selectedAction.acting_entity_name ??
+                  selectedAction.submitted_by_name ??
+                  "the selected action"}
+              </strong>
+              : {selectedAction.text}
+            </p>
+          )}
+          <RulingPreview
+            result={compiled.preview}
+            entities={entities}
+            mechanics={mechanics}
+          />
+        </>
       )}
       {!rulesReady ? (
         <p className="ruling-sync-notice" role="status">
-          Refreshing the current rules and entity state before this problem can
-          be previewed or resolved.
+          Refreshing the current rules and entity state before this consequence
+          can be interpreted or resolved.
         </p>
-      ) : effectsCurrent ? null : (
+      ) : compilation !== null && compiled === null ? (
         <p className="ruling-sync-notice" role="status">
-          The world changed after an effect was added. Remove or rebuild the
-          outdated effect before continuing.
+          The outcome or table changed after this preview was prepared. Prepare
+          it again before resolving.
         </p>
-      )}
+      ) : null}
       {error === null ? null : <ErrorMessage error={error} />}
       <footer className="ruling-actions">
-        <button
-          className="button button-quiet"
-          type="button"
-          disabled={
-            saving !== null ||
-            narrative.trim() === "" ||
-            !rulesReady ||
-            !effectsCurrent
-          }
-          onClick={() => void adjudicate("preview")}
-        >
-          {saving === "preview" ? "Previewing…" : "Preview changes"}
-        </button>
+        {terra ? (
+          <button
+            className="button button-quiet"
+            type="button"
+            disabled={saving !== null || !rulesReady}
+            onClick={() => void prepareConsequence("generate")}
+          >
+            {saving === "generate"
+              ? "Terra is deciding…"
+              : compiled === null
+                ? "Generate consequence"
+                : "Generate again"}
+          </button>
+        ) : (
+          <button
+            className="button button-quiet"
+            type="button"
+            disabled={saving !== null || narrative.trim() === "" || !rulesReady}
+            onClick={() => void prepareConsequence("compile")}
+          >
+            {saving === "compile"
+              ? "Interpreting…"
+              : compiled === null
+                ? "Compile & preview"
+                : "Compile again"}
+          </button>
+        )}
         <button
           className="button button-play"
           type="button"
-          disabled={
-            saving !== null ||
-            narrative.trim() === "" ||
-            !rulesReady ||
-            !effectsCurrent
-          }
-          onClick={() => void adjudicate("resolve")}
+          disabled={saving !== null || compiled === null || !rulesReady}
+          onClick={() => void resolve()}
         >
           {saving === "resolve" ? "Resolving…" : "Resolve problem"}
         </button>
@@ -1257,625 +1360,6 @@ function RulingEditor({
     </section>
   );
 }
-
-function EffectBuilder({
-  entities,
-  mechanics,
-  mutableMechanics,
-  effects,
-  onChange,
-}: {
-  entities: WorldEntity[];
-  mechanics: WorldMechanic[];
-  mutableMechanics: WorldMechanic[];
-  effects: EffectDraft[];
-  onChange: (effects: EffectDraft[]) => void;
-}) {
-  const eligibleEntities = entities.filter(
-    (entity) =>
-      !entity.archived && entity.character_status !== "setup-required",
-  );
-  const eligibleEntityIDs = new Set(
-    eligibleEntities.map((entity) => entity.id),
-  );
-  const activeStatusOptions = eligibleEntities.flatMap((entity) =>
-    entity.state.active_statuses.map((status) => ({
-      key: `${entity.id}:${status.id}`,
-      entity,
-      status,
-    })),
-  );
-  const queuedRemovalIDs = new Set(
-    effects
-      .filter((effect) => effect.kind === "remove-status")
-      .flatMap((effect) =>
-        effect.targets.map((target) => target.statusInstanceId),
-      ),
-  );
-  const removableStatusOptions = activeStatusOptions.filter(
-    ({ status }) => !queuedRemovalIDs.has(status.id),
-  );
-  const firstMechanic = mutableMechanics[0];
-  const [entityId, setEntityId] = useState(eligibleEntities[0]?.id ?? "");
-  const [effectKind, setEffectKind] = useState<
-    "mechanic" | "apply-status" | "remove-status"
-  >(firstMechanic === undefined ? "apply-status" : "mechanic");
-  const [mechanicId, setMechanicId] = useState(firstMechanic?.id ?? "");
-  const [operation, setOperation] = useState<"adjust-number" | "set">(
-    firstMechanic?.mode === "binary" ? "set" : "adjust-number",
-  );
-  const [amount, setAmount] = useState(0);
-  const [booleanValue, setBooleanValue] = useState(true);
-  const [statusName, setStatusName] = useState("");
-  const [statusDescription, setStatusDescription] = useState("");
-  const [statusTargetIds, setStatusTargetIds] = useState<string[]>(
-    eligibleEntities[0] === undefined ? [] : [eligibleEntities[0].id],
-  );
-  const [statusModifiers, setStatusModifiers] = useState<StatusModifierDraft[]>(
-    [],
-  );
-  const [removalKey, setRemovalKey] = useState(
-    removableStatusOptions[0]?.key ?? "",
-  );
-  const effectiveEntityId =
-    entityId !== "" && eligibleEntityIDs.has(entityId)
-      ? entityId
-      : (eligibleEntities[0]?.id ?? "");
-  const effectiveMechanicId =
-    mechanicId !== "" ? mechanicId : (firstMechanic?.id ?? "");
-  const mechanic = mutableMechanics.find(
-    (item) => item.id === effectiveMechanicId,
-  );
-  const effectiveRemoval =
-    removableStatusOptions.find((option) => option.key === removalKey) ??
-    removableStatusOptions[0];
-  const currentStatusTargetIds = statusTargetIds.filter((id) =>
-    eligibleEntityIDs.has(id),
-  );
-  const statusModifiersCurrent = statusModifiers.every((modifier) =>
-    statusModifierIsCurrent(modifier, mechanics),
-  );
-
-  function chooseMechanic(id: string) {
-    setMechanicId(id);
-    const selected = mutableMechanics.find((item) => item.id === id);
-    setOperation(selected?.mode === "binary" ? "set" : "adjust-number");
-    setAmount(0);
-  }
-
-  function addMechanicEffect() {
-    if (effectiveEntityId === "") return;
-    if (mechanic === undefined) return;
-    onChange([
-      ...effects,
-      {
-        id: crypto.randomUUID(),
-        entityId: effectiveEntityId,
-        kind: "mechanic",
-        mechanicId: effectiveMechanicId,
-        valueKind: mechanic.mode === "binary" ? "boolean" : "number",
-        operation: mechanic.mode === "binary" ? "set" : operation,
-        amount,
-        booleanValue,
-      },
-    ]);
-    setAmount(0);
-  }
-
-  function addStatusEffect() {
-    if (
-      statusName.trim() === "" ||
-      currentStatusTargetIds.length === 0 ||
-      !statusModifiersCurrent
-    )
-      return;
-    onChange([
-      ...effects,
-      {
-        id: crypto.randomUUID(),
-        kind: "apply-status",
-        entityIds: currentStatusTargetIds,
-        status: {
-          name: statusName.trim(),
-          description: statusDescription.trim(),
-          modifiers: statusModifiers,
-        },
-      },
-    ]);
-    setStatusName("");
-    setStatusDescription("");
-    setStatusModifiers([]);
-  }
-
-  function addRemovalEffect() {
-    if (effectiveRemoval === undefined) return;
-    onChange([
-      ...effects,
-      {
-        id: crypto.randomUUID(),
-        kind: "remove-status",
-        targets: [
-          {
-            entityId: effectiveRemoval.entity.id,
-            statusInstanceId: effectiveRemoval.status.id,
-            statusName: effectiveRemoval.status.name,
-          },
-        ],
-      },
-    ]);
-    setRemovalKey("");
-  }
-
-  function toggleStatusTarget(id: string) {
-    setStatusTargetIds((current) =>
-      current.includes(id)
-        ? current.filter((candidate) => candidate !== id)
-        : [...current, id],
-    );
-  }
-
-  function setModifier(index: number, modifier: StatusModifierDraft) {
-    setStatusModifiers((current) =>
-      current.map((candidate, candidateIndex) =>
-        candidateIndex === index ? modifier : candidate,
-      ),
-    );
-  }
-
-  return (
-    <section className="effect-builder">
-      <header>
-        <h4>Effects</h4>
-        <span>
-          {effects.length} {effects.length === 1 ? "effect" : "effects"}
-        </span>
-      </header>
-      {eligibleEntities.length === 0 ? (
-        <p className="effect-empty">
-          At least one ready entity is required to add effects. A resolution
-          summary without effects is valid.
-        </p>
-      ) : (
-        <>
-          <select
-            className="consequence-kind-select"
-            value={effectKind}
-            onChange={(event) =>
-              setEffectKind(event.currentTarget.value as typeof effectKind)
-            }
-            aria-label="Effect type"
-          >
-            {mutableMechanics.length > 0 ? (
-              <option value="mechanic">Change a value</option>
-            ) : null}
-            <option value="apply-status">Apply a status</option>
-            {activeStatusOptions.length > 0 ? (
-              <option value="remove-status">Remove an active status</option>
-            ) : null}
-          </select>
-          {effectKind === "mechanic" ? (
-            <div className="effect-composer">
-              <select
-                value={effectiveEntityId}
-                onChange={(event) => setEntityId(event.currentTarget.value)}
-                aria-label="Effect entity"
-              >
-                {eligibleEntities.map((entity) => (
-                  <option key={entity.id} value={entity.id}>
-                    {entity.display_name}
-                  </option>
-                ))}
-              </select>
-              <select
-                value={effectiveMechanicId}
-                onChange={(event) => chooseMechanic(event.currentTarget.value)}
-                aria-label="Effect mechanic"
-              >
-                {mutableMechanics.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-              {mechanic?.mode === "binary" ? (
-                <select
-                  value={String(booleanValue)}
-                  onChange={(event) =>
-                    setBooleanValue(event.currentTarget.value === "true")
-                  }
-                  aria-label="Capability change"
-                >
-                  <option value="true">Grant</option>
-                  <option value="false">Remove</option>
-                </select>
-              ) : (
-                <>
-                  <select
-                    value={operation}
-                    onChange={(event) =>
-                      setOperation(
-                        event.currentTarget.value as "adjust-number" | "set",
-                      )
-                    }
-                    aria-label="Effect operation"
-                  >
-                    <option value="adjust-number">Adjust by</option>
-                    <option value="set">Set to</option>
-                  </select>
-                  <input
-                    type="number"
-                    value={amount}
-                    onChange={(event) =>
-                      setAmount(event.currentTarget.valueAsNumber || 0)
-                    }
-                    step="any"
-                    aria-label="Effect amount"
-                  />
-                </>
-              )}
-              <button
-                className="button button-ink"
-                type="button"
-                onClick={addMechanicEffect}
-                disabled={mechanic === undefined}
-              >
-                Add effect
-              </button>
-            </div>
-          ) : effectKind === "apply-status" ? (
-            <div className="status-consequence-composer">
-              <div className="status-consequence-fields">
-                <label>
-                  <span>Status name</span>
-                  <input
-                    value={statusName}
-                    maxLength={200}
-                    onChange={(event) =>
-                      setStatusName(event.currentTarget.value)
-                    }
-                    placeholder="Status name"
-                  />
-                </label>
-                <label>
-                  <span>
-                    Description <small>Optional</small>
-                  </span>
-                  <textarea
-                    value={statusDescription}
-                    maxLength={2000}
-                    rows={2}
-                    onChange={(event) =>
-                      setStatusDescription(event.currentTarget.value)
-                    }
-                    placeholder="Describe the status."
-                  />
-                </label>
-              </div>
-              <fieldset className="consequence-targets">
-                <legend>Targets</legend>
-                <div>
-                  {eligibleEntities.map((entity) => (
-                    <label
-                      className={
-                        statusTargetIds.includes(entity.id) ? "selected" : ""
-                      }
-                      key={entity.id}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={statusTargetIds.includes(entity.id)}
-                        onChange={() => toggleStatusTarget(entity.id)}
-                      />
-                      <span>{entity.display_name}</span>
-                    </label>
-                  ))}
-                </div>
-              </fieldset>
-              <section className="status-consequence-modifiers">
-                <header>
-                  <div>
-                    <strong>Typed modifiers</strong>
-                    <small>
-                      Optional. Lower priorities run first; ties follow this
-                      order.
-                    </small>
-                  </div>
-                  <button
-                    className="button button-quiet"
-                    type="button"
-                    disabled={mechanics.length === 0}
-                    onClick={() => {
-                      const target = mechanics[0];
-                      if (target === undefined) return;
-                      setStatusModifiers((current) => [
-                        ...current,
-                        newStatusModifier(target),
-                      ]);
-                    }}
-                  >
-                    Add modifier
-                  </button>
-                </header>
-                {statusModifiers.length === 0 ? (
-                  <p className="status-modifier-empty">
-                    A status can have no modifiers.
-                  </p>
-                ) : (
-                  <ol className="status-modifier-list">
-                    {statusModifiers.map((modifier, index) => (
-                      <li key={modifier.id}>
-                        <StatusModifierEditor
-                          modifier={modifier}
-                          mechanics={mechanics}
-                          onChange={(next) => setModifier(index, next)}
-                        />
-                        <div className="modifier-order-actions">
-                          <button
-                            type="button"
-                            aria-label={`Move modifier ${index + 1} up`}
-                            disabled={index === 0}
-                            onClick={() =>
-                              setStatusModifiers((current) =>
-                                moveItem(current, index, index - 1),
-                              )
-                            }
-                          >
-                            ↑
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Move modifier ${index + 1} down`}
-                            disabled={index === statusModifiers.length - 1}
-                            onClick={() =>
-                              setStatusModifiers((current) =>
-                                moveItem(current, index, index + 1),
-                              )
-                            }
-                          >
-                            ↓
-                          </button>
-                          <button
-                            className="danger-text"
-                            type="button"
-                            onClick={() =>
-                              setStatusModifiers((current) =>
-                                current.filter(
-                                  (_candidate, candidateIndex) =>
-                                    candidateIndex !== index,
-                                ),
-                              )
-                            }
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </section>
-              <button
-                className="button button-ink status-consequence-add"
-                type="button"
-                onClick={addStatusEffect}
-                disabled={
-                  statusName.trim() === "" ||
-                  currentStatusTargetIds.length === 0 ||
-                  !statusModifiersCurrent
-                }
-              >
-                Add status effect
-              </button>
-              {statusModifiersCurrent ? null : (
-                <p className="field-message" role="status">
-                  A modifier has an unavailable target, a mismatched literal, or
-                  a non-whole priority. Review it before adding this effect.
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="effect-composer remove-status-composer">
-              <select
-                value={effectiveRemoval?.key ?? ""}
-                onChange={(event) => setRemovalKey(event.currentTarget.value)}
-                aria-label="Active status instance"
-              >
-                {removableStatusOptions.length === 0 ? (
-                  <option value="">No unplanned active statuses</option>
-                ) : null}
-                {removableStatusOptions.map(({ key, entity, status }) => (
-                  <option key={key} value={key}>
-                    {entity.display_name} · {status.name} · applied{" "}
-                    {formatRelativeDate(status.applied_at)} · instance{" "}
-                    {shortIdentifier(status.id)}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="button button-ink"
-                type="button"
-                onClick={addRemovalEffect}
-                disabled={effectiveRemoval === undefined}
-              >
-                Add effect
-              </button>
-            </div>
-          )}
-        </>
-      )}
-      {effects.length > 0 ? (
-        <ol className="effect-list">
-          {effects.map((effect) => {
-            const item =
-              effect.kind === "mechanic"
-                ? mechanics.find(
-                    (candidate) => candidate.id === effect.mechanicId,
-                  )
-                : undefined;
-            return (
-              <li key={effect.id}>
-                <div>
-                  <strong>{effectTargetLabel(effect, entities)}</strong>
-                  <span>{effectDescription(effect, item)}</span>
-                </div>
-                <button
-                  className="icon-button"
-                  type="button"
-                  aria-label="Remove effect"
-                  onClick={() =>
-                    onChange(
-                      effects.filter((candidate) => candidate.id !== effect.id),
-                    )
-                  }
-                >
-                  ×
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
-    </section>
-  );
-}
-
-function StatusModifierEditor({
-  modifier,
-  mechanics,
-  onChange,
-}: {
-  modifier: StatusModifierDraft;
-  mechanics: WorldMechanic[];
-  onChange: (modifier: StatusModifierDraft) => void;
-}) {
-  const mechanic = mechanics.find((item) => item.id === modifier.mechanic_id);
-  const numeric = mechanic?.mode !== "binary";
-  return (
-    <div className="status-modifier">
-      <label>
-        <span>Target value</span>
-        <select
-          value={modifier.mechanic_id}
-          onChange={(event) => {
-            const nextMechanic = mechanics.find(
-              (candidate) => candidate.id === event.currentTarget.value,
-            );
-            if (nextMechanic === undefined) return;
-            const nextNumeric = nextMechanic.mode !== "binary";
-            onChange({
-              ...modifier,
-              mechanic_id: nextMechanic.id,
-              operation: nextNumeric ? "add-number" : "set",
-              value: nextNumeric
-                ? { kind: "number", value: 0 }
-                : { kind: "boolean", value: true },
-            });
-          }}
-        >
-          {mechanics.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.name}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        <span>Operation</span>
-        <select
-          value={modifier.operation}
-          onChange={(event) =>
-            onChange({
-              ...modifier,
-              operation: event.currentTarget.value as StatusModifierOperation,
-            })
-          }
-        >
-          <option value="set">Set to</option>
-          {numeric ? <option value="add-number">Add</option> : null}
-          {numeric ? (
-            <option value="multiply-number">Multiply by</option>
-          ) : null}
-        </select>
-      </label>
-      <label>
-        <span>Literal value</span>
-        {numeric ? (
-          <input
-            type="number"
-            step="any"
-            value={modifier.value.kind === "number" ? modifier.value.value : 0}
-            onChange={(event) =>
-              onChange({
-                ...modifier,
-                value: {
-                  kind: "number",
-                  value: event.currentTarget.valueAsNumber || 0,
-                },
-              })
-            }
-          />
-        ) : (
-          <select
-            value={
-              modifier.value.kind === "boolean"
-                ? String(modifier.value.value)
-                : "true"
-            }
-            onChange={(event) =>
-              onChange({
-                ...modifier,
-                operation: "set",
-                value: {
-                  kind: "boolean",
-                  value: event.currentTarget.value === "true",
-                },
-              })
-            }
-          >
-            <option value="true">True</option>
-            <option value="false">False</option>
-          </select>
-        )}
-      </label>
-      <label>
-        <span>Priority</span>
-        <input
-          type="number"
-          step="1"
-          value={modifier.priority}
-          onChange={(event) =>
-            onChange({
-              ...modifier,
-              priority: event.currentTarget.valueAsNumber || 0,
-            })
-          }
-        />
-      </label>
-    </div>
-  );
-}
-
-function newStatusModifier(mechanic: WorldMechanic): StatusModifierDraft {
-  const numeric = mechanic.mode !== "binary";
-  return {
-    id: crypto.randomUUID(),
-    mechanic_id: mechanic.id,
-    operation: numeric ? "add-number" : "set",
-    value: numeric
-      ? { kind: "number", value: 0 }
-      : { kind: "boolean", value: true },
-    priority: 0,
-  };
-}
-
-function moveItem<T>(items: T[], from: number, to: number): T[] {
-  if (to < 0 || to >= items.length) return items;
-  const next = [...items];
-  const [item] = next.splice(from, 1);
-  if (item !== undefined) next.splice(to, 0, item);
-  return next;
-}
-
 function RulingPreview({
   result,
   entities,
@@ -2020,117 +1504,6 @@ function HistoryCard({
   );
 }
 
-function effectDraftIsCurrent(
-  effect: EffectDraft,
-  entities: WorldEntity[],
-  mechanics: WorldMechanic[],
-): boolean {
-  const eligibleEntityIDs = new Set(
-    entities
-      .filter(
-        (entity) =>
-          !entity.archived && entity.character_status !== "setup-required",
-      )
-      .map((entity) => entity.id),
-  );
-  if (effect.kind === "mechanic") {
-    const mechanic = mechanics.find(
-      (candidate) => candidate.id === effect.mechanicId,
-    );
-    return (
-      eligibleEntityIDs.has(effect.entityId) &&
-      mechanic !== undefined &&
-      !mechanic.archived &&
-      mechanic.mutable_during_play &&
-      effect.valueKind ===
-        (mechanic.mode === "binary" ? "boolean" : "number") &&
-      (effect.valueKind === "boolean" || Number.isFinite(effect.amount))
-    );
-  }
-  if (effect.kind === "apply-status")
-    return (
-      effect.entityIds.length > 0 &&
-      effect.entityIds.every((id) => eligibleEntityIDs.has(id)) &&
-      effect.status.modifiers.every((modifier) =>
-        statusModifierIsCurrent(modifier, mechanics),
-      )
-    );
-  return (
-    effect.targets.length > 0 &&
-    effect.targets.every((target) => {
-      if (!eligibleEntityIDs.has(target.entityId)) return false;
-      return (
-        entities
-          .find((entity) => entity.id === target.entityId)
-          ?.state.active_statuses.some(
-            (status) => status.id === target.statusInstanceId,
-          ) ?? false
-      );
-    })
-  );
-}
-
-function statusModifierIsCurrent(
-  modifier: StatusModifierDraft,
-  mechanics: WorldMechanic[],
-): boolean {
-  const mechanic = mechanics.find(
-    (candidate) => candidate.id === modifier.mechanic_id,
-  );
-  if (
-    mechanic === undefined ||
-    mechanic.archived ||
-    !Number.isInteger(modifier.priority)
-  )
-    return false;
-  const numeric = mechanic.mode !== "binary";
-  if (modifier.operation === "set")
-    return (
-      modifier.value.kind === (numeric ? "number" : "boolean") &&
-      (modifier.value.kind === "boolean" ||
-        Number.isFinite(modifier.value.value))
-    );
-  return (
-    numeric &&
-    modifier.value.kind === "number" &&
-    Number.isFinite(modifier.value.value)
-  );
-}
-
-function effectDescription(
-  effect: EffectDraft,
-  mechanic?: WorldMechanic,
-): string {
-  if (effect.kind === "apply-status") {
-    const count = effect.status.modifiers.length;
-    return `Apply ${effect.status.name}${count === 0 ? "" : ` · ${count} ${count === 1 ? "modifier" : "modifiers"}`}`;
-  }
-  if (effect.kind === "remove-status")
-    return `Remove ${effect.targets[0]?.statusName ?? "status"} · instance ${shortIdentifier(effect.targets[0]?.statusInstanceId ?? "unknown")}`;
-  if (mechanic === undefined) return "Unknown mechanic";
-  if (effect.valueKind === "boolean")
-    return `${effect.booleanValue ? "Grant" : "Remove"} ${mechanic.name}`;
-  return `${effect.operation === "set" ? "Set" : "Adjust"} ${mechanic.name} ${effect.operation === "adjust-number" && effect.amount >= 0 ? "+" : ""}${effect.amount}`;
-}
-
-function effectTargetLabel(
-  effect: EffectDraft,
-  entities: WorldEntity[],
-): string {
-  const ids =
-    effect.kind === "mechanic"
-      ? [effect.entityId]
-      : effect.kind === "apply-status"
-        ? effect.entityIds
-        : effect.targets.map((target) => target.entityId);
-  const names = ids.map(
-    (id) =>
-      entities.find((entity) => entity.id === id)?.display_name ?? "Entity",
-  );
-  if (names.length <= 2) return names.join(" & ");
-  return `${names[0]} + ${names.length - 1} others`;
-}
-
 function displayValue(value?: StateValue): string {
   if (value === undefined) return "unknown";
   return value.kind === "number"
@@ -2138,10 +1511,6 @@ function displayValue(value?: StateValue): string {
     : value.value
       ? "yes"
       : "no";
-}
-
-function shortIdentifier(id: string): string {
-  return id.slice(0, 8);
 }
 
 function entitySubtitle(

@@ -10,10 +10,12 @@ import (
 )
 
 type Config struct {
-	Addr         string
-	DatabaseURL  string
-	PublicOrigin string
-	LogLevel     slog.Level
+	Addr          string
+	DatabaseURL   string
+	PublicOrigin  string
+	OpenAIAPIKey  string
+	OpenAIBaseURL string
+	LogLevel      slog.Level
 }
 
 func ValidateConfig(config Config) error {
@@ -74,8 +76,10 @@ func LoadConfig() Config {
 			os.Getenv("DATABASE_URL"),
 			"postgres://localhost:5432/dnd?sslmode=disable",
 		),
-		PublicOrigin: strings.TrimSpace(os.Getenv("DND_PUBLIC_ORIGIN")),
-		LogLevel:     parseLogLevel(os.Getenv("DND_LOG_LEVEL")),
+		PublicOrigin:  strings.TrimSpace(os.Getenv("DND_PUBLIC_ORIGIN")),
+		OpenAIAPIKey:  strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
+		OpenAIBaseURL: strings.TrimSpace(os.Getenv("DND_OPENAI_BASE_URL")),
+		LogLevel:      parseLogLevel(os.Getenv("DND_LOG_LEVEL")),
 	}
 }
 

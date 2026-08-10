@@ -86,11 +86,13 @@ sessions for the account, pruning least-recently-seen sessions first.
 | 401    | `authentication_required`, `invalid_credentials`                                | Session is absent/expired/revoked, or signin credentials are wrong. |
 | 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                           | Browser-integrity check or resource authority failed.               |
 | 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                           | Resource, invite, or endpoint is absent or hidden.                  |
-| 409    | `revision_conflict`, `conflict`, `world_archived`, lifecycle/idempotency errors | Current state conflicts with the command.                           |
+| 409    | `revision_conflict`, `conflict`, `world_archived`, `dm_source_conflict`, lifecycle/idempotency errors | Current state or DM mode conflicts with the command. |
 | 422    | `validation_failed`, `invalid_reference`, `transition_failed`                   | Structurally readable JSON violates a domain/database rule.         |
 | 429    | `rate_limited`                                                                  | Authentication attempt/work limit was reached; honor `Retry-After`. |
-| 500    | `internal_error`, `database_error`                                              | Unexpected server or database failure.                              |
-| 503    | `database_unavailable`                                                          | Health check cannot ping PostgreSQL.                                |
+| 500    | `internal_error`, `database_error`                                               | Unexpected server or database failure.                              |
+| 502    | `auto_dm_failed`, `auto_dm_invalid_output`                                       | Provider call or returned model output failed.                       |
+| 503    | `database_unavailable`, `auto_dm_unavailable`                                    | Required database or Auto DM configuration is unavailable.          |
+| 504    | `auto_dm_timeout`                                                               | Auto DM generation exceeded its request deadline.                    |
 
 Unknown API paths and unsupported methods on known paths reach the methodless
 API catchall and return `404 endpoint_not_found` in the JSON error envelope.
@@ -112,6 +114,7 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 | `expected_revision` on action withdrawal                    | Action submission.                            |
 | `expected_rules_revision` on mechanic mutation              | World mechanic dependency graph.              |
 | `expected_rules_revision` on state replacement              | Rule schema used to construct the input map.  |
+| Both revisions on Consequence generation/compilation        | Interaction plus exact graph used to compile. |
 | `expected_rules_revision` on preview/resolve                | Exact graph used to evaluate the Consequence. |
 
 Preview does not reserve a revision. Use the latest authoritative response
@@ -163,7 +166,7 @@ An incorrect current password on the change endpoint is a field-specific
 | `GET /api/worlds`                     | Authenticated user         | Active memberships only; role/count/activity and derived `play_status`.          |
 | `POST /api/worlds`                    | Authenticated user         | Name/description; creates world, owner membership, field/rules roots, and event. |
 | `GET /api/worlds/{world_id}`          | Active world member        | World summary for the current member.                                            |
-| `PATCH /api/worlds/{world_id}`        | Owner/editor, active world | Name, nullable description, and `expected_revision`.                             |
+| `PATCH /api/worlds/{world_id}`        | Owner/editor, active world | Name, nullable description, `dm_source`, and `expected_revision`.                |
 | `POST /api/worlds/{world_id}/archive` | Owner                      | `expected_revision`; rejects unfinished interactions.                            |
 | `GET /api/worlds/{world_id}/members`  | Active world member        | Memberships, controls, revisions, and derived readiness.                         |
 
@@ -173,6 +176,11 @@ have facilitator authority; there is no separate facilitator membership.
 `revision` protects world settings/archive. `table_revision` protects
 controller changes. `rules_revision` protects the world mechanic graph; all
 three are returned on every `World` response.
+
+Every World also returns `dm_source`, either `human` or `terra`. New worlds
+default to `human`; owner/editor settings updates may change it with the normal
+world revision guard. The world description is also the campaign brief for
+Terra when Auto DM is selected.
 
 ### Capacities and capabilities
 
@@ -249,6 +257,9 @@ cannot silently escalate or downgrade it.
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player             | Withdraws submitted action using action revision.            |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator  | Advisory Consequence; no idempotency key required.           |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Owner/editor facilitator  | Atomic state, immutable receipt, lifecycle, and world event. |
+| `POST /api/worlds/{world_id}/auto-dm/problem`                                            | Owner/editor facilitator  | Terra problem prose; requires `dm_source=terra`.              |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/consequence`          | Owner/editor facilitator  | Terra prose, Luna compilation, and existing preview.          |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Owner/editor facilitator  | Luna compilation and existing preview for supplied prose.     |
 
 ### World events (SSE)
 
@@ -530,6 +541,67 @@ audience, and context entities must be active and eligible. Omitting
 supplying an explicit empty array persists an audience-free draft. Such a
 draft remains editable, but `present: true` or a later presentation command is
 rejected atomically until it has at least one audience member.
+
+### Auto DM generation and Consequence compilation
+
+`POST /api/worlds/{world_id}/auto-dm/problem` has no request payload and is
+available only when that active world's `dm_source` is `terra`. It returns
+plain prose that the normal interaction create request may use:
+
+```json
+{ "prompt": "The lanterns along the flooded causeway go dark one by one." }
+```
+
+An adjudicating interaction has two narrative-first preparation commands. A
+Terra world can generate the prose and compile it in one request to
+`POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/consequence`:
+
+```json
+{
+  "expected_revision": 4,
+  "expected_rules_revision": 7
+}
+```
+
+Any world can compile human-authored prose through
+`POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`:
+
+```json
+{
+  "expected_revision": 4,
+  "expected_rules_revision": 7,
+  "narrative": "You reach the far bank, but the current tears away your pack."
+}
+```
+
+Both consequence commands return the exact narrative, Luna's optional selected
+action and summary, concrete effects in the four existing shapes, and the
+result of the existing advisory preview:
+
+```json
+{
+  "narrative": "You reach the far bank, but the current tears away your pack.",
+  "selected_action_id": "optional submitted action UUID",
+  "action_summary": "Optional short summary.",
+  "effects": [],
+  "preview": {
+    "preview": true,
+    "interaction_id": "interaction UUID",
+    "interaction_revision": 4,
+    "rules_revision": 7,
+    "narrative": "You reach the far bank, but the current tears away your pack.",
+    "applied_effects": [],
+    "effective_changes": [],
+    "state": { "records": {} }
+  }
+}
+```
+
+Compilation is read-only: it does not reserve either revision, change the
+interaction, or persist a resolution. The client resolves through the normal
+`/resolve` endpoint using the returned narrative, selection/summary, and
+effects plus a fresh idempotency key. Luna may return no effects for a purely
+narrative outcome; resolve remains authoritative for all state and history.
 
 ### Action and Consequence
 

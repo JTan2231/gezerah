@@ -104,12 +104,19 @@ shell/process manager that launches the application. Vite independently loads
 | `DATABASE_URL`      | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                   |
 | `DND_PUBLIC_ORIGIN` | Request origin                     | Exact origin accepted for auth/unsafe requests; HTTPS selects the secure session cookie. |
 | `DND_LOG_LEVEL`     | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                 |
+| `OPENAI_API_KEY`    | Empty                              | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                       |
+| `DND_OPENAI_BASE_URL` | Official OpenAI API              | Overrides the Responses API base URL, primarily for local integration tests.             |
 
 When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
 uses the incoming request's scheme and host. Managed `run.sh` instead supplies
 `http://127.0.0.1:5173` unless the variable is already exported. A proxied
 deployment must set the exact browser-visible HTTP(S) origin, without a path,
 query, or fragment.
+
+`OPENAI_API_KEY` is optional for startup but required for Terra generation and
+for Luna Consequence compilation in either DM mode. When it is empty, those
+endpoints return `503 auto_dm_unavailable`; the key is never sent to the
+frontend. Leave `DND_OPENAI_BASE_URL` empty for the official API.
 
 ### Local process variables
 

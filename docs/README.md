@@ -5,7 +5,7 @@ implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 status layers, generated entity sheets, player-controlled characters with
 world-authored onboarding fields, and a multiplayer table where facilitators
-create every problem ad hoc.
+or the configured Auto DM create every problem ad hoc.
 
 The application intentionally has no built-in entity classes, privileged
 configured keys, seed vocabulary, or canonical JSON document model. World
@@ -57,9 +57,9 @@ route. During development, Vite serves the frontend on port `5173` and proxies
 A world author defines input and derived capacities/capabilities, generates
 sheets for stateful subjects, admits participants by invite link, and runs
 improvised interactions at the table. For each resolved problem, the
-facilitator authors one prose Consequence summary plus ordered targeted effects;
-an apply-status effect defines its status inline, while a later Consequence may
-remove an exact active instance. Base-state changes, status lifecycle changes,
+configured human facilitator or Auto DM authors one prose Consequence. Luna
+compiles that prose into ordered targeted effects and the existing preview
+validates them before resolve. Base-state changes, status lifecycle changes,
 effective-value receipts, and the world event commit in one transaction.
 
 ## Core invariants
@@ -113,7 +113,7 @@ effective-value receipts, and the world event commit in one transaction.
 | Effective value    | A mechanic's intrinsic value after active status modifiers, and the value consumed by dependents.      |
 | Status instance    | Durable condition created by one problem effect, with source provenance and immutable modifier snapshots. |
 | Interaction        | An ad-hoc facilitator-authored problem with its audience, responders, actions, and Consequence.          |
-| Consequence        | One prose summary plus ordered targeted effects authored while the facilitator adjudicates a problem.   |
+| Consequence        | One prose account of what transpires, plus Luna-compiled targeted effects accepted by the normal resolve path. |
 | Resolution receipt | Immutable record of a committed Consequence, requested effects, applications, and effective changes.     |
 
 ## Sources of truth

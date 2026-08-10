@@ -10,6 +10,9 @@ the PostgreSQL schema and production frontend.
 One process owns connection pooling, startup migrations, JSON/SSE routes,
 embedded SPA serving, and signal-driven shutdown. There is no ORM, worker,
 cache, message broker, code generator, or dependency-injection framework.
+Narrative generation and compilation use an optional outbound OpenAI Responses
+API client; the server can start without its API key, but those calls are then
+unavailable.
 
 ## Startup and shutdown
 
@@ -97,8 +100,16 @@ facilitator authority directly; there is no parallel live membership model.
 derived mechanics, problem-sourced persistent statuses, and expanded receipts;
 `003_interaction_audience_invalidations.sql` adds constrained audience-removal
 event invalidations; and
-`004_password_auth.sql` installs credentials and server sessions. See
+`004_password_auth.sql` installs credentials and server sessions.
+`005_auto_dm.sql` adds the world-level human/Terra DM source. See
 [Database](database.md).
+
+### `internal/openai`
+
+A narrow standard-library Responses API client provides one-shot Terra plain
+text generation and Luna strict JSON Schema generation. It always sends
+`reasoning.effort: "none"` and `store: false`, bounds response bodies, and
+surfaces provider failures/refusals without exposing the API key.
 
 ### `web`
 
@@ -123,6 +134,10 @@ request logger
 API bodies are capped at 1 MiB. Recovery logs panic and stack; API panics return
 the JSON `500 internal_error` envelope. Request summaries record method, path,
 status, bytes, and duration.
+
+When `OPENAI_API_KEY` is non-empty, production server construction installs the
+Auto DM provider. Without it, normal routes still start and Auto DM endpoints
+return `503 auto_dm_unavailable`.
 
 ### Static/SPA behavior
 
@@ -322,6 +337,29 @@ bounds/step; Boolean mechanics accept only Boolean `set`. Scalar operations
 read/write logical base input and never use an active status-modified effective
 value as their operand. Status layers are reapplied only when the application
 evaluates the post-transition runtime snapshot.
+
+## Auto DM pipeline
+
+The application builds Auto DM context in one read-only `REPEATABLE READ`
+transaction. It includes the world description as campaign brief, all active
+mechanic definitions, every non-archived sheet's facilitator-visible profile
+plus exact logical/intrinsic/effective state and active statuses, and
+the latest three resolved situation/Consequence pairs. Consequence calls add
+the adjudicating situation and all submitted actions. UUIDs are replaced with
+short request-local references before the snapshot leaves the process.
+
+GPT-5.6 Terra writes plain problem or consequence prose. GPT-5.6 Luna receives
+the immutable consequence prose and the same snapshot, then produces strict
+structured output for an optional selected action/summary and the four existing
+effect types. The application maps every reference back to its world-owned UUID,
+performs exact decimal/type/shape validation, constructs an ordinary
+`adjudicateInteractionRequest`, and calls `previewInteractionResolution`.
+
+Neither model call writes the database. A valid compilation returns the prose,
+concrete effects, and hypothetical preview. The browser later sends those
+values to the existing resolve handler with a fresh idempotency key, where the
+normal authorization, lifecycle, revision, rules, locking, and atomic receipt
+path remains authoritative.
 
 ## Transaction patterns
 

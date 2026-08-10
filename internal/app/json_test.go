@@ -45,6 +45,42 @@ func TestDecodeJSONAcceptsOneStrictObject(t *testing.T) {
 	}
 }
 
+func TestUpdateWorldRequestDistinguishesOmittedAndNullDescription(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		body      string
+		wantSet   bool
+		wantValue *string
+	}{
+		{name: "omitted", body: `{"expected_revision":1}`},
+		{name: "null", body: `{"description":null,"expected_revision":1}`, wantSet: true},
+		{name: "string", body: `{"description":"brief","expected_revision":1}`, wantSet: true, wantValue: testString("brief")},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var request updateWorldRequest
+			if err := decodeStrictBytes([]byte(test.body), &request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if request.Description.Set != test.wantSet {
+				t.Fatalf("description set = %t, want %t", request.Description.Set, test.wantSet)
+			}
+			if test.wantValue == nil && request.Description.Value != nil {
+				t.Fatalf("description value = %q, want nil", *request.Description.Value)
+			}
+			if test.wantValue != nil && (request.Description.Value == nil || *request.Description.Value != *test.wantValue) {
+				t.Fatalf("description value = %#v, want %q", request.Description.Value, *test.wantValue)
+			}
+		})
+	}
+}
+
+func testString(value string) *string { return &value }
+
 func TestWriteErrorUsesStableEnvelope(t *testing.T) {
 	response := httptest.NewRecorder()
 	writeError(response, http.StatusConflict, "revision_conflict", "state changed", map[string]string{

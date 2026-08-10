@@ -20,6 +20,7 @@ import (
 type Server struct {
 	db                 *pgxpool.Pool
 	api                *http.ServeMux
+	autoDM             autoDMProvider
 	static             http.Handler
 	staticFS           fs.FS
 	publicOrigin       string
@@ -40,6 +41,13 @@ func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, err
 		return nil, err
 	}
 	server := newServerWithStaticFS(db, staticFS)
+	if strings.TrimSpace(config.OpenAIAPIKey) != "" {
+		provider, err := newOpenAIAutoDMProvider(config.OpenAIAPIKey, config.OpenAIBaseURL)
+		if err != nil {
+			return nil, fmt.Errorf("configure Auto DM: %w", err)
+		}
+		server.autoDM = provider
+	}
 	server.publicOrigin = publicOrigin
 	server.securePublicOrigin = securePublicOrigin
 	return server, nil
@@ -48,6 +56,12 @@ func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, err
 // NewServerWithStaticFS is the test seam for serving a synthetic frontend.
 func NewServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	return newServerWithStaticFS(db, staticFS)
+}
+
+func newServerWithStaticFSAndAutoDM(db *pgxpool.Pool, staticFS fs.FS, provider autoDMProvider) *Server {
+	server := newServerWithStaticFS(db, staticFS)
+	server.autoDM = provider
+	return server
 }
 
 func newServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {

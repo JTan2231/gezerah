@@ -160,8 +160,9 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 	var currentName string
 	var currentDescription *string
+	var currentDMSource string
 	var actual int64
-	if err := s.db.QueryRow(r.Context(), `select name, description, revision from worlds where id = $1`, member.WorldID).Scan(&currentName, &currentDescription, &actual); err != nil {
+	if err := s.db.QueryRow(r.Context(), `select name, description, dm_source, revision from worlds where id = $1`, member.WorldID).Scan(&currentName, &currentDescription, &currentDMSource, &actual); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -172,16 +173,24 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	if request.Name != nil {
 		currentName = strings.TrimSpace(*request.Name)
 	}
-	currentDescription = cleanOptional(request.Description)
+	if request.Description.Set {
+		currentDescription = cleanOptional(request.Description.Value)
+	}
+	if request.DMSource != nil {
+		currentDMSource = strings.TrimSpace(*request.DMSource)
+	}
 	fields := map[string]string{}
 	validateRequired(fields, "name", currentName, 200)
+	if currentDMSource != "human" && currentDMSource != "terra" {
+		fields["dm_source"] = "must be human or terra"
+	}
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", fields)
 		return
 	}
 	command, err := s.db.Exec(r.Context(), `
-		update worlds set name = $2, description = $3, revision = revision + 1
-		where id = $1 and revision = $4`, member.WorldID, currentName, currentDescription, actual)
+		update worlds set name = $2, description = $3, dm_source = $4, revision = revision + 1
+		where id = $1 and revision = $5`, member.WorldID, currentName, currentDescription, currentDMSource, actual)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -273,7 +282,7 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	var item worldResponse
 	var membershipStatus string
 	err := db.QueryRow(ctx, `
-		select world.id::text, world.name, world.description, world.status,
+		select world.id::text, world.name, world.description, world.dm_source, world.status,
 			world.revision, world.table_revision, membership.role, membership.id::text,
 			membership.status,
 			(select count(*)::int from world_memberships where world_id = world.id and status = 'active'),
@@ -288,7 +297,7 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 		join world_memberships membership on membership.world_id = world.id and membership.user_id = $2
 		where world.id = $1`, worldID, userID,
 	).Scan(
-		&item.ID, &item.Name, &item.Description, &item.Status,
+		&item.ID, &item.Name, &item.Description, &item.DMSource, &item.Status,
 		&item.Revision, &item.TableRevision, &item.Role, &item.MembershipID,
 		&membershipStatus, &item.MemberCount, &item.CapacityCount, &item.CapabilityCount,
 		&item.CharacterFieldCount, &item.RulesRevision,

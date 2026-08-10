@@ -4,7 +4,9 @@
 
 1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
    username, display name, and password but no email address.
-2. Create a world from the Build library.
+2. Create a world from the Build library. In **Settings**, choose a human
+   facilitator or Terra Auto DM; for Terra, write the world description as the
+   campaign brief generation should follow.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
 4. Define capabilities the same way, using binary or rating scalar shape.
@@ -50,7 +52,9 @@ authenticated account, and redemption binds the membership to that account.
 Problems are runtime moments, never authored configuration.
 
 1. The facilitator enters the world through `/play` and clicks **New problem**.
-2. Write what is happening, with an optional short title.
+2. In a human world, write what is happening. In a Terra world, optionally ask
+   Terra to generate the problem from the campaign brief, current sheets/state,
+   and recent history. Add an optional short title.
 3. The UI automatically includes every active member whose play status is
    ready in the audience. Optionally select active uncontrolled or ready
    controlled context entities and choose eligible player responders.
@@ -61,23 +65,22 @@ Problems are runtime moments, never authored configuration.
    ready controlled character and may withdraw while the problem remains open.
 6. The facilitator begins adjudication. The interaction becomes adjudicating
    and is hidden from non-facilitators until it is resolved.
-7. Optionally choose the action at the center and author the problem's
-   **Consequence**: one prose summary plus ordered targeted effects. Each scalar
-   effect changes one mutable input on one entity. An apply-status effect
-   defines its name, optional description, and ordered literal modifiers inline
-   for one or more entity targets; each remove-status effect selects one exact
-   active status instance on one entity.
-8. Optionally run an advisory preview with the current rules revision to
-   validate exact bounds, steps, types, inline status modifiers, exact removal
-   targets, permissions, status lifecycle, and resulting effective values
-   without writing. Preview does not reserve the revision.
-9. Resolve, with or without a prior preview, using a fresh idempotency key.
-   Base-state changes, persistent status instances with source-problem
+7. Describe **What transpires?** as unstructured prose in a human world, or ask
+   Terra to generate it from the current situation and submitted actions in a
+   Terra world.
+8. Prepare the Consequence. Luna preserves that prose, compiles an optional
+   selected action/summary and zero or more concrete effects, and runs the
+   existing advisory preview. Exact bounds, steps, types, status targets,
+   permissions, lifecycle, and revisions are validated without writing;
+   compilation does not reserve either revision.
+9. Resolve the prepared prose/effects using a fresh idempotency key. The normal
+   resolve path rechecks the previewed revisions and mechanics. Base-state
+   changes, persistent status instances with source-problem
    provenance, modifier snapshots,
    effective-change receipt, action selection, interaction status, and event
    cursor commit together.
 
-The facilitator may also commit a summary-only Consequence. A problem may be
+Luna may compile a narrative-only Consequence with no effects. A problem may be
 cancelled before resolution. A world cannot be archived while any interaction
 is draft, open, or adjudicating.
 

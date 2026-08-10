@@ -89,6 +89,25 @@ func TestPasswordAuthenticationMigrationContract(t *testing.T) {
 	}
 }
 
+func TestAutoDMMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("005_auto_dm.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"add column dm_source text not null default 'human'",
+		"worlds_dm_source_valid",
+		"dm_source in ('human', 'terra')",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing Auto DM contract fragment %q", fragment)
+		}
+	}
+}
+
 func TestInteractionAudienceInvalidationMigrationContract(t *testing.T) {
 	t.Parallel()
 

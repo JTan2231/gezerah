@@ -5,6 +5,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
+import { startTestAutoDMServer, type TestAutoDMServer } from "./autoDMServer";
 import { runCommand } from "./command";
 import { createDisposableDatabase, type DisposableDatabase } from "./database";
 
@@ -27,7 +28,9 @@ export async function startAppServer(options: {
   let database: DisposableDatabase | undefined;
   let child: ChildProcess | undefined;
   let logStream: WriteStream | undefined;
+  let autoDMServer: TestAutoDMServer | undefined;
   try {
+    autoDMServer = await startTestAutoDMServer();
     process.stdout.write("\n==> E2E: creating disposable database\n");
     database = await createDisposableDatabase();
     const port = await freePort();
@@ -43,6 +46,8 @@ export async function startAppServer(options: {
         DND_DATABASE_URL: database.url,
         DND_LOG_LEVEL: "debug",
         DND_PUBLIC_ORIGIN: baseURL,
+        OPENAI_API_KEY: "e2e-auto-dm-key",
+        DND_OPENAI_BASE_URL: autoDMServer.baseURL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -54,6 +59,7 @@ export async function startAppServer(options: {
     const runningChild = child;
     const runningLog = logStream;
     const runningDatabase = database;
+    const runningAutoDMServer = autoDMServer;
     let stopped = false;
     return {
       baseURL,
@@ -71,7 +77,11 @@ export async function startAppServer(options: {
             await runningDatabase.drop();
           }
         } finally {
-          await preparedBinary.cleanup();
+          try {
+            await runningAutoDMServer.stop();
+          } finally {
+            await preparedBinary.cleanup();
+          }
           reportTiming("application and database cleanup", cleanupStartedAt);
         }
       },
@@ -81,6 +91,8 @@ export async function startAppServer(options: {
     if (logStream !== undefined)
       await endStream(logStream).catch(() => undefined);
     if (database !== undefined) await database.drop().catch(() => undefined);
+    if (autoDMServer !== undefined)
+      await autoDMServer.stop().catch(() => undefined);
     await preparedBinary.cleanup().catch(() => undefined);
     throw error;
   }

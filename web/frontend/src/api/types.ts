@@ -5,6 +5,7 @@ export interface World {
   id: string;
   name: string;
   description?: string | undefined;
+  dm_source: "human" | "terra";
   status: WorldStatus;
   revision: number;
   role: WorldRole;
@@ -113,7 +114,7 @@ export interface WorldMechanicMutation {
   mechanic: WorldMechanic;
 }
 
-export type StatusModifierOperation = "set" | "add-number" | "multiply-number";
+type StatusModifierOperation = "set" | "add-number" | "multiply-number";
 
 interface StatusModifier {
   id: string;
@@ -124,7 +125,7 @@ interface StatusModifier {
   position: number;
 }
 
-export interface StatusModifierInput {
+interface StatusModifierInput {
   id?: string | undefined;
   mechanic_id: string;
   operation: StatusModifierOperation;
@@ -132,7 +133,7 @@ export interface StatusModifierInput {
   priority: number;
 }
 
-export interface InlineStatus {
+interface InlineStatus {
   name: string;
   description?: string | undefined;
   modifiers: StatusModifierInput[];
@@ -335,6 +336,18 @@ export interface InteractionResolutionResult {
   applied_effects: ConcreteAppliedEffect[];
   effective_changes: EffectiveChange[];
   state: { records: Record<string, StateRecordResponse> };
+}
+
+export interface ConsequenceCompilation {
+  narrative: string;
+  selected_action_id?: string | undefined;
+  action_summary?: string | undefined;
+  effects: ConcreteEffect[];
+  preview: InteractionResolutionResult;
+}
+
+export interface AutoDMProblem {
+  prompt: string;
 }
 
 export interface ActiveStatus {

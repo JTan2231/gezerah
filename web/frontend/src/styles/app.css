@@ -529,6 +529,23 @@ textarea {
   gap: 0.7rem;
 }
 
+.auto-dm-generator {
+  display: flex;
+  padding: 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.auto-dm-generator span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .app-boot,
 .boot-failure {
   display: grid;
@@ -3057,6 +3074,27 @@ textarea {
 .ruling-editor > header > p:last-child {
   color: var(--muted);
   font-size: 0.72rem;
+}
+
+.consequence-actions {
+  margin: 1rem 0;
+}
+
+.consequence-actions h4 {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.64rem;
+}
+
+.compiled-action-summary {
+  margin: 1rem 0 0;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-small);
+  background: var(--surface-muted);
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+  line-height: 1.45;
 }
 
 .action-selection,

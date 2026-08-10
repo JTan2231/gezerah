@@ -43,6 +43,8 @@ binary whose SPA routes return 503.
 | `DATABASE_URL`      | Fallback                       | Hosting-provider database URL.                                                                |
 | `DND_LOG_LEVEL`     | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                   |
 | `DND_PUBLIC_ORIGIN` | Request origin                 | Exact browser origin accepted for unsafe/auth requests; HTTPS also selects the secure cookie. |
+| `OPENAI_API_KEY`    | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                            |
+| `DND_OPENAI_BASE_URL` | Official OpenAI API          | Optional Responses API base URL override.                                                     |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
@@ -58,9 +60,11 @@ the exact external origin (scheme and authority, with no
 path/query/fragment); this is required when a reverse proxy changes the request
 host and ensures the `Secure` `__Host-dnd_session` cookie is issued.
 
-Treat database URLs as secrets. The application does not read secret files or
-rotate credentials. Supply them through the deployment platform and restrict
-who can view process configuration.
+Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
+read secret files or rotate credentials. Supply them through the deployment
+platform and restrict who can view process configuration. Omitting the OpenAI
+key leaves non-model routes available, but Terra generation and Luna
+Consequence compilation return `503 auto_dm_unavailable`.
 
 There are no environment settings for pool size, SSE interval, HTTP timeouts,
 request body size, or event batch size; changing those currently requires code.
