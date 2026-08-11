@@ -87,6 +87,10 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 					(
 						interaction.status in ('open', 'resolved')
 						or (
+							interaction.status = 'cancelled'
+							and interaction.presented_at is not null
+						)
+						or (
 							interaction.status = 'adjudicating'
 							and exists (
 								select 1 from worlds assigned_world
@@ -437,19 +441,33 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
+	terraPlayerCancellation := false
 	if !actor.Facilitator {
-		handleAppError(w, facilitatorRequired())
-		return
+		if command != "cancel" {
+			handleAppError(w, facilitatorRequired())
+			return
+		}
+		if err := requireTerraReadyPlayer(r.Context(), tx, actor); err != nil {
+			handleAppError(w, err)
+			return
+		}
+		terraPlayerCancellation = true
 	}
 
-	var status string
+	var status, facilitatorSource string
 	var revision int64
 	if err := tx.QueryRow(r.Context(), `
-		select status, revision
+		select status, revision, facilitator_source
 		from interactions
 		where world_id = $1 and id = $2
-		for update`, worldID, interactionID).Scan(&status, &revision); err != nil {
+		for update`, worldID, interactionID).Scan(&status, &revision, &facilitatorSource); err != nil {
 		handleAppError(w, err)
+		return
+	}
+	if terraPlayerCancellation && !terraPlayerCanCancelInteraction(facilitatorSource, status) {
+		handleAppError(w, interactionLifecycleConflict(
+			"players may cancel only an open or adjudicating Terra interaction",
+		))
 		return
 	}
 	if revision != *request.ExpectedRevision {
@@ -522,7 +540,9 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	item, err := s.loadInteractionResponseSnapshot(r.Context(), worldID, interactionID, true)
+	item, err := s.loadInteractionResponseSnapshot(
+		r.Context(), worldID, interactionID, actor.Facilitator,
+	)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -531,7 +551,13 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 }
 
 func interactionLifecycleInvalidatesAudience(command, priorStatus string) bool {
-	return priorStatus == "open" && (command == "adjudicate" || command == "cancel")
+	return (command == "adjudicate" && priorStatus == "open") ||
+		(command == "cancel" && (priorStatus == "open" || priorStatus == "adjudicating"))
+}
+
+func terraPlayerCanCancelInteraction(facilitatorSource, status string) bool {
+	return facilitatorSource == terraFacilitatorSource &&
+		(status == "open" || status == "adjudicating")
 }
 
 func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Request) {
@@ -1568,6 +1594,10 @@ func requireInteractionVisibility(
 			where interaction.world_id = $1 and interaction.id = $2
 				and (
 					interaction.status in ('open', 'resolved')
+					or (
+						interaction.status = 'cancelled'
+						and interaction.presented_at is not null
+					)
 					or (
 						interaction.status = 'adjudicating'
 						and exists (

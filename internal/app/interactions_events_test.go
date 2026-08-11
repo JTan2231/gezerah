@@ -194,7 +194,7 @@ func TestInteractionLifecycleInvalidatesOnlyPreviouslyVisibleAudience(t *testing
 		{name: "begin adjudication", command: "adjudicate", priorStatus: "open", want: true},
 		{name: "cancel open", command: "cancel", priorStatus: "open", want: true},
 		{name: "cancel draft", command: "cancel", priorStatus: "draft"},
-		{name: "cancel adjudicating", command: "cancel", priorStatus: "adjudicating"},
+		{name: "cancel adjudicating", command: "cancel", priorStatus: "adjudicating", want: true},
 		{name: "present draft", command: "present", priorStatus: "draft"},
 	}
 
@@ -204,6 +204,38 @@ func TestInteractionLifecycleInvalidatesOnlyPreviouslyVisibleAudience(t *testing
 			t.Parallel()
 			if got := interactionLifecycleInvalidatesAudience(test.command, test.priorStatus); got != test.want {
 				t.Fatalf("interactionLifecycleInvalidatesAudience(%q, %q) = %t, want %t", test.command, test.priorStatus, got, test.want)
+			}
+		})
+	}
+}
+
+func TestTerraPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name              string
+		facilitatorSource string
+		status            string
+		want              bool
+	}{
+		{name: "open Terra interaction", facilitatorSource: terraFacilitatorSource, status: "open", want: true},
+		{name: "adjudicating Terra interaction", facilitatorSource: terraFacilitatorSource, status: "adjudicating", want: true},
+		{name: "draft Terra interaction", facilitatorSource: terraFacilitatorSource, status: "draft"},
+		{name: "resolved Terra interaction", facilitatorSource: terraFacilitatorSource, status: "resolved"},
+		{name: "cancelled Terra interaction", facilitatorSource: terraFacilitatorSource, status: "cancelled"},
+		{name: "open human interaction", facilitatorSource: "human", status: "open"},
+		{name: "adjudicating human interaction", facilitatorSource: "human", status: "adjudicating"},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := terraPlayerCanCancelInteraction(test.facilitatorSource, test.status); got != test.want {
+				t.Fatalf(
+					"terraPlayerCanCancelInteraction(%q, %q) = %t, want %t",
+					test.facilitatorSource, test.status, got, test.want,
+				)
 			}
 		})
 	}

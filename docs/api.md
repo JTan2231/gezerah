@@ -282,7 +282,7 @@ cannot silently escalate or downgrade it.
 | `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Current human facilitator    | Replaces editable draft using expected revision.                       |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Current human facilitator    | `draft → open`.                                                        |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Current human facilitator    | `open → adjudicating`.                                                 |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Current human facilitator    | Any unfinished state → cancelled.                                     |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Current human facilitator or ready current player with Terra | Human: any unfinished state; Terra: open/adjudicating → cancelled. |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible current player      | Creates an action/pass; optional ready controlled acting entity.       |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning current player        | Withdraws submitted action using action revision.                      |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Current human facilitator    | Advisory Consequence; no idempotency key required.                     |
@@ -319,9 +319,9 @@ account disablement, membership revocation, query failure, or write failure.
 The client reconnects with its cursor unless authentication has ended. Events
 are invalidation signals only.
 
-An ordinary human adjudication or cancellation may invalidate audience
-visibility. Non-facilitators receive such a marked cursor projected as
-`interaction-feed-invalidated`: `id` and `created_at` remain, while
+An ordinary human adjudication or cancellation may invalidate the audience's
+interaction projection. Non-facilitators receive such a marked cursor
+projected as `interaction-feed-invalidated`: `id` and `created_at` remain, while
 `interaction_id`, `submission_id`, `resolution_id`, and
 `actor_membership_id` are omitted. Facilitators receive the original lifecycle
 event. Autonomous Terra adjudication is different: its full
@@ -330,9 +330,10 @@ remains visible while the decision finishes or is retried. Clients always
 advance the cursor and reload authoritative visibility.
 
 Every event returns `actor_source`. Human events also return
-`actor_membership_id`; Terra events omit that field. A player who presses a
-Terra pacing control is not attributed as the author of Terra's lifecycle
-events.
+`actor_membership_id`; Terra events omit that field. Continue and Decide events
+are attributed to Terra rather than the player who paced them. A ready player's
+Skip is a human-attributed cancellation event; the interaction itself remains
+Terra-authored.
 
 ## Payload reference
 
@@ -586,6 +587,9 @@ has its own `facilitator_source` and includes
 recovery path, the interaction correctly remains Terra-authored while its
 resolution is human-attributed.
 
+Presented cancelled interactions remain readable to their audience and contain
+no resolution. A cancelled draft remains visible only to the human facilitator.
+
 ### Human Consequence compilation and autonomous Terra
 
 A current human facilitator may compile their own prose through
@@ -611,6 +615,14 @@ or adjudicating interaction. The server generates the prompt, then atomically
 creates and presents one interaction, returning it with `201 Created` and a `Location`
 header. Its audience is every ready active membership, its responders are all
 ready non-spectators, and its context contains every ready controlled entity.
+
+While that Terra-authored interaction is open or adjudicating and Terra remains
+assigned, any ready current player may send its current `expected_revision` to
+the existing `POST .../interactions/{interaction_id}/cancel` endpoint. The UI
+labels this **Skip problem**. The command records the player as the human event
+actor, makes the interaction `cancelled` without a Consequence or effects, and
+does not change the Terra assignment. It returns the table to idle and never
+generates a replacement; Continue remains a separate command.
 
 Each eligible responder submits an action before Terra decides. Passing uses
 the ordinary action endpoint with `text:"I pass."` and no acting entity; it is
@@ -650,9 +662,9 @@ interaction and retry the same decision with its current revision and the same
 idempotency key. An equivalent successful replay returns `replayed:true`;
 different reuse conflicts. Luna may return no effects for a purely narrative
 outcome. The pacing player's membership is not persisted as Terra's creator,
-resolver, or event actor. Alternatively, the owner may use the narrow
-facilitator takeover above; their own action is withdrawn before the human
-ruling path opens.
+resolver, or Continue/Decide event actor. Alternatively, the owner may use the
+narrow facilitator takeover above; their own action is withdrawn before the
+human ruling path opens.
 
 ### Action and Consequence
 

@@ -80,6 +80,28 @@ describe("WorldPlayView", () => {
               ],
               effectiveChanges: [],
             },
+            {
+              id: "problem-2",
+              outcome: "cancelled",
+              cancellationLabel: "Skipped",
+              occurredLabel: "1m ago",
+              facilitatorLabel: "Terra Auto DM",
+              title: "The silent causeway",
+              prompt: "A causeway rises from the fog.",
+              effects: [],
+              effectiveChanges: [],
+            },
+            {
+              id: "problem-3",
+              outcome: "cancelled",
+              cancellationLabel: "Cancelled",
+              occurredLabel: "just now",
+              facilitatorLabel: "Mara Vale",
+              title: "The sealed gate",
+              prompt: "The gate refuses to open.",
+              effects: [],
+              effectiveChanges: [],
+            },
           ],
         }}
         actions={{
@@ -104,6 +126,8 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Accepting actions");
     expect(html).toContain("Ash’s generated sheet");
     expect(html).toContain("Ash: applied Exhausted");
+    expect(html).toContain("Skipped · Terra Auto DM");
+    expect(html).toContain("Cancelled · Mara Vale");
   });
 
   test("renders onboarding selection and progress from semantic state", () => {
@@ -149,6 +173,7 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Your characters");
     expect(html).toContain("Dungeon Master: Terra Auto DM");
     expect(html).toContain("Take over from Terra");
+    expect(html).not.toContain("Skip problem");
     expect(html).toContain("2 of 3 complete");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Profile fixture");
@@ -325,11 +350,74 @@ describe("WorldPlayView", () => {
           prompt: "The lower stacks are filling.",
           contextEntityNames: ["Ash"],
           facilitator: true,
+          canSkip: false,
           working: true,
+          skipping: false,
           issue: null,
         }}
         content={<p>Ruling fixture</p>}
         onCancel={noop}
+        onSkip={noop}
+      />,
+    );
+    const terraLiveHtml = renderToStaticMarkup(
+      <LiveInteractionView
+        model={{
+          status: "adjudicating",
+          statusLabel: "Terra is deciding",
+          presentedLabel: "just now",
+          title: "Flooded archive",
+          prompt: "The lower stacks are filling.",
+          contextEntityNames: ["Ash"],
+          facilitator: false,
+          canSkip: true,
+          working: true,
+          skipping: false,
+          issue: null,
+        }}
+        content={<p>Terra pending fixture</p>}
+        onCancel={noop}
+        onSkip={noop}
+      />,
+    );
+    const spectatorLiveHtml = renderToStaticMarkup(
+      <LiveInteractionView
+        model={{
+          status: "adjudicating",
+          statusLabel: "Terra is deciding",
+          presentedLabel: "just now",
+          title: "Flooded archive",
+          prompt: "The lower stacks are filling.",
+          contextEntityNames: [],
+          facilitator: false,
+          canSkip: false,
+          working: false,
+          skipping: false,
+          issue: null,
+        }}
+        content={<p>Observer fixture</p>}
+        onCancel={noop}
+        onSkip={noop}
+      />,
+    );
+    const skippingHtml = renderToStaticMarkup(
+      <LiveInteractionView
+        model={{
+          status: "open",
+          statusLabel: "Accepting actions",
+          presentedLabel: "just now",
+          title: "Flooded archive",
+          prompt: "The lower stacks are filling.",
+          contextEntityNames: [],
+          facilitator: false,
+          canSkip: true,
+          working: false,
+          skipping: true,
+          issue: null,
+        }}
+        content={null}
+        onCancel={noop}
+        onSkip={noop}
       />,
     );
     const rulingHtml = renderToStaticMarkup(
@@ -361,6 +449,13 @@ describe("WorldPlayView", () => {
 
     expect(liveHtml).toContain("Adjudicating");
     expect(liveHtml).toContain("Ruling fixture");
+    expect(liveHtml).toContain("Cancel problem");
+    expect(terraLiveHtml).toContain("Skip problem");
+    expect(terraLiveHtml).not.toContain("disabled");
+    expect(spectatorLiveHtml).not.toContain("Skip problem");
+    expect(spectatorLiveHtml).not.toContain("Cancel problem");
+    expect(skippingHtml).toContain("Skipping…");
+    expect(skippingHtml).toContain("disabled");
     expect(rulingHtml).toContain("Refreshing the current rules");
     expect(rulingHtml).toContain("Interpreting…");
     expect(terraRetryHtml).toContain("Retry Terra");

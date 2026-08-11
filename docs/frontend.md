@@ -395,6 +395,10 @@ With a human DM, the lifecycle is:
 6. the facilitator resolves, atomically storing state/status changes, source
    provenance, the immutable receipt, lifecycle change, and event cursor.
 
+The facilitator may instead choose **Cancel problem** while it is unfinished; a
+presented cancellation remains in audience history, while a cancelled draft
+remains private.
+
 With Terra as DM, the human controls are pacing only:
 
 1. while the table is idle, any ready current player clicks **Ask Terra to
@@ -404,10 +408,14 @@ With Terra as DM, the human controls are pacing only:
    context;
 3. every responder submits an action or clicks **Pass**. The UI shows acted-or-
    passed progress and enables the decision only after every response arrives;
-4. any ready current player asks Terra to decide. The UI moves to a Terra
+4. while the problem is open or Terra is adjudicating it, any ready current
+   player may confirm **Skip problem**. The interaction becomes cancelled
+   without a Consequence, Terra remains Dungeon Master, and the table returns
+   to idle without automatically preparing a replacement;
+5. any ready current player asks Terra to decide. The UI moves to a Terra
    pending state while the server generates prose, compiles it with Luna,
    previews it internally, and resolves it;
-5. the pacing player cannot edit or approve the narrative, selection, notes, or
+6. the pacing player cannot edit or approve the narrative, selection, notes, or
    effects. On a provider failure the client reloads the adjudicating
    interaction and offers a retry with the same idempotency key. As an explicit
    recovery path, the owner may confirm **Take over** during the open or
@@ -415,8 +423,10 @@ With Terra as DM, the human controls are pacing only:
    problem exposes the human close/adjudicate flow, while an adjudicating one
    opens the human-DM ruling UI directly.
 
-Resolved and cancelled history labels whether the facilitator was the named
-human or Terra. There is deliberately no problem-template catalog, problem
+Resolved and presented-cancelled history remains visible to its audience.
+Human cancellations are labelled **Cancelled**; cancelled Terra-authored
+problems are labelled **Skipped · Terra Auto DM**. Cancelled drafts remain
+facilitator-only. There is deliberately no problem-template catalog, problem
 editor, pre-authored problem route, or Terra output approval screen.
 
 `useWorldEvents` holds the authorized SSE stream and reconnects with its last

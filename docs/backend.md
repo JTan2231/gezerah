@@ -371,6 +371,14 @@ and context from ready controlled entities, then inserts and presents an open
 interaction with `facilitator_source='terra'` and no human creator. Its two
 lifecycle events likewise use `actor_source='terra'` and no human actor.
 
+The existing interaction cancellation path also admits a ready current player
+when Terra is still assigned and the target is a Terra-authored open or
+adjudicating interaction. The transaction locks and rechecks the assignment,
+source, lifecycle, and expected revision, then makes the interaction
+`cancelled` without a Consequence. Its event is attributed to the human player;
+the interaction source and world assignment remain Terra. Cancellation does
+not call the provider or generate a replacement.
+
 `auto-dm/decide` requires a ready current player, fresh interaction/rules
 revisions, a non-empty idempotency key, and one submitted action for every
 eligible responder. It locks the interaction, changes `open` to
@@ -446,7 +454,8 @@ checks whether that exact membership is the currently designated human
 facilitator for live DM commands; Terra assignment is checked without
 manufacturing a membership. Current players—including owners/editors when they
 are not DM—must satisfy controlled-character readiness before live
-interaction/event access. `play_status` is still calculated for a designated
+interaction/event access and before skipping a Terra-authored open or
+adjudicating interaction. `play_status` is still calculated for a designated
 human facilitator so a later handoff knows the seat they return to, but the
 facilitator bypasses that readiness gate while assigned. Spectators report
 ready and remain audience-only.
@@ -483,9 +492,11 @@ remaining authority.
 Non-facilitator interaction visibility is enforced in SQL/response loading.
 Adjudication of a human-authored interaction is private; a Terra-authored
 interaction remains visible to its audience for progress/retry, including
-after an owner takeover. Private notes and restricted
-profile text are omitted server-side. Every ID in a command is revalidated
-against `world_id`; frontend checks are affordances, not authorization.
+after an owner takeover. Presented cancelled interactions remain audience
+history, while cancelled drafts remain facilitator-only. Private notes and
+restricted profile text are omitted server-side. Every ID in a command is
+revalidated against `world_id`; frontend checks are affordances, not
+authorization.
 
 ## SSE implementation
 
@@ -511,16 +522,18 @@ Payloads contain identifiers and event types, never aggregate snapshots.
 Clients treat them as reload signals.
 
 Ordinary human adjudication and cancellation events may be marked as audience
-invalidations. A non-facilitator audience member receives a marked cursor as
-`interaction-feed-invalidated`, with interaction, submission, resolution, and
-human actor IDs cleared. The projection preserves cursor/time metadata so the
-client can reload authoritative visibility without an identifier leak.
+projection invalidations. A non-facilitator audience member receives a marked
+cursor as `interaction-feed-invalidated`, with interaction, submission,
+resolution, and human actor IDs cleared. The projection preserves cursor/time
+metadata so the client can reload authoritative visibility without an
+identifier leak.
 Autonomous Terra adjudication explicitly appends an unmarked, unredacted
 Terra-attributed event and remains visible while pending.
 
 The response always includes `actor_source`. Human events pair it with the
-authenticated membership; Terra events require a null human actor. The human
-who paces a Terra call is intentionally not written as the event actor.
+authenticated membership; Terra events require a null human actor. Continue
+and Decide use Terra attribution, while a ready player's Skip uses human
+attribution without changing the interaction's Terra source.
 
 ## Testing seams
 

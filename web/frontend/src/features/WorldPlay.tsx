@@ -713,9 +713,18 @@ function LiveInteraction({
   onChanged: () => void;
 }) {
   const [working, setWorking] = useState(false);
+  const [skipping, setSkipping] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [skipError, setSkipError] = useState<ApiError | null>(null);
   const [terraIdempotencyKey] = useState(() => crypto.randomUUID());
   const terraFacilitated = world.facilitator.source === "terra";
+  const canSkip =
+    world.status === "active" &&
+    terraFacilitated &&
+    interaction.facilitator_source === "terra" &&
+    (interaction.status === "open" || interaction.status === "adjudicating") &&
+    world.current_play_role === "player" &&
+    world.play_status === "ready";
   const context = interaction.entity_ids
     .map((id) => entities.find((entity) => entity.id === id))
     .filter((item): item is WorldEntity => item !== undefined);
@@ -775,6 +784,36 @@ function LiveInteraction({
     }
   }
 
+  async function skipProblem() {
+    if (
+      !window.confirm(
+        "Skip this problem? Submitted actions will not affect the world. Terra will remain Dungeon Master, and you can ask for another problem.",
+      )
+    )
+      return;
+    setSkipping(true);
+    setSkipError(null);
+    try {
+      await api<Interaction>(
+        worldPath(world.id, `interactions/${interaction.id}/cancel`),
+        {
+          method: "POST",
+          ...jsonBody({ expected_revision: interaction.revision }),
+        },
+      );
+      onChanged();
+    } catch (reason) {
+      const issue =
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(0, "unknown", "Could not skip this problem.");
+      setSkipError(issue);
+      if (issue.status === 409) onChanged();
+    } finally {
+      setSkipping(false);
+    }
+  }
+
   return (
     <LiveInteractionView
       model={{
@@ -792,11 +831,13 @@ function LiveInteraction({
         prompt: interaction.prompt,
         contextEntityNames: context.map((entity) => entity.display_name),
         facilitator,
+        canSkip,
         working,
+        skipping,
         issue:
           interaction.status === "adjudicating" && terraFacilitated
             ? null
-            : toPlayViewIssue(error),
+            : toPlayViewIssue(skipError ?? error),
       }}
       content={
         <>
@@ -829,13 +870,14 @@ function LiveInteraction({
           {interaction.status === "adjudicating" && terraFacilitated ? (
             <TerraDecisionPendingView
               retrying={working}
-              issue={toPlayViewIssue(error)}
+              issue={toPlayViewIssue(skipError ?? error)}
               onRetry={() => void letTerraDecide()}
             />
           ) : null}
         </>
       }
       onCancel={() => void command("cancel")}
+      onSkip={() => void skipProblem()}
     />
   );
 }
@@ -1250,6 +1292,8 @@ function toHistoryCardViewModel(
     return {
       id: interaction.id,
       outcome: "cancelled",
+      cancellationLabel:
+        facilitatorSource === "terra" ? "Skipped" : "Cancelled",
       occurredLabel: formatRelativeDate(interaction.cancelled_at),
       facilitatorLabel,
       title: interaction.title ?? "Untitled problem",

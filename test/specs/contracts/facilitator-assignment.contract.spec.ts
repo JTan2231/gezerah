@@ -330,7 +330,6 @@ test("contract: facilitator assignment changes play authority without rewriting 
       },
     ],
   });
-
   for (const denied of [
     {
       actorID: owner.id,
@@ -413,6 +412,169 @@ test("contract: facilitator assignment changes play authority without rewriting 
       current_play_role: "player",
     },
   ]);
+});
+
+test("contract: a ready player can skip open and adjudicating Terra problems", async ({
+  request,
+}) => {
+  const baseURL = await readBaseURL();
+  const unique = randomUUID().slice(0, 8);
+  const owner = await signupActor(baseURL, `Skip Owner ${unique}`);
+  const player = await signupActor(baseURL, `Skip Player ${unique}`);
+  const world = await postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds`,
+    { name: `Terra Skip Contract ${unique}` },
+    owner.id,
+  );
+  const playerWorld = await joinWorld(
+    request,
+    baseURL,
+    world.id,
+    owner.id,
+    player.id,
+    "player",
+  );
+  const character = await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    {
+      display_name: `Skip Character ${unique}`,
+      controller_world_membership_ids: [playerWorld.membership_id],
+    },
+    owner.id,
+  );
+
+  const draft = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
+    {
+      prompt: `Unpresented draft ${unique}`,
+      private_notes: `Private draft notes ${unique}`,
+      audience_membership_ids: [playerWorld.membership_id],
+      eligible_responder_membership_ids: [playerWorld.membership_id],
+      entity_ids: [character.id],
+    },
+    owner.id,
+  );
+  await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}/cancel`,
+    { expected_revision: draft.revision },
+    owner.id,
+  );
+  await expectAPIError(
+    await getAs(
+      request,
+      `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}`,
+      player.id,
+    ),
+    404,
+    "not_found",
+  );
+
+  const terraWorld = await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    { source: "terra", expected_revision: world.revision },
+    owner.id,
+  );
+  const open = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    undefined,
+    player.id,
+  );
+  const cancelledOpen = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/cancel`,
+    { expected_revision: open.revision },
+    player.id,
+  );
+  expect(cancelledOpen).toMatchObject({
+    id: open.id,
+    facilitator_source: "terra",
+    status: "cancelled",
+    revision: open.revision + 1,
+  });
+  expect(
+    await getJSON<InteractionResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}`,
+      player.id,
+    ),
+  ).toMatchObject({
+    id: open.id,
+    facilitator_source: "terra",
+    status: "cancelled",
+  });
+
+  const next = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    undefined,
+    player.id,
+  );
+  await postJSON<InteractionActionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/actions`,
+    {
+      text: `${TERRA_FORCED_FAILURE_MARKER} The player waits for Terra.`,
+      acting_entity_id: character.id,
+      expected_revision: next.revision,
+    },
+    player.id,
+  );
+  const readyToDecide = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}`,
+    player.id,
+  );
+  await expectAPIError(
+    await postAs(
+      request,
+      `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/auto-dm/decide`,
+      {
+        expected_revision: readyToDecide.revision,
+        expected_rules_revision: terraWorld.rules_revision,
+        idempotency_key: randomUUID(),
+      },
+      player.id,
+    ),
+    502,
+    "auto_dm_failed",
+  );
+  const adjudicating = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}`,
+    player.id,
+  );
+  expect(adjudicating.status).toBe("adjudicating");
+  const cancelledAdjudicating = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/cancel`,
+    { expected_revision: adjudicating.revision },
+    player.id,
+  );
+  expect(cancelledAdjudicating).toMatchObject({
+    id: next.id,
+    facilitator_source: "terra",
+    status: "cancelled",
+    revision: adjudicating.revision + 1,
+  });
+
+  const history = await getJSON<InteractionResponse[]>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
+    player.id,
+  );
+  expect(history.map((item) => item.id)).not.toContain(draft.id);
+  expect(history).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: open.id, status: "cancelled" }),
+      expect.objectContaining({ id: next.id, status: "cancelled" }),
+    ]),
+  );
 });
 
 async function joinWorld(

@@ -180,7 +180,9 @@ export interface LiveInteractionViewModel {
   prompt: string;
   contextEntityNames: string[];
   facilitator: boolean;
+  canSkip: boolean;
   working: boolean;
+  skipping: boolean;
   issue: PlayViewIssue | null;
 }
 
@@ -231,6 +233,7 @@ export interface HistoryEffectViewModel {
 export interface HistoryCardViewModel {
   id: string;
   outcome: "resolved" | "cancelled";
+  cancellationLabel?: "Cancelled" | "Skipped" | undefined;
   occurredLabel: string;
   facilitatorLabel: string;
   title: string;

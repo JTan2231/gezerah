@@ -109,7 +109,7 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
     await expect(
       page.getByRole("heading", { name: "No active problem" }),
     ).toBeVisible({ timeout: 4_000 });
-    await expect(page.getByText(prompt)).toHaveCount(0);
-    await expect(page.getByText("Cancelled")).toHaveCount(0);
+    await expect(page.getByText(prompt)).toHaveCount(1);
+    await expect(page.getByText("Cancelled", { exact: false })).toHaveCount(1);
   });
 });

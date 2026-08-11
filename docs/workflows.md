@@ -83,10 +83,15 @@ For Terra:
    responder, and ready controlled entities are context.
 3. Each responder submits an action or clicks **Pass**; pass is stored as the
    ordinary action text `I pass.`.
-4. After all responders have acted or passed, any ready player asks Terra to
+4. While the problem is open or Terra is adjudicating it, any ready current
+   player may confirm **Skip problem**. Skip uses the ordinary cancellation
+   command, ends the problem without a Consequence, and returns the table to
+   idle with Terra still assigned. It does not generate a replacement; a ready
+   player must explicitly ask Terra to continue again.
+5. After all responders have acted or passed, any ready player asks Terra to
    decide. Terra writes the Consequence, Luna compiles it, and the server
    previews and resolves it without a human edit or approval stage.
-5. If the provider call fails after adjudication starts, reload and retry with
+6. If the provider call fails after adjudication starts, reload and retry with
    the same idempotency key. The interaction remains visible while pending.
 
 For recovery from a Terra problem stuck waiting on a responder or a failed
@@ -98,9 +103,12 @@ problem the owner closes and adjudicates manually; for an adjudicating problem
 the owner goes directly to the human ruling UI. No other handoff is allowed
 while an interaction is unfinished.
 
-Luna may compile a narrative-only Consequence with no effects. A problem may be
-cancelled before resolution. A world cannot be archived while any interaction
-is draft, open, or adjudicating.
+Luna may compile a narrative-only Consequence with no effects. A human
+facilitator may cancel any unfinished problem; a ready current player may skip
+a Terra-authored open or adjudicating problem while Terra remains assigned.
+Presented cancellations remain visible to their audience as history, while a
+cancelled draft remains private. A world cannot be archived while any
+interaction is draft, open, or adjudicating.
 
 ## Prepare and edit entity sheets
 

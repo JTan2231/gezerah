@@ -192,7 +192,15 @@ func requireAutoDMReadyPlayer(
 	if err != nil {
 		return err
 	}
-	if err := requireTerraFacilitator(ctx, db, worldID); err != nil {
+	return requireTerraReadyPlayer(ctx, db, member)
+}
+
+func requireTerraReadyPlayer(
+	ctx context.Context,
+	db queryer,
+	member authorizedWorldMember,
+) error {
+	if err := requireTerraFacilitator(ctx, db, member.WorldID); err != nil {
 		return err
 	}
 	if member.Role == "spectator" || member.Facilitator {

@@ -335,7 +335,8 @@ draft ──present──> open ──adjudicate──> adjudicating ──resol
   from its non-facilitator audience, while a Terra interaction remains visible
   as Terra finishes or retries its decision;
 - `resolved`: immutable Consequence and applied receipt exist;
-- `cancelled`: final without a Consequence.
+- `cancelled`: final without a Consequence. A presented cancellation remains
+  visible to its audience as history; a cancelled draft remains private.
 
 An interaction stores an optional title, required prompt, facilitator-private
 notes, audience memberships, eligible responders, and ordered context entities.
@@ -348,10 +349,10 @@ Each eligible player may have at most one submitted action. The player may
 withdraw it while the interaction is open. During adjudication the compiled
 Consequence may identify one submitted action or explicitly select none.
 
-Non-facilitators may read open/resolved interactions in whose audience they
-participate, plus an adjudicating Terra interaction while the autonomous
-decision is pending. Responses omit private notes and facilitator-only receipt
-fields.
+Non-facilitators may read open, resolved, and presented-cancelled interactions
+in whose audience they participate, plus an adjudicating Terra interaction
+while the autonomous decision is pending. Responses omit private notes and
+facilitator-only receipt fields.
 
 ## Consequences and transition semantics
 
@@ -386,6 +387,13 @@ generates Terra's prose, compiles it through Luna, runs the same deterministic
 preview internally, and invokes the ordinary atomic resolve path. The pacing
 player supplies revisions and an idempotency key but cannot edit, select, or
 approve model output.
+
+While a Terra-authored interaction is open or adjudicating and Terra remains
+assigned, any ready current player may use the ordinary cancellation command,
+surfaced in Play as **Skip problem**. It records that player as the human event
+actor but retains Terra as the interaction source, applies no Consequence, and
+leaves Terra assigned. The table returns to idle; creating a replacement still
+requires a separate Continue command.
 
 A failed Terra decision may be retried while the interaction remains
 adjudicating. Alternatively, the owner-only recovery handoff above can recover
@@ -449,8 +457,9 @@ statuses, interaction lifecycle, and world event share one transaction.
 payload carries `actor_source` (`human` or `terra`), a human membership only
 for human actors, and related resource IDs rather than state snapshots. Clients
 reconnect with their last cursor and reload authoritative resources. The human
-who clicks a pacing command is not represented as the author of Terra's
-interaction, resolution, or events.
+who clicks Continue or Decide is not recorded as the author or actor of Terra's
+interaction, resolution, or events. Skipping is instead a human cancellation
+event even though the interaction remains attributed to Terra.
 
 ## Revisions and lifecycle rules
 

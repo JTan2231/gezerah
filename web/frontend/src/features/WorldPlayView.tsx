@@ -371,10 +371,12 @@ export function LiveInteractionView({
   model,
   content,
   onCancel,
+  onSkip,
 }: {
   model: LiveInteractionViewModel;
   content: ReactNode;
   onCancel: () => void;
+  onSkip: () => void;
 }) {
   return (
     <article className="live-interaction">
@@ -394,6 +396,15 @@ export function LiveInteractionView({
             onClick={onCancel}
           >
             Cancel problem
+          </button>
+        ) : model.canSkip ? (
+          <button
+            className="text-button danger-text"
+            type="button"
+            disabled={model.skipping}
+            onClick={onSkip}
+          >
+            {model.skipping ? "Skipping…" : "Skip problem"}
           </button>
         ) : null}
       </header>
@@ -434,7 +445,9 @@ function HistoryCardView({ item }: { item: HistoryCardViewModel }) {
     return (
       <article className="history-card history-cancelled">
         <header>
-          <span>Cancelled · {item.facilitatorLabel}</span>
+          <span>
+            {item.cancellationLabel ?? "Cancelled"} · {item.facilitatorLabel}
+          </span>
           <time>{item.occurredLabel}</time>
         </header>
         <h3>{item.title}</h3>
