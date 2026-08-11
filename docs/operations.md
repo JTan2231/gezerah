@@ -66,8 +66,8 @@ host and ensures the `Secure` `__Host-dnd_session` cookie is issued.
 Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
 read secret files or rotate credentials. Supply them through the deployment
 platform and restrict who can view process configuration. Omitting the OpenAI
-key leaves non-model routes available, but Terra generation and Luna
-Consequence compilation return `503 auto_dm_unavailable`.
+key leaves non-model routes available, but Terra Continue/Decide and human
+Luna compilation return `503 auto_dm_unavailable`.
 
 There are no environment settings for pool size, SSE interval, HTTP timeouts,
 request body size, or event batch size; changing those currently requires code.
@@ -345,8 +345,10 @@ upgrade from the removed schema. New databases apply `001`,
 `002_rules_graph_statuses.sql`, and
 `003_interaction_audience_invalidations.sql`, then the empty-user account
 cutover in `004_password_auth.sql`, followed by the constrained `human`/`terra`
-world DM-source setting in `005_auto_dm.sql`; a database at a recorded prefix
-upgrades in place, including mechanic-rules/status-set root backfills and the
+world source discriminator in `005_auto_dm.sql`, followed by the designated
+facilitator/live attribution upgrade in `006_facilitator_assignment.sql`; a
+database at a recorded prefix upgrades in place, including
+mechanic-rules/status-set root backfills and the
 audience-invalidation event flag. `004` deliberately stops if any user row
 exists; this repository has no account-claim or password-invention migration.
 Use a fresh deployment database for this cutover. Do not attach a database with

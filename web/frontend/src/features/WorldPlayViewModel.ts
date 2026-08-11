@@ -25,13 +25,35 @@ export interface ReadyMemberViewModel {
   name: string;
 }
 
+export interface FacilitatorChoiceViewModel {
+  value: string;
+  name: string;
+}
+
 export interface WorldPlayViewModel {
   worldName: string;
   currentUserName: string;
   roleLabel: string;
+  accessLabel: string;
   facilitator: boolean;
   canCreateProblem: boolean;
   hasActiveProblem: boolean;
+  dungeonMaster: {
+    name: string;
+    source: "human" | "terra";
+    selectedValue: string;
+    canChange: boolean;
+    canTakeOver: boolean;
+    changing: boolean;
+    choices: FacilitatorChoiceViewModel[];
+    issue: PlayViewIssue | null;
+  };
+  idle: {
+    terraFacilitated: boolean;
+    canContinue: boolean;
+    continuing: boolean;
+    issue: PlayViewIssue | null;
+  };
   roster: {
     loading: boolean;
     showEmpty: boolean;
@@ -48,6 +70,9 @@ export interface WorldPlayViewModel {
 
 export interface WorldPlayViewActions {
   createProblem: () => void;
+  changeFacilitator: (value: string) => void;
+  takeOverFacilitation: () => void;
+  continueWithTerra: () => void;
   retryRoster: () => void;
   retryProblems: () => void;
   selectEntity: (id: string) => void;
@@ -64,7 +89,12 @@ export interface CharacterChoiceViewModel {
 export interface CharacterOnboardingViewModel {
   worldName: string;
   currentUserName: string;
+  dungeonMasterName: string;
   statusLabel: string;
+  facilitatorActionLabel: string;
+  canBecomeFacilitator: boolean;
+  changingFacilitator: boolean;
+  facilitatorIssue: PlayViewIssue | null;
   loading: boolean;
   issue: PlayViewIssue | null;
   characters: CharacterChoiceViewModel[];
@@ -73,6 +103,7 @@ export interface CharacterOnboardingViewModel {
 export interface CharacterOnboardingViewActions {
   retry: () => void;
   selectCharacter: (id: string) => void;
+  becomeFacilitator: () => void;
 }
 
 export interface NewProblemDraftViewModel {
@@ -92,8 +123,6 @@ export interface NewProblemViewModel {
   contextEntities: ChoiceViewModel[];
   showContextChoices: boolean;
   responders: ChoiceViewModel[];
-  terraEnabled: boolean;
-  generating: boolean;
   saving: boolean;
   issue: PlayViewIssue | null;
 }
@@ -103,7 +132,6 @@ export interface NewProblemViewActions {
   changeDescription: (value: string) => void;
   toggleContextEntity: (id: string) => void;
   toggleResponder: (id: string) => void;
-  generate: () => void;
   submit: () => void;
   close: () => void;
 }
@@ -125,6 +153,12 @@ export interface OpenProblemViewModel {
   actionText: string;
   saving: boolean;
   closing: boolean;
+  terraFacilitated: boolean;
+  canRequestDecision: boolean;
+  allRespondersReady: boolean;
+  decisionEnabled: boolean;
+  responseProgressLabel: string;
+  deciding: boolean;
   issue: PlayViewIssue | null;
 }
 
@@ -132,8 +166,10 @@ export interface OpenProblemViewActions {
   changeActingEntity: (id: string) => void;
   changeActionText: (value: string) => void;
   submitAction: () => void;
+  passAction: () => void;
   withdrawAction: () => void;
   closeActions: () => void;
+  requestDecision: () => void;
 }
 
 export interface LiveInteractionViewModel {
@@ -168,7 +204,6 @@ export interface RulingPreviewViewModel {
 }
 
 export interface RulingViewModel {
-  terraEnabled: boolean;
   submissions: SubmittedActionViewModel[];
   narrative: string;
   selectedAction: {
@@ -178,13 +213,13 @@ export interface RulingViewModel {
   preview: RulingPreviewViewModel | null;
   rulesReady: boolean;
   previewStale: boolean;
-  saving: "compile" | "generate" | "resolve" | null;
+  saving: "compile" | "resolve" | null;
   issue: PlayViewIssue | null;
 }
 
 export interface RulingViewActions {
   changeNarrative: (value: string) => void;
-  prepare: (mode: "compile" | "generate") => void;
+  prepare: () => void;
   resolve: () => void;
 }
 
@@ -197,6 +232,7 @@ export interface HistoryCardViewModel {
   id: string;
   outcome: "resolved" | "cancelled";
   occurredLabel: string;
+  facilitatorLabel: string;
   title: string;
   prompt: string;
   narrative?: string | undefined;

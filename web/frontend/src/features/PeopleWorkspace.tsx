@@ -111,7 +111,7 @@ export function PeopleWorkspace({ world }: { world: World }) {
           id: member.id,
           displayName: member.display_name,
           role: member.role,
-          details: `Joined ${formatRelativeDate(member.joined_at ?? member.created_at)}${member.role === "player" ? ` · ${humanize(member.play_status)}` : ""}`,
+          details: `Joined ${formatRelativeDate(member.joined_at ?? member.created_at)}${member.role === "spectator" ? "" : ` · ${humanize(member.current_play_role)} · ${humanize(member.play_status)}`}`,
         })),
         membersLoading: members.loading,
         membersIssue:

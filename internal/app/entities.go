@@ -26,7 +26,7 @@ func (s *Server) handleListWorldEntities(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	if member.Role == "player" && playStatus != "ready" {
+	if member.Role == "player" && !member.Facilitator && playStatus != "ready" {
 		query += ` and exists (
 			select 1 from world_membership_entity_controls control
 			where control.world_id = entity.world_id and control.entity_id = entity.id and control.membership_id = $2)`
@@ -498,11 +498,11 @@ func validateControllerMembershipIDs(ctx context.Context, db queryer, worldID st
 		var valid bool
 		if err := db.QueryRow(ctx, `
 			select exists(select 1 from world_memberships
-			where world_id = $1 and id = $2 and role = 'player' and status = 'active')`, worldID, id).Scan(&valid); err != nil {
+				where world_id = $1 and id = $2 and role <> 'spectator' and status = 'active')`, worldID, id).Scan(&valid); err != nil {
 			return err
 		}
 		if !valid {
-			return &statusError{Status: http.StatusUnprocessableEntity, Code: "invalid_reference", Message: "controller must be an active player in this world"}
+			return &statusError{Status: http.StatusUnprocessableEntity, Code: "invalid_reference", Message: "controller must be an active non-spectator member of this world"}
 		}
 	}
 	return nil
@@ -516,7 +516,7 @@ func requireEntityStateReadAccess(ctx context.Context, db queryer, member author
 	if !exists {
 		return pgx.ErrNoRows
 	}
-	if member.Role != "player" {
+	if member.Role != "player" || member.Facilitator {
 		return nil
 	}
 	playStatus, err := membershipPlayStatus(ctx, db, member.WorldID, member.ID, member.Role, member.Status)

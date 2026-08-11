@@ -33,7 +33,7 @@ export function PlayLibrary({
           name: world.name,
           description: world.description ?? "No description",
           role: world.role,
-          roleLabel: humanize(world.role),
+          roleLabel: humanize(world.current_play_role),
           status: world.status,
           readiness: playStatus(world),
           memberCount: world.member_count,
@@ -61,7 +61,7 @@ export function PlayLibrary({
 
 function playStatus(world: World): string {
   if (world.status === "archived") return "Read only";
-  if (world.role !== "player") return "Ready";
+  if (world.current_play_role !== "player") return "Ready";
   switch (world.play_status) {
     case "waiting-for-character":
       return "Waiting";

@@ -23,6 +23,7 @@ interface IdentifiedResource {
 interface WorldResponse extends IdentifiedResource {
   name: string;
   role: "owner" | "editor" | "player" | "spectator";
+  current_play_role: "facilitator" | "player" | "spectator";
   membership_id: string;
   revision: number;
   status: "active" | "archived";
@@ -136,12 +137,14 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
   expect(joinedPlayer).toMatchObject({
     id: world.id,
     role: "player",
+    current_play_role: "player",
     play_status: "waiting-for-character",
   });
   expect(joinedEditor).toMatchObject({
     id: world.id,
     role: "editor",
-    play_status: "ready",
+    current_play_role: "player",
+    play_status: "waiting-for-character",
   });
 
   await expectAPIError(

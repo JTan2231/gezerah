@@ -14,6 +14,7 @@ func (s *Server) registerResourceRoutes() {
 	s.authenticatedAPIFunc("POST /api/worlds", s.handleCreateWorld)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}", s.handleGetWorld)
 	s.authenticatedAPIFunc("PATCH /api/worlds/{world_id}", s.handleUpdateWorld)
+	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/facilitator", s.handleUpdateFacilitator)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/archive", s.handleArchiveWorld)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/members", s.handleListWorldMembers)
 
@@ -45,7 +46,7 @@ func (s *Server) registerResourceRoutes() {
 
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/interactions", s.handleListInteractions)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions", s.handleCreateInteraction)
-	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/auto-dm/problem", s.handleGenerateAutoDMProblem)
+	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/auto-dm/continue", s.handleContinueAutoDM)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/interactions/{interaction_id}", s.handleGetInteraction)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/interactions/{interaction_id}", s.handlePutInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/present", s.handlePresentInteraction)
@@ -55,7 +56,7 @@ func (s *Server) registerResourceRoutes() {
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw", s.handleWithdrawInteractionAction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/preview", s.handlePreviewInteractionResolution)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve", s.handleResolveInteraction)
-	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/consequence", s.handleGenerateAutoDMConsequence)
+	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide", s.handleDecideAutoDMInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence", s.handleCompileConsequence)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/events", s.handleWorldEvents)
 }

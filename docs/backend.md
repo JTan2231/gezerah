@@ -90,8 +90,11 @@ HTTP and persistence adapter:
   changes;
 - server/JSON/config files provide cross-cutting infrastructure.
 
-There is one membership/role vocabulary. Owners and editors receive
-facilitator authority directly; there is no parallel live membership model.
+Durable membership and live responsibility are deliberately separate. The one
+membership vocabulary remains owner/editor/player/spectator for world access.
+A world-level assignment designates either one active non-spectator membership
+or Terra as facilitator, and response mapping derives the current
+facilitator/player/spectator play role without rewriting membership.
 
 ### `internal/migrations`
 
@@ -101,7 +104,9 @@ derived mechanics, problem-sourced persistent statuses, and expanded receipts;
 `003_interaction_audience_invalidations.sql` adds constrained audience-removal
 event invalidations; and
 `004_password_auth.sql` installs credentials and server sessions.
-`005_auto_dm.sql` adds the world-level human/Terra DM source. See
+`005_auto_dm.sql` adds the world-level human/Terra source discriminator;
+`006_facilitator_assignment.sql` adds the designated human membership and
+human/Terra attribution on interactions, resolutions, and events. See
 [Database](database.md).
 
 ### `internal/openai`
@@ -302,7 +307,7 @@ and values before serialization. Profile changes never advance state revision.
 
 Controller replacement is a complete set operation over
 `world_membership_entity_controls`. The command checks the world's
-`table_revision`, validates every target as an active player membership in the
+`table_revision`, validates every target as an active non-spectator membership in the
 same world, replaces rows, increments `table_revision`, and appends an event.
 
 ## Rules execution
@@ -351,18 +356,40 @@ the latest three resolved situation/Consequence pairs. Consequence calls add
 the adjudicating situation and all submitted actions. UUIDs are replaced with
 short request-local references before the snapshot leaves the process.
 
-GPT-5.6 Terra writes plain problem or consequence prose. GPT-5.6 Luna receives
-the immutable consequence prose and the same snapshot, then produces strict
-structured output for an optional selected action/summary and the four existing
-effect types. The application maps every reference back to its world-owned UUID,
-performs exact decimal/type/shape validation, constructs an ordinary
-`adjudicateInteractionRequest`, and calls `previewInteractionResolution`.
+For a human facilitator, consequence compilation remains advisory: GPT-5.6
+Luna interprets the human's immutable prose, the application maps request-local
+references back to world-owned UUIDs, validates and previews the concrete
+effects, and returns them to the human. Only a later human resolve command
+writes.
 
-Neither model call writes the database. A valid compilation returns the prose,
-concrete effects, and hypothetical preview. The browser later sends those
-values to the existing resolve handler with a fresh idempotency key, where the
-normal authorization, lifecycle, revision, rules, locking, and atomic receipt
-path remains authoritative.
+Terra uses two orchestration handlers instead. `auto-dm/continue` first checks
+that the caller is a ready current player, Terra is assigned, and no
+interaction is unfinished. After GPT-5.6 Terra generates the prompt, a write
+transaction locks the world and repeats those checks. It derives the audience
+from all ready active memberships, responders from all ready non-spectators,
+and context from ready controlled entities, then inserts and presents an open
+interaction with `facilitator_source='terra'` and no human creator. Its two
+lifecycle events likewise use `actor_source='terra'` and no human actor.
+
+`auto-dm/decide` requires a ready current player, fresh interaction/rules
+revisions, a non-empty idempotency key, and one submitted action for every
+eligible responder. It locks the interaction, changes `open` to
+`adjudicating`, and appends a Terra-attributed event before the provider calls.
+Terra writes the narrative; Luna produces an optional selected action/summary
+and the four existing effect types. The application maps and validates every
+reference, runs the ordinary preview internally, and immediately calls the
+ordinary resolution transaction as facilitator source `terra`. The applied
+receipt and event have no human resolver/actor. A pacing player's session
+authorizes and times the request but is never substituted as the model's
+author.
+
+No prose or effects cross back to the browser for editing or approval before a
+Terra resolution commits. A failed provider/validation call can leave the
+interaction adjudicating; the client reloads its revision and retries with the
+same idempotency key. An applied replay returns the immutable result, while a
+different use of that key conflicts. Provider output still passes the normal
+world scope, lifecycle, revision, type, bounds, transition, lock, and receipt
+boundaries.
 
 ## Transaction patterns
 
@@ -381,9 +408,13 @@ than overwriting newer state.
 
 ### Live resolution
 
-Resolve checks the active world/facilitator boundary with ordinary transaction
-reads, then checks for an idempotent replay. A new resolution locks the mechanic
-rules root, interaction, and sorted target entity/state/status roots. Selected
+Resolve checks the active world and applicable assignment/source boundary with
+ordinary transaction reads, then checks for an idempotent replay. The public
+resolve route requires the designated human facilitator—including an owner who
+has taken over a Terra-authored interaction. Terra's decision path invokes the
+same implementation with Terra assignment plus ready-player pacing checks.
+A new resolution locks the mechanic rules root, interaction, and sorted target
+entity/state/status roots. Selected
 action existence is validated by an ordinary read rather than a row lock. The
 transaction checks lifecycle and revisions; evaluates before; applies the
 combined transition; persists base state and status snapshots with source
@@ -393,8 +424,9 @@ applications, effective changes, action statuses, interaction status, and
 world event atomically.
 
 An equivalent idempotent replay loads the immutable receipt and current state,
-and still checks the current authenticated actor, facilitator authority, and
-active world.
+and still checks the current session, active world, receipt facilitator source,
+current assignment, and the applicable human-facilitator or Terra-pacing
+authority.
 
 ### Lock discipline
 
@@ -409,9 +441,15 @@ opaque-cookie session. Route registration wraps protected handlers
 deny-by-default; unsafe requests additionally require an exact same-origin
 `Origin` and the session-bound `X-DND-CSRF` token. The old identity header is
 ignored. World handlers load an active membership for the session user.
-Owner/editor helpers add configuration or facilitator authority. Players must
-also have at least one complete controlled entity before live
-interaction/event access.
+Owner/editor helpers grant durable configuration authority. A separate helper
+checks whether that exact membership is the currently designated human
+facilitator for live DM commands; Terra assignment is checked without
+manufacturing a membership. Current players—including owners/editors when they
+are not DM—must satisfy controlled-character readiness before live
+interaction/event access. `play_status` is still calculated for a designated
+human facilitator so a later handoff knows the seat they return to, but the
+facilitator bypasses that readiness gate while assigned. Spectators report
+ready and remain audience-only.
 
 Every authenticated request performs a read-only session/account validity
 lookup. If the last activity touch is at least five minutes old, ordinary
@@ -421,15 +459,33 @@ active-account predicates. A concurrent touch loser revalidates. The SSE
 handshake follows that ordinary path, while subsequent stream reauthorization
 is read-only and therefore does not keep an otherwise idle session alive.
 
-Profile writes allow owner/editor or the entity's current active controller.
-Controller and field-set replacement are owner/editor only. An acting entity on
-an action must be controlled and complete. Interaction context/effect targets
-must be active and eligible.
+Profile writes allow owner/editor or the entity's current active
+non-spectator controller. Controller and field-set replacement are
+owner/editor only. An acting entity on an action must be controlled and
+complete. Interaction context/effect targets must be active and eligible.
+Restricted profile reads additionally admit the currently designated human
+facilitator even when that membership is neither an editor nor controller.
+
+Facilitator assignment accepts an active non-spectator target and is available
+to owner/editor memberships or the current human facilitator. It locks the
+world revision and normally rejects a meaningful handoff while any interaction
+is unfinished. One transactional exception lets the owner assign themself from
+Terra while the sole unfinished interaction is Terra-authored and open or
+adjudicating. It locks that interaction, withdraws the owner's submitted action
+if present, advances the interaction revision for the withdrawal, and preserves
+the interaction's Terra source. The owner closes/adjudicates an open problem as
+needed; the later human receipt records the owner.
+
+Action submission instead rejects spectators and the designated
+human facilitator; the interaction's eligible-responder snapshot supplies the
+remaining authority.
 
 Non-facilitator interaction visibility is enforced in SQL/response loading.
-Private notes and restricted profile text are omitted server-side. Every ID in
-a command is revalidated against `world_id`; frontend checks are affordances,
-not authorization.
+Adjudication of a human-authored interaction is private; a Terra-authored
+interaction remains visible to its audience for progress/retry, including
+after an owner takeover. Private notes and restricted
+profile text are omitted server-side. Every ID in a command is revalidated
+against `world_id`; frontend checks are affordances, not authorization.
 
 ## SSE implementation
 
@@ -454,12 +510,17 @@ The world event endpoint:
 Payloads contain identifiers and event types, never aggregate snapshots.
 Clients treat them as reload signals.
 
-Events that move an open interaction to adjudicating or cancelled are marked
-as audience invalidations. A former non-facilitator audience member receives
-the cursor as `interaction-feed-invalidated`, with interaction, submission,
-resolution, and actor IDs cleared; facilitators receive the original lifecycle
-event. The projection preserves cursor/time metadata so the client can reload
-and remove the newly invisible interaction without an identifier leak.
+Ordinary human adjudication and cancellation events may be marked as audience
+invalidations. A non-facilitator audience member receives a marked cursor as
+`interaction-feed-invalidated`, with interaction, submission, resolution, and
+human actor IDs cleared. The projection preserves cursor/time metadata so the
+client can reload authoritative visibility without an identifier leak.
+Autonomous Terra adjudication explicitly appends an unmarked, unredacted
+Terra-attributed event and remains visible while pending.
+
+The response always includes `actor_source`. Human events pair it with the
+authenticated membership; Terra events require a null human actor. The human
+who paces a Terra call is intentionally not written as the event actor.
 
 ## Testing seams
 

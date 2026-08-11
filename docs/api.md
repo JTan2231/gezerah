@@ -91,7 +91,7 @@ sessions for the account, pruning least-recently-seen sessions first.
 | 401    | `authentication_required`, `invalid_credentials`                                | Session is absent/expired/revoked, or signin credentials are wrong. |
 | 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                           | Browser-integrity check or resource authority failed.               |
 | 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                           | Resource, invite, or endpoint is absent or hidden.                  |
-| 409    | `revision_conflict`, `conflict`, `world_archived`, `dm_source_conflict`, lifecycle/idempotency errors | Current state or DM mode conflicts with the command. |
+| 409    | `revision_conflict`, `conflict`, `world_archived`, `interactions_unfinished`, `responses_incomplete`, lifecycle/idempotency errors | Current state conflicts with the command. |
 | 422    | `validation_failed`, `invalid_reference`, `transition_failed`                   | Structurally readable JSON violates a domain/database rule.         |
 | 429    | `rate_limited`                                                                  | Authentication attempt/work limit was reached; honor `Retry-After`. |
 | 500    | `internal_error`, `database_error`                                               | Unexpected server or database failure.                              |
@@ -109,7 +109,7 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 
 | Request field                                               | Protects                                      |
 | ----------------------------------------------------------- | --------------------------------------------- |
-| `expected_revision` on world update/archive                 | World settings/lifecycle revision.            |
+| `expected_revision` on world update/archive/facilitator assignment | World settings/lifecycle/DM assignment revision. |
 | `expected_table_revision` on controller replacement         | World table/control revision.                 |
 | `expected_revision` on state replacement                    | Entity state record.                          |
 | `expected_revision` on character-field replacement          | World character-field set.                    |
@@ -119,7 +119,7 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 | `expected_revision` on action withdrawal                    | Action submission.                            |
 | `expected_rules_revision` on mechanic mutation              | World mechanic dependency graph.              |
 | `expected_rules_revision` on state replacement              | Rule schema used to construct the input map.  |
-| Both revisions on Consequence generation/compilation        | Interaction plus exact graph used to compile. |
+| Both revisions on Consequence compilation or Terra decision | Interaction plus exact graph used to compile. |
 | `expected_rules_revision` on preview/resolve                | Exact graph used to evaluate the Consequence. |
 
 Preview does not reserve a revision. Use the latest authoritative response
@@ -166,26 +166,49 @@ An incorrect current password on the change endpoint is a field-specific
 
 ### Worlds
 
-| Method and path                       | Authority                  | Request/response                                                                 |
-| ------------------------------------- | -------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/worlds`                     | Authenticated user         | Active memberships only; role/count/activity and derived `play_status`.          |
-| `POST /api/worlds`                    | Authenticated user         | Name/description; creates world, owner membership, field/rules roots, and event. |
-| `GET /api/worlds/{world_id}`          | Active world member        | World summary for the current member.                                            |
-| `PATCH /api/worlds/{world_id}`        | Owner/editor, active world | Name, nullable description, `dm_source`, and `expected_revision`.                |
-| `POST /api/worlds/{world_id}/archive` | Owner                      | `expected_revision`; rejects unfinished interactions.                            |
-| `GET /api/worlds/{world_id}/members`  | Active world member        | Memberships, controls, revisions, and derived readiness.                         |
+| Method and path                                | Authority                                      | Request/response                                                                 |
+| ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
+| `GET /api/worlds`                              | Authenticated user                             | Active memberships only; role/count/activity and derived play fields.            |
+| `POST /api/worlds`                             | Authenticated user                             | Name/description; creates world, owner membership, field/rules roots, and event. |
+| `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
+| `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, and `expected_revision`.                             |
+| `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra assignment against `expected_revision`.                 |
+| `POST /api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
+| `GET /api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
 
-World creation is transactional and returns role `owner`. Owners and editors
-have facilitator authority; there is no separate facilitator membership.
+World creation is transactional and returns durable role `owner`; that owner
+is also the initial human facilitator. Durable `role` remains one of
+`owner`/`editor`/`player`/`spectator`. `current_play_role` is derived separately
+as `facilitator`, `player`, or `spectator`, so a handoff never rewrites access.
+`play_status` remains the non-spectator membership's player-seat readiness even
+while it is the facilitator; facilitators bypass that gate while assigned, and
+spectators return `ready` but stay read-only.
 
 `revision` protects world settings/archive. `table_revision` protects
 controller changes. `rules_revision` protects the world mechanic graph; all
 three are returned on every `World` response.
 
-Every World also returns `dm_source`, either `human` or `terra`. New worlds
-default to `human`; owner/editor settings updates may change it with the normal
-world revision guard. The world description is also the campaign brief for
-Terra when Auto DM is selected.
+Every World also returns legacy assignment discriminator `dm_source` and a
+`facilitator` object. For a human assignment it contains `source:"human"`,
+`membership_id`, and `display_name`; for Terra it contains only
+`source:"terra"`. Ordinary world PATCH cannot change `dm_source`. The dedicated
+assignment command accepts exactly one of:
+
+```json
+{ "source": "human", "membership_id": "membership UUID", "expected_revision": 4 }
+{ "source": "terra", "expected_revision": 4 }
+```
+
+The human target must be an active non-spectator in the world. A meaningful
+handoff advances the world revision and emits `facilitator-changed`; an
+unchanged assignment is idempotent. Any draft, open, or adjudicating
+interaction normally returns `409 interactions_unfinished`. The only exception
+is an owner assigning the facilitator to their own membership when exactly one
+unfinished interaction exists, it is Terra-authored and open or adjudicating,
+and Terra is still assigned. That transaction withdraws the owner's submitted
+action if present, advances the interaction revision for that withdrawal, and
+lets the owner close/adjudicate as needed and finish with human-DM commands.
+The world description is the campaign brief when Terra is designated.
 
 ### Capacities and capabilities
 
@@ -220,17 +243,19 @@ restored through the product API.
 | `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Terminally archives the entity; the record remains readable.        |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.              |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete controller set using `expected_table_revision`.            |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_table_revision`. |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions. |
 
 Until ready, a player's entity collection, entity-detail, and state reads are
 restricted to controlled entities. Profile reads are filtered separately: a
 different completed entity may expose only its table-visible values, while
-restricted values require controller or facilitator authority. Direct state
-writes remain owner/editor setup operations; players edit only authorized
-profile text. An archived entity remains readable, but its identity/display
-archive transition has no product restore operation.
+restricted values require current control, owner/editor authority, or the
+currently designated human facilitator. Profile editing remains owner/editor
+or controller authority. Direct state writes remain owner/editor setup
+operations; players edit only authorized profile text. An archived entity
+remains readable, but its identity/display archive transition has no product
+restore operation.
 
 ### Invite links
 
@@ -249,22 +274,22 @@ cannot silently escalate or downgrade it.
 
 ### Interactions and actions
 
-| Method and path                                                                          | Authority                 | Notes                                                        |
-| ---------------------------------------------------------------------------------------- | ------------------------- | ------------------------------------------------------------ |
-| `GET /api/worlds/{world_id}/interactions`                                                | Play-ready world member   | Visibility-filtered feed.                                    |
-| `POST /api/worlds/{world_id}/interactions`                                               | Owner/editor facilitator  | Creates draft or creates/presents with `present:true`.       |
-| `GET /api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member | One interaction; private data omitted for non-facilitators.  |
-| `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Owner/editor facilitator  | Replaces editable draft using expected revision.             |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Owner/editor facilitator  | `draft → open`.                                              |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Owner/editor facilitator  | `open → adjudicating`.                                       |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Owner/editor facilitator  | Any unfinished state → cancelled.                            |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible player           | Creates action; optional ready controlled acting entity.     |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning player             | Withdraws submitted action using action revision.            |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Owner/editor facilitator  | Advisory Consequence; no idempotency key required.           |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Owner/editor facilitator  | Atomic state, immutable receipt, lifecycle, and world event. |
-| `POST /api/worlds/{world_id}/auto-dm/problem`                                            | Owner/editor facilitator  | Terra problem prose; requires `dm_source=terra`.              |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/consequence`          | Owner/editor facilitator  | Terra prose, Luna compilation, and existing preview.          |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Owner/editor facilitator  | Luna compilation and existing preview for supplied prose.     |
+| Method and path                                                                          | Authority                    | Notes                                                                  |
+| ---------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
+| `GET /api/worlds/{world_id}/interactions`                                                | Play-ready world member      | Visibility-filtered feed.                                              |
+| `POST /api/worlds/{world_id}/interactions`                                               | Current human facilitator    | Creates draft or creates/presents with `present:true`.                 |
+| `GET /api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member    | One interaction; private data omitted for non-facilitators.            |
+| `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Current human facilitator    | Replaces editable draft using expected revision.                       |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Current human facilitator    | `draft → open`.                                                        |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Current human facilitator    | `open → adjudicating`.                                                 |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Current human facilitator    | Any unfinished state → cancelled.                                     |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible current player      | Creates an action/pass; optional ready controlled acting entity.       |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning current player        | Withdraws submitted action using action revision.                      |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Current human facilitator    | Advisory Consequence; no idempotency key required.                     |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Current human facilitator    | Atomic state, immutable receipt, lifecycle, and world event.           |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Current human facilitator    | Luna compilation and advisory preview for the human's supplied prose. |
+| `POST /api/worlds/{world_id}/auto-dm/continue`                                           | Ready current player         | Terra creates and presents the next interaction; empty body.           |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide`               | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
 
 ### World events (SSE)
 
@@ -277,7 +302,7 @@ The stream sends `retry: 1500`, keep-alive comments, and compact events:
 ```text
 id: 42
 event: world-event
-data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id":"...","actor_membership_id":"...","created_at":"..."}
+data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id":"...","actor_membership_id":"...","actor_source":"human","created_at":"..."}
 
 ```
 
@@ -294,14 +319,20 @@ account disablement, membership revocation, query failure, or write failure.
 The client reconnects with its cursor unless authentication has ended. Events
 are invalidation signals only.
 
-When an open interaction moves to adjudicating or cancelled, it leaves a
-non-facilitator audience member's visible feed. That former audience still
-receives the marked cursor row, projected as
+An ordinary human adjudication or cancellation may invalidate audience
+visibility. Non-facilitators receive such a marked cursor projected as
 `interaction-feed-invalidated`: `id` and `created_at` remain, while
 `interaction_id`, `submission_id`, `resolution_id`, and
 `actor_membership_id` are omitted. Facilitators receive the original lifecycle
-event. Clients advance the cursor and reload the visible interaction feed for
-either form.
+event. Autonomous Terra adjudication is different: its full
+`interaction-adjudicating` event is not marked or redacted and the interaction
+remains visible while the decision finishes or is retried. Clients always
+advance the cursor and reload authoritative visibility.
+
+Every event returns `actor_source`. Human events also return
+`actor_membership_id`; Terra events omit that field. A player who presses a
+Terra pacing control is not attributed as the author of Terra's lifecycle
+events.
 
 ## Payload reference
 
@@ -533,42 +564,31 @@ table-visible values only.
   "prompt": "The center span gives way beneath you.",
   "private_notes": "Optional facilitator-only setup.",
   "audience_membership_ids": ["membership UUID"],
-  "eligible_responder_membership_ids": ["player membership UUID"],
+  "eligible_responder_membership_ids": ["current-player membership UUID"],
   "entity_ids": ["entity UUID"],
   "present": true
 }
 ```
 
 Draft replacement adds `expected_revision`. Audience/responders/entities must
-belong to the same world; responders must be active ready players in the
+belong to the same world; responders must be active ready current players in the
 audience, and context entities must be active and eligible. Omitting
-`audience_membership_ids` applies the table-audience default;
+`audience_membership_ids` applies the table-audience default: the designated
+human facilitator, active spectators, and ready current players;
 supplying an explicit empty array persists an audience-free draft. Such a
 draft remains editable, but `present: true` or a later presentation command is
 rejected atomically until it has at least one audience member.
 
-### Auto DM generation and Consequence compilation
+Every Interaction includes `facilitator_source`. A human-authored row includes
+`created_by_membership_id`; a Terra-authored row omits it. A returned resolution
+has its own `facilitator_source` and includes
+`resolved_by_membership_id` only for a human resolution. After the owner
+recovery path, the interaction correctly remains Terra-authored while its
+resolution is human-attributed.
 
-`POST /api/worlds/{world_id}/auto-dm/problem` has no request payload and is
-available only when that active world's `dm_source` is `terra`. It returns
-plain prose that the normal interaction create request may use:
+### Human Consequence compilation and autonomous Terra
 
-```json
-{ "prompt": "The lanterns along the flooded causeway go dark one by one." }
-```
-
-An adjudicating interaction has two narrative-first preparation commands. A
-Terra world can generate the prose and compile it in one request to
-`POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/consequence`:
-
-```json
-{
-  "expected_revision": 4,
-  "expected_rules_revision": 7
-}
-```
-
-Any world can compile human-authored prose through
+A current human facilitator may compile their own prose through
 `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`:
 
 ```json
@@ -579,34 +599,60 @@ Any world can compile human-authored prose through
 }
 ```
 
-Both consequence commands return the exact narrative, Luna's optional selected
-action and summary, concrete effects in the four existing shapes, and the
-result of the existing advisory preview:
+The response preserves that narrative, supplies Luna's optional selected
+action/summary and concrete effects, and includes the ordinary advisory
+preview. It is read-only; the human decides whether to send those values to
+`/resolve` with a fresh idempotency key.
+
+Terra exposes lifecycle commands instead of model-output preparation commands.
+With Terra currently assigned, a ready current player sends an empty request
+to `POST /api/worlds/{world_id}/auto-dm/continue`. There must be no draft, open,
+or adjudicating interaction. The server generates the prompt, then atomically
+creates and presents one interaction, returning it with `201 Created` and a `Location`
+header. Its audience is every ready active membership, its responders are all
+ready non-spectators, and its context contains every ready controlled entity.
+
+Each eligible responder submits an action before Terra decides. Passing uses
+the ordinary action endpoint with `text:"I pass."` and no acting entity; it is
+not a separate resource or command. When all responders have acted or passed,
+any ready current player calls
+`POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide`:
 
 ```json
 {
-  "narrative": "You reach the far bank, but the current tears away your pack.",
-  "selected_action_id": "optional submitted action UUID",
-  "action_summary": "Optional short summary.",
-  "effects": [],
-  "preview": {
-    "preview": true,
-    "interaction_id": "interaction UUID",
-    "interaction_revision": 4,
-    "rules_revision": 7,
-    "narrative": "You reach the far bank, but the current tears away your pack.",
-    "applied_effects": [],
-    "effective_changes": [],
-    "state": { "records": {} }
-  }
+  "expected_revision": 4,
+  "expected_rules_revision": 7,
+  "idempotency_key": "client-generated unique key"
 }
 ```
 
-Compilation is read-only: it does not reserve either revision, change the
-interaction, or persist a resolution. The client resolves through the normal
-`/resolve` endpoint using the returned narrative, selection/summary, and
-effects plus a fresh idempotency key. Luna may return no effects for a purely
-narrative outcome; resolve remains authoritative for all state and history.
+The command changes an open Terra interaction to `adjudicating`, generates
+Terra's narrative, compiles it with Luna, runs the deterministic preview, and
+resolves through the normal locked receipt path in the same request. The
+requester cannot supply or edit narrative, action selection, notes, or effects,
+and no model output is returned for human approval before commit. A successful
+response is the ordinary resolution result:
+
+```json
+{
+  "interaction_id": "interaction UUID",
+  "interaction_revision": 6,
+  "rules_revision": 7,
+  "narrative": "You reach the far bank, but the current tears away your pack.",
+  "applied_effects": [],
+  "effective_changes": [],
+  "state": { "records": {} }
+}
+```
+
+If generation or compilation fails after adjudication begins, reload the
+interaction and retry the same decision with its current revision and the same
+idempotency key. An equivalent successful replay returns `replayed:true`;
+different reuse conflicts. Luna may return no effects for a purely narrative
+outcome. The pacing player's membership is not persisted as Terra's creator,
+resolver, or event actor. Alternatively, the owner may use the narrow
+facilitator takeover above; their own action is withdrawn before the human
+ruling path opens.
 
 ### Action and Consequence
 

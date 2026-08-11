@@ -216,7 +216,8 @@ resolution-owned inline status modifiers, status source-provenance columns,
 expanded receipt tables, immutable receipt triggers, the `003` constrained
 audience-invalidation event flag, and the `004` empty-user cutover to normalized
 usernames/Argon2id/session-token digests, plus the `005` constrained human/Terra
-world DM source. They assert that status authoring rows are owned by the
+world source and `006` designated membership plus human/Terra attribution
+shapes. They assert that status authoring rows are owned by the
 resolution rather than world configuration. For authentication, the static
 migration contract requires the password-hash/token-digest columns and shape
 constraints and rejects raw-token/session-token/CSRF columns in `auth_sessions`;

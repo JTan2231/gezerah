@@ -10,7 +10,6 @@ import {
 const actions: SettingsViewActions = {
   changeName: () => undefined,
   changeDescription: () => undefined,
-  changeDMSource: () => undefined,
   save: () => undefined,
   archive: () => undefined,
 };
@@ -19,7 +18,6 @@ const ownerDraft: SettingsViewModel = {
   draft: {
     name: "The Verdant Reach",
     description: "A frontier beneath a restless canopy.",
-    dmSource: "terra",
   },
   dirty: true,
   busy: null,
@@ -30,6 +28,7 @@ const ownerDraft: SettingsViewModel = {
     memberCount: 4,
     mechanicCount: 9,
     status: "active",
+    dungeonMaster: "Terra Auto DM",
   },
   canArchive: true,
 };
@@ -42,6 +41,8 @@ describe("SettingsView", () => {
 
     expect(html).toContain("The Verdant Reach");
     expect(html).toContain("Terra Auto DM");
+    expect(html).toContain("Hand off the Dungeon Master role from Play");
+    expect(html).not.toContain("DM source");
     expect(html).toContain("Unsaved changes");
     expect(html).toContain("Archive world");
     expect(html).toContain("<dd>9</dd>");

@@ -4,9 +4,9 @@
 
 1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
    username, display name, and password but no email address.
-2. Create a world from the Build library. In **Settings**, choose a human
-   facilitator or Terra Auto DM; for Terra, write the world description as the
-   campaign brief generation should follow.
+2. Create a world from the Build library. The creator's owner membership is the
+   initial human facilitator. In **Settings**, write the world description;
+   Terra uses it as the campaign brief when later designated in Play.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
 4. Define capabilities the same way, using binary or rating scalar shape.
@@ -18,8 +18,8 @@
    this world; zero fields is valid.
 7. Invite editors, players, or spectators through expiring links.
 8. Open **Roster & sheets** in Build. Create the roster and optionally assign
-   active players as an entity's controllers; that entity is presented as their
-   character. Sheets are generated from the active capacity/capability
+   active non-spectators as an entity's controllers; that entity is presented
+   as their character. Sheets are generated from the active capacity/capability
    definitions.
 9. Return to `/`, choose **Play**, select the world, and enter the live table.
 
@@ -39,9 +39,9 @@ attributes, skills, entity classes, or privileged names.
 4. Redeem the link.
 5. The world now appears in the corresponding Play or Build library and the
    user receives one world membership.
-6. A player waits for a facilitator to assign a controlled entity. After assignment,
+6. A current player waits for an owner/editor to assign a controlled entity. After assignment,
    fill the world's required character fields. Partial drafts may be saved, but
-   live play opens only after one controlled character is complete.
+   live play opens only after their controlled-character setup is ready.
 
 Invite tokens are bearer secrets. Share them only with intended recipients;
 authors can revoke a link at any time. Preview and redemption both require an
@@ -51,34 +51,52 @@ authenticated account, and redemption binds the membership to that account.
 
 Problems are runtime moments, never authored configuration.
 
-1. The facilitator enters the world through `/play` and clicks **New problem**.
-2. In a human world, write what is happening. In a Terra world, optionally ask
-   Terra to generate the problem from the campaign brief, current sheets/state,
-   and recent history. Add an optional short title.
-3. The UI automatically includes every active member whose play status is
-   ready in the audience. Optionally select active uncontrolled or ready
-   controlled context entities and choose eligible player responders.
-   Onboarding players are excluded from the audience and responder choices;
-   setup-required controlled entities are excluded from context.
-4. Present the problem. It becomes open and visible to its audience.
-5. Eligible players offer one free-form action each; they may attribute it to a
-   ready controlled character and may withdraw while the problem remains open.
-6. The facilitator begins adjudication. The interaction becomes adjudicating
-   and is hidden from non-facilitators until it is resolved.
-7. Describe **What transpires?** as unstructured prose in a human world, or ask
-   Terra to generate it from the current situation and submitted actions in a
-   Terra world.
-8. Prepare the Consequence. Luna preserves that prose, compiles an optional
-   selected action/summary and zero or more concrete effects, and runs the
-   existing advisory preview. Exact bounds, steps, types, status targets,
-   permissions, lifecycle, and revisions are validated without writing;
-   compilation does not reserve either revision.
-9. Resolve the prepared prose/effects using a fresh idempotency key. The normal
-   resolve path rechecks the previewed revisions and mechanics. Base-state
-   changes, persistent status instances with source-problem
-   provenance, modifier snapshots,
-   effective-change receipt, action selection, interaction status, and event
-   cursor commit together.
+First enter the world through `/play` and inspect the Dungeon Master shown in
+the header. Between problems, an owner/editor or the current human facilitator
+may assign any active non-spectator or Terra. The former human facilitator
+immediately returns to the current-player role; durable world access does not
+change, and their persistent `play_status` determines whether they return to a
+ready seat or character setup.
+
+For a human facilitator:
+
+1. Click **New problem**, write what is happening, optionally add a title, and
+   choose context and eligible ready current-player responders. The default
+   audience is every active membership whose `play_status` is ready, including
+   spectators.
+2. Present the problem. Eligible players offer one free-form action each,
+   optionally attribute it to a ready controlled character, and may withdraw
+   while the problem is open.
+3. Begin private adjudication and describe **What transpires?**.
+4. Ask Luna to preserve that prose while compiling an optional selected
+   action/summary and effects. Review the advisory preview.
+5. Resolve with a fresh idempotency key. The normal path rechecks revisions and
+   commits base/status changes, provenance, receipt, action selection,
+   interaction lifecycle, and event together.
+
+For Terra:
+
+1. While no interaction is unfinished, any ready current player clicks **Ask
+   Terra to continue**. Terra uses the campaign brief, current table, and recent
+   history to create and present the problem.
+2. Every ready active member is in the audience, every ready non-spectator is a
+   responder, and ready controlled entities are context.
+3. Each responder submits an action or clicks **Pass**; pass is stored as the
+   ordinary action text `I pass.`.
+4. After all responders have acted or passed, any ready player asks Terra to
+   decide. Terra writes the Consequence, Luna compiles it, and the server
+   previews and resolves it without a human edit or approval stage.
+5. If the provider call fails after adjudication starts, reload and retry with
+   the same idempotency key. The interaction remains visible while pending.
+
+For recovery from a Terra problem stuck waiting on a responder or a failed
+adjudication, the world owner alone may choose **Take over**. This is allowed
+only when that Terra-authored open/adjudicating problem is the sole unfinished
+interaction and assigns the owner as human facilitator. The owner's own
+submitted action, if any, is withdrawn; other submissions remain. For an open
+problem the owner closes and adjudicates manually; for an adjudicating problem
+the owner goes directly to the human ruling UI. No other handoff is allowed
+while an interaction is unfinished.
 
 Luna may compile a narrative-only Consequence with no effects. A problem may be
 cancelled before resolution. A world cannot be archived while any interaction
@@ -90,7 +108,7 @@ Creating an entity creates an empty normalized state root and status-set root.
 Logical defaults make every active input appear immediately; derived mechanics
 evaluate from the graph and need no stored row.
 
-Facilitators use **Roster & sheets** in Build for **Save sheet** setup
+Owners/editors use **Roster & sheets** in Build for **Save sheet** setup
 changes. The request supplies current state and rules revisions and replaces
 only the logical input map atomically. A derived ID is rejected. A stale
 revision returns `409 revision_conflict`; reload before retrying. Sheets are
@@ -111,16 +129,16 @@ correction and do not append a world event.
 1. An owner/editor publishes character fields for the world. Each active field
    is required for every controlled entity; visibility is configured once on
    the field rather than chosen by each player.
-2. A facilitator creates or selects an ordinary entity in **Roster & sheets**
+2. An owner/editor creates or selects an ordinary entity in **Roster & sheets**
    in Build.
-3. Use **Controllers** to select any number of active player memberships. The
+3. Use **Controllers** to select any number of active non-spectator memberships. The
    world table revision guards the complete replacement.
 4. Until setup is complete, the controller sees only their controlled entities
    and the configured profile form—not the live table.
 5. Fill any subset and choose **Save character**. The command checks both the
    profile revision and the character-field schema revision.
 6. Complete every field for that entity. Its derived status becomes `ready`,
-   and a player with at least one ready controlled entity enters live play.
+   and a current player with ready controlled-character setup enters live play.
 
 Control is many-to-many. Removing a controller revokes authoring and action
 attribution authority without deleting values. Adding a required field returns

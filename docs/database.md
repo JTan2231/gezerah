@@ -55,6 +55,7 @@ The current application has one clean baseline followed by forward upgrades:
 | `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity.                                                |
 | `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
 | `005_auto_dm.sql`                            | World-level human/Terra DM source selection.                                                           |
+| `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live interactions, receipts, and events. |
 
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
@@ -80,6 +81,14 @@ raw password, raw session token, recovery secret, or seeded account.
 to `human` or `terra`. It stores only the world setting; model context and
 compiled output are request-scoped and are not canonical JSON persistence.
 
+`006` adds `worlds.facilitator_membership_id`, backfills the owner for human
+worlds, and requires exactly one shape: human plus a same-world membership, or
+Terra plus no membership. The composite foreign key is deferred so world and
+initial owner can be created in one transaction. It also adds source columns
+and nullable human actor columns to interactions, applied resolutions, and
+events. Database checks require human sources to carry the applicable human
+membership and Terra sources to omit it.
+
 The baseline and upgrade contain no alternate configuration container,
 secondary live container, reusable simulation aggregate, or superseded profile
 storage.
@@ -92,13 +101,21 @@ storage.
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
 | `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
-| `worlds`                   | Name/description, human/Terra DM source, lifecycle, settings revision, and table revision. |
+| `worlds`                   | Name/description, human/Terra facilitator assignment, lifecycle, settings revision, and table revision. |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
 | `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.                   |
 | `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |
 
-`worlds.revision` guards settings and archive commands. `table_revision`
+`worlds.revision` guards settings, facilitator assignment, and archive
+commands. `table_revision`
 guards controller-set changes and table authority independently.
+
+`dm_source` is the assignment discriminator. `human` requires a
+`facilitator_membership_id` from the same world; `terra` requires it to be
+null. Membership role remains owner/editor/player/spectator and is not changed
+by assignment. Active/non-spectator eligibility and the narrow owner takeover
+from a Terra-authored open or adjudicating interaction are application
+lifecycle rules rather than SQL checks.
 
 Invite rows never store raw bearer tokens. Creation returns the token once;
 the table stores a lowercase 64-character SHA-256 digest. Redemption rows make
@@ -186,7 +203,7 @@ instance's meaning independent of later changes.
 | `world_character_fields`           | Durable label/guidance/visibility/position rows with soft archive. |
 | `entity_profiles`                  | Optional independently revisioned profile root per entity.         |
 | `entity_profile_field_values`      | Non-empty text value per entity/field with author provenance.      |
-| `world_membership_entity_controls` | Many-to-many player-membership/entity control edge.                |
+| `world_membership_entity_controls` | Many-to-many membership/entity control edge; active non-spectator enforced by the app. |
 
 Every world has one character-field-set root. All active fields are required
 for controlled entities. Field visibility is `table` or
@@ -201,15 +218,21 @@ multiple entities per membership and multiple controllers per entity.
 
 | Table                             | Purpose                                                          |
 | --------------------------------- | ---------------------------------------------------------------- |
-| `interactions`                    | Prompt/private notes/status/revision/lifecycle root.             |
+| `interactions`                    | Prompt/private notes/status/revision/lifecycle root plus facilitator source/creator. |
 | `interaction_audience_members`    | Memberships allowed to see a presented interaction.              |
-| `interaction_eligible_responders` | Audience players allowed to submit.                              |
+| `interaction_eligible_responders` | Audience current-player memberships allowed to submit.           |
 | `interaction_context_entities`    | Ordered world entity context and visibility.                     |
 | `interaction_action_submissions`  | Free-form actions, acting-entity snapshot, status, and revision. |
 
 Lifecycle checks constrain timestamp/status combinations for draft, open,
 adjudicating, resolved, and cancelled interactions. A partial unique index
 allows at most one selected action per interaction.
+
+`facilitator_source` snapshots who authored the interaction independently of
+the world's later assignment. Human rows require
+`created_by_membership_id`; Terra rows require it to be null. The owner recovery
+path deliberately leaves a Terra interaction's source unchanged even though a
+later human resolution concludes it.
 
 Action attribution stores a nullable `(acting_entity_id, acting_entity_name)`
 pair. The entity must share the world; the display name is captured at
@@ -220,7 +243,7 @@ rather than retained as a historical foreign key.
 
 | Table                                            | Purpose                                                                             |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `interaction_resolutions`                        | One problem Consequence, actor, idempotency key, prose summary, and rules revision. |
+| `interaction_resolutions`                        | One problem Consequence, facilitator source/actor, idempotency key, prose summary, and rules revision. |
 | `interaction_resolution_effects`                 | Ordered scalar/status requests; apply rows snapshot inline status name/description. |
 | `interaction_resolution_status_effect_modifiers` | Ordered literal modifiers authored on an apply-status effect.                       |
 | `interaction_resolution_effect_targets`          | Ordered entity targets; remove rows also carry the exact status-instance target.    |
@@ -243,6 +266,11 @@ therefore remain distinct from the direct application tables.
 `(world_id, idempotency_key)` supports safe retry. Application rows are unique
 by effect/entity, and explicit positions preserve execution order.
 
+Human applied resolutions require creator/resolver memberships; Terra applied
+resolutions leave both human columns null. Resolution source can differ from
+interaction source only when a human owner takes over a Terra-authored
+adjudication, preserving both facts rather than rewriting provenance.
+
 ### Events
 
 | Table          | Purpose                                                               |
@@ -252,13 +280,17 @@ by effect/entity, and explicit positions preserve execution order.
 Event IDs are generated `bigint` identities indexed by `(world_id, id)`. The
 payload is not a state snapshot. Event types cover world/membership changes,
 entity control/profile changes, character-field changes, interaction/action
-lifecycle, mechanic `rules-updated` publication, and resolution application.
+lifecycle, mechanic `rules-updated` publication, facilitator handoff, and
+resolution application. `actor_source` is `human` with a required human
+membership or `terra` with a null membership. A pacing player's membership is
+therefore not stored as the actor on Terra lifecycle events.
 
-`invalidates_interaction_audience` marks an open interaction's transition to
-adjudicating or cancelled. It keeps that cursor row visible to the former
-non-facilitator audience even though the interaction has left their feed. The
-application projects it as `interaction-feed-invalidated` and clears all
-resource and actor IDs; facilitators receive the original lifecycle event.
+`invalidates_interaction_audience` marks ordinary lifecycle events that can
+remove an interaction from audience visibility. The application projects a
+marked cursor to non-facilitators as `interaction-feed-invalidated` and clears
+its resource and human actor IDs. Autonomous Terra adjudication intentionally
+stores this flag as false, so its full Terra-attributed event remains visible
+alongside the pending interaction.
 
 The schema checks event type and world scope of populated IDs but does not
 prove every semantically required actor/resource combination. Events are an
@@ -292,8 +324,10 @@ interactions, and action submissions.
 Revisions advance only for meaningful mutations where implemented. A direct
 SQL writer must not assume the timestamp trigger also increments a revision.
 `worlds.table_revision` is separate from `worlds.revision` so controller changes
-do not conflict with unrelated settings drafts. `world_rule_sets.revision` is
-separate from both and versions the published mechanic-expression graph.
+do not conflict with unrelated settings or facilitator assignment drafts.
+`worlds.revision` also serializes handoff and owner takeover.
+`world_rule_sets.revision` is separate from both and versions the published
+mechanic-expression graph.
 Problem-authored status effects do not publish configuration or advance it.
 `entity_status_sets.revision` advances once per transaction that actually
 changes that entity's active status lifecycle.
@@ -339,7 +373,7 @@ restricted history references. It is not a supported operational action.
 After the existing migration chain is released:
 
 1. add the next zero-padded file after the current tip
-   (`005_auto_dm.sql`, so currently `006_*.sql`);
+   (`006_facilitator_assignment.sql`, so currently `007_*.sql`);
 2. never edit a migration already recorded in a durable database;
 3. keep each file valid inside one transaction;
 4. preserve user-authored, world-scoped vocabulary—do not seed canonical
@@ -386,7 +420,8 @@ order by created_at, id;
 Inspect recent event cursors:
 
 ```sql
-select id, event_type, interaction_id, submission_id, resolution_id, created_at
+select id, event_type, actor_source, actor_membership_id,
+       interaction_id, submission_id, resolution_id, created_at
 from world_events
 where world_id = $1
 order by id desc

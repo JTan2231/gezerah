@@ -5,8 +5,6 @@ import {
   RolePill,
 } from "../components/StudioUI";
 
-export type SettingsDMSource = "human" | "terra";
-
 export interface SettingsIssue {
   kind: "connection" | "request";
   message: string;
@@ -16,20 +14,19 @@ export interface SettingsViewModel {
   draft: {
     name: string;
     description: string;
-    dmSource: SettingsDMSource;
   };
   dirty: boolean;
   busy: "saving" | "archiving" | null;
   issue: SettingsIssue | null;
   fieldIssues: {
     name?: string | undefined;
-    dmSource?: string | undefined;
   };
   access: {
     role: "owner" | "editor";
     memberCount: number;
     mechanicCount: number;
     status: "active" | "archived";
+    dungeonMaster: string;
   };
   canArchive: boolean;
 }
@@ -37,7 +34,6 @@ export interface SettingsViewModel {
 export interface SettingsViewActions {
   changeName: (name: string) => void;
   changeDescription: (description: string) => void;
-  changeDMSource: (source: SettingsDMSource) => void;
   save: () => void;
   archive: () => void;
 }
@@ -92,24 +88,13 @@ export function SettingsView({
               disabled={model.busy !== null}
             />
           </Field>
-          <Field
-            label="DM source"
-            hint="A human writes problems and outcomes, or Terra can generate them from the live world."
-            error={model.fieldIssues.dmSource}
-          >
-            <select
-              value={model.draft.dmSource}
-              onChange={(event) =>
-                actions.changeDMSource(
-                  event.currentTarget.value as SettingsDMSource,
-                )
-              }
-              disabled={model.busy !== null}
-            >
-              <option value="human">Human facilitator</option>
-              <option value="terra">Terra Auto DM</option>
-            </select>
-          </Field>
+          <div className="settings-facilitator-note">
+            <span>Dungeon Master</span>
+            <strong>{model.access.dungeonMaster}</strong>
+            <small>
+              Hand off the Dungeon Master role from Play between problems.
+            </small>
+          </div>
           {model.issue === null ? null : <ErrorMessage error={model.issue} />}
           <footer className="form-actions">
             <span>{model.dirty ? "Unsaved changes" : "Up to date"}</span>
@@ -132,8 +117,8 @@ export function SettingsView({
           <RolePill role={model.access.role} />
           <p>
             {model.access.role === "owner"
-              ? "You can configure mechanics, invite members, facilitate play, and archive this world."
-              : "You can configure mechanics and facilitate play."}
+              ? "You can configure mechanics, invite members, assign the Dungeon Master, and archive this world."
+              : "You can configure mechanics and assign the Dungeon Master."}
           </p>
           <dl>
             <div>
@@ -143,6 +128,10 @@ export function SettingsView({
             <div>
               <dt>Mechanics</dt>
               <dd>{model.access.mechanicCount}</dd>
+            </div>
+            <div>
+              <dt>Dungeon Master</dt>
+              <dd>{model.access.dungeonMaster}</dd>
             </div>
             <div>
               <dt>Status</dt>

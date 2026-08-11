@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +59,7 @@ func TestAutoDMRequestBodyStrictness(t *testing.T) {
 			t.Context(), http.MethodPost, "/auto-dm",
 			strings.NewReader(`{"expected_revision":4,"expected_rules_revision":7}`),
 		)
-		var decoded autoDMConsequenceRequest
+		var decoded autoDMDecideRequest
 		if err := decodeAutoDMRequest(request, &decoded); err != nil {
 			t.Fatalf("decode valid request: %v", err)
 		}
@@ -81,7 +82,7 @@ func TestAutoDMRequestBodyStrictness(t *testing.T) {
 			request := httptest.NewRequestWithContext(
 				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
 			)
-			var decoded autoDMConsequenceRequest
+			var decoded autoDMDecideRequest
 			if err := decodeAutoDMRequest(request, &decoded); err == nil {
 				t.Fatalf("decodeAutoDMRequest(%q) unexpectedly succeeded", body)
 			}
@@ -89,7 +90,7 @@ func TestAutoDMRequestBodyStrictness(t *testing.T) {
 	}
 }
 
-func TestAutoDMProblemRequiresEmptyRequestBody(t *testing.T) {
+func TestAutoDMContinueRequiresEmptyRequestBody(t *testing.T) {
 	t.Parallel()
 
 	for name, body := range map[string]string{
@@ -120,6 +121,88 @@ func TestAutoDMProblemRequiresEmptyRequestBody(t *testing.T) {
 			if err := requireEmptyAutoDMRequest(request); err == nil {
 				t.Fatalf("requireEmptyAutoDMRequest(%q) unexpectedly succeeded", body)
 			}
+		})
+	}
+}
+
+func TestValidateAutoDMDecideRequest(t *testing.T) {
+	t.Parallel()
+
+	revision, rulesRevision := int64(4), int64(7)
+	if fields := validateAutoDMDecideRequest(autoDMDecideRequest{
+		ExpectedRevision: &revision, ExpectedRulesRevision: &rulesRevision,
+		IdempotencyKey: " decision-1 ",
+	}); len(fields) != 0 {
+		t.Fatalf("valid decision fields = %#v", fields)
+	}
+	for _, test := range []struct {
+		name    string
+		request autoDMDecideRequest
+		field   string
+	}{
+		{name: "missing interaction revision", request: autoDMDecideRequest{ExpectedRulesRevision: &rulesRevision, IdempotencyKey: "key"}, field: "expected_revision"},
+		{name: "missing rules revision", request: autoDMDecideRequest{ExpectedRevision: &revision, IdempotencyKey: "key"}, field: "expected_rules_revision"},
+		{name: "missing idempotency key", request: autoDMDecideRequest{ExpectedRevision: &revision, ExpectedRulesRevision: &rulesRevision}, field: "idempotency_key"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if fields := validateAutoDMDecideRequest(test.request); fields[test.field] == "" {
+				t.Fatalf("validation fields = %#v, want %q", fields, test.field)
+			}
+		})
+	}
+}
+
+func TestAutoDMAdjudicationPlanSupportsRetryAfterGenerationFailure(t *testing.T) {
+	t.Parallel()
+
+	first, err := planAutoDMAdjudication("open", terraFacilitatorSource, 9, 9, 0)
+	if err != nil {
+		t.Fatalf("plan first decision: %v", err)
+	}
+	if !first.Begin || first.Revision != 10 {
+		t.Fatalf("first decision plan = %#v, want begin at revision 10", first)
+	}
+
+	// Terra/Luna run only after the first plan commits. If either call fails,
+	// the interaction remains adjudicating at the advanced revision and a
+	// retry must not advance it a second time.
+	retry, err := planAutoDMAdjudication(
+		"adjudicating", terraFacilitatorSource, first.Revision, first.Revision, 0,
+	)
+	if err != nil {
+		t.Fatalf("plan retry: %v", err)
+	}
+	if retry.Begin || retry.Revision != first.Revision {
+		t.Fatalf("retry plan = %#v, want unchanged adjudicating revision", retry)
+	}
+
+	_, err = planAutoDMAdjudication(
+		"adjudicating", terraFacilitatorSource, first.Revision, 9, 0,
+	)
+	assertAutoDMStatusError(t, err, "revision_conflict")
+}
+
+func TestAutoDMAdjudicationPlanEnforcesOwnershipLifecycleAndResponses(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name              string
+		status            string
+		facilitatorSource string
+		missingResponders int
+		wantCode          string
+	}{
+		{name: "human interaction", status: "open", facilitatorSource: "human", wantCode: "interaction_lifecycle_conflict"},
+		{name: "final interaction", status: "resolved", facilitatorSource: terraFacilitatorSource, wantCode: "interaction_lifecycle_conflict"},
+		{name: "missing response", status: "open", facilitatorSource: terraFacilitatorSource, missingResponders: 2, wantCode: "responses_incomplete"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := planAutoDMAdjudication(
+				test.status, test.facilitatorSource, 3, 3, test.missingResponders,
+			)
+			assertAutoDMStatusError(t, err, test.wantCode)
 		})
 	}
 }
@@ -531,3 +614,14 @@ func assertAutoDMProviderRequest(t *testing.T, request map[string]any, model str
 }
 
 func autoDMTestString(value string) *string { return &value }
+
+func assertAutoDMStatusError(t *testing.T, err error, code string) {
+	t.Helper()
+	var status *statusError
+	if !errors.As(err, &status) {
+		t.Fatalf("error = %v, want statusError %q", err, code)
+	}
+	if status.Code != code {
+		t.Fatalf("error code = %q, want %q", status.Code, code)
+	}
+}

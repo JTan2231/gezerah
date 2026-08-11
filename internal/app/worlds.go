@@ -97,8 +97,8 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rollbackTx(r.Context(), tx)
 	if _, err := tx.Exec(r.Context(), `
-		insert into worlds (id, name, description, created_by_user_id)
-		values ($1, $2, $3, $4)`, worldID, strings.TrimSpace(request.Name), request.Description, userID); err != nil {
+		insert into worlds (id, name, description, created_by_user_id, facilitator_membership_id)
+		values ($1, $2, $3, $4, $5)`, worldID, strings.TrimSpace(request.Name), request.Description, userID, membershipID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -177,7 +177,13 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 		currentDescription = cleanOptional(request.Description.Value)
 	}
 	if request.DMSource != nil {
-		currentDMSource = strings.TrimSpace(*request.DMSource)
+		requestedDMSource := strings.TrimSpace(*request.DMSource)
+		if requestedDMSource != currentDMSource {
+			writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", map[string]string{
+				"dm_source": "must be changed through the facilitator assignment command",
+			})
+			return
+		}
 	}
 	fields := map[string]string{}
 	validateRequired(fields, "name", currentName, 200)
@@ -189,8 +195,8 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	command, err := s.db.Exec(r.Context(), `
-		update worlds set name = $2, description = $3, dm_source = $4, revision = revision + 1
-		where id = $1 and revision = $5`, member.WorldID, currentName, currentDescription, currentDMSource, actual)
+		update worlds set name = $2, description = $3, revision = revision + 1
+		where id = $1 and revision = $4`, member.WorldID, currentName, currentDescription, actual)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -200,6 +206,228 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := loadWorldResponse(r.Context(), s.db, member.WorldID, member.UserID)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, item)
+}
+
+func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request) {
+	worldID := r.PathValue("world_id")
+	member, err := requireActiveWorldMember(r.Context(), s.db, r, worldID)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	var request updateFacilitatorRequest
+	if err := decodeJSON(r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
+		return
+	}
+	request.Source = strings.TrimSpace(request.Source)
+	fields := map[string]string{}
+	if request.ExpectedRevision == nil || *request.ExpectedRevision < 0 {
+		fields["expected_revision"] = "a non-negative expected revision is required"
+	}
+	switch request.Source {
+	case "human":
+		if request.MembershipID == nil || !validID(strings.TrimSpace(*request.MembershipID)) {
+			fields["membership_id"] = "a human facilitator membership UUID is required"
+		}
+	case "terra":
+		if request.MembershipID != nil {
+			fields["membership_id"] = "must be omitted when Terra is the facilitator"
+		}
+	default:
+		fields["source"] = "must be human or terra"
+	}
+	if len(fields) > 0 {
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "facilitator assignment is invalid", fields)
+		return
+	}
+	if request.Source == "terra" && s.autoDM == nil {
+		handleAppError(w, autoDMUnavailable())
+		return
+	}
+
+	tx, err := s.db.Begin(r.Context())
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	defer rollbackTx(r.Context(), tx)
+	var worldStatus, currentSource string
+	var currentMembershipID *string
+	var actualRevision int64
+	if err := tx.QueryRow(r.Context(), `
+		select status, revision, dm_source, facilitator_membership_id::text
+		from worlds where id = $1 for update`, worldID,
+	).Scan(&worldStatus, &actualRevision, &currentSource, &currentMembershipID); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if worldStatus != "active" {
+		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "world_archived", Message: "archived worlds cannot be changed"})
+		return
+	}
+	var membershipRole, membershipStatus string
+	if err := tx.QueryRow(r.Context(), `
+		select role, status from world_memberships
+		where world_id = $1 and id = $2 and user_id = $3
+		for share`, worldID, member.ID, member.UserID,
+	).Scan(&membershipRole, &membershipStatus); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if membershipStatus != "active" {
+		handleAppError(w, &statusError{Status: http.StatusForbidden, Code: "world_forbidden", Message: "active world membership is required"})
+		return
+	}
+	requesterIsFacilitator := currentSource == "human" && currentMembershipID != nil && *currentMembershipID == member.ID
+	if membershipRole != "owner" && membershipRole != "editor" && !requesterIsFacilitator {
+		handleAppError(w, &statusError{Status: http.StatusForbidden, Code: "facilitator_assignment_forbidden", Message: "world editing or current facilitator authority is required"})
+		return
+	}
+	if actualRevision != *request.ExpectedRevision {
+		handleAppError(w, revisionConflict("world", *request.ExpectedRevision, actualRevision))
+		return
+	}
+
+	var nextMembershipID *string
+	if request.Source == "human" {
+		targetID := strings.TrimSpace(*request.MembershipID)
+		var targetRole, targetStatus string
+		if err := tx.QueryRow(r.Context(), `
+			select role, status from world_memberships
+			where world_id = $1 and id = $2
+			for share`, worldID, targetID,
+		).Scan(&targetRole, &targetStatus); errors.Is(err, pgx.ErrNoRows) {
+			writeError(w, http.StatusUnprocessableEntity, "validation_failed", "facilitator assignment is invalid", map[string]string{
+				"membership_id": "must identify an active non-spectator membership in this world",
+			})
+			return
+		} else if err != nil {
+			handleAppError(w, err)
+			return
+		}
+		if targetStatus != "active" || targetRole == "spectator" {
+			writeError(w, http.StatusUnprocessableEntity, "validation_failed", "facilitator assignment is invalid", map[string]string{
+				"membership_id": "must identify an active non-spectator membership in this world",
+			})
+			return
+		}
+		nextMembershipID = &targetID
+	}
+	assignmentUnchanged := currentSource == request.Source &&
+		((currentMembershipID == nil && nextMembershipID == nil) ||
+			(currentMembershipID != nil && nextMembershipID != nil && *currentMembershipID == *nextMembershipID))
+	if assignmentUnchanged {
+		item, loadErr := loadWorldResponse(r.Context(), tx, worldID, member.UserID)
+		if loadErr != nil {
+			handleAppError(w, loadErr)
+			return
+		}
+		if err := tx.Commit(r.Context()); err != nil {
+			handleAppError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, item)
+		return
+	}
+	type unfinishedInteraction struct {
+		id, status, facilitatorSource string
+	}
+	unfinished := make([]unfinishedInteraction, 0, 1)
+	rows, err := tx.Query(r.Context(), `
+		select id::text, status, facilitator_source from interactions
+		where world_id = $1 and status in ('draft', 'open', 'adjudicating')
+		order by created_at, id
+		for update`, worldID)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	for rows.Next() {
+		var item unfinishedInteraction
+		if err := rows.Scan(&item.id, &item.status, &item.facilitatorSource); err != nil {
+			rows.Close()
+			handleAppError(w, err)
+			return
+		}
+		unfinished = append(unfinished, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		handleAppError(w, err)
+		return
+	}
+	rows.Close()
+	emergencyTakeover := len(unfinished) == 1 &&
+		(unfinished[0].status == "open" || unfinished[0].status == "adjudicating") &&
+		unfinished[0].facilitatorSource == terraFacilitatorSource &&
+		currentSource == terraFacilitatorSource && request.Source == "human" &&
+		nextMembershipID != nil && *nextMembershipID == member.ID && membershipRole == "owner"
+	if len(unfinished) > 0 && !emergencyTakeover {
+		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "interactions_unfinished", Message: "resolve or cancel active interactions before changing facilitator"})
+		return
+	}
+	if emergencyTakeover {
+		interactionID := unfinished[0].id
+		var submissionID string
+		err := tx.QueryRow(r.Context(), `
+			select id::text from interaction_action_submissions
+			where world_id = $1 and interaction_id = $2
+				and submitted_by_membership_id = $3 and status = 'submitted'
+			order by created_at desc, id desc
+			limit 1 for update`, worldID, interactionID, member.ID,
+		).Scan(&submissionID)
+		if err == nil {
+			if _, err := tx.Exec(r.Context(), `
+				update interaction_action_submissions
+				set status = 'withdrawn', revision = revision + 1
+				where world_id = $1 and interaction_id = $2 and id = $3`,
+				worldID, interactionID, submissionID,
+			); err != nil {
+				handleAppError(w, err)
+				return
+			}
+			if _, err := tx.Exec(r.Context(), `
+				update interactions set revision = revision + 1
+				where world_id = $1 and id = $2`, worldID, interactionID,
+			); err != nil {
+				handleAppError(w, err)
+				return
+			}
+			if err := appendWorldEvent(
+				r.Context(), tx, worldID, "submission-withdrawn", member.ID,
+				&interactionID, &submissionID, nil,
+			); err != nil {
+				handleAppError(w, err)
+				return
+			}
+		} else if !errors.Is(err, pgx.ErrNoRows) {
+			handleAppError(w, err)
+			return
+		}
+	}
+	if _, err := tx.Exec(r.Context(), `
+		update worlds
+		set dm_source = $2, facilitator_membership_id = $3, revision = revision + 1
+		where id = $1`, worldID, request.Source, nextMembershipID,
+	); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if err := appendWorldEvent(r.Context(), tx, worldID, "facilitator-changed", member.ID, nil, nil, nil); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	if err := tx.Commit(r.Context()); err != nil {
+		handleAppError(w, err)
+		return
+	}
+	item, err := loadWorldResponse(r.Context(), s.db, worldID, member.UserID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -283,6 +511,7 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	var membershipStatus string
 	err := db.QueryRow(ctx, `
 		select world.id::text, world.name, world.description, world.dm_source, world.status,
+			world.facilitator_membership_id::text, facilitator_user.display_name,
 			world.revision, world.table_revision, membership.role, membership.id::text,
 			membership.status,
 			(select count(*)::int from world_memberships where world_id = world.id and status = 'active'),
@@ -295,9 +524,13 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 		from worlds world
 		join world_rule_sets rules on rules.world_id = world.id
 		join world_memberships membership on membership.world_id = world.id and membership.user_id = $2
+		left join world_memberships facilitator
+			on facilitator.world_id = world.id and facilitator.id = world.facilitator_membership_id
+		left join users facilitator_user on facilitator_user.id = facilitator.user_id
 		where world.id = $1`, worldID, userID,
 	).Scan(
 		&item.ID, &item.Name, &item.Description, &item.DMSource, &item.Status,
+		&item.Facilitator.MembershipID, &item.Facilitator.DisplayName,
 		&item.Revision, &item.TableRevision, &item.Role, &item.MembershipID,
 		&membershipStatus, &item.MemberCount, &item.CapacityCount, &item.CapabilityCount,
 		&item.CharacterFieldCount, &item.RulesRevision,
@@ -306,6 +539,12 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	if err != nil {
 		return item, err
 	}
+	item.Facilitator.Source = item.DMSource
+	item.CurrentPlayRole = currentPlayRole(
+		item.Role,
+		item.DMSource == "human" && item.Facilitator.MembershipID != nil &&
+			*item.Facilitator.MembershipID == item.MembershipID,
+	)
 	item.PlayStatus, err = membershipPlayStatus(ctx, db, worldID, item.MembershipID, item.Role, membershipStatus)
 	return item, err
 }
@@ -313,6 +552,14 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) {
 	member, err := requireActiveWorldMember(r.Context(), s.db, r, r.PathValue("world_id"))
 	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	var facilitatorSource string
+	var facilitatorMembershipID *string
+	if err := s.db.QueryRow(r.Context(), `
+		select dm_source, facilitator_membership_id::text from worlds where id = $1`, member.WorldID,
+	).Scan(&facilitatorSource, &facilitatorMembershipID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -337,6 +584,11 @@ func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) 
 			handleAppError(w, err)
 			return
 		}
+		item.CurrentPlayRole = currentPlayRole(
+			item.Role,
+			facilitatorSource == "human" && facilitatorMembershipID != nil &&
+				*facilitatorMembershipID == item.ID,
+		)
 		items = append(items, item)
 	}
 	if err := rows.Err(); err != nil {
@@ -670,8 +922,8 @@ func inviteNotFound() error {
 }
 
 func appendWorldEvent(ctx context.Context, tx pgx.Tx, worldID, eventType, actorMembershipID string, interactionID, submissionID, resolutionID *string) error {
-	return appendWorldEventWithAudienceInvalidation(
-		ctx, tx, worldID, eventType, actorMembershipID,
+	return appendWorldEventForSource(
+		ctx, tx, worldID, eventType, "human", &actorMembershipID,
 		interactionID, submissionID, resolutionID, false,
 	)
 }
@@ -683,16 +935,25 @@ func appendWorldEventWithAudienceInvalidation(
 	interactionID, submissionID, resolutionID *string,
 	invalidatesInteractionAudience bool,
 ) error {
-	var actor any
-	if actorMembershipID != "" {
-		actor = actorMembershipID
-	}
+	return appendWorldEventForSource(
+		ctx, tx, worldID, eventType, "human", &actorMembershipID,
+		interactionID, submissionID, resolutionID, invalidatesInteractionAudience,
+	)
+}
+
+func appendWorldEventForSource(
+	ctx context.Context,
+	tx pgx.Tx,
+	worldID, eventType, actorSource string,
+	actorMembershipID, interactionID, submissionID, resolutionID *string,
+	invalidatesInteractionAudience bool,
+) error {
 	_, err := tx.Exec(ctx, `
 		insert into world_events (
-			world_id, event_type, actor_membership_id, interaction_id,
+			world_id, event_type, actor_source, actor_membership_id, interaction_id,
 			submission_id, resolution_id, invalidates_interaction_audience
-		) values ($1, $2, $3, $4, $5, $6, $7)`,
-		worldID, eventType, actor, interactionID, submissionID, resolutionID,
+		) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		worldID, eventType, actorSource, actorMembershipID, interactionID, submissionID, resolutionID,
 		invalidatesInteractionAudience)
 	return err
 }

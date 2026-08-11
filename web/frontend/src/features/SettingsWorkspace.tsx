@@ -10,7 +10,7 @@ import {
 import type { World } from "../api/types";
 import { confirmDiscardDraft, useDraft } from "../hooks/useDraft";
 import type { Navigate } from "../worldRoutes";
-import { SettingsView, type SettingsDMSource } from "./SettingsView";
+import { SettingsView } from "./SettingsView";
 
 export function SettingsWorkspace({
   world,
@@ -25,9 +25,8 @@ export function SettingsWorkspace({
     () => ({
       name: world.name,
       description: world.description ?? "",
-      dmSource: world.dm_source,
     }),
-    [world.description, world.dm_source, world.name],
+    [world.description, world.name],
   );
   const draft = useDraft(source);
   const [saving, setSaving] = useState(false);
@@ -43,14 +42,12 @@ export function SettingsWorkspace({
         ...jsonBody({
           name: draft.draft.name.trim(),
           description: draft.draft.description.trim() || null,
-          dm_source: draft.draft.dmSource,
           expected_revision: world.revision,
         }),
       });
       draft.accept({
         name: saved.name,
         description: saved.description ?? "",
-        dmSource: saved.dm_source,
       });
       onWorldChanged();
     } catch (reason) {
@@ -100,13 +97,17 @@ export function SettingsWorkspace({
         issue: error === null ? null : toErrorNotice(error),
         fieldIssues: {
           name: error?.fields["name"],
-          dmSource: error?.fields["dm_source"],
         },
         access: {
           role: world.role === "owner" ? "owner" : "editor",
           memberCount: world.member_count,
           mechanicCount: world.capacity_count + world.capability_count,
           status: world.status,
+          dungeonMaster:
+            world.facilitator.display_name ??
+            (world.facilitator.source === "terra"
+              ? "Terra Auto DM"
+              : "Human facilitator"),
         },
         canArchive: world.role === "owner" && world.status === "active",
       }}
@@ -115,8 +116,6 @@ export function SettingsWorkspace({
           draft.setDraft((current) => ({ ...current, name })),
         changeDescription: (description) =>
           draft.setDraft((current) => ({ ...current, description })),
-        changeDMSource: (dmSource: SettingsDMSource) =>
-          draft.setDraft((current) => ({ ...current, dmSource })),
         save: () => void save(),
         archive: () => void archive(),
       }}

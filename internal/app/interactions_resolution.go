@@ -59,13 +59,23 @@ func (s *Server) handleInteractionResolution(w http.ResponseWriter, r *http.Requ
 }
 
 func (s *Server) previewInteractionResolution(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (interactionResolutionResultResponse, error) {
+	return s.previewInteractionResolutionAs(ctx, r, worldID, interactionID, request, "human")
+}
+
+func (s *Server) previewInteractionResolutionAs(
+	ctx context.Context,
+	r *http.Request,
+	worldID, interactionID string,
+	request adjudicateInteractionRequest,
+	facilitatorSource string,
+) (interactionResolutionResultResponse, error) {
 	var zero interactionResolutionResultResponse
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return zero, err
 	}
 	defer rollbackTx(ctx, tx)
-	_, err = requireFacilitator(ctx, tx, r, worldID)
+	_, err = requireResolutionActor(ctx, tx, r, worldID, facilitatorSource, false)
 	if err != nil {
 		return zero, err
 	}
@@ -125,32 +135,44 @@ func (s *Server) previewInteractionResolution(ctx context.Context, r *http.Reque
 }
 
 func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (interactionResolutionResultResponse, error) {
+	return s.resolveInteractionAs(ctx, r, worldID, interactionID, request, "human")
+}
+
+func (s *Server) resolveInteractionAs(
+	ctx context.Context,
+	r *http.Request,
+	worldID, interactionID string,
+	request adjudicateInteractionRequest,
+	facilitatorSource string,
+) (interactionResolutionResultResponse, error) {
 	var zero interactionResolutionResultResponse
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return zero, err
 	}
 	defer rollbackTx(ctx, tx)
-	member, err := requireFacilitator(ctx, tx, r, worldID)
+	member, err := requireResolutionActor(ctx, tx, r, worldID, facilitatorSource, true)
 	if err != nil {
 		return zero, err
 	}
 
-	var replayInteractionID string
+	var replayInteractionID, replaySource string
 	err = tx.QueryRow(ctx, `
-		select interaction_id::text from interaction_resolutions
+		select interaction_id::text, facilitator_source from interaction_resolutions
 		where world_id = $1 and idempotency_key = $2 and status = 'applied'`, worldID, strings.TrimSpace(request.IdempotencyKey),
-	).Scan(&replayInteractionID)
+	).Scan(&replayInteractionID, &replaySource)
 	if err == nil {
-		if replayInteractionID != interactionID {
+		if replayInteractionID != interactionID || replaySource != facilitatorSource {
 			return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was already used for another ruling"}
 		}
-		matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
-		if err != nil {
-			return zero, err
-		}
-		if !matches {
-			return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different ruling"}
+		if facilitatorSource == "human" {
+			matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
+			if err != nil {
+				return zero, err
+			}
+			if !matches {
+				return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different ruling"}
+			}
 		}
 		result, err := loadAppliedResolutionResult(ctx, tx, worldID, interactionID)
 		if err != nil {
@@ -167,15 +189,48 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 		return zero, err
 	}
 
-	var status string
+	var status, interactionFacilitatorSource string
 	var revision int64
 	if err := tx.QueryRow(ctx, `
-		select status, revision from interactions where world_id = $1 and id = $2 for update`, worldID, interactionID,
-	).Scan(&status, &revision); err != nil {
+		select status, revision, facilitator_source from interactions
+		where world_id = $1 and id = $2 for update`, worldID, interactionID,
+	).Scan(&status, &revision, &interactionFacilitatorSource); err != nil {
 		return zero, err
 	}
 	if status != "adjudicating" {
+		if status == "resolved" {
+			var committedInteractionID, committedSource string
+			replayErr := tx.QueryRow(ctx, `
+				select interaction_id::text, facilitator_source
+				from interaction_resolutions
+				where world_id = $1 and idempotency_key = $2 and status = 'applied'`,
+				worldID, strings.TrimSpace(request.IdempotencyKey),
+			).Scan(&committedInteractionID, &committedSource)
+			if replayErr == nil && committedInteractionID == interactionID && committedSource == facilitatorSource {
+				if facilitatorSource == "human" {
+					matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
+					if err != nil {
+						return zero, err
+					}
+					if !matches {
+						return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different ruling"}
+					}
+				}
+				result, err := loadAppliedResolutionResult(ctx, tx, worldID, interactionID)
+				if err != nil {
+					return zero, err
+				}
+				result.Replayed = true
+				return result, nil
+			}
+			if replayErr != nil && !errors.Is(replayErr, pgx.ErrNoRows) {
+				return zero, replayErr
+			}
+		}
 		return zero, interactionLifecycleConflict("interaction must be adjudicating before it can be resolved")
+	}
+	if facilitatorSource == terraFacilitatorSource && interactionFacilitatorSource != terraFacilitatorSource {
+		return zero, interactionLifecycleConflict("interaction facilitator source does not match this ruling")
 	}
 	if revision != *request.ExpectedRevision {
 		return zero, revisionConflict("interaction", *request.ExpectedRevision, revision)
@@ -212,13 +267,18 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 	}
 	request.ActionSummary = cleanOptional(request.ActionSummary)
 	request.PrivateNotes = cleanOptional(request.PrivateNotes)
+	var actorMembershipID any
+	if facilitatorSource == "human" {
+		actorMembershipID = member.ID
+	}
 	if _, err := tx.Exec(ctx, `
 		insert into interaction_resolutions
 			(id, interaction_id, world_id, selected_submission_id, action_summary, public_narrative,
-			 private_notes, status, created_by_membership_id, rules_revision)
-		values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9)`,
+			 private_notes, status, facilitator_source, created_by_membership_id, rules_revision)
+		values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10)`,
 		resolutionID, interactionID, worldID, request.SelectedActionID, request.ActionSummary,
-		strings.TrimSpace(request.Narrative), request.PrivateNotes, member.ID, rulesRevision); err != nil {
+		strings.TrimSpace(request.Narrative), request.PrivateNotes, facilitatorSource,
+		actorMembershipID, rulesRevision); err != nil {
 		return zero, err
 	}
 	if err := persistTransitionState(ctx, tx, worldID, rules.TransitionResult{
@@ -265,7 +325,7 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 	if _, err := tx.Exec(ctx, `
 		update interaction_resolutions set status = 'applied', resolved_by_membership_id = $3,
 			idempotency_key = $4, applied_at = now()
-		where world_id = $1 and id = $2`, worldID, resolutionID, member.ID, strings.TrimSpace(request.IdempotencyKey)); err != nil {
+		where world_id = $1 and id = $2`, worldID, resolutionID, actorMembershipID, strings.TrimSpace(request.IdempotencyKey)); err != nil {
 		return zero, err
 	}
 	if _, err := tx.Exec(ctx, `
@@ -273,7 +333,11 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 		where world_id = $1 and id = $2`, worldID, interactionID); err != nil {
 		return zero, err
 	}
-	if err := appendWorldEvent(ctx, tx, worldID, "resolution-applied", member.ID, &interactionID, nil, &resolutionID); err != nil {
+	if facilitatorSource == terraFacilitatorSource {
+		if err := appendAutoDMResolutionEvent(ctx, tx, worldID, interactionID, resolutionID); err != nil {
+			return zero, err
+		}
+	} else if err := appendWorldEvent(ctx, tx, worldID, "resolution-applied", member.ID, &interactionID, nil, &resolutionID); err != nil {
 		return zero, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -284,6 +348,60 @@ func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldI
 		return zero, err
 	}
 	return result, nil
+}
+
+func requireResolutionActor(
+	ctx context.Context,
+	db queryer,
+	r *http.Request,
+	worldID, facilitatorSource string,
+	lock bool,
+) (authorizedWorldMember, error) {
+	if facilitatorSource == "human" {
+		return requireFacilitator(ctx, db, r, worldID)
+	}
+	if facilitatorSource != terraFacilitatorSource {
+		return authorizedWorldMember{}, fmt.Errorf("unsupported facilitator source %q", facilitatorSource)
+	}
+	var member authorizedWorldMember
+	var err error
+	if lock {
+		tx, ok := db.(pgx.Tx)
+		if !ok {
+			return member, errors.New("terra resolution lock requires a transaction")
+		}
+		member, err = lockInteractionWorldMember(ctx, tx, r, worldID)
+	} else {
+		member, err = requireActiveWorldMember(ctx, db, r, worldID)
+	}
+	if err != nil {
+		return member, err
+	}
+	if err := requireTerraFacilitator(ctx, db, worldID); err != nil {
+		return member, err
+	}
+	if member.Role == "spectator" || member.Facilitator {
+		return member, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace Terra"}
+	}
+	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
+		return member, err
+	}
+	return member, nil
+}
+
+func appendAutoDMResolutionEvent(
+	ctx context.Context,
+	tx pgx.Tx,
+	worldID, interactionID, resolutionID string,
+) error {
+	_, err := tx.Exec(ctx, `
+		insert into world_events (
+			world_id, event_type, actor_membership_id, actor_source,
+			interaction_id, resolution_id, invalidates_interaction_audience
+		) values ($1, 'resolution-applied', null, 'terra', $2, $3, false)`,
+		worldID, interactionID, resolutionID,
+	)
+	return err
 }
 
 func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireIdempotency bool) map[string]string {
@@ -519,10 +637,15 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 	var privateNotes *string
 	err := db.QueryRow(ctx, `
 		select id::text, selected_submission_id::text, action_summary, public_narrative,
-			private_notes, resolved_by_membership_id::text, rules_revision, applied_at
+			private_notes, facilitator_source, resolved_by_membership_id::text,
+			rules_revision, applied_at
 		from interaction_resolutions
 		where world_id = $1 and interaction_id = $2 and status = 'applied'`, worldID, interactionID,
-	).Scan(&item.ID, &item.SelectedActionID, &item.ActionSummary, &item.Narrative, &privateNotes, &item.ResolvedByMembershipID, &item.RulesRevision, &item.ResolvedAt)
+	).Scan(
+		&item.ID, &item.SelectedActionID, &item.ActionSummary, &item.Narrative,
+		&privateNotes, &item.FacilitatorSource, &item.ResolvedByMembershipID,
+		&item.RulesRevision, &item.ResolvedAt,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}

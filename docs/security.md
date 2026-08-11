@@ -120,11 +120,13 @@ are `private, no-store` and vary on `Cookie`.
 | World list/read                     | Active session + active membership              | Returns only worlds for the session user.                                 |
 | World configuration/setup reads     | Active session + active membership              | Server-side scope and visibility projections still apply.                 |
 | World configuration/setup mutations | Active owner/editor + origin + CSRF             | Resource scope and revisions still apply.                                 |
-| Character profiles                  | Active member; controller/facilitator filtering | Restricted definitions/values are removed server-side.                    |
+| Character profiles                  | Active member; controller/owner-editor/current-facilitator filtering | Restricted definitions/values are removed server-side. |
 | World archive                       | Active owner                                    | Requires no unfinished interaction.                                       |
 | Live reads/events                   | Active, play-ready membership                   | Streams periodically revalidate session and membership.                   |
-| Facilitator commands                | Active owner/editor                             | Lifecycle, scope, revision, and idempotency checks apply.                 |
-| Player actions                      | Active ready eligible player                    | Server enforces responder, ownership, and control.                        |
+| Facilitator assignment              | Owner/editor or current human facilitator       | Revisioned; normally requires no unfinished interaction.                  |
+| Human facilitator commands          | Current designated human facilitator            | Lifecycle, scope, revision, and idempotency checks apply.                 |
+| Terra pacing commands               | Active ready current player                     | Terra assignment, responder completion, revisions, and idempotency apply. |
+| Player actions                      | Active ready eligible current player            | Server enforces responder, ownership, and control.                        |
 
 Network reachability, React routes, and hidden controls are never treated as
 authorization.
@@ -139,14 +141,25 @@ continues to decide what that user may do:
 - configuration, invite, entity, and setup-state mutation requires
   owner/editor authority;
 - archive requires owner authority and no unfinished interaction;
-- controller grants name active player memberships and entities in the same
+- controller grants name active non-spectator memberships and entities in the same
   world and use `table_revision`;
 - profile writes require owner/editor or current control and check profile plus
   field-schema revisions;
+- restricted profile reads additionally admit the designated human facilitator;
 - restricted fields and facilitator-private prose are removed server-side;
-- live access requires player readiness;
-- only eligible players submit, with at most one current action each;
+- live access requires current-player readiness; the designated human
+  facilitator bypasses that gate while their underlying player-seat status is
+  still projected, and spectators are ready/read-only;
+- only eligible current players submit, with at most one current action each;
 - players withdraw only their own submitted actions;
+- live human-DM commands require the exact designated facilitator membership,
+  regardless of its durable access role;
+- Terra Continue/Decide requires a ready current player but persists Terra—not
+  that player—as the interaction, resolution, and event source;
+- facilitator handoff uses the world revision and normally rejects unfinished
+  interactions. The sole exception lets the owner take over one Terra-authored
+  open or adjudicating interaction as themself, withdrawing their own submitted
+  action before human adjudication continues;
 - referenced mechanic/entity/membership/action IDs are checked against the path
   world;
 - interaction lifecycle, expected revisions, and resolve idempotency gate live
@@ -183,8 +196,11 @@ Treat invite URLs as secrets. Request logs redact their bearer path segment.
 
 `users` and `world_memberships` represent real participants. `entities`
 represent fictional state owners. A username, mechanic name, entity name, or
-profile value grants no product authority. Facilitator authority comes from an
-owner/editor membership, not a mechanical class.
+profile value grants no product authority. Durable owner/editor/player/spectator
+access and the current facilitator/player/spectator play role are separate.
+Human facilitator authority comes only from the world's same-world membership
+assignment; Terra carries no user or membership identity. Neither is a
+mechanical class.
 
 `world_membership_entity_controls` is the only character-authority edge.
 Profile text cannot grant control, mutate mechanical state, or become an effect
@@ -194,8 +210,10 @@ target.
 
 Facilitator-private interaction/Consequence notes and restricted character
 fields are filtered in server query/mapping paths. Frontend hiding is secondary.
-World events contain invalidation identifiers, not passwords, profile text,
-action text, or private narrative.
+Interaction/resolution `facilitator_source` and event `actor_source` preserve
+human-versus-Terra attribution; the human membership is present only for human
+authors. World events contain invalidation identifiers, not passwords, profile
+text, action text, or private narrative.
 
 The standard request/recovery logger records method, a redacted path, status,
 bytes, and duration. It does not intentionally log request/response bodies,
@@ -225,7 +243,7 @@ they do not consume forwarded-address headers. A shared reverse proxy can
 therefore aggregate unrelated users into one bucket and cause an availability
 lockout. Public or multi-replica deployments need a trusted, shared,
 proxy-aware limiter. World writes, invite use, actions, resolutions, and SSE
-connections still have no general per-user quotas.
+connections and outbound Auto DM pacing still have no general per-user quotas.
 
 ## Future-target risks and hardening
 

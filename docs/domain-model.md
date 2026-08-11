@@ -38,14 +38,28 @@ erDiagram
 
 A world is the single authorization, configuration, entity, live-play, and
 event boundary. It owns lifecycle and table revisions. A world membership has
-an `owner`, `editor`, `player`, or `spectator` role; owners and editors have
-facilitator authority during play.
+an `owner`, `editor`, `player`, or `spectator` role. That durable role controls
+Build access and survives every table handoff; it is not the participant's
+momentary role in Play.
 
-The world setting `dm_source` is either `human` or `terra` and defaults to
-`human`. It decides whether a facilitator writes consequence prose or asks the
-Auto DM to write it. In Terra mode the world description also serves as the
-campaign brief supplied to generation; it remains ordinary user-authored world
-prose rather than a privileged rules field.
+Exactly one facilitator assignment identifies the Dungeon Master. Its source
+is `human`, with one active non-spectator `facilitator_membership_id`, or
+`terra`, with no human membership. A new world's owner is its initial human
+facilitator. The assignment derives each membership's `current_play_role`:
+the designated human is `facilitator`, a spectator remains `spectator`, and
+every other active non-spectator is a `player`, including owners and editors.
+Changing the assignment does not rewrite any durable membership role.
+
+`dm_source` stores the assignment discriminator for compatibility. Handoff is
+a separate world-revisioned command, not an ordinary settings patch. An
+owner/editor or the current human facilitator may hand the table to another
+active non-spectator or Terra, but only when no interaction is draft, open, or
+adjudicating. The narrow recovery exception lets the owner assign themself when
+the sole unfinished interaction is Terra-authored and open or adjudicating;
+the owner's submitted action is withdrawn before they continue as human DM. In
+Terra mode the world description also serves as the campaign
+brief supplied to generation; it remains ordinary user-authored prose rather
+than a privileged rules field.
 
 A world mechanic is a typed scalar state definition with an author-facing
 classification and a source:
@@ -61,7 +75,7 @@ classification and a source:
 The classification adds no canonical name, entity class, or special key.
 
 World problems are interactions: prompt-first, free-form moments created during
-play by a facilitator or, in Terra mode, proposed by the Auto DM. Their
+play by the current human facilitator or Terra. Their
 audience, responders, context entities, player actions, Consequence, requested
 effects, and before/after receipt are captured relationally. A Consequence is
 one prose account of what transpires plus ordered targeted effects compiled
@@ -69,9 +83,9 @@ from that prose. An apply-status effect defines its name, optional description,
 and modifiers in that problem; it is not selected from world configuration.
 
 A character is a product projection over an ordinary world entity. It becomes
-a character when at least one active player-control relationship points to it.
-Control is many-to-many, permitting troupe play and shared characters without
-introducing an engine class.
+a character when at least one active non-spectator control relationship points
+to it. Control is many-to-many, permitting troupe play and shared characters
+without introducing an engine class.
 
 ## Authored identity and scope
 
@@ -93,8 +107,9 @@ fields. A field has a durable UUID, user-authored label, optional guidance,
 position, and visibility:
 
 - `table` is readable by every active world member;
-- `controllers-and-facilitators` is readable only by the entity's active player
-  controllers and world owners/editors.
+- `controllers-and-facilitators` is readable only by the entity's active
+  non-spectator controllers, world owners/editors, and the currently designated
+  human facilitator.
 
 Every active field is required for every controlled entity. Requiredness is a
 property of membership in the active field set, not a separate flag. Labels
@@ -109,17 +124,25 @@ text. A complete replacement may omit fields, allowing an incomplete draft to
 be saved. It must match both the profile revision and field-set revision so a
 draft cannot silently ignore a concurrent schema change.
 
-Owners/editors may edit any active entity profile. An active player may edit a
-profile only while their world membership controls that entity. Control
+Owners/editors may edit any active entity profile. Any other active
+non-spectator may edit a profile only while their world membership controls
+that entity. Control
 removal, leaving, or a role change revokes edit authority without deleting the
-profile. Ordinary admitted members receive only completed table-visible values.
+profile. The designated human facilitator may read restricted values even when
+they are neither an editor nor controller. Ordinary admitted members receive
+only completed table-visible values.
 
 Completion and live-play admission are derived, never stored. An uncontrolled
 entity is `not-controlled`. A controlled entity is `setup-required` while any
 active field lacks a non-empty value and `ready` otherwise; with zero fields it
-is immediately ready. An active world player is `waiting-for-character` with no
-control, `setup-required` when every controlled entity is incomplete, and
-`ready` once at least one controlled entity is ready.
+is immediately ready. An active non-spectator's persistent player seat is
+`waiting-for-character` with no control, `setup-required` while their
+controlled-character setup is incomplete, and `ready` when it meets the current
+requirements. This `play_status` remains projected even while they are
+designated facilitator. A human
+facilitator bypasses the readiness gate to run Play but may still report the
+seat they will return to after handoff. Spectators report `ready` and remain
+read-only.
 
 Profile prose is not mechanical state. It cannot change mechanic applicability,
 be targeted by effects, or advance the entity-state revision.
@@ -258,8 +281,10 @@ changes. Exact decimal arithmetic is used throughout.
 A `user` represents a real participant and owns a case-insensitive username,
 display name, Argon2id password hash, and account status. Authentication binds
 an opaque server session to that user. A `world_membership` grants an owner,
-editor, player, or spectator role and lifecycle status. Owners and editors have
-facilitator authority; players may respond when admitted and ready.
+editor, player, or spectator durable role and lifecycle status. Separately,
+the world's facilitator assignment derives the live role. A designated human
+DM does not respond to their own interaction; any other ready non-spectator may
+respond even when their durable access role is owner or editor.
 
 An invite is an expiring and revocable bearer grant for a non-owner role. The
 raw URL-safe token is returned only when the invite is created. PostgreSQL
@@ -276,19 +301,21 @@ actor.
 ## World table scope and control
 
 `world_membership_entity_controls` is the only character-authority edge. An
-active player may control multiple entities, and an entity may have multiple
-active player controllers. An optional acting entity on an action must be both
-controlled by the submitting player and complete at submission time. The
+active non-spectator may control multiple entities, and an entity may have
+multiple active non-spectator controllers. An optional acting entity on an
+action must be both controlled by the submitting player and complete at
+submission time. The
 accepted action snapshots its display name for stable history.
 
 The world's `table_revision` guards complete controller-set replacements. It
 advances when table-scoped membership/control state changes independently of
 the world settings revision.
 
-Readiness gates the live table for players. Onboarding players remain active
-world members so they can read and edit authorized character profiles, but
-interactions/events return `character_setup_required` until at least one
-controlled character is ready. An active uncontrolled entity or ready
+Readiness gates the live table for the current `player` role. Onboarding
+players remain active world members so they can read and edit authorized
+character profiles, but
+interactions/events return `character_setup_required` until their controlled
+character setup is ready. An active uncontrolled entity or ready
 controlled entity may be interaction context or a live-effect target; a
 setup-required controlled entity may not. Acting-entity attribution also
 requires the submitting player to control the ready entity.
@@ -304,22 +331,27 @@ draft ──present──> open ──adjudicate──> adjudicating ──resol
 
 - `draft`: facilitator-editable prompt and audience setup;
 - `open`: visible to its audience and accepting eligible player actions;
-- `adjudicating`: submissions are closed and the interaction is hidden from
-  non-facilitators;
+- `adjudicating`: submissions are closed; a human-DM interaction is hidden
+  from its non-facilitator audience, while a Terra interaction remains visible
+  as Terra finishes or retries its decision;
 - `resolved`: immutable Consequence and applied receipt exist;
 - `cancelled`: final without a Consequence.
 
 An interaction stores an optional title, required prompt, facilitator-private
 notes, audience memberships, eligible responders, and ordered context entities.
 Presentation requires at least one audience member. Eligible responders are an
-active, ready player subset of the audience.
+active, ready current-player subset of the audience. The interaction snapshots
+`facilitator_source`; a human-authored interaction records its creator
+membership, while a Terra interaction has no human creator.
 
 Each eligible player may have at most one submitted action. The player may
 withdraw it while the interaction is open. During adjudication the compiled
 Consequence may identify one submitted action or explicitly select none.
 
-Non-facilitators may read only open/resolved interactions in whose audience they
-participate. Responses omit private notes and facilitator-only receipt fields.
+Non-facilitators may read open/resolved interactions in whose audience they
+participate, plus an adjudicating Terra interaction while the autonomous
+decision is pending. Responses omit private notes and facilitator-only receipt
+fields.
 
 ## Consequences and transition semantics
 
@@ -337,14 +369,31 @@ Every target entity must belong to the world, be active and eligible, and own a
 state root. An effect value must match the mechanic kind; numeric results must
 satisfy configured bounds and step.
 
-The prose is the authoring surface and immutable input to compilation. In a
-`human` world the facilitator writes it; in a `terra` world GPT-5.6 Terra writes
-it from the current table snapshot. GPT-5.6 Luna then returns a strict
-structured interpretation containing an optional selected action/summary and
-zero or more effects. Compilation neither rewrites the prose nor persists a
-Consequence. It runs the existing advisory preview and returns its concrete
-effects so the facilitator can submit those same values to the ordinary
-resolve command.
+The prose is the authoring surface and immutable input to compilation. A human
+facilitator writes it, asks GPT-5.6 Luna for a strict optional selected
+action/summary plus zero or more effects, reviews the advisory preview, and
+chooses whether to resolve.
+
+When Terra is the facilitator there is no human-authored draft or approval
+stage. Any ready current player may ask Terra to continue while the table is
+idle. Terra creates and presents an interaction to every ready active member,
+with every ready non-spectator as an eligible responder and every ready
+controlled entity as context. Responders submit an action or use the ordinary
+action text `I pass.` to pass. After all responders have submitted, a ready
+player may
+ask Terra to decide. That single lifecycle command enters adjudication,
+generates Terra's prose, compiles it through Luna, runs the same deterministic
+preview internally, and invokes the ordinary atomic resolve path. The pacing
+player supplies revisions and an idempotency key but cannot edit, select, or
+approve model output.
+
+A failed Terra decision may be retried while the interaction remains
+adjudicating. Alternatively, the owner-only recovery handoff above can recover
+an open interaction waiting on a responder or an adjudicating interaction after
+a failed model call. It preserves the interaction's Terra authorship,
+withdraws the owner's own action if any, and lets the owner close/adjudicate as
+needed and author a human-attributed resolution. No other handoff may cross an
+unfinished interaction.
 
 Effects execute in author order. A scalar effect observes earlier scalar
 changes to the same logical base input. Status lifecycle effects validate their
@@ -357,10 +406,11 @@ usable result. The application adds database transaction atomicity.
 
 Preview optionally runs the same validation and application logic without
 persisting. It is advisory and does not reserve a revision or need to precede
-resolution. Auto DM compilation uses this same preview path; model output never
-bypasses world scope, mutability, type, bound, status, lifecycle, or revision
-checks. Resolve remains the only path that locks the relevant roots, rechecks
-revisions, applies the plan, and commits state plus history together.
+resolution. Terra's autonomous decision uses this same preview path internally;
+model output never bypasses world scope, mutability, type, bound, status,
+lifecycle, or revision checks. Resolve remains the only path that locks the
+relevant roots, rechecks revisions, applies the plan, and commits state plus
+history together.
 
 ## Resolution receipts and events
 
@@ -370,7 +420,8 @@ Consequence and containing:
 - the public prose summary in the transport field `narrative` and optional
   facilitator-private notes;
 - selected action, if any;
-- resolving facilitator and idempotency key;
+- `facilitator_source`, a nullable human resolver membership, and the
+  idempotency key;
 - ordered requested effects and concrete targets, including each inline apply
   specification and each exact remove-instance target;
 - ordered scalar applications with `changed`, `before`, and `after` values;
@@ -380,6 +431,10 @@ Consequence and containing:
   were not directly targeted;
 - the exact mechanic rules revision used for evaluation;
 - affected state records after commit.
+
+Normally interaction and resolution sources agree. An owner takeover is the
+intentional exception: the interaction remains attributed to Terra and the
+resolution records the human owner, preserving both authorship facts.
 
 Resolution is unique per interaction. A world-scoped idempotency key makes retry
 safe: equivalent reuse returns the existing receipt with `replayed: true`,
@@ -391,8 +446,11 @@ database triggers. A committed Consequence, its state changes, receipt, action
 statuses, interaction lifecycle, and world event share one transaction.
 
 `world_events` is an append-only monotonic cursor used for SSE invalidation. Its
-payload carries event and related resource IDs rather than state snapshots.
-Clients reconnect with their last cursor and reload authoritative resources.
+payload carries `actor_source` (`human` or `terra`), a human membership only
+for human actors, and related resource IDs rather than state snapshots. Clients
+reconnect with their last cursor and reload authoritative resources. The human
+who clicks a pacing command is not represented as the author of Terra's
+interaction, resolution, or events.
 
 ## Revisions and lifecycle rules
 
@@ -400,6 +458,9 @@ Optimistic revisions protect world details, complete controller-set
 replacements through the world table, character-field sets, profiles, entity
 state, interactions, action submissions, and the world mechanic graph. Each
 entity also has a status-set revision.
+The facilitator assignment shares the world revision and normally changes only
+between interactions; the owner recovery handoff is the single unfinished-state
+exception.
 Mechanic mutations advance the world-rules counter. State replacement,
 preview, and resolve carry `expected_rules_revision`; status modifiers authored
 inside a Consequence are validated against that exact mechanic graph, and the
@@ -414,7 +475,9 @@ Archive and final-state rules include:
 - derived mechanics cannot be stored or directly targeted by scalar effects;
 - archived entities reject setup/profile mutation and new live references;
 - a world cannot archive while an interaction is unfinished;
-- resolved/cancelled interactions and applied receipts remain readable history.
+- audience-visible resolved/cancelled interactions and applied receipts remain
+  readable history, including for admitted members whose player seat is not
+  ready.
 
 Configuration and state are normalized relational data. JSON is a transport
 shape, never the canonical persisted aggregate, and no migration seeds a world

@@ -1,5 +1,13 @@
 export type WorldRole = "owner" | "editor" | "player" | "spectator";
 type WorldStatus = "active" | "archived";
+export type CurrentPlayRole = "facilitator" | "player" | "spectator";
+type FacilitatorSource = "human" | "terra";
+
+export interface WorldFacilitator {
+  source: FacilitatorSource;
+  membership_id?: string | undefined;
+  display_name?: string | undefined;
+}
 
 export interface World {
   id: string;
@@ -10,6 +18,8 @@ export interface World {
   revision: number;
   role: WorldRole;
   membership_id: string;
+  facilitator: WorldFacilitator;
+  current_play_role: CurrentPlayRole;
   table_revision: number;
   member_count: number;
   capacity_count: number;
@@ -29,6 +39,7 @@ export interface WorldMember {
   role: WorldRole;
   status: "active" | "left";
   play_status: PlayStatus;
+  current_play_role: CurrentPlayRole;
   revision: number;
   controlled_entity_ids: string[];
   joined_at?: string | undefined;
@@ -298,7 +309,8 @@ interface InteractionResolution {
   action_summary?: string | undefined;
   narrative: string;
   private_notes?: string | undefined;
-  resolved_by_membership_id: string;
+  facilitator_source: FacilitatorSource;
+  resolved_by_membership_id?: string | undefined;
   rules_revision: number;
   effects: ConcreteEffect[];
   applied_effects: ConcreteAppliedEffect[];
@@ -314,7 +326,8 @@ export interface Interaction {
   private_notes?: string | undefined;
   status: InteractionStatus;
   revision: number;
-  created_by_membership_id: string;
+  facilitator_source: FacilitatorSource;
+  created_by_membership_id?: string | undefined;
   audience_membership_ids: string[];
   entity_ids: string[];
   eligible_responder_membership_ids: string[];
@@ -345,10 +358,6 @@ export interface ConsequenceCompilation {
   action_summary?: string | undefined;
   effects: ConcreteEffect[];
   preview: InteractionResolutionResult;
-}
-
-export interface AutoDMProblem {
-  prompt: string;
 }
 
 export interface ActiveStatus {

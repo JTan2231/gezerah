@@ -285,9 +285,9 @@ func loadWorldEntityProfileAccess(
 	}
 
 	editor := member.Role == "owner" || member.Role == "editor"
-	controller := member.Role == "player" && access.Controlled
-	access.CanReadRestricted = editor || controller
-	access.CanEdit = access.CanReadRestricted && member.WorldStatus == "active" && !access.EntityArchived
+	controller := member.Role != "spectator" && access.Controlled
+	access.CanReadRestricted = editor || member.Facilitator || controller
+	access.CanEdit = (editor || controller) && member.WorldStatus == "active" && !access.EntityArchived
 	return access, nil
 }
 

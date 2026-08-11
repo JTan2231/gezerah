@@ -42,7 +42,7 @@ export function PlayWorkspace({
   return (
     <PlayWorkspaceView
       worldName={world.name}
-      roleLabel={world.role}
+      roleLabel={world.current_play_role}
       user={{ displayName: user.display_name, username: user.username }}
       accountControls={
         <AccountControls

@@ -30,7 +30,7 @@ export function NewEntityModal({
   const [saving, setSaving] = useState(false);
   const [issue, setIssue] = useState<RosterModalIssue | null>(null);
   const players = members.filter(
-    (member) => member.status === "active" && member.role === "player",
+    (member) => member.status === "active" && member.role !== "spectator",
   );
   async function submit() {
     setSaving(true);
@@ -87,7 +87,7 @@ export function ManageControllersModal({
   onSaved: () => void;
 }) {
   const players = members.filter(
-    (member) => member.status === "active" && member.role === "player",
+    (member) => member.status === "active" && member.role !== "spectator",
   );
   const initialControllerIDs =
     entity === undefined

@@ -2193,6 +2193,26 @@ textarea {
   gap: 1rem;
 }
 
+.settings-facilitator-note {
+  display: grid;
+  padding: 0.8rem;
+  gap: 0.2rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--paper-soft);
+}
+
+.settings-facilitator-note > span,
+.settings-facilitator-note > small {
+  color: var(--muted);
+  font-size: 0.62rem;
+}
+
+.settings-facilitator-note > strong {
+  color: var(--ink);
+  font-size: 0.76rem;
+}
+
 .form-actions {
   display: flex;
   align-items: center;
@@ -2630,6 +2650,28 @@ textarea {
   gap: 1rem;
 }
 
+.dungeon-master-picker {
+  display: grid;
+  min-width: 170px;
+  gap: 0.2rem;
+}
+
+.dungeon-master-picker > span,
+.dungeon-master-picker > small {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.dungeon-master-picker select {
+  min-height: 36px;
+  padding: 0.4rem 1.8rem 0.4rem 0.55rem;
+  font-size: 0.68rem;
+}
+
+.play-header-issue {
+  padding: 0.75rem clamp(1.4rem, 3vw, 3.2rem) 0;
+}
+
 .table-role {
   display: flex;
   align-items: center;
@@ -2996,6 +3038,12 @@ textarea {
   gap: 0.7rem;
 }
 
+.action-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.55rem;
+}
+
 .play-page .field-label,
 .play-page .field-hint {
   color: var(--muted);
@@ -3069,6 +3117,25 @@ textarea {
 .adjudicate-callout small {
   color: var(--muted);
   font-size: 0.61rem;
+}
+
+.terra-decision-pending {
+  display: grid;
+  min-height: 240px;
+  padding: clamp(1.4rem, 4vw, 2.4rem);
+  align-content: center;
+  justify-items: center;
+  text-align: center;
+}
+
+.terra-decision-pending h3 {
+  color: var(--ink);
+}
+
+.terra-decision-pending > p {
+  max-width: 520px;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .ruling-editor > header > p:last-child {
@@ -4216,6 +4283,7 @@ textarea {
   .copy-field,
   .form-actions,
   .modal-actions,
+  .action-composer-actions,
   .ruling-actions,
   .adjudicate-callout {
     align-items: stretch;
@@ -4262,7 +4330,13 @@ textarea {
   }
 
   .play-header-actions {
+    align-items: stretch;
+    flex-wrap: wrap;
     justify-content: space-between;
+  }
+
+  .dungeon-master-picker {
+    flex: 1 1 100%;
   }
 
   .roster-list {

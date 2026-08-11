@@ -10,21 +10,21 @@ user-authored lists:
 
 - **capacities**: numeric input or derived scores/pools carried by every entity;
 - **capabilities**: Boolean/numeric input or derived skills carried by every entity;
-- **character fields**: ordered text prompts required for each player-controlled
-  entity before it can enter play.
+- **character fields**: ordered text prompts required for each
+  participant-controlled entity before it can enter play.
 
 Entity sheets are generated from active mechanics and expose intrinsic versus
 effective values plus active-status explanations. An entity controlled by an
-active player is presented as that player's character, with a separately loaded
-profile generated from the world's active character fields. Those values never
-become engine state.
+active non-spectator is presented as that participant's character, with a
+separately loaded profile generated from the world's active character fields.
+Those values never become engine state.
 Problems are not a configuration resource in this UI. A facilitator describes
-each problem at the table or asks Terra to propose it, depending on the world's
-DM source. Players offer free-form actions, then a human or Terra writes one
-unstructured account of what transpires. Luna compiles that prose into optional
-typed scalar/status effects and the existing preview before resolve. Applying a
-compiled status defines it in that problem and snapshots it onto each affected
-entity.
+each problem at the table, or Terra creates it when designated as Dungeon
+Master. Players offer free-form actions or pass. A human DM writes one
+unstructured account of what transpires and reviews Luna's compiled preview.
+Terra instead writes, compiles, previews, and resolves its outcome without
+exposing model output for human editing or approval. Applying a compiled status
+defines it in that problem and snapshots it onto each affected entity.
 
 ## Stack and source layout
 
@@ -175,12 +175,12 @@ equivalent local semantic types. Mapping remains close to the feature that uses
 it.
 
 For example, `SettingsWorkspace` receives the authoritative `World` DTO and
-maps `name`, optional `description`, and `dm_source` into a camel-case settings
-draft. `SettingsView` edits that draft and emits save/archive intent. The
-controller adds `expected_revision`, maps `dmSource` back to `dm_source`, sends
-the command, accepts the returned `World` as the new draft baseline, refreshes
-the workspace resource, and performs archive navigation. The view never sees
-the world ID, revision, endpoint, HTTP method, or response DTO.
+maps `name` and optional `description` into a settings draft. `SettingsView`
+edits that draft and emits save/archive intent while displaying the current DM
+read-only. The controller adds `expected_revision`, accepts the returned
+`World` as the new draft baseline, refreshes the workspace resource, and
+performs archive navigation. DM handoff is a separate Play command. The view
+never sees the world ID, revision, endpoint, HTTP method, or response DTO.
 
 ### Errors, permissions, and server authority
 
@@ -202,11 +202,12 @@ serialization.
 Live Play has several independent command lifecycles, so it uses multiple view
 contracts rather than one universal props object. The root controller owns the
 member/entity/mechanic/interaction resources, polling, SSE reconnect, and rules
-revision synchronization. Problem creation, player action composition,
-adjudication/resolution, compiled-effect preview, and history are separate
-presentation islands. Compile/preview/resolve payload construction, exact
-revisions, idempotency, and post-event authoritative reloads remain operational
-even when the corresponding form and history layout are extracted.
+revision synchronization. Facilitator handoff, human problem creation, player
+action composition, human adjudication/resolution, Terra pacing, compiled-effect
+preview, and history are separate presentation islands. Command payload
+construction, exact revisions, idempotency, and post-event authoritative reloads
+remain operational even when the corresponding form and history layout are
+extracted.
 
 ### Styling boundary
 
@@ -233,7 +234,7 @@ Routes are parsed without an external router:
 | `/build/{world-id}/character-fields`            | Required character-field editor.              |
 | `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
 | `/build/{world-id}/people`                      | Members and invite links.                     |
-| `/build/{world-id}/settings`                    | World details, DM source, and lifecycle.      |
+| `/build/{world-id}/settings`                    | World details, current-DM summary, lifecycle. |
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
 Unknown paths render a not-found screen rather than silently opening a library.
@@ -269,7 +270,8 @@ revoking the account's other sessions.
 Both libraries request `GET /api/worlds`. The Build library filters to
 owner/editor memberships, offers world creation, and
 opens the capacity editor. The Play library shows every admitted world and
-emphasizes role, player readiness, table size, and last activity. Neither
+emphasizes the derived play role, player readiness, table size, and last
+activity. Durable access remains available separately inside the table. Neither
 library exposes actions belonging to the other area.
 
 ## Static configuration
@@ -306,10 +308,12 @@ IDs are not a user-facing ontology.
 
 The character-field screen edits the whole ordered requirement set as one
 draft. Each field has a user-authored label, optional guidance, and either
-table or controller/facilitator visibility. Every published field is required; there is
-no per-field required toggle. Publishing uses the current schema revision,
-preserves durable IDs, and warns when adding/removing requirements can change
-existing character readiness.
+`table` or `controllers-and-facilitators` visibility. The latter is currently
+readable by active controllers, durable owners/editors, and the designated
+human facilitator. Every published field is required; there is no per-field
+required toggle. Publishing uses the current schema revision, preserves
+durable IDs, and warns when adding/removing requirements can change existing
+character readiness.
 
 ## People and invite links
 
@@ -329,9 +333,9 @@ The live table has three regions on wide screens: roster, current problem and
 history, and selected entity sheet. It collapses to a single-column flow on
 narrow screens.
 
-An editor/facilitator creates world entities, assigns active player
-controllers, edits profiles, and makes direct setup sheet changes in the
-Build roster. Every active capacity and capability appears automatically on
+An owner/editor creates world entities, assigns active non-spectator
+controllers, edits profiles, and makes direct setup sheet changes in the Build
+roster. Every active capacity and capability appears automatically on
 the generated sheet. Inputs begin at configured defaults; derived values are
 calculated from the current graph. The sheet displays active status chips,
 labels derived fields as calculated, and lists the modifier trail from
@@ -343,47 +347,77 @@ without becoming keys.
 
 The roster labels entities controlled by the current membership as “Your
 character” and otherwise names active controllers. The selected entity panel
-has Character and Sheet tabs. Active controllers and facilitators fill the
+has Character and Sheet tabs. Active controllers and owner/editors fill the
 configured fields and may save partial drafts; other members see only completed
-table-visible prose. Mechanical sheet inputs remain disabled for players.
+table-visible prose. The designated human facilitator can also read restricted
+profile prose. Mechanical sheet inputs remain disabled in Play.
 Profile values are fetched only for the selected entity rather than embedded in
 the roster collection.
 
-A player who has no controlled entity sees a waiting screen. A player whose
-controlled entities are all incomplete sees only the onboarding profile UI,
-including completion counts and every field they are authorized to fill. The
+A current player who has no controlled entity sees a waiting screen. A player
+whose controlled-character setup is incomplete sees only the onboarding
+profile UI, including completion counts and every field they are authorized to
+fill. The
 client does not request live interactions or the event stream until
 `play_status` becomes `ready`; onboarding uses world/entity/profile resources.
 If requirements later make the player incomplete, stream reconnect also
 triggers an authoritative reload.
 
-The interaction lifecycle is:
+Archived worlds bypass player-seat onboarding so every admitted member can
+read the frozen table and any audience-visible resolved/cancelled history. All
+archived Play controls remain read-only.
 
-1. facilitator clicks **New problem** and writes the moment in free text, or a
-   `terra` world can generate a draft from the current world snapshot;
-2. the audience is automatically every active member whose play status is
-   ready; optional active uncontrolled or ready controlled context entities and
-   eligible player responders are selected;
-3. players offer or withdraw one free-form action while the problem is open,
-   optionally attributing it to one of their ready controlled entities;
-4. facilitator closes submissions and enters private adjudication;
-5. in a `human` world the facilitator writes **What transpires?** as
-   unstructured prose; in a `terra` world Terra writes it from the situation,
-   submitted actions, and world snapshot;
-6. Luna compiles that exact prose into an optional selected action/summary and
-   zero or more concrete effects, then the server runs the existing advisory
-   preview with the current interaction and mechanic rules revisions;
-7. the UI shows the preview rather than an effect authoring form. Editing the
-   human prose or observing a changed table/rules snapshot invalidates it and
-   requires compilation again;
-8. resolve the compiled prose/effects; the existing command atomically stores
-   base state, status instances/snapshots with source problem, resolution, and
-   effect IDs, the receipt, lifecycle change, and event cursor;
-9. resolved Consequence summary, direct applications, and effective
-   before/after changes appear in world history.
+`play_status` remains the underlying player-seat readiness while that
+membership is facilitator. The facilitator can enter Play regardless, and a
+handoff confirmation warns whether they will return to a ready seat or to
+character setup. Spectators are always ready and read-only.
 
-There is deliberately no problem-template catalog, problem editor, or
-pre-authored problem route.
+The Play header names the current Dungeon Master, the viewer's derived play
+role, and their durable world access. Between problems, an owner/editor or the
+current human facilitator can use the DM picker to assign another active
+non-spectator or Terra. The control is unavailable while an interaction is
+unfinished; Settings only displays the assignment. The sole recovery exception
+is a **Take over** button for an owner while a Terra interaction is open or
+adjudicating.
+
+With a human DM, the lifecycle is:
+
+1. the designated facilitator clicks **New problem** and writes the moment;
+2. the UI audience is every active membership whose `play_status` is ready,
+   while the facilitator chooses optional eligible current-player responders
+   and context entities;
+3. responders offer or withdraw one action, optionally attributed to a ready
+   controlled entity;
+4. the facilitator closes submissions and enters private adjudication;
+5. the facilitator writes **What transpires?**, asks Luna to compile an
+   optional selected action/summary and effects, and reviews the advisory
+   preview;
+6. the facilitator resolves, atomically storing state/status changes, source
+   provenance, the immutable receipt, lifecycle change, and event cursor.
+
+With Terra as DM, the human controls are pacing only:
+
+1. while the table is idle, any ready current player clicks **Ask Terra to
+   continue**;
+2. Terra creates and presents a problem to all ready active memberships; all
+   ready non-spectators are responders and ready controlled entities are
+   context;
+3. every responder submits an action or clicks **Pass**. The UI shows acted-or-
+   passed progress and enables the decision only after every response arrives;
+4. any ready current player asks Terra to decide. The UI moves to a Terra
+   pending state while the server generates prose, compiles it with Luna,
+   previews it internally, and resolves it;
+5. the pacing player cannot edit or approve the narrative, selection, notes, or
+   effects. On a provider failure the client reloads the adjudicating
+   interaction and offers a retry with the same idempotency key. As an explicit
+   recovery path, the owner may confirm **Take over** during the open or
+   adjudicating interaction; their own submitted action is withdrawn. An open
+   problem exposes the human close/adjudicate flow, while an adjudicating one
+   opens the human-DM ruling UI directly.
+
+Resolved and cancelled history labels whether the facilitator was the named
+human or Terra. There is deliberately no problem-template catalog, problem
+editor, pre-authored problem route, or Terra output approval screen.
 
 `useWorldEvents` holds the authorized SSE stream and reconnects with its last
 cursor when the connection ends. Event data is treated as invalidation; the

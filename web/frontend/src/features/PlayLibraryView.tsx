@@ -116,7 +116,7 @@ export function PlayLibraryView({
               </button>
               <dl className="world-stats play-world-stats">
                 <div>
-                  <dt>Your role</dt>
+                  <dt>Play role</dt>
                   <dd>{world.roleLabel}</dd>
                 </div>
                 <div>

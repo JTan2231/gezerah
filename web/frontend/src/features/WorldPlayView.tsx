@@ -49,13 +49,54 @@ export function WorldPlayView({
       <header className="play-header">
         <div>
           <h1>{model.worldName}</h1>
+          <p>Dungeon Master: {model.dungeonMaster.name}</p>
         </div>
         <div className="play-header-actions">
+          {model.dungeonMaster.canChange ? (
+            <label className="dungeon-master-picker">
+              <span>Dungeon Master</span>
+              <select
+                value={model.dungeonMaster.selectedValue}
+                disabled={model.dungeonMaster.changing}
+                onChange={(event) =>
+                  actions.changeFacilitator(event.currentTarget.value)
+                }
+              >
+                {model.dungeonMaster.choices.map((choice) => (
+                  <option key={choice.value} value={choice.value}>
+                    {choice.name}
+                  </option>
+                ))}
+              </select>
+              {model.dungeonMaster.changing ? (
+                <small role="status">Handing off…</small>
+              ) : null}
+            </label>
+          ) : (
+            <div className="table-role dungeon-master-role">
+              <Avatar name={model.dungeonMaster.name} size="small" />
+              <span>
+                <small>Dungeon Master</small>
+                <strong>{model.dungeonMaster.name}</strong>
+              </span>
+            </div>
+          )}
+          {model.dungeonMaster.canTakeOver ? (
+            <button
+              className="button button-ink"
+              type="button"
+              disabled={model.dungeonMaster.changing}
+              onClick={actions.takeOverFacilitation}
+            >
+              {model.dungeonMaster.changing ? "Taking over…" : "Take over"}
+            </button>
+          ) : null}
           <div className="table-role">
             <Avatar name={model.currentUserName} size="small" />
             <span>
-              <small>Role</small>
+              <small>Your role</small>
               <strong>{model.roleLabel}</strong>
+              <small>World access: {model.accessLabel}</small>
             </span>
           </div>
           {model.canCreateProblem ? (
@@ -70,6 +111,11 @@ export function WorldPlayView({
           ) : null}
         </div>
       </header>
+      {model.dungeonMaster.issue === null ? null : (
+        <div className="play-header-issue">
+          <ErrorMessage error={model.dungeonMaster.issue} />
+        </div>
+      )}
 
       <div className="play-grid">
         <aside className="roster-panel">
@@ -144,7 +190,12 @@ export function WorldPlayView({
             <IdleTableView
               facilitator={model.facilitator}
               canCreate={model.canCreateProblem}
+              terraFacilitated={model.idle.terraFacilitated}
+              canContinue={model.idle.canContinue}
+              continuing={model.idle.continuing}
+              issue={model.idle.issue}
               onCreate={actions.createProblem}
+              onContinue={actions.continueWithTerra}
             />
           )}
 
@@ -186,11 +237,30 @@ export function CharacterOnboardingView({
             {model.currentUserName}, complete all required fields for a
             controlled character before entering Play.
           </p>
+          <p>Dungeon Master: {model.dungeonMasterName}</p>
         </div>
-        <span className="character-status status-setup">
-          {model.statusLabel}
-        </span>
+        <div className="play-header-actions">
+          <span className="character-status status-setup">
+            {model.statusLabel}
+          </span>
+          {model.canBecomeFacilitator ? (
+            <button
+              className="button button-ink"
+              type="button"
+              disabled={model.changingFacilitator}
+              onClick={actions.becomeFacilitator}
+            >
+              {model.changingFacilitator
+                ? "Taking over…"
+                : model.facilitatorActionLabel}
+            </button>
+          ) : null}
+        </div>
       </header>
+
+      {model.facilitatorIssue === null ? null : (
+        <ErrorMessage error={model.facilitatorIssue} />
+      )}
 
       {model.loading && model.characters.length === 0 ? (
         <LoadingState label="Loading characters" />
@@ -244,23 +314,51 @@ export function CharacterOnboardingView({
 function IdleTableView({
   facilitator,
   canCreate,
+  terraFacilitated,
+  canContinue,
+  continuing,
+  issue,
   onCreate,
+  onContinue,
 }: {
   facilitator: boolean;
   canCreate: boolean;
+  terraFacilitated: boolean;
+  canContinue: boolean;
+  continuing: boolean;
+  issue: WorldPlayViewModel["idle"]["issue"];
   onCreate: () => void;
+  onContinue: () => void;
 }) {
   return (
     <section className="idle-table">
       <h2>No active problem</h2>
       <p>
-        {facilitator && !canCreate
-          ? "This world is archived."
-          : facilitator
-            ? "Create a problem to begin."
-            : "A facilitator can create the next problem."}
+        {terraFacilitated && continuing
+          ? "Terra is preparing the next problem from the current world and table history."
+          : terraFacilitated
+            ? "Terra Auto DM is running the table. A ready player can ask Terra to continue."
+            : facilitator && !canCreate
+              ? "This world is archived."
+              : facilitator
+                ? "Create a problem to begin."
+                : "A facilitator can create the next problem."}
       </p>
-      {canCreate ? (
+      {issue === null ? null : <ErrorMessage error={issue} />}
+      {terraFacilitated && canContinue ? (
+        <button
+          className="button button-play"
+          type="button"
+          disabled={continuing}
+          onClick={onContinue}
+        >
+          {continuing
+            ? "Terra is preparing…"
+            : issue === null
+              ? "Ask Terra to continue"
+              : "Try Terra again"}
+        </button>
+      ) : canCreate ? (
         <button className="button button-play" type="button" onClick={onCreate}>
           New problem
         </button>
@@ -336,7 +434,7 @@ function HistoryCardView({ item }: { item: HistoryCardViewModel }) {
     return (
       <article className="history-card history-cancelled">
         <header>
-          <span>Cancelled</span>
+          <span>Cancelled · {item.facilitatorLabel}</span>
           <time>{item.occurredLabel}</time>
         </header>
         <h3>{item.title}</h3>
@@ -347,7 +445,7 @@ function HistoryCardView({ item }: { item: HistoryCardViewModel }) {
   return (
     <article className="history-card">
       <header>
-        <span>Resolved</span>
+        <span>Resolved · {item.facilitatorLabel}</span>
         <time>{item.occurredLabel}</time>
       </header>
       <h3>{item.title}</h3>

@@ -153,7 +153,7 @@ func TestWorldEventStreamChunkOverridesGlobalWriteTimeout(t *testing.T) {
 	}
 }
 
-func TestVisibleWorldEventsAudiencePolicyIncludesMarkedInvalidation(t *testing.T) {
+func TestVisibleWorldEventsAudiencePolicyIncludesTerraAdjudicationAndInvalidation(t *testing.T) {
 	t.Parallel()
 
 	got := strings.Join(strings.Fields(visibleWorldEventsAudiencePolicyQuery), " ")
@@ -167,6 +167,14 @@ func TestVisibleWorldEventsAudiencePolicyIncludesMarkedInvalidation(t *testing.T
 		)
 		and (
 			interaction.status in ('open', 'resolved')
+			or (
+				interaction.status = 'adjudicating'
+				and exists (
+					select 1 from worlds assigned_world
+					where assigned_world.id = interaction.world_id
+						and assigned_world.dm_source = 'terra'
+				)
+			)
 			or event.invalidates_interaction_audience
 		)`), " ")
 	if got != want {
@@ -216,6 +224,7 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 			event := worldEventResponse{
 				ID:                42,
 				Type:              eventType,
+				ActorSource:       terraFacilitatorSource,
 				InteractionID:     &interactionID,
 				SubmissionID:      &submissionID,
 				ResolutionID:      &resolutionID,
@@ -229,6 +238,9 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 			}
 			if got.Type != interactionFeedInvalidatedEventType {
 				t.Fatalf("type = %q, want %q", got.Type, interactionFeedInvalidatedEventType)
+			}
+			if got.ActorSource != terraFacilitatorSource {
+				t.Fatalf("actor source = %q, want Terra attribution", got.ActorSource)
 			}
 			if got.InteractionID != nil || got.SubmissionID != nil || got.ResolutionID != nil || got.ActorMembershipID != nil {
 				t.Fatalf("audience invalidation leaked resource identifiers: %#v", got)

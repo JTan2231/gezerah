@@ -132,12 +132,20 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
     ]);
 
     await test.step("CCY-V01/stale-world-details-recovery", async () => {
+      const editorFacilitatorNote = editorPage.locator(
+        ".settings-facilitator-note",
+      );
+      await expect(editorFacilitatorNote).toContainText(labels.owner);
+      await expect(editorFacilitatorNote).toContainText(
+        "Hand off the Dungeon Master role from Play between problems.",
+      );
+      await expect(editorPage.getByLabel("DM source")).toHaveCount(0);
+
       await ownerPage
         .getByLabel("Description")
         .fill(`Owner stale description ${unique}`);
       const editorDescription = `Editor winning description ${unique}`;
       await editorPage.getByLabel("Description").fill(editorDescription);
-      await editorPage.getByLabel("DM source").selectOption("terra");
       await editorPage.getByRole("button", { name: "Save details" }).click();
       await expect(editorPage.getByText("Up to date")).toBeVisible();
 
@@ -155,7 +163,9 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         editorDescription,
       );
-      await expect(ownerPage.getByLabel("DM source")).toHaveValue("terra");
+      await expect(
+        ownerPage.locator(".settings-facilitator-note"),
+      ).toContainText(labels.owner);
 
       const retriedDescription = `Owner intentional retry ${unique}`;
       await ownerPage.getByLabel("Description").fill(retriedDescription);

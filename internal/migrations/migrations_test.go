@@ -108,6 +108,34 @@ func TestAutoDMMigrationContract(t *testing.T) {
 	}
 }
 
+func TestFacilitatorAssignmentMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("006_facilitator_assignment.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"add column facilitator_membership_id uuid",
+		"worlds_facilitator_assignment_shape",
+		"dm_source = 'human' and facilitator_membership_id is not null",
+		"dm_source = 'terra' and facilitator_membership_id is null",
+		"worlds_facilitator_membership_fk",
+		"deferrable initially deferred",
+		"add column facilitator_source text not null default 'human'",
+		"interactions_facilitator_actor_shape",
+		"interaction_resolutions_created_actor_shape",
+		"add column actor_source text not null default 'human'",
+		"world_events_actor_shape",
+		"'facilitator-changed'",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing facilitator assignment contract fragment %q", fragment)
+		}
+	}
+}
+
 func TestInteractionAudienceInvalidationMigrationContract(t *testing.T) {
 	t.Parallel()
 

@@ -731,6 +731,7 @@ class ScenarioRuntime {
       "submission_id",
       "resolution_id",
       "actor_membership_id",
+      "actor_source",
       "created_at",
     ]);
     for (const { actorId, events } of projections) {

@@ -3,10 +3,11 @@
 dnd is a collaborative world editor and live play table. Authors define
 the capacities and capabilities that matter in a world, create people and other
 stateful subjects from that vocabulary, and invite the table with expiring
-links. During play, a facilitator presents problems in the moment, players
-offer free-form actions, and the facilitator commits a Consequence with one
-prose summary plus optional ordered typed effects. Problems are never required
-as advance configuration.
+links. During play, exactly one designated Dungeon Master presents problems in
+the moment, players offer free-form actions, and the Dungeon Master commits a
+Consequence with one prose summary plus optional ordered typed effects. The DM
+may be a human participant or Terra. Problems are never required as advance
+configuration.
 
 The implementation is backed by a configurable typed state-transition engine.
 World authors define writable input mechanics and derived mechanics connected
@@ -15,8 +16,9 @@ inside problem Consequences during play. Status modifiers are snapshotted onto
 entity instances and layer over calculated state. The engine has no built-in
 world ontology, entity classes, privileged configured keys, or seed vocabulary.
 Real users and world memberships are separate from the fictional subjects they
-control; facilitator authority comes from owner/editor membership, not a
-special mechanic or configured key.
+control. Durable owner/editor/player/spectator access and the current
+facilitator/player/spectator play role are separate: handing the table to Terra
+or another participant changes play responsibility without changing access.
 
 ## Documentation
 
@@ -51,9 +53,12 @@ the user to sign up or sign in when needed. Accounts use a username and
 password; no email address is required. **Build** defines input and
 derived capacities/capabilities, character requirements, roster setup, people,
 invitations, and world settings. **Play** is the separate live table: complete
-player onboarding, present an ad-hoc problem, collect player actions, author a
-Consequence with one prose summary and ordered scalar/status effects, optionally
-run an advisory preview, then commit an immutable resolution receipt.
+player onboarding, designate a human or Terra as Dungeon Master between
+problems, present an ad-hoc problem, collect player actions, and commit an
+immutable Consequence receipt. A human DM authors the prose and may preview
+Luna-compiled effects. When Terra is DM, ready players only pace the table;
+Terra creates and resolves the interaction without a human edit or approval
+step.
 
 Useful process commands:
 

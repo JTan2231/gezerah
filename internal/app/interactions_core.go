@@ -36,6 +36,14 @@ const (
 				)
 				and (
 					interaction.status in ('open', 'resolved')
+					or (
+						interaction.status = 'adjudicating'
+						and exists (
+							select 1 from worlds assigned_world
+							where assigned_world.id = interaction.world_id
+								and assigned_world.dm_source = 'terra'
+						)
+					)
 					or event.invalidates_interaction_audience
 				)`
 )
@@ -68,7 +76,7 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	facilitator := interactionFacilitator(member.Role)
+	facilitator := member.Facilitator
 	rows, err := tx.Query(r.Context(), `
 		select interaction.id::text
 		from interactions interaction
@@ -76,7 +84,17 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 			and (
 				$2
 				or (
-					interaction.status in ('open', 'resolved')
+					(
+						interaction.status in ('open', 'resolved')
+						or (
+							interaction.status = 'adjudicating'
+							and exists (
+								select 1 from worlds assigned_world
+								where assigned_world.id = interaction.world_id
+									and assigned_world.dm_source = 'terra'
+							)
+						)
+					)
 					and exists (
 						select 1
 						from interaction_audience_members audience
@@ -152,7 +170,7 @@ func (s *Server) handleGetInteraction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	item, err := loadInteractionResponse(
-		r.Context(), tx, worldID, interactionID, interactionFacilitator(member.Role),
+		r.Context(), tx, worldID, interactionID, member.Facilitator,
 	)
 	if err != nil {
 		handleAppError(w, err)
@@ -200,7 +218,7 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	if !interactionFacilitator(actor.Role) {
+	if !actor.Facilitator {
 		handleAppError(w, facilitatorRequired())
 		return
 	}
@@ -295,7 +313,7 @@ func (s *Server) handlePutInteraction(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	if !interactionFacilitator(actor.Role) {
+	if !actor.Facilitator {
 		handleAppError(w, facilitatorRequired())
 		return
 	}
@@ -419,7 +437,7 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	if !interactionFacilitator(actor.Role) {
+	if !actor.Facilitator {
 		handleAppError(w, facilitatorRequired())
 		return
 	}
@@ -559,7 +577,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
-	if member.Role != "player" {
+	if member.Role == "spectator" || member.Facilitator {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
 			Message: "only players may submit actions",
@@ -755,7 +773,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 		handleAppError(w, err)
 		return
 	}
-	if member.Role != "player" {
+	if member.Role == "spectator" || member.Facilitator {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
 			Message: "only players may withdraw actions",
@@ -982,13 +1000,15 @@ func loadInteractionResponse(
 	var privateNotes *string
 	if err := db.QueryRow(ctx, `
 		select id::text, world_id::text, title, prompt, private_notes, status, revision,
-			created_by_membership_id::text, presented_at, resolved_at, cancelled_at,
+			facilitator_source, created_by_membership_id::text,
+			presented_at, resolved_at, cancelled_at,
 			created_at, updated_at
 		from interactions
 		where world_id = $1 and id = $2`, worldID, interactionID,
 	).Scan(
 		&result.ID, &result.WorldID, &result.Title, &result.Prompt, &privateNotes,
-		&result.Status, &result.Revision, &result.CreatedByMembershipID,
+		&result.Status, &result.Revision, &result.FacilitatorSource,
+		&result.CreatedByMembershipID,
 		&result.PresentedAt, &result.ResolvedAt, &result.CancelledAt,
 		&result.CreatedAt, &result.UpdatedAt,
 	); err != nil {
@@ -1176,22 +1196,27 @@ func validateInteractionRequest(
 	}
 
 	memberRoles := make(map[string]string)
+	memberFacilitators := make(map[string]bool)
 	rows, err := tx.Query(ctx, `
-		select id::text, role
-		from world_memberships
-		where world_id = $1 and status = 'active'
-		order by id
-		for share`, worldID)
+		select membership.id::text, membership.role,
+			(world.dm_source = 'human' and world.facilitator_membership_id = membership.id)
+		from world_memberships membership
+		join worlds world on world.id = membership.world_id
+		where membership.world_id = $1 and membership.status = 'active'
+		order by membership.id
+		for share of membership, world`, worldID)
 	if err != nil {
 		return interactionAudience{}, nil, err
 	}
 	for rows.Next() {
 		var membershipID, role string
-		if err := rows.Scan(&membershipID, &role); err != nil {
+		var facilitator bool
+		if err := rows.Scan(&membershipID, &role, &facilitator); err != nil {
 			rows.Close()
 			return interactionAudience{}, nil, err
 		}
 		memberRoles[membershipID] = role
+		memberFacilitators[membershipID] = facilitator
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -1199,7 +1224,7 @@ func validateInteractionRequest(
 	}
 	rows.Close()
 	for membershipID, role := range memberRoles {
-		if role != "player" {
+		if role == "spectator" || memberFacilitators[membershipID] {
 			continue
 		}
 		playStatus, err := membershipPlayStatus(ctx, tx, worldID, membershipID, role, "active")
@@ -1230,7 +1255,7 @@ func validateInteractionRequest(
 	}
 	for index, membershipID := range request.EligibleResponderMembershipIDs {
 		role, exists := memberRoles[membershipID]
-		if !exists || role != "player" {
+		if !exists || role == "spectator" || memberFacilitators[membershipID] {
 			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "active play-ready player membership is required"
 			continue
 		}
@@ -1373,11 +1398,11 @@ func loadVisibleWorldEvents(
 	member authorizedWorldMember,
 	after int64,
 ) ([]worldEventResponse, error) {
-	facilitator := interactionFacilitator(member.Role)
+	facilitator := member.Facilitator
 	rows, err := db.Query(ctx, `
 		select event.id, event.event_type, event.interaction_id::text,
 			event.submission_id::text, event.resolution_id::text,
-			event.actor_membership_id::text, event.created_at,
+			event.actor_membership_id::text, event.actor_source, event.created_at,
 			event.invalidates_interaction_audience
 		from world_events event
 		left join interactions interaction
@@ -1402,7 +1427,7 @@ func loadVisibleWorldEvents(
 		var invalidatesInteractionAudience bool
 		if err := rows.Scan(
 			&item.ID, &item.Type, &item.InteractionID, &item.SubmissionID,
-			&item.ResolutionID, &item.ActorMembershipID, &item.CreatedAt,
+			&item.ResolutionID, &item.ActorMembershipID, &item.ActorSource, &item.CreatedAt,
 			&invalidatesInteractionAudience,
 		); err != nil {
 			return nil, err
@@ -1439,6 +1464,9 @@ func requirePlayReadyWorldMember(
 	if err != nil {
 		return member, err
 	}
+	if member.WorldStatus == "archived" {
+		return member, nil
+	}
 	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
 		return member, err
 	}
@@ -1450,7 +1478,7 @@ func requireInteractionMemberReadiness(
 	db queryer,
 	member authorizedWorldMember,
 ) error {
-	if member.Role != "player" {
+	if member.Role == "spectator" || member.Facilitator {
 		return nil
 	}
 	playStatus, err := membershipPlayStatus(
@@ -1482,14 +1510,15 @@ func lockInteractionWorldMember(
 	locked := authorizedWorldMember{}
 	err = tx.QueryRow(ctx, `
 		select membership.id::text, membership.world_id::text, membership.user_id::text,
-			membership.role, membership.status, world.status
+			membership.role, membership.status, world.status,
+			(world.dm_source = 'human' and world.facilitator_membership_id = membership.id)
 		from world_memberships membership
 		join worlds world on world.id = membership.world_id
 		where membership.id = $1 and membership.world_id = $2 and membership.user_id = $3
 		for share of membership, world`, member.ID, worldID, member.UserID,
 	).Scan(
 		&locked.ID, &locked.WorldID, &locked.UserID,
-		&locked.Role, &locked.Status, &locked.WorldStatus,
+		&locked.Role, &locked.Status, &locked.WorldStatus, &locked.Facilitator,
 	)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && locked.Status != "active") {
 		return locked, &statusError{
@@ -1515,7 +1544,7 @@ func requireInteractionVisibility(
 	worldID, interactionID string,
 	member authorizedWorldMember,
 ) error {
-	if interactionFacilitator(member.Role) {
+	if member.Facilitator {
 		var exists bool
 		if err := db.QueryRow(ctx, `
 			select exists(
@@ -1537,7 +1566,17 @@ func requireInteractionVisibility(
 				on audience.interaction_id = interaction.id
 				and audience.world_id = interaction.world_id
 			where interaction.world_id = $1 and interaction.id = $2
-				and interaction.status in ('open', 'resolved')
+				and (
+					interaction.status in ('open', 'resolved')
+					or (
+						interaction.status = 'adjudicating'
+						and exists (
+							select 1 from worlds assigned_world
+							where assigned_world.id = interaction.world_id
+								and assigned_world.dm_source = 'terra'
+						)
+					)
+				)
 				and audience.membership_id = $3
 		)`, worldID, interactionID, member.ID).Scan(&visible); err != nil {
 		return err
@@ -1600,10 +1639,6 @@ func interactionStringSlicesEqual(left, right []string) bool {
 		}
 	}
 	return true
-}
-
-func interactionFacilitator(role string) bool {
-	return role == "owner" || role == "editor"
 }
 
 func facilitatorRequired() error {

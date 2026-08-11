@@ -94,7 +94,7 @@ export function PeopleView({
                   <option value="player">Player — respond in play</option>
                   <option value="spectator">Spectator — watch the table</option>
                   <option value="editor">
-                    Editor — configure and facilitate
+                    Editor — configure and assign the DM
                   </option>
                 </select>
               </Field>

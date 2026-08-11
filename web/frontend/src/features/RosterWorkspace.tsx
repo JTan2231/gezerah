@@ -178,7 +178,7 @@ function rosterSubtitle(
   const controllers = memberships.filter(
     (membership) =>
       membership.status === "active" &&
-      membership.role === "player" &&
+      membership.role !== "spectator" &&
       membership.controlled_entity_ids.includes(entity.id),
   );
   if (controllers.length === 0) return "Uncontrolled entity";

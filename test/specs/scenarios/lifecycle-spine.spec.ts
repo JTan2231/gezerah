@@ -508,12 +508,38 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await expect(
           editorPage.getByRole("heading", { name: labels.world }),
         ).toBeVisible();
+        const facilitatorHandoff = editorPage.waitForResponse(
+          (response) =>
+            response.request().method() === "PUT" &&
+            new URL(response.url()).pathname.endsWith("/facilitator") &&
+            response.ok(),
+        );
+        const facilitatorRefresh = editorPage.waitForResponse((response) => {
+          const pathname = new URL(response.url()).pathname;
+          return (
+            response.request().method() === "GET" &&
+            pathname.match(/^\/api\/worlds\/[^/]+$/) !== null &&
+            response.ok()
+          );
+        });
+        editorPage.once("dialog", async (dialog) => dialog.accept());
+        await editorPage
+          .getByRole("button", { name: "Become Dungeon Master" })
+          .click();
+        await Promise.all([facilitatorHandoff, facilitatorRefresh]);
         await expect(
           editorPage
             .locator(".play-header-actions")
             .getByRole("button", { name: "New problem" }),
         ).toBeVisible();
-        await expect(editorPage.getByText("Facilitator")).toBeVisible();
+        await expect(
+          editorPage
+            .locator(".play-header-actions .table-role")
+            .getByText("Facilitator", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          editorPage.getByText("World access: Editor"),
+        ).toBeVisible();
       },
       async () => {
         await expect(
@@ -521,7 +547,14 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             .locator(".play-header-actions")
             .getByRole("button", { name: "New problem" }),
         ).toBeVisible();
-        await expect(editorPage.getByText("Facilitator")).toBeVisible();
+        await expect(
+          editorPage
+            .locator(".play-header-actions .table-role")
+            .getByText("Facilitator", { exact: true }),
+        ).toBeVisible();
+        await expect(
+          editorPage.getByText("World access: Editor"),
+        ).toBeVisible();
       },
     );
   });
@@ -938,10 +971,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await expect(
           ownerPage.getByText(labels.secondStatusDescription),
         ).toBeVisible();
-        await expect(ownerPage.locator(".history-card")).toHaveCount(3);
-        await expect(ownerPage.locator(".history-card").first()).toContainText(
-          `${labels.entity}: removed ${labels.status}`,
-        );
+        await expect(ownerPage.locator(".history-card")).toHaveCount(0);
 
         await Promise.all(
           [editorPage, playerPage, spectatorPage].map(async (actorPage) => {
@@ -961,7 +991,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         );
       },
       async () => {
-        await expect(ownerPage.locator(".history-card")).toHaveCount(3);
+        await expect(ownerPage.locator(".history-card")).toHaveCount(0);
         await expect(spectatorPage.locator(".history-card")).toHaveCount(3);
         await expect(
           ownerPage.getByRole("button", { name: "New problem" }),
@@ -1131,7 +1161,14 @@ async function presentProblem(
   await dialog.getByLabel("Title").fill(title);
   await dialog.getByLabel("Description").fill(prompt);
   await dialog.getByRole("checkbox", { name: entityName }).check();
+  const created = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname.endsWith("/interactions") &&
+      response.ok(),
+  );
   await dialog.getByRole("button", { name: "Create problem" }).click();
+  await created;
   await expect(page.getByText(prompt, { exact: true })).toBeVisible();
 }
 

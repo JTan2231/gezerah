@@ -8,7 +8,6 @@ import {
   worldPath,
 } from "../api/client";
 import type {
-  AutoDMProblem,
   ConsequenceCompilation,
   Interaction,
   InteractionAction,
@@ -39,7 +38,11 @@ import type {
   RulingPreviewViewModel,
   SubmittedActionViewModel,
 } from "./WorldPlayViewModel";
-import { NewProblemView, OpenProblemView } from "./WorldProblemView";
+import {
+  NewProblemView,
+  OpenProblemView,
+  TerraDecisionPendingView,
+} from "./WorldProblemView";
 import { RulingView } from "./WorldRulingView";
 
 export function WorldPlay({
@@ -51,10 +54,11 @@ export function WorldPlay({
   user: User;
   onWorldChanged: () => void;
 }) {
-  const playReady = world.role !== "player" || world.play_status === "ready";
-  const members = useCollection<WorldMember>(
-    playReady ? worldPath(world.id, "members") : null,
-  );
+  const playReady =
+    world.status === "archived" ||
+    world.current_play_role !== "player" ||
+    world.play_status === "ready";
+  const members = useCollection<WorldMember>(worldPath(world.id, "members"));
   const entities = useCollection<WorldEntity>(worldPath(world.id, "entities"));
   const mechanics = useResource<WorldMechanicCollection>(
     playReady ? worldPath(world.id, "mechanics") : null,
@@ -63,6 +67,14 @@ export function WorldPlay({
     playReady ? worldPath(world.id, "interactions") : null,
   );
   const [creatingProblem, setCreatingProblem] = useState(false);
+  const [changingFacilitator, setChangingFacilitator] = useState(false);
+  const [facilitatorError, setFacilitatorError] = useState<ApiError | null>(
+    null,
+  );
+  const [continuingWithTerra, setContinuingWithTerra] = useState(false);
+  const [terraContinueError, setTerraContinueError] = useState<ApiError | null>(
+    null,
+  );
   const [profileRefreshToken, setProfileRefreshToken] = useState(0);
   const [selectedEntityId, setSelectedEntityId] = useState<
     string | undefined
@@ -93,6 +105,90 @@ export function WorldPlay({
   );
   useWorldEvents(playReady ? world.id : undefined, refresh);
 
+  async function changeFacilitator(value: string) {
+    const currentValue =
+      world.facilitator.source === "terra"
+        ? "terra"
+        : `human:${world.facilitator.membership_id ?? ""}`;
+    if (value === currentValue) return;
+    const terra = value === "terra";
+    const membershipID = terra ? undefined : value.replace(/^human:/, "");
+    const currentMember = members.items.find(
+      (item) => item.id === world.membership_id,
+    );
+    const targetMember = members.items.find((item) => item.id === membershipID);
+    const emergencyTakeover =
+      !terra &&
+      world.facilitator.source === "terra" &&
+      membershipID === world.membership_id &&
+      interactions.items.some((item) => item.status === "adjudicating");
+    const possibleTerraTakeover =
+      !terra &&
+      world.facilitator.source === "terra" &&
+      membershipID === world.membership_id &&
+      world.role === "owner";
+    const returningToSeat =
+      world.current_play_role === "facilitator"
+        ? currentMember?.play_status === "ready"
+          ? " Your player seat is ready when the handoff completes."
+          : " You’ll enter character setup when the handoff completes."
+        : "";
+    const confirmation =
+      emergencyTakeover || possibleTerraTakeover
+        ? "Take over from Terra? If a problem is active, your submitted action will be withdrawn and you will decide the outcome as Dungeon Master."
+        : terra
+          ? `Hand the table to Terra Auto DM? Terra will author and resolve the next problem.${returningToSeat}`
+          : `${targetMember?.display_name ?? "This member"} will become the Dungeon Master and their player seat will pause.${returningToSeat}`;
+    if (!window.confirm(confirmation)) return;
+    setChangingFacilitator(true);
+    setFacilitatorError(null);
+    try {
+      await api<World>(worldPath(world.id, "facilitator"), {
+        method: "PUT",
+        ...jsonBody({
+          source: terra ? "terra" : "human",
+          ...(membershipID === undefined
+            ? {}
+            : { membership_id: membershipID }),
+          expected_revision: world.revision,
+        }),
+      });
+      setCreatingProblem(false);
+      refresh();
+    } catch (reason) {
+      setFacilitatorError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(0, "unknown", "Could not hand off the table."),
+      );
+    } finally {
+      setChangingFacilitator(false);
+    }
+  }
+
+  async function continueWithTerra() {
+    setContinuingWithTerra(true);
+    setTerraContinueError(null);
+    try {
+      await api<Interaction>(worldPath(world.id, "auto-dm/continue"), {
+        method: "POST",
+      });
+      refresh();
+    } catch (reason) {
+      setTerraContinueError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(
+              0,
+              "unknown",
+              "Terra could not prepare the next problem.",
+            ),
+      );
+    } finally {
+      setContinuingWithTerra(false);
+    }
+  }
+
   useEffect(() => {
     const mechanicsRevision = mechanics.value?.revision;
     if (
@@ -121,11 +217,12 @@ export function WorldPlay({
   useEffect(() => {
     if (playReady) return undefined;
     const timer = window.setInterval(() => {
+      reloadMembers();
       reloadEntities();
       onWorldChanged();
     }, 3000);
     return () => window.clearInterval(timer);
-  }, [onWorldChanged, playReady, reloadEntities]);
+  }, [onWorldChanged, playReady, reloadEntities, reloadMembers]);
 
   if (!playReady)
     return (
@@ -133,10 +230,32 @@ export function WorldPlay({
         world={world}
         user={user}
         entities={entities.items}
-        loading={entities.loading}
-        error={entities.error}
-        onRetry={entities.reload}
+        controlledEntityIDs={
+          members.items.find((item) => item.id === world.membership_id)
+            ?.controlled_entity_ids ?? []
+        }
+        loading={entities.loading || members.loading}
+        error={entities.error ?? members.error}
+        onRetry={() => {
+          entities.reload();
+          members.reload();
+        }}
         refreshToken={profileRefreshToken}
+        dungeonMasterName={
+          world.facilitator.display_name ??
+          (world.facilitator.source === "terra"
+            ? "Terra Auto DM"
+            : "Human facilitator")
+        }
+        canBecomeFacilitator={
+          world.status === "active" &&
+          (world.role === "owner" || world.role === "editor")
+        }
+        changingFacilitator={changingFacilitator}
+        facilitatorError={facilitatorError}
+        onBecomeFacilitator={() =>
+          void changeFacilitator(`human:${world.membership_id}`)
+        }
         onChanged={() => {
           entities.reload();
           onWorldChanged();
@@ -185,9 +304,8 @@ export function WorldPlay({
         }}
       />
     );
-  const facilitator = world.role === "owner" || world.role === "editor";
-  const controlledEntityIDs =
-    membership.role === "player" ? membership.controlled_entity_ids : [];
+  const facilitator = world.current_play_role === "facilitator";
+  const controlledEntityIDs = membership.controlled_entity_ids;
   const active = interactions.items.find(
     (item) =>
       item.status === "open" ||
@@ -204,16 +322,68 @@ export function WorldPlay({
     entities.items.find((item) => item.id === selectedEntityId) ??
     firstControlledEntity ??
     entities.items[0];
+  const facilitatorName =
+    world.facilitator.display_name ??
+    (world.facilitator.source === "terra"
+      ? "Terra Auto DM"
+      : (members.items.find(
+          (item) => item.id === world.facilitator.membership_id,
+        )?.display_name ?? "Facilitator"));
+  const facilitatorValue =
+    world.facilitator.source === "terra"
+      ? "terra"
+      : `human:${world.facilitator.membership_id ?? ""}`;
+  const canChangeFacilitator =
+    world.status === "active" &&
+    active === undefined &&
+    (world.role === "owner" || world.role === "editor" || facilitator);
+  const canTakeOverFacilitation =
+    world.status === "active" &&
+    world.role === "owner" &&
+    world.facilitator.source === "terra" &&
+    (active?.status === "open" || active?.status === "adjudicating");
+  const facilitatorChoices = [
+    { value: "terra", name: "Terra Auto DM" },
+    ...members.items
+      .filter((item) => item.status === "active" && item.role !== "spectator")
+      .map((item) => ({
+        value: `human:${item.id}`,
+        name:
+          item.id === membership.id
+            ? `${item.display_name} (you)`
+            : item.display_name,
+      })),
+  ];
 
   return (
     <WorldPlayView
       model={{
         worldName: world.name,
         currentUserName: user.display_name,
-        roleLabel: facilitator ? "Facilitator" : humanize(membership.role),
+        roleLabel: humanize(world.current_play_role),
+        accessLabel: humanize(world.role),
         facilitator,
         canCreateProblem: facilitator && world.status === "active",
         hasActiveProblem: active !== undefined,
+        dungeonMaster: {
+          name: facilitatorName,
+          source: world.facilitator.source,
+          selectedValue: facilitatorValue,
+          canChange: canChangeFacilitator,
+          canTakeOver: canTakeOverFacilitation,
+          changing: changingFacilitator,
+          choices: facilitatorChoices,
+          issue: toPlayViewIssue(facilitatorError),
+        },
+        idle: {
+          terraFacilitated: world.facilitator.source === "terra",
+          canContinue:
+            world.status === "active" &&
+            world.current_play_role === "player" &&
+            world.play_status === "ready",
+          continuing: continuingWithTerra,
+          issue: toPlayViewIssue(terraContinueError),
+        },
         roster: {
           loading: entities.loading,
           showEmpty: !entities.loading && entities.items.length === 0,
@@ -245,11 +415,20 @@ export function WorldPlay({
           issue: toPlayViewIssue(interactions.error),
         },
         history: history.map((interaction) =>
-          toHistoryCardViewModel(interaction, entities.items, mechanicItems),
+          toHistoryCardViewModel(
+            interaction,
+            entities.items,
+            mechanicItems,
+            members.items,
+          ),
         ),
       }}
       actions={{
         createProblem: () => setCreatingProblem(true),
+        changeFacilitator: (value) => void changeFacilitator(value),
+        takeOverFacilitation: () =>
+          void changeFacilitator(`human:${world.membership_id}`),
+        continueWithTerra: () => void continueWithTerra(),
         retryRoster: entities.reload,
         retryProblems: interactions.reload,
         selectEntity: setSelectedEntityId,
@@ -309,24 +488,35 @@ function CharacterOnboarding({
   world,
   user,
   entities,
+  controlledEntityIDs,
   loading,
   error,
   onRetry,
   refreshToken,
+  dungeonMasterName,
+  canBecomeFacilitator,
+  changingFacilitator,
+  facilitatorError,
+  onBecomeFacilitator,
   onChanged,
 }: {
   world: World;
   user: User;
   entities: WorldEntity[];
+  controlledEntityIDs: string[];
   loading: boolean;
   error: ApiError | null;
   onRetry: () => void;
   refreshToken: number;
+  dungeonMasterName: string;
+  canBecomeFacilitator: boolean;
+  changingFacilitator: boolean;
+  facilitatorError: ApiError | null;
+  onBecomeFacilitator: () => void;
   onChanged: () => void;
 }) {
   const available = entities.filter(
-    (entity) =>
-      !entity.archived && entity.character_status !== "not-controlled",
+    (entity) => !entity.archived && controlledEntityIDs.includes(entity.id),
   );
   const [selectedID, setSelectedID] = useState<string | undefined>();
   const selected =
@@ -337,10 +527,18 @@ function CharacterOnboarding({
       model={{
         worldName: world.name,
         currentUserName: user.display_name,
+        dungeonMasterName,
         statusLabel:
           world.play_status === "waiting-for-character"
             ? "Waiting for a character"
             : "Setup required",
+        facilitatorActionLabel:
+          world.facilitator.source === "terra"
+            ? "Take over from Terra"
+            : "Become Dungeon Master",
+        canBecomeFacilitator,
+        changingFacilitator,
+        facilitatorIssue: toPlayViewIssue(facilitatorError),
         loading,
         issue: toPlayViewIssue(error),
         characters: available.map((entity) => ({
@@ -351,7 +549,11 @@ function CharacterOnboarding({
           selected: selected?.id === entity.id,
         })),
       }}
-      actions={{ retry: onRetry, selectCharacter: setSelectedID }}
+      actions={{
+        retry: onRetry,
+        selectCharacter: setSelectedID,
+        becomeFacilitator: onBecomeFacilitator,
+      }}
       profile={
         selected === undefined ? null : (
           <EntityProfilePanel
@@ -388,7 +590,8 @@ function NewProblemController({
     [members],
   );
   const responders = useMemo(
-    () => activeMembers.filter((member) => member.role === "player"),
+    () =>
+      activeMembers.filter((member) => member.current_play_role === "player"),
     [activeMembers],
   );
   const [title, setTitle] = useState("");
@@ -400,7 +603,6 @@ function NewProblemController({
   const previousResponderIds = useRef(
     new Set(responders.map((member) => member.id)),
   );
-  const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
@@ -425,32 +627,6 @@ function NewProblemController({
         ? values.filter((value) => value !== id)
         : [...values, id],
     );
-  }
-
-  async function generateProblem() {
-    setGenerating(true);
-    setError(null);
-    try {
-      const result = await api<AutoDMProblem>(
-        worldPath(world.id, "auto-dm/problem"),
-        { method: "POST" },
-      );
-      if (result.prompt.trim() === "")
-        throw new ApiError(
-          502,
-          "invalid_response",
-          "The Auto DM returned an empty problem.",
-        );
-      setPrompt(result.prompt.trim());
-    } catch (reason) {
-      setError(
-        reason instanceof ApiError
-          ? reason
-          : new ApiError(0, "unknown", "Could not generate a problem."),
-      );
-    } finally {
-      setGenerating(false);
-    }
   }
 
   async function submit() {
@@ -500,8 +676,6 @@ function NewProblemController({
           id: member.id,
           name: member.display_name,
         })),
-        terraEnabled: world.dm_source === "terra",
-        generating,
         saving,
         issue: toPlayViewIssue(error, { prompt: "description" }),
       }}
@@ -510,7 +684,6 @@ function NewProblemController({
         changeDescription: setPrompt,
         toggleContextEntity: (id) => toggle(entityIds, id, setEntityIds),
         toggleResponder: (id) => toggle(responderIds, id, setResponderIds),
-        generate: () => void generateProblem(),
         submit: () => void submit(),
         close: onClose,
       }}
@@ -541,6 +714,8 @@ function LiveInteraction({
 }) {
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
+  const [terraIdempotencyKey] = useState(() => crypto.randomUUID());
+  const terraFacilitated = world.facilitator.source === "terra";
   const context = interaction.entity_ids
     .map((id) => entities.find((entity) => entity.id === id))
     .filter((item): item is WorldEntity => item !== undefined);
@@ -567,6 +742,35 @@ function LiveInteraction({
               "The problem changed before that action completed.",
             ),
       );
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function letTerraDecide() {
+    setWorking(true);
+    setError(null);
+    try {
+      await api<InteractionResolutionResult>(
+        worldPath(world.id, `interactions/${interaction.id}/auto-dm/decide`),
+        {
+          method: "POST",
+          ...jsonBody({
+            expected_revision: interaction.revision,
+            expected_rules_revision: rulesRevision,
+            idempotency_key: terraIdempotencyKey,
+          }),
+        },
+      );
+      onChanged();
+    } catch (reason) {
+      setError(
+        reason instanceof ApiError
+          ? reason
+          : new ApiError(0, "unknown", "Terra could not decide the outcome."),
+      );
+      onChanged();
+    } finally {
       setWorking(false);
     }
   }
@@ -578,7 +782,9 @@ function LiveInteraction({
         statusLabel:
           interaction.status === "open"
             ? "Accepting actions"
-            : "Closed for actions",
+            : terraFacilitated
+              ? "Terra is deciding"
+              : "Closed for actions",
         presentedLabel: formatRelativeDate(
           interaction.presented_at ?? interaction.created_at,
         ),
@@ -587,7 +793,10 @@ function LiveInteraction({
         contextEntityNames: context.map((entity) => entity.display_name),
         facilitator,
         working,
-        issue: toPlayViewIssue(error),
+        issue:
+          interaction.status === "adjudicating" && terraFacilitated
+            ? null
+            : toPlayViewIssue(error),
       }}
       content={
         <>
@@ -598,8 +807,11 @@ function LiveInteraction({
               membership={membership}
               entities={entities}
               facilitator={facilitator}
+              terraFacilitated={terraFacilitated}
+              rulesReady={rulesReady}
               working={working}
               onAdjudicate={() => void command("adjudicate")}
+              onRequestDecision={() => void letTerraDecide()}
               onChanged={onChanged}
             />
           ) : null}
@@ -612,6 +824,13 @@ function LiveInteraction({
               rulesRevision={rulesRevision}
               rulesReady={rulesReady}
               onResolved={onChanged}
+            />
+          ) : null}
+          {interaction.status === "adjudicating" && terraFacilitated ? (
+            <TerraDecisionPendingView
+              retrying={working}
+              issue={toPlayViewIssue(error)}
+              onRetry={() => void letTerraDecide()}
             />
           ) : null}
         </>
@@ -627,8 +846,11 @@ function OpenProblem({
   membership,
   entities,
   facilitator,
+  terraFacilitated,
+  rulesReady,
   working,
   onAdjudicate,
+  onRequestDecision,
   onChanged,
 }: {
   interaction: Interaction;
@@ -636,13 +858,17 @@ function OpenProblem({
   membership: WorldMember;
   entities: WorldEntity[];
   facilitator: boolean;
+  terraFacilitated: boolean;
+  rulesReady: boolean;
   working: boolean;
   onAdjudicate: () => void;
+  onRequestDecision: () => void;
   onChanged: () => void;
 }) {
-  const eligible = interaction.eligible_responder_membership_ids.includes(
-    membership.id,
-  );
+  const player = world.current_play_role === "player";
+  const eligible =
+    player &&
+    interaction.eligible_responder_membership_ids.includes(membership.id);
   const currentAction = interaction.actions.find(
     (action) =>
       action.submitted_by_membership_id === membership.id &&
@@ -663,7 +889,7 @@ function OpenProblem({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<ApiError | null>(null);
 
-  async function submit() {
+  async function submit(actionText = text.trim(), passing = false) {
     setSaving(true);
     setError(null);
     try {
@@ -672,8 +898,10 @@ function OpenProblem({
         {
           method: "POST",
           ...jsonBody({
-            text: text.trim(),
-            acting_entity_id: actingEntityID || undefined,
+            text: actionText,
+            ...(passing
+              ? {}
+              : { acting_entity_id: actingEntityID || undefined }),
             expected_revision: interaction.revision,
           }),
         },
@@ -721,6 +949,14 @@ function OpenProblem({
   const submitted = interaction.actions.filter(
     (action) => action.status === "submitted",
   );
+  const respondedMembershipIDs = new Set(
+    submitted.map((action) => action.submitted_by_membership_id),
+  );
+  const respondedCount = interaction.eligible_responder_membership_ids.filter(
+    (membershipID) => respondedMembershipIDs.has(membershipID),
+  ).length;
+  const responderCount = interaction.eligible_responder_membership_ids.length;
+  const allRespondersReady = respondedCount === responderCount;
   return (
     <OpenProblemView
       model={{
@@ -736,14 +972,26 @@ function OpenProblem({
         actionText: text,
         saving,
         closing: working,
+        terraFacilitated,
+        canRequestDecision: terraFacilitated && player,
+        allRespondersReady,
+        decisionEnabled: rulesReady,
+        responseProgressLabel: !rulesReady
+          ? "Refreshing the current rules and entity state."
+          : responderCount === 0
+            ? "No player responses are required."
+            : `${respondedCount} of ${responderCount} responders have acted or passed.`,
+        deciding: working,
         issue: toPlayViewIssue(error),
       }}
       actions={{
         changeActingEntity: setActingEntityID,
         changeActionText: setText,
         submitAction: () => void submit(),
+        passAction: () => void submit("I pass.", true),
         withdrawAction: () => void withdraw(),
         closeActions: onAdjudicate,
+        requestDecision: onRequestDecision,
       }}
     />
   );
@@ -774,12 +1022,9 @@ function RulingEditor({
     contextKey: string;
     result: ConsequenceCompilation;
   } | null>(null);
-  const [saving, setSaving] = useState<
-    "compile" | "generate" | "resolve" | null
-  >(null);
+  const [saving, setSaving] = useState<"compile" | "resolve" | null>(null);
   const [error, setError] = useState<ApiError | null>(null);
   const [idempotencyKey] = useState(() => crypto.randomUUID());
-  const terra = world.dm_source === "terra";
   const contextKey = JSON.stringify({
     world_revision: world.revision,
     interaction_revision: interaction.revision,
@@ -803,23 +1048,22 @@ function RulingEditor({
       ? undefined
       : submitted.find((action) => action.id === compiled.selected_action_id);
 
-  async function prepareConsequence(mode: "compile" | "generate") {
+  async function prepareConsequence() {
     const requestContextKey = contextKey;
-    setSaving(mode);
+    setSaving("compile");
     setError(null);
     try {
-      const path =
-        mode === "generate"
-          ? `interactions/${interaction.id}/auto-dm/consequence`
-          : `interactions/${interaction.id}/compile-consequence`;
       const result = await api<ConsequenceCompilation>(
-        worldPath(world.id, path),
+        worldPath(
+          world.id,
+          `interactions/${interaction.id}/compile-consequence`,
+        ),
         {
           method: "POST",
           ...jsonBody({
             expected_revision: interaction.revision,
             expected_rules_revision: rulesRevision,
-            ...(mode === "compile" ? { narrative: narrative.trim() } : {}),
+            narrative: narrative.trim(),
           }),
         },
       );
@@ -835,13 +1079,7 @@ function RulingEditor({
       setError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(
-              0,
-              "unknown",
-              mode === "generate"
-                ? "Could not generate a consequence."
-                : "Could not interpret this consequence.",
-            ),
+          : new ApiError(0, "unknown", "Could not interpret this consequence."),
       );
     } finally {
       setSaving(null);
@@ -883,7 +1121,6 @@ function RulingEditor({
   return (
     <RulingView
       model={{
-        terraEnabled: terra,
         submissions: submitted.map(toSubmittedActionViewModel),
         narrative,
         selectedAction:
@@ -911,7 +1148,7 @@ function RulingEditor({
           setCompilation(null);
           setError(null);
         },
-        prepare: (mode) => void prepareConsequence(mode),
+        prepare: () => void prepareConsequence(),
         resolve: () => void resolve(),
       }}
     />
@@ -995,12 +1232,26 @@ function toHistoryCardViewModel(
   interaction: Interaction,
   entities: WorldEntity[],
   mechanics: WorldMechanic[],
+  memberships: WorldMember[],
 ): HistoryCardViewModel {
+  const facilitatorSource =
+    interaction.resolution?.facilitator_source ??
+    interaction.facilitator_source;
+  const facilitatorMembershipID =
+    interaction.resolution?.resolved_by_membership_id ??
+    interaction.created_by_membership_id;
+  const facilitatorLabel =
+    facilitatorSource === "terra"
+      ? "Terra Auto DM"
+      : (memberships.find(
+          (membership) => membership.id === facilitatorMembershipID,
+        )?.display_name ?? "Human facilitator");
   if (interaction.status === "cancelled")
     return {
       id: interaction.id,
       outcome: "cancelled",
       occurredLabel: formatRelativeDate(interaction.cancelled_at),
+      facilitatorLabel,
       title: interaction.title ?? "Untitled problem",
       prompt: interaction.prompt,
       effects: [],
@@ -1011,6 +1262,7 @@ function toHistoryCardViewModel(
     id: interaction.id,
     outcome: "resolved",
     occurredLabel: formatRelativeDate(interaction.resolved_at),
+    facilitatorLabel,
     title: interaction.title ?? "Untitled problem",
     prompt: interaction.prompt,
     ...(resolution === undefined ? {} : { narrative: resolution.narrative }),
@@ -1060,7 +1312,6 @@ function entitySubtitle(
     memberships.some(
       (membership) =>
         membership.id === currentMembershipID &&
-        membership.role === "player" &&
         membership.status === "active" &&
         membership.controlled_entity_ids.includes(entity.id),
     )
@@ -1072,7 +1323,7 @@ function entitySubtitle(
   const controllers = memberships.filter(
     (membership) =>
       membership.status === "active" &&
-      membership.role === "player" &&
+      membership.role !== "spectator" &&
       membership.controlled_entity_ids.includes(entity.id),
   );
   if (controllers.length > 0) {

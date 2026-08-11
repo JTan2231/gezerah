@@ -157,6 +157,7 @@ type authorizedWorldMember struct {
 	Role        string
 	Status      string
 	WorldStatus string
+	Facilitator bool
 }
 
 func requireActiveWorldMember(ctx context.Context, db queryer, r *http.Request, worldID string) (authorizedWorldMember, error) {
@@ -170,11 +171,15 @@ func requireActiveWorldMember(ctx context.Context, db queryer, r *http.Request, 
 	}
 	err = db.QueryRow(ctx, `
 		select membership.id::text, membership.world_id::text, membership.user_id::text,
-			membership.role, membership.status, world.status
+			membership.role, membership.status, world.status,
+			world.dm_source = 'human' and world.facilitator_membership_id = membership.id
 		from world_memberships membership
 		join worlds world on world.id = membership.world_id
 		where membership.world_id = $1 and membership.user_id = $2`, worldID, userID,
-	).Scan(&member.ID, &member.WorldID, &member.UserID, &member.Role, &member.Status, &member.WorldStatus)
+	).Scan(
+		&member.ID, &member.WorldID, &member.UserID, &member.Role, &member.Status,
+		&member.WorldStatus, &member.Facilitator,
+	)
 	if errors.Is(err, pgx.ErrNoRows) || (err == nil && member.Status != "active") {
 		return member, &statusError{Status: http.StatusForbidden, Code: "world_forbidden", Message: "active world membership is required"}
 	}
@@ -211,7 +216,7 @@ func requireFacilitator(ctx context.Context, db queryer, r *http.Request, worldI
 	if err != nil {
 		return member, err
 	}
-	if member.Role != "owner" && member.Role != "editor" {
+	if !member.Facilitator {
 		return member, &statusError{Status: http.StatusForbidden, Code: "facilitator_required", Message: "facilitator authority is required"}
 	}
 	if member.WorldStatus != "active" {
@@ -220,11 +225,42 @@ func requireFacilitator(ctx context.Context, db queryer, r *http.Request, worldI
 	return member, nil
 }
 
+func requireTerraFacilitator(ctx context.Context, db queryer, worldID string) error {
+	if !validID(worldID) {
+		return &statusError{Status: http.StatusBadRequest, Code: "invalid_id", Message: "world ID is malformed"}
+	}
+	var source, status string
+	var facilitatorMembershipID *string
+	if err := db.QueryRow(ctx, `
+		select dm_source, status, facilitator_membership_id::text
+		from worlds where id = $1`, worldID,
+	).Scan(&source, &status, &facilitatorMembershipID); err != nil {
+		return err
+	}
+	if status != "active" {
+		return &statusError{Status: http.StatusConflict, Code: "world_archived", Message: "archived worlds cannot be changed"}
+	}
+	if source != "terra" || facilitatorMembershipID != nil {
+		return &statusError{Status: http.StatusForbidden, Code: "facilitator_required", Message: "Terra is not the current facilitator"}
+	}
+	return nil
+}
+
+func currentPlayRole(membershipRole string, facilitator bool) string {
+	if facilitator {
+		return "facilitator"
+	}
+	if membershipRole == "spectator" {
+		return "spectator"
+	}
+	return "player"
+}
+
 func membershipPlayStatus(ctx context.Context, db queryer, worldID, membershipID, role, status string) (string, error) {
 	if status != "active" {
 		return "unavailable", nil
 	}
-	if role != "player" {
+	if role == "spectator" {
 		return "ready", nil
 	}
 	var controlled, incomplete int
@@ -265,7 +301,7 @@ func entityCharacterStatus(ctx context.Context, db queryer, worldID, entityID st
 			(select count(*)::int from world_membership_entity_controls control
 			 join world_memberships membership on membership.id = control.membership_id
 			 where control.world_id = $1 and control.entity_id = $2
-			 and membership.status = 'active' and membership.role = 'player'),
+				 and membership.status = 'active' and membership.role <> 'spectator'),
 			(select count(*)::int from world_character_fields
 			 where world_id = $1 and not archived),
 			(select count(*)::int from entity_profile_field_values value

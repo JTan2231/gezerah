@@ -7,6 +7,7 @@ import type { AddressInfo } from "node:net";
 
 const TERRA_MODEL = "gpt-5.6-terra";
 const LUNA_MODEL = "gpt-5.6-luna";
+export const TERRA_FORCED_FAILURE_MARKER = "[[E2E_TERRA_FAILURE]]";
 
 export interface TestAutoDMServer {
   baseURL: string;
@@ -86,6 +87,12 @@ async function handleResponsesRequest(
   if (body.model === LUNA_MODEL) {
     text = JSON.stringify(compileConsequence(body.input));
   } else if (body.model === TERRA_MODEL) {
+    if (
+      !body.instructions?.includes("next situation") &&
+      body.input.includes(TERRA_FORCED_FAILURE_MARKER)
+    ) {
+      throw new Error("forced Terra consequence failure");
+    }
     text = body.instructions?.includes("next situation")
       ? "The tide rises around the next crossing."
       : "The party reaches safety, though the crossing leaves its mark.";

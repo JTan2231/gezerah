@@ -45,26 +45,6 @@ export function NewProblemView({
             placeholder="Describe the problem."
           />
         </Field>
-        {model.terraEnabled ? (
-          <div className="auto-dm-generator">
-            <span>
-              Terra can propose the next problem from the current world and
-              table history.
-            </span>
-            <button
-              className="button button-quiet"
-              type="button"
-              disabled={model.generating || model.saving}
-              onClick={actions.generate}
-            >
-              {model.generating
-                ? "Generating…"
-                : model.draft.description.trim() === ""
-                  ? "Generate problem"
-                  : "Generate again"}
-            </button>
-          </div>
-        ) : null}
         {model.showContextChoices ? (
           <fieldset className="choice-fieldset">
             <legend>
@@ -128,11 +108,7 @@ export function NewProblemView({
           <button
             className="button button-play"
             type="submit"
-            disabled={
-              model.saving ||
-              model.generating ||
-              model.draft.description.trim() === ""
-            }
+            disabled={model.saving || model.draft.description.trim() === ""}
           >
             {model.saving ? "Creating…" : "Create problem"}
           </button>
@@ -212,13 +188,25 @@ export function OpenProblemView({
                 placeholder="Describe your action."
               />
             </Field>
-            <button
-              className="button button-play"
-              type="submit"
-              disabled={model.saving || model.actionText.trim() === ""}
-            >
-              {model.saving ? "Submitting…" : "Submit action"}
-            </button>
+            <div className="action-composer-actions">
+              <button
+                className="button button-play"
+                type="submit"
+                disabled={model.saving || model.actionText.trim() === ""}
+              >
+                {model.saving ? "Submitting…" : "Submit action"}
+              </button>
+              {model.terraFacilitated ? (
+                <button
+                  className="button button-quiet"
+                  type="button"
+                  disabled={model.saving}
+                  onClick={actions.passAction}
+                >
+                  Pass
+                </button>
+              ) : null}
+            </div>
           </form>
         ) : (
           <div className="own-action">
@@ -260,7 +248,71 @@ export function OpenProblemView({
           </button>
         </div>
       ) : null}
+      {model.terraFacilitated ? (
+        <div className="adjudicate-callout terra-decision-callout">
+          <div>
+            <p>
+              <strong>
+                {model.allRespondersReady
+                  ? "Terra can decide"
+                  : "Waiting for every responder"}
+              </strong>
+              <small>{model.responseProgressLabel}</small>
+            </p>
+          </div>
+          {model.canRequestDecision ? (
+            <button
+              className="button button-ink"
+              type="button"
+              disabled={
+                !model.allRespondersReady ||
+                !model.decisionEnabled ||
+                model.deciding
+              }
+              onClick={actions.requestDecision}
+            >
+              {model.deciding ? "Terra is deciding…" : "Let Terra decide"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {model.issue === null ? null : <ErrorMessage error={model.issue} />}
+    </section>
+  );
+}
+
+export function TerraDecisionPendingView({
+  retrying,
+  issue,
+  onRetry,
+}: {
+  retrying: boolean;
+  issue: OpenProblemViewModel["issue"];
+  onRetry: () => void;
+}) {
+  return (
+    <section className="terra-decision-pending" aria-live="polite">
+      <h3>
+        {issue === null ? "Terra is deciding…" : "Terra couldn’t continue"}
+      </h3>
+      <p>
+        {issue === null
+          ? "Terra is considering the submitted actions and Luna is validating the mechanical outcome. If this appears stalled, any ready player can retry."
+          : "The submitted actions remain locked. Any ready player can ask Terra to try again."}
+      </p>
+      {issue === null ? null : <ErrorMessage error={issue} />}
+      <button
+        className="button button-play"
+        type="button"
+        disabled={retrying}
+        onClick={onRetry}
+      >
+        {retrying
+          ? "Retrying…"
+          : issue === null
+            ? "Retry if stalled"
+            : "Retry Terra"}
+      </button>
     </section>
   );
 }

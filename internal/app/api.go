@@ -63,24 +63,32 @@ type authResponse struct {
 }
 
 type worldResponse struct {
-	ID                  string     `json:"id"`
-	Name                string     `json:"name"`
-	Description         *string    `json:"description,omitempty"`
-	DMSource            string     `json:"dm_source"`
-	Status              string     `json:"status"`
-	Revision            int64      `json:"revision"`
-	TableRevision       int64      `json:"table_revision"`
-	Role                string     `json:"role"`
-	MembershipID        string     `json:"membership_id"`
-	MemberCount         int        `json:"member_count"`
-	CapacityCount       int        `json:"capacity_count"`
-	CapabilityCount     int        `json:"capability_count"`
-	CharacterFieldCount int        `json:"character_field_count"`
-	RulesRevision       int64      `json:"rules_revision"`
-	PlayStatus          string     `json:"play_status"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
-	LastInteractionAt   *time.Time `json:"last_interaction_at,omitempty"`
+	ID                  string              `json:"id"`
+	Name                string              `json:"name"`
+	Description         *string             `json:"description,omitempty"`
+	DMSource            string              `json:"dm_source"`
+	Facilitator         facilitatorResponse `json:"facilitator"`
+	CurrentPlayRole     string              `json:"current_play_role"`
+	Status              string              `json:"status"`
+	Revision            int64               `json:"revision"`
+	TableRevision       int64               `json:"table_revision"`
+	Role                string              `json:"role"`
+	MembershipID        string              `json:"membership_id"`
+	MemberCount         int                 `json:"member_count"`
+	CapacityCount       int                 `json:"capacity_count"`
+	CapabilityCount     int                 `json:"capability_count"`
+	CharacterFieldCount int                 `json:"character_field_count"`
+	RulesRevision       int64               `json:"rules_revision"`
+	PlayStatus          string              `json:"play_status"`
+	CreatedAt           time.Time           `json:"created_at"`
+	UpdatedAt           time.Time           `json:"updated_at"`
+	LastInteractionAt   *time.Time          `json:"last_interaction_at,omitempty"`
+}
+
+type facilitatorResponse struct {
+	Source       string  `json:"source"`
+	MembershipID *string `json:"membership_id,omitempty"`
+	DisplayName  *string `json:"display_name,omitempty"`
 }
 
 type createWorldRequest struct {
@@ -119,6 +127,12 @@ type archiveWorldRequest struct {
 	ExpectedRevision *int64 `json:"expected_revision"`
 }
 
+type updateFacilitatorRequest struct {
+	Source           string  `json:"source"`
+	MembershipID     *string `json:"membership_id"`
+	ExpectedRevision *int64  `json:"expected_revision"`
+}
+
 type worldMemberResponse struct {
 	ID                  string     `json:"id"`
 	UserID              string     `json:"user_id"`
@@ -126,6 +140,7 @@ type worldMemberResponse struct {
 	Role                string     `json:"role"`
 	Status              string     `json:"status"`
 	PlayStatus          string     `json:"play_status"`
+	CurrentPlayRole     string     `json:"current_play_role"`
 	Revision            int64      `json:"revision"`
 	ControlledEntityIDs []string   `json:"controlled_entity_ids"`
 	JoinedAt            *time.Time `json:"joined_at,omitempty"`
@@ -463,13 +478,10 @@ type adjudicateInteractionRequest struct {
 	Effects               []concreteEffectDTO `json:"effects"`
 }
 
-type autoDMProblemResponse struct {
-	Prompt string `json:"prompt"`
-}
-
-type autoDMConsequenceRequest struct {
+type autoDMDecideRequest struct {
 	ExpectedRevision      *int64 `json:"expected_revision"`
 	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
+	IdempotencyKey        string `json:"idempotency_key"`
 }
 
 type compileConsequenceRequest struct {
@@ -521,7 +533,8 @@ type interactionResolutionResponse struct {
 	ActionSummary          *string                         `json:"action_summary,omitempty"`
 	Narrative              string                          `json:"narrative"`
 	PrivateNotes           *string                         `json:"private_notes,omitempty"`
-	ResolvedByMembershipID string                          `json:"resolved_by_membership_id"`
+	FacilitatorSource      string                          `json:"facilitator_source"`
+	ResolvedByMembershipID *string                         `json:"resolved_by_membership_id,omitempty"`
 	RulesRevision          int64                           `json:"rules_revision"`
 	Effects                []concreteEffectDTO             `json:"effects"`
 	AppliedEffects         []concreteAppliedEffectResponse `json:"applied_effects"`
@@ -537,7 +550,8 @@ type interactionResponse struct {
 	PrivateNotes                   *string                        `json:"private_notes,omitempty"`
 	Status                         string                         `json:"status"`
 	Revision                       int64                          `json:"revision"`
-	CreatedByMembershipID          string                         `json:"created_by_membership_id"`
+	FacilitatorSource              string                         `json:"facilitator_source"`
+	CreatedByMembershipID          *string                        `json:"created_by_membership_id,omitempty"`
 	AudienceMembershipIDs          []string                       `json:"audience_membership_ids"`
 	EligibleResponderMembershipIDs []string                       `json:"eligible_responder_membership_ids"`
 	EntityIDs                      []string                       `json:"entity_ids"`
@@ -573,5 +587,6 @@ type worldEventResponse struct {
 	SubmissionID      *string   `json:"submission_id,omitempty"`
 	ResolutionID      *string   `json:"resolution_id,omitempty"`
 	ActorMembershipID *string   `json:"actor_membership_id,omitempty"`
+	ActorSource       string    `json:"actor_source"`
 	CreatedAt         time.Time `json:"created_at"`
 }

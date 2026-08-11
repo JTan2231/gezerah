@@ -1,0 +1,506 @@
+import { randomUUID } from "node:crypto";
+
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type APIResponse,
+} from "@playwright/test";
+
+import { TERRA_FORCED_FAILURE_MARKER } from "../../src/autoDMServer";
+import { readBaseURL } from "../../src/runtime";
+import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
+import {
+  disposeAuthenticatedActors,
+  getAs,
+  postAs,
+  putAs,
+  signupActor,
+} from "../support/auth";
+
+test.afterEach(async () => disposeAuthenticatedActors());
+
+type DurableRole = "owner" | "editor" | "player" | "spectator";
+type CurrentPlayRole = "facilitator" | "player" | "spectator";
+type PlayStatus =
+  "waiting-for-character" | "setup-required" | "ready" | "unavailable";
+
+interface WorldResponse {
+  id: string;
+  membership_id: string;
+  role: DurableRole;
+  revision: number;
+  rules_revision: number;
+  dm_source: "human" | "terra";
+  facilitator: {
+    source: "human" | "terra";
+    membership_id?: string;
+    display_name?: string;
+  };
+  current_play_role: CurrentPlayRole;
+  play_status: PlayStatus;
+}
+
+interface WorldMemberResponse {
+  id: string;
+  user_id: string;
+  role: DurableRole;
+  current_play_role: CurrentPlayRole;
+  play_status: PlayStatus;
+  controlled_entity_ids: string[];
+}
+
+interface InviteResponse {
+  id: string;
+  role: Exclude<DurableRole, "owner">;
+  join_path?: string;
+}
+
+interface EntityResponse {
+  id: string;
+  display_name: string;
+  character_status: "not-controlled" | "setup-required" | "ready";
+}
+
+interface InteractionActionResponse {
+  id: string;
+  submitted_by_membership_id: string;
+  text: string;
+  status: "submitted" | "withdrawn" | "selected" | "declined";
+  revision: number;
+}
+
+interface InteractionResponse {
+  id: string;
+  prompt: string;
+  facilitator_source: "human" | "terra";
+  status: "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
+  revision: number;
+  eligible_responder_membership_ids: string[];
+  actions: InteractionActionResponse[];
+}
+
+test("contract: facilitator assignment changes play authority without rewriting durable roles", async ({
+  request,
+}) => {
+  const baseURL = await readBaseURL();
+  const unique = randomUUID().slice(0, 8);
+  const owner = await signupActor(baseURL, `Seat Owner ${unique}`);
+  const delegate = await signupActor(baseURL, `Seat Delegate ${unique}`);
+  const editor = await signupActor(baseURL, `Seat Editor ${unique}`);
+
+  const world = await postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds`,
+    { name: `Facilitator Contract ${unique}` },
+    owner.id,
+  );
+  expect(world).toMatchObject({
+    role: "owner",
+    dm_source: "human",
+    facilitator: { source: "human", membership_id: world.membership_id },
+    current_play_role: "facilitator",
+    play_status: "waiting-for-character",
+  });
+
+  const delegateWorld = await joinWorld(
+    request,
+    baseURL,
+    world.id,
+    owner.id,
+    delegate.id,
+    "player",
+  );
+  const editorWorld = await joinWorld(
+    request,
+    baseURL,
+    world.id,
+    owner.id,
+    editor.id,
+    "editor",
+  );
+  const character = await postJSON<EntityResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities`,
+    {
+      display_name: `Owner Character ${unique}`,
+      controller_world_membership_ids: [world.membership_id],
+    },
+    owner.id,
+  );
+  expect(character.character_status).toBe("ready");
+
+  const delegated = await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    {
+      source: "human",
+      membership_id: delegateWorld.membership_id,
+      expected_revision: world.revision,
+    },
+    owner.id,
+  );
+  expect(delegated).toMatchObject({
+    role: "owner",
+    revision: world.revision + 1,
+    facilitator: {
+      source: "human",
+      membership_id: delegateWorld.membership_id,
+    },
+    current_play_role: "player",
+    play_status: "ready",
+  });
+  expect(
+    await getJSON<WorldResponse>(
+      request,
+      `${baseURL}/api/worlds/${world.id}`,
+      delegate.id,
+    ),
+  ).toMatchObject({
+    role: "player",
+    facilitator: {
+      source: "human",
+      membership_id: delegateWorld.membership_id,
+    },
+    current_play_role: "facilitator",
+    play_status: "waiting-for-character",
+  });
+  await expectMemberRoles(request, baseURL, world.id, owner.id, [
+    {
+      id: world.membership_id,
+      role: "owner",
+      current_play_role: "player",
+    },
+    {
+      id: delegateWorld.membership_id,
+      role: "player",
+      current_play_role: "facilitator",
+    },
+    {
+      id: editorWorld.membership_id,
+      role: "editor",
+      current_play_role: "player",
+    },
+  ]);
+
+  const humanInteraction = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
+    {
+      present: true,
+      prompt: `The delegated facilitator asks the owner to act ${unique}.`,
+      audience_membership_ids: [world.membership_id],
+      eligible_responder_membership_ids: [world.membership_id],
+      entity_ids: [character.id],
+    },
+    delegate.id,
+  );
+  expect(humanInteraction).toMatchObject({
+    status: "open",
+    facilitator_source: "human",
+    eligible_responder_membership_ids: [world.membership_id],
+  });
+  const ownerAction = await postJSON<InteractionActionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}/actions`,
+    {
+      text: `The owner acts as a ready player ${unique}.`,
+      acting_entity_id: character.id,
+      expected_revision: humanInteraction.revision,
+    },
+    owner.id,
+  );
+  expect(ownerAction).toMatchObject({
+    submitted_by_membership_id: world.membership_id,
+    status: "submitted",
+  });
+
+  await expectAPIError(
+    await putAs(
+      request,
+      `${baseURL}/api/worlds/${world.id}/facilitator`,
+      {
+        source: "human",
+        membership_id: world.membership_id,
+        expected_revision: delegated.revision,
+      },
+      delegate.id,
+    ),
+    409,
+    "interactions_unfinished",
+  );
+  const currentHumanInteraction = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}`,
+    delegate.id,
+  );
+  await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}/cancel`,
+    { expected_revision: currentHumanInteraction.revision },
+    delegate.id,
+  );
+
+  const terraWorld = await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    { source: "terra", expected_revision: delegated.revision },
+    owner.id,
+  );
+  expect(terraWorld).toMatchObject({
+    role: "owner",
+    dm_source: "terra",
+    facilitator: { source: "terra" },
+    current_play_role: "player",
+    play_status: "ready",
+    revision: delegated.revision + 1,
+  });
+  expect(terraWorld.facilitator.membership_id).toBeUndefined();
+  await expectMemberRoles(request, baseURL, world.id, owner.id, [
+    {
+      id: world.membership_id,
+      role: "owner",
+      current_play_role: "player",
+    },
+    {
+      id: delegateWorld.membership_id,
+      role: "player",
+      current_play_role: "player",
+    },
+    {
+      id: editorWorld.membership_id,
+      role: "editor",
+      current_play_role: "player",
+    },
+  ]);
+
+  const terraInteraction = await postJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    undefined,
+    owner.id,
+  );
+  expect(terraInteraction).toMatchObject({
+    facilitator_source: "terra",
+    status: "open",
+    eligible_responder_membership_ids: [world.membership_id],
+  });
+  const terraAction = await postJSON<InteractionActionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/actions`,
+    {
+      text: `${TERRA_FORCED_FAILURE_MARKER} The owner braces the crossing.`,
+      acting_entity_id: character.id,
+      expected_revision: terraInteraction.revision,
+    },
+    owner.id,
+  );
+  const terraReadyToDecide = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    owner.id,
+  );
+  await expectAPIError(
+    await postAs(
+      request,
+      `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/auto-dm/decide`,
+      {
+        expected_revision: terraReadyToDecide.revision,
+        expected_rules_revision: terraWorld.rules_revision,
+        idempotency_key: randomUUID(),
+      },
+      owner.id,
+    ),
+    502,
+    "auto_dm_failed",
+  );
+  const terraAdjudicating = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    owner.id,
+  );
+  expect(terraAdjudicating).toMatchObject({
+    facilitator_source: "terra",
+    status: "adjudicating",
+    actions: [
+      {
+        id: terraAction.id,
+        submitted_by_membership_id: world.membership_id,
+        status: "submitted",
+      },
+    ],
+  });
+
+  for (const denied of [
+    {
+      actorID: owner.id,
+      membershipID: delegateWorld.membership_id,
+      label: "owner assigning another member",
+    },
+    {
+      actorID: editor.id,
+      membershipID: editorWorld.membership_id,
+      label: "editor assigning themself",
+    },
+  ]) {
+    await test.step(`unfinished Terra adjudication blocks ${denied.label}`, async () => {
+      await expectAPIError(
+        await putAs(
+          request,
+          `${baseURL}/api/worlds/${world.id}/facilitator`,
+          {
+            source: "human",
+            membership_id: denied.membershipID,
+            expected_revision: terraWorld.revision,
+          },
+          denied.actorID,
+        ),
+        409,
+        "interactions_unfinished",
+      );
+    });
+  }
+
+  const recovered = await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    {
+      source: "human",
+      membership_id: world.membership_id,
+      expected_revision: terraWorld.revision,
+    },
+    owner.id,
+  );
+  expect(recovered).toMatchObject({
+    role: "owner",
+    dm_source: "human",
+    facilitator: { source: "human", membership_id: world.membership_id },
+    current_play_role: "facilitator",
+    play_status: "ready",
+    revision: terraWorld.revision + 1,
+  });
+  const recoveredInteraction = await getJSON<InteractionResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    owner.id,
+  );
+  expect(recoveredInteraction).toMatchObject({
+    facilitator_source: "terra",
+    status: "adjudicating",
+    actions: [
+      {
+        id: terraAction.id,
+        submitted_by_membership_id: world.membership_id,
+        status: "withdrawn",
+        revision: terraAction.revision + 1,
+      },
+    ],
+  });
+  await expectMemberRoles(request, baseURL, world.id, owner.id, [
+    {
+      id: world.membership_id,
+      role: "owner",
+      current_play_role: "facilitator",
+    },
+    {
+      id: delegateWorld.membership_id,
+      role: "player",
+      current_play_role: "player",
+    },
+    {
+      id: editorWorld.membership_id,
+      role: "editor",
+      current_play_role: "player",
+    },
+  ]);
+});
+
+async function joinWorld(
+  request: APIRequestContext,
+  baseURL: string,
+  worldID: string,
+  inviterID: string,
+  joiningActorID: string,
+  role: InviteResponse["role"],
+): Promise<WorldResponse> {
+  const invite = await postJSON<InviteResponse>(
+    request,
+    `${baseURL}/api/worlds/${worldID}/invites`,
+    { role, expires_in_days: 7 },
+    inviterID,
+  );
+  const token = invite.join_path?.split("/").at(-1);
+  if (token === undefined || token === "") {
+    throw new Error("created invitation has no bearer token");
+  }
+  return postJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/world-invites/${token}/redeem`,
+    undefined,
+    joiningActorID,
+  );
+}
+
+async function expectMemberRoles(
+  request: APIRequestContext,
+  baseURL: string,
+  worldID: string,
+  actorID: string,
+  expected: Array<
+    Pick<WorldMemberResponse, "id" | "role" | "current_play_role">
+  >,
+): Promise<void> {
+  const members = await getJSON<WorldMemberResponse[]>(
+    request,
+    `${baseURL}/api/worlds/${worldID}/members`,
+    actorID,
+  );
+  for (const item of expected) {
+    expect(members).toContainEqual(expect.objectContaining(item));
+  }
+}
+
+async function getJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  actorID: string,
+): Promise<T> {
+  return expectJSON<T>(await getAs(request, url, actorID), url);
+}
+
+async function postJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  actorID: string,
+): Promise<T> {
+  return expectJSON<T>(await postAs(request, url, data, actorID), url);
+}
+
+async function putJSON<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  actorID: string,
+): Promise<T> {
+  return expectJSON<T>(await putAs(request, url, data, actorID), url);
+}
+
+async function expectJSON<T>(response: APIResponse, url: string): Promise<T> {
+  const body = await response.text();
+  expect(
+    response.ok(),
+    `${response.status()} ${sanitizeURL(url)}: ${sanitizeDiagnosticBody(body)}`,
+  ).toBe(true);
+  return JSON.parse(body) as T;
+}
+
+async function expectAPIError(
+  response: APIResponse,
+  status: number,
+  code: string,
+): Promise<void> {
+  const body = await response.text();
+  expect(response.status(), sanitizeDiagnosticBody(body)).toBe(status);
+  expect(JSON.parse(body)).toMatchObject({ error: { code } });
+}

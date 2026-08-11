@@ -64,7 +64,9 @@ seed step; create all world vocabulary through the application/API. New
 databases install the `001` baseline, the `002` derived-graph/problem-status
 upgrade, the `003` audience-invalidation event upgrade, the `004` password-
 authentication cutover, and `005_auto_dm.sql`, which adds the world-level
-`human`/`terra` DM-source setting. Existing databases at a recorded migration
+`human`/`terra` source discriminator, followed by
+`006_facilitator_assignment.sql`, which adds the designated human membership
+and live attribution. Existing databases at a recorded migration
 prefix upgrade forward, but `004_password_auth.sql` deliberately refuses a
 nonempty `users` table because the repository has no safe way to invent
 credentials for UUID-only accounts. Use a fresh database for that cutover
@@ -124,8 +126,8 @@ accepted only when both that host and the network peer are loopback. Managed
 exported. A proxied deployment must set the exact browser-visible HTTPS origin,
 without a path, query, or fragment.
 
-`OPENAI_API_KEY` is optional for startup but required for Terra generation and
-for Luna Consequence compilation in either DM mode. When it is empty, those
+`OPENAI_API_KEY` is optional for startup but required for Terra's autonomous
+Continue/Decide lifecycle and for Luna compilation of human Consequences. When it is empty, those
 endpoints return `503 auto_dm_unavailable`; the key is never sent to the
 frontend. Leave `DND_OPENAI_BASE_URL` empty for the official API.
 
