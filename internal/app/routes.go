@@ -38,8 +38,10 @@ func (s *Server) registerResourceRoutes() {
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/entities/{entity_id}/state", s.handleGetWorldEntityState)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/state", s.handlePutWorldEntityState)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/controllers", s.handleReplaceWorldEntityControllers)
+	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/entities/{entity_id}/claim", s.handleClaimWorldEntity)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/entities/{entity_id}/profile", s.handleGetWorldEntityProfile)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/entities/{entity_id}/profile", s.handlePutWorldEntityProfile)
+	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/available-characters", s.handleListAvailableAgentCharacters)
 
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/character-fields", s.handleGetWorldCharacterFields)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/character-fields", s.handlePutWorldCharacterFields)
@@ -47,6 +49,7 @@ func (s *Server) registerResourceRoutes() {
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/interactions", s.handleListInteractions)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions", s.handleCreateInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/auto-dm/continue", s.handleContinueAutoDM)
+	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/agent-dm/continue", s.handleContinueAgentDM)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/interactions/{interaction_id}", s.handleGetInteraction)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/interactions/{interaction_id}", s.handlePutInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/present", s.handlePresentInteraction)
@@ -57,6 +60,7 @@ func (s *Server) registerResourceRoutes() {
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/preview", s.handlePreviewInteractionResolution)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve", s.handleResolveInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide", s.handleDecideAutoDMInteraction)
+	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/agent-dm/resolve", s.handleResolveAgentDMInteraction)
 	s.authenticatedAPIFunc("POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence", s.handleCompileConsequence)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}/events", s.handleWorldEvents)
 }

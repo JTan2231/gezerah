@@ -56,6 +56,7 @@ The current application has one clean baseline followed by forward upgrades:
 | `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
 | `005_auto_dm.sql`                            | World-level human/Terra DM source selection.                                                           |
 | `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live interactions, receipts, and events. |
+| `007_agent_facilitator.sql`                  | Non-membership agent attribution for WebMCP-driven interactions, resolutions, and events.             |
 
 This baseline is intentionally a clean break. Databases created by the removed
 schema are unsupported and must not be upgraded in place. Create a fresh empty
@@ -89,6 +90,11 @@ and nullable human actor columns to interactions, applied resolutions, and
 events. Database checks require human sources to carry the applicable human
 membership and Terra sources to omit it.
 
+`007` extends the same assignment and attribution shapes to `agent`. Agent
+worlds have no facilitator membership, and agent-authored interactions,
+resolutions, and events have no human actor column; the player session remains
+the authorization context rather than becoming the persisted author.
+
 The baseline and upgrade contain no alternate configuration container,
 secondary live container, reusable simulation aggregate, or superseded profile
 storage.
@@ -101,7 +107,7 @@ storage.
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
 | `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
-| `worlds`                   | Name/description, human/Terra facilitator assignment, lifecycle, settings revision, and table revision. |
+| `worlds`                   | Name/description, human/Terra/agent facilitator assignment, lifecycle, settings revision, and table revision. |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
 | `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.                   |
 | `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |
@@ -111,7 +117,7 @@ commands. `table_revision`
 guards controller-set changes and table authority independently.
 
 `dm_source` is the assignment discriminator. `human` requires a
-`facilitator_membership_id` from the same world; `terra` requires it to be
+`facilitator_membership_id` from the same world; `terra` and `agent` require it to be
 null. Membership role remains owner/editor/player/spectator and is not changed
 by assignment. Active/non-spectator eligibility and the narrow owner takeover
 from a Terra-authored open or adjudicating interaction are application
@@ -230,8 +236,8 @@ allows at most one selected action per interaction.
 
 `facilitator_source` snapshots who authored the interaction independently of
 the world's later assignment. Human rows require
-`created_by_membership_id`; Terra rows require it to be null. The owner recovery
-path deliberately leaves a Terra interaction's source unchanged even though a
+`created_by_membership_id`; Terra and agent rows require it to be null. The owner recovery
+path deliberately leaves an automated interaction's source unchanged even though a
 later human resolution concludes it.
 
 Action attribution stores a nullable `(acting_entity_id, acting_entity_name)`
@@ -266,9 +272,9 @@ therefore remain distinct from the direct application tables.
 `(world_id, idempotency_key)` supports safe retry. Application rows are unique
 by effect/entity, and explicit positions preserve execution order.
 
-Human applied resolutions require creator/resolver memberships; Terra applied
+Human applied resolutions require creator/resolver memberships; Terra and agent applied
 resolutions leave both human columns null. Resolution source can differ from
-interaction source only when a human owner takes over a Terra-authored
+interaction source only when a human owner takes over an automated
 adjudication, preserving both facts rather than rewriting provenance.
 
 ### Events
@@ -282,8 +288,8 @@ payload is not a state snapshot. Event types cover world/membership changes,
 entity control/profile changes, character-field changes, interaction/action
 lifecycle, mechanic `rules-updated` publication, facilitator handoff, and
 resolution application. `actor_source` is `human` with a required human
-membership or `terra` with a null membership. A pacing player's membership is
-therefore not stored as the actor on Terra lifecycle events.
+membership; `terra` and `agent` have a null membership. A pacing player's membership is
+therefore not stored as the actor on automated lifecycle events.
 
 `invalidates_interaction_audience` marks ordinary lifecycle events that can
 remove an interaction from audience visibility. The application projects a
@@ -373,7 +379,7 @@ restricted history references. It is not a supported operational action.
 After the existing migration chain is released:
 
 1. add the next zero-padded file after the current tip
-   (`006_facilitator_assignment.sql`, so currently `007_*.sql`);
+   (`007_agent_facilitator.sql`, so currently `008_*.sql`);
 2. never edit a migration already recorded in a durable database;
 3. keep each file valid inside one transaction;
 4. preserve user-authored, world-scoped vocabulary—do not seed canonical

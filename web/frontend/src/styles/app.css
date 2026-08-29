@@ -2618,6 +2618,86 @@ textarea {
   color: var(--muted);
 }
 
+.claimable-characters {
+  max-width: 760px;
+  margin: 2rem auto 1rem;
+  border-color: var(--line);
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.claimable-characters > header p {
+  margin-bottom: 1rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.claimable-character-list {
+  display: grid;
+  gap: 0.65rem;
+}
+
+.claimable-character-list > article {
+  display: grid;
+  padding: 0.85rem;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-muted);
+}
+
+.claimable-character-list p {
+  margin: 0.2rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.agent-mode-notice {
+  display: flex;
+  margin: 1rem clamp(1.4rem, 3vw, 3.2rem);
+  padding: 1rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  border: 1px solid var(--role-owner-line);
+  border-radius: var(--radius);
+  background: var(--ember-soft);
+}
+
+.character-onboarding-page > .agent-mode-notice {
+  max-width: 1068px;
+  margin-right: auto;
+  margin-left: auto;
+}
+
+.agent-mode-notice > div {
+  min-width: 0;
+}
+
+.agent-mode-notice p {
+  margin: 0.2rem 0 0.55rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+}
+
+.agent-mode-notice code {
+  display: block;
+  max-width: 100%;
+  color: var(--ink-soft);
+  font-size: 0.64rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.agent-mode-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .play-header {
   display: flex;
   min-height: 145px;
@@ -3119,7 +3199,8 @@ textarea {
   font-size: 0.61rem;
 }
 
-.terra-decision-pending {
+.terra-decision-pending,
+.agent-decision-pending {
   display: grid;
   min-height: 240px;
   padding: clamp(1.4rem, 4vw, 2.4rem);
@@ -3128,14 +3209,21 @@ textarea {
   text-align: center;
 }
 
-.terra-decision-pending h3 {
+.terra-decision-pending h3,
+.agent-decision-pending h3 {
   color: var(--ink);
 }
 
-.terra-decision-pending > p {
+.terra-decision-pending > p,
+.agent-decision-pending > p {
   max-width: 520px;
   color: var(--muted);
   font-size: 0.76rem;
+}
+
+.agent-decision-callout {
+  border-color: var(--role-owner-line);
+  background: var(--ember-soft);
 }
 
 .ruling-editor > header > p:last-child {
@@ -4285,7 +4373,9 @@ textarea {
   .modal-actions,
   .action-composer-actions,
   .ruling-actions,
-  .adjudicate-callout {
+  .adjudicate-callout,
+  .agent-mode-notice,
+  .agent-mode-actions {
     align-items: stretch;
     flex-direction: column;
   }
@@ -4323,6 +4413,24 @@ textarea {
   .onboarding-layout {
     margin-top: 1rem;
     padding: 0 1rem 2rem;
+  }
+
+  .character-onboarding-page > .agent-mode-notice {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+
+  .claimable-characters {
+    margin-right: 1rem;
+    margin-left: 1rem;
+  }
+
+  .claimable-character-list > article {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .claimable-character-list > article > .button {
+    grid-column: 1 / -1;
   }
 
   .character-field-definition {

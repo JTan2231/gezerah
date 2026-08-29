@@ -1,6 +1,6 @@
 module dnd
 
-go 1.25.12
+go 1.25.14
 
 require (
 	github.com/jackc/pgx/v5 v5.10.0

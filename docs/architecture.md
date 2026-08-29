@@ -10,7 +10,7 @@ authored as reusable configuration.
 The world is the sole product and data boundary. It owns:
 
 - owner/editor/player/spectator memberships and expiring bearer invitations;
-- one human-membership or Terra facilitator assignment, from which current
+- one human-membership, Terra, or external-agent facilitator assignment, from which current
   facilitator/player/spectator play roles are derived;
 - numeric/Boolean input and derived capacity/capability definitions plus their
   typed dependency graph;
@@ -157,7 +157,7 @@ cursor, and reconnects after a stream ends unless the session has ended.
 - strict request/response DTOs preserve exact numeric input;
 - handlers validate path, query, body, authenticated actor, membership, and role;
 - world response mapping keeps durable access separate from the designated
-  human/Terra facilitator and derived current play role;
+  human/Terra/agent facilitator and derived current play role;
 - world-scoped queries load relational aggregates;
 - command transactions lock mutable roots and recheck revisions;
 - mechanic publication validates the proposed complete dependency graph and
@@ -167,6 +167,9 @@ cursor, and reconnects after a stream ends unless the session has ended.
 - Auto DM handlers assemble revision-consistent world snapshots and either
   compile human prose for review or autonomously create/decide Terra
   interactions through the ordinary preview/resolve paths;
+- agent-DM handlers accept page-agent prose from a ready current player, derive
+  audience and context server-side, and use the same deterministic
+  preview/resolve paths without a server-side model call;
 - live Consequences call the pure runtime transition/evaluation engine and
   persist base state, status lifecycle, and history atomically;
 - visibility filtering removes private fields before serialization.

@@ -5,7 +5,8 @@ implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 status layers, generated entity sheets, participant-controlled characters with
 world-authored onboarding fields, and a multiplayer table with exactly one
-designated Dungeon Master: a human facilitator or Terra.
+designated Dungeon Master: a human facilitator, Terra, or an external page
+agent such as ChatGPT.
 
 The application intentionally has no built-in entity classes, privileged
 configured keys, seed vocabulary, or canonical JSON document model. World
@@ -21,7 +22,7 @@ constraints.
 | [Architecture](architecture.md) | System boundaries, runtime topology, layers, data flow, and repository layout.                        |
 | [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, and interactions.                           |
 | [Workflows](workflows.md)       | World creation, configuration, invitations, sheets, and the ad-hoc Play lifecycle.                    |
-| [API reference](api.md)         | HTTP conventions, sessions/CSRF, payloads, errors, concurrency guards, SSE, and every route. |
+| [API reference](api.md)         | HTTP conventions, sessions/CSRF, payloads, errors, concurrency guards, SSE, and every route.           |
 | [Backend](backend.md)           | Go server construction, application packages, rules engine, persistence adapters, and transactions.   |
 | [Frontend](frontend.md)         | React application structure, screens, state management, API integration, and styling.                 |
 | [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, receipts, and immutability.            |
@@ -29,6 +30,7 @@ constraints.
 | [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |
 | [Operations](operations.md)     | Production build, configuration, scripted Railway deployment and verification, health, backups, and recovery. |
 | [Security](security.md)         | Current trust boundary, authorization rules, visibility filtering, known gaps, and hardening path.    |
+| [ChatGPT/WebMCP](webmcp.md)     | ChatGPT DM journey, page-tool boundary, same-origin session model, commands, and release checks.       |
 | [Deployment readiness](deployment-readiness/README.md) | Audits, blockers, decisions, and exit criteria for trusted staging and public release. |
 
 ## System at a glance
@@ -58,12 +60,13 @@ A world author defines input and derived capacities/capabilities, generates
 sheets for stateful subjects, admits participants by invite link, and runs
 improvised interactions at the table. Durable world access stays separate from
 the current play role, so a participant can hand the DM responsibility to
-another non-spectator or Terra, normally between problems. A human DM authors
-one prose
-Consequence and may preview Luna's compiled effects. Terra instead creates and
-resolves its own interactions autonomously. Base-state changes, status
-lifecycle changes, effective-value receipts, and the world event commit in one
-transaction.
+another non-spectator, Terra, or an external page agent, normally between
+problems. A human DM authors one prose Consequence and may preview Luna's
+compiled effects. Terra instead creates and resolves its own interactions
+autonomously. In agent mode, ChatGPT authors the
+problem and ruling through the signed-in Play page while the person remains a
+player. Base-state changes, status lifecycle changes, effective-value receipts,
+and the world event commit in one transaction.
 
 ## Core invariants
 
@@ -78,8 +81,8 @@ transaction.
 - Player admission to live play is derived from control and character-field
   completion rather than persisted as a second membership lifecycle.
 - Exactly one facilitator assignment exists per world: either one active human
-  membership or Terra. It determines the current play role without rewriting
-  the durable membership role.
+  membership, Terra, or an external agent. It determines the current play role
+  without rewriting the durable membership role.
 - Typed state is stored relationally; the database does not use a canonical
   JSON document as its source of truth.
 - Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic.
@@ -109,7 +112,7 @@ transaction.
 | Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                        |
 | World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                    |
 | Current play role  | Momentary facilitator, player, or spectator responsibility derived from the facilitator assignment.   |
-| Facilitator        | The designated Dungeon Master: one human non-spectator membership or Terra.                             |
+| Facilitator        | The designated Dungeon Master: one human non-spectator membership, Terra, or an external agent.          |
 | Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                         |
 | Entity             | Durable state owner represented to authors as a person or other world subject.                         |
 | Character          | Product view of a world entity controlled by one or more active non-spectator memberships.             |

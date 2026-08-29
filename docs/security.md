@@ -126,6 +126,8 @@ are `private, no-store` and vary on `Cookie`.
 | Facilitator assignment              | Owner/editor or current human facilitator       | Revisioned; normally requires no unfinished interaction.                  |
 | Human facilitator commands          | Current designated human facilitator            | Lifecycle, scope, revision, and idempotency checks apply.                 |
 | Terra pacing commands               | Active ready current player                     | Terra assignment, responder completion, revisions, and idempotency apply. |
+| Agent pacing commands               | Active ready current player                     | Agent assignment, responder completion, revisions, and idempotency apply. |
+| Preset character claim              | Active current player waiting for a character   | Agent assignment, availability, and table revision apply.                 |
 | Player actions                      | Active ready eligible current player            | Server enforces responder, ownership, and control.                        |
 
 Network reachability, React routes, and hidden controls are never treated as
@@ -156,6 +158,9 @@ continues to decide what that user may do:
   regardless of its durable access role;
 - Terra Continue/Decide requires a ready current player but persists Terra—not
   that player—as the interaction, resolution, and event source;
+- agent Continue/Resolve likewise requires a ready current player and persists
+  `agent`, while accepting only public prose and rules-valid effects from the
+  page tool; WebMCP itself is not treated as an authenticated identity;
 - facilitator handoff uses the world revision and normally rejects unfinished
   interactions. The sole exception lets the owner take over one Terra-authored
   open or adjudicating interaction as themself, withdrawing their own submitted
@@ -199,8 +204,8 @@ represent fictional state owners. A username, mechanic name, entity name, or
 profile value grants no product authority. Durable owner/editor/player/spectator
 access and the current facilitator/player/spectator play role are separate.
 Human facilitator authority comes only from the world's same-world membership
-assignment; Terra carries no user or membership identity. Neither is a
-mechanical class.
+assignment; Terra and agent sources carry no user or membership identity. None
+is a mechanical class.
 
 `world_membership_entity_controls` is the only character-authority edge.
 Profile text cannot grant control, mutate mechanical state, or become an effect
@@ -211,8 +216,8 @@ target.
 Facilitator-private interaction/Consequence notes and restricted character
 fields are filtered in server query/mapping paths. Frontend hiding is secondary.
 Interaction/resolution `facilitator_source` and event `actor_source` preserve
-human-versus-Terra attribution; the human membership is present only for human
-authors. World events contain invalidation identifiers, not passwords, profile
+human, Terra, or agent attribution; the human membership is present only for
+human authors. World events contain invalidation identifiers, not passwords, profile
 text, action text, or private narrative.
 
 The standard request/recovery logger records method, a redacted path, status,

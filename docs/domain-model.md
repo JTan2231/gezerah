@@ -43,9 +43,9 @@ Build access and survives every table handoff; it is not the participant's
 momentary role in Play.
 
 Exactly one facilitator assignment identifies the Dungeon Master. Its source
-is `human`, with one active non-spectator `facilitator_membership_id`, or
-`terra`, with no human membership. A new world's owner is its initial human
-facilitator. The assignment derives each membership's `current_play_role`:
+is `human`, with one active non-spectator `facilitator_membership_id`, or a
+non-membership `terra` or `agent` source. A new world's owner is its initial
+human facilitator. The assignment derives each membership's `current_play_role`:
 the designated human is `facilitator`, a spectator remains `spectator`, and
 every other active non-spectator is a `player`, including owners and editors.
 Changing the assignment does not rewrite any durable membership role.
@@ -53,9 +53,11 @@ Changing the assignment does not rewrite any durable membership role.
 `dm_source` stores the assignment discriminator for compatibility. Handoff is
 a separate world-revisioned command, not an ordinary settings patch. An
 owner/editor or the current human facilitator may hand the table to another
-active non-spectator or Terra, but only when no interaction is draft, open, or
-adjudicating. The narrow recovery exception lets the owner assign themself when
-the sole unfinished interaction is Terra-authored and open or adjudicating;
+active non-spectator, Terra, or an external agent, but only when no interaction
+is draft, open, or adjudicating. The narrow recovery exception lets the owner
+assign themself when
+the sole unfinished interaction is authored by the currently assigned
+non-human source and is open or adjudicating;
 the owner's submitted action is withdrawn before they continue as human DM. In
 Terra mode the world description also serves as the campaign
 brief supplied to generation; it remains ordinary user-authored prose rather
@@ -75,7 +77,7 @@ classification and a source:
 The classification adds no canonical name, entity class, or special key.
 
 World problems are interactions: prompt-first, free-form moments created during
-play by the current human facilitator or Terra. Their
+play by the current human facilitator, Terra, or an external agent. Their
 audience, responders, context entities, player actions, Consequence, requested
 effects, and before/after receipt are captured relationally. A Consequence is
 one prose account of what transpires plus ordered targeted effects compiled
@@ -311,6 +313,11 @@ The world's `table_revision` guards complete controller-set replacements. It
 advances when table-scoped membership/control state changes independently of
 the world settings revision.
 
+An agent-mode waiting player has one additional narrow command: atomically
+claim an active entity with no active non-spectator controller. The same world
+lock and `table_revision` guard make the availability snapshot and claim race
+explicit without granting general controller-editing authority.
+
 Readiness gates the live table for the current `player` role. Onboarding
 players remain active world members so they can read and edit authorized
 character profiles, but
@@ -332,8 +339,8 @@ draft ──present──> open ──adjudicate──> adjudicating ──resol
 - `draft`: facilitator-editable prompt and audience setup;
 - `open`: visible to its audience and accepting eligible player actions;
 - `adjudicating`: submissions are closed; a human-DM interaction is hidden
-  from its non-facilitator audience, while a Terra interaction remains visible
-  as Terra finishes or retries its decision;
+  from its non-facilitator audience, while a Terra or agent interaction remains
+  visible as the automated source finishes or retries its decision;
 - `resolved`: immutable Consequence and applied receipt exist;
 - `cancelled`: final without a Consequence. A presented cancellation remains
   visible to its audience as history; a cancelled draft remains private.
@@ -343,15 +350,15 @@ notes, audience memberships, eligible responders, and ordered context entities.
 Presentation requires at least one audience member. Eligible responders are an
 active, ready current-player subset of the audience. The interaction snapshots
 `facilitator_source`; a human-authored interaction records its creator
-membership, while a Terra interaction has no human creator.
+membership, while Terra and agent interactions have no human creator.
 
 Each eligible player may have at most one submitted action. The player may
 withdraw it while the interaction is open. During adjudication the compiled
 Consequence may identify one submitted action or explicitly select none.
 
 Non-facilitators may read open, resolved, and presented-cancelled interactions
-in whose audience they participate, plus an adjudicating Terra interaction
-while the autonomous decision is pending. Responses omit private notes and
+in whose audience they participate, plus an adjudicating Terra or agent
+interaction while the automated decision is pending. Responses omit private notes and
 facilitator-only receipt fields.
 
 ## Consequences and transition semantics
@@ -388,7 +395,15 @@ preview internally, and invokes the ordinary atomic resolve path. The pacing
 player supplies revisions and an idempotency key but cannot edit, select, or
 approve model output.
 
-While a Terra-authored interaction is open or adjudicating and Terra remains
+With `agent` assigned, the server does not call a model. A ready current player
+may present agent-supplied public prose through the dedicated agent command;
+audience, responders, and context are still server-derived. After all responders
+act, the agent command supplies public narrative and concrete effects, while the
+server enforces revisions, validates a deterministic preview, and commits the
+ordinary atomic receipt. The authenticated membership remains a player and is
+not persisted as the author of agent-attributed rows or events.
+
+While an automated interaction is open or adjudicating and its source remains
 assigned, any ready current player may use the ordinary cancellation command,
 surfaced in Play as **Skip problem**. It records that player as the human event
 actor but retains Terra as the interaction source, applies no Consequence, and
@@ -441,7 +456,8 @@ Consequence and containing:
 - affected state records after commit.
 
 Normally interaction and resolution sources agree. An owner takeover is the
-intentional exception: the interaction remains attributed to Terra and the
+intentional exception: the interaction remains attributed to its automated
+source and the
 resolution records the human owner, preserving both authorship facts.
 
 Resolution is unique per interaction. A world-scoped idempotency key makes retry
@@ -454,7 +470,7 @@ database triggers. A committed Consequence, its state changes, receipt, action
 statuses, interaction lifecycle, and world event share one transaction.
 
 `world_events` is an append-only monotonic cursor used for SSE invalidation. Its
-payload carries `actor_source` (`human` or `terra`), a human membership only
+payload carries `actor_source` (`human`, `terra`, or `agent`), a human membership only
 for human actors, and related resource IDs rather than state snapshots. Clients
 reconnect with their last cursor and reload authoritative resources. The human
 who clicks Continue or Decide is not recorded as the author or actor of Terra's

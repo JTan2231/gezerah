@@ -6,7 +6,7 @@ Install the following locally:
 
 | Tool                                   | Purpose                                                    |
 | -------------------------------------- | ---------------------------------------------------------- |
-| Go 1.25.12                             | Pinned backend build, tests, and executable.               |
+| Go 1.25.14                             | Pinned backend build, tests, and executable.               |
 | Bun 1.1.42                             | Intended frontend and E2E package manager/runtime version. |
 | PostgreSQL                             | Application data and tests.                                |
 | `createdb`                             | Initial local database creation.                           |
@@ -17,7 +17,7 @@ Install the following locally:
 | Chrome/Chromium or Playwright Chromium | Browser acceptance tests.                                  |
 | POSIX shell                            | Root scripts.                                              |
 
-The backend validator rejects any Go toolchain other than 1.25.12. It downloads
+The backend validator rejects any Go toolchain other than 1.25.14. It downloads
 the official golangci-lint 2.12.2 release archive into the shared CI tool cache
 and verifies its checked-in published SHA-256 checksum before use. It also installs
 govulncheck 1.6.0 into its disposable run directory with
@@ -66,7 +66,8 @@ upgrade, the `003` audience-invalidation event upgrade, the `004` password-
 authentication cutover, and `005_auto_dm.sql`, which adds the world-level
 `human`/`terra` source discriminator, followed by
 `006_facilitator_assignment.sql`, which adds the designated human membership
-and live attribution. Existing databases at a recorded migration
+and live attribution, followed by `007_agent_facilitator.sql`, which adds the
+external page-agent source. Existing databases at a recorded migration
 prefix upgrade forward, but `004_password_auth.sql` deliberately refuses a
 nonempty `users` table because the repository has no safe way to invent
 credentials for UUID-only accounts. Use a fresh database for that cutover

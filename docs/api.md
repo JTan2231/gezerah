@@ -172,7 +172,7 @@ An incorrect current password on the change endpoint is a field-specific
 | `POST /api/worlds`                             | Authenticated user                             | Name/description; creates world, owner membership, field/rules roots, and event. |
 | `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
 | `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, and `expected_revision`.                             |
-| `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra assignment against `expected_revision`.                 |
+| `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
 | `POST /api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
 | `GET /api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
 
@@ -190,13 +190,14 @@ three are returned on every `World` response.
 
 Every World also returns legacy assignment discriminator `dm_source` and a
 `facilitator` object. For a human assignment it contains `source:"human"`,
-`membership_id`, and `display_name`; for Terra it contains only
-`source:"terra"`. Ordinary world PATCH cannot change `dm_source`. The dedicated
+`membership_id`, and `display_name`; Terra and agent assignments contain only
+their source. Ordinary world PATCH cannot change `dm_source`. The dedicated
 assignment command accepts exactly one of:
 
 ```json
 { "source": "human", "membership_id": "membership UUID", "expected_revision": 4 }
 { "source": "terra", "expected_revision": 4 }
+{ "source": "agent", "expected_revision": 4 }
 ```
 
 The human target must be an active non-spectator in the world. A meaningful
@@ -204,10 +205,11 @@ handoff advances the world revision and emits `facilitator-changed`; an
 unchanged assignment is idempotent. Any draft, open, or adjudicating
 interaction normally returns `409 interactions_unfinished`. The only exception
 is an owner assigning the facilitator to their own membership when exactly one
-unfinished interaction exists, it is Terra-authored and open or adjudicating,
-and Terra is still assigned. That transaction withdraws the owner's submitted
-action if present, advances the interaction revision for that withdrawal, and
-lets the owner close/adjudicate as needed and finish with human-DM commands.
+unfinished interaction exists, it is authored by the currently assigned Terra
+or external-agent source, and it is open or adjudicating. That transaction
+withdraws the owner's submitted action if present, advances the interaction
+revision for that withdrawal, and lets the owner close/adjudicate as needed and
+finish with human-DM commands.
 The world description is the campaign brief when Terra is designated.
 
 ### Capacities and capabilities
@@ -244,6 +246,8 @@ restored through the product API.
 | `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.              |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_table_revision`. |
+| `GET /api/worlds/{world_id}/available-characters`             | Waiting player in agent world     | Narrow unclaimed preset projection plus current `table_revision`.       |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/claim`      | Waiting player in agent world     | Atomically claims one uncontrolled active entity using `expected_table_revision`. |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions. |
 
@@ -290,6 +294,8 @@ cannot silently escalate or downgrade it.
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Current human facilitator    | Luna compilation and advisory preview for the human's supplied prose. |
 | `POST /api/worlds/{world_id}/auto-dm/continue`                                           | Ready current player         | Terra creates and presents the next interaction; empty body.           |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide`               | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
+| `POST /api/worlds/{world_id}/agent-dm/continue`                                     | Ready current player         | Creates and presents an agent-supplied prompt; no server model call.   |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/agent-dm/resolve`        | Ready current player         | Applies an agent-supplied narrative/effect ruling through the ordinary receipt path. |
 
 ### World events (SSE)
 
@@ -517,6 +523,15 @@ the response.
 The response returns `entity_id`, the normalized controller membership IDs,
 and the new `table_revision`.
 
+Agent-mode character selection is deliberately narrower than controller
+replacement. `GET .../available-characters` returns only `id`, `display_name`,
+an optional table-visible `profile_summary`, and the world `table_revision`.
+`POST .../entities/{entity_id}/claim` accepts only `expected_table_revision`.
+It requires the signed-in membership to be waiting for a character and the
+entity to have no active non-spectator controller; the world lock makes two
+simultaneous claims produce one winner. Its response adds the resulting
+`play_status`.
+
 ### Character fields and profiles
 
 ```json
@@ -581,11 +596,21 @@ draft remains editable, but `present: true` or a later presentation command is
 rejected atomically until it has at least one audience member.
 
 Every Interaction includes `facilitator_source`. A human-authored row includes
-`created_by_membership_id`; a Terra-authored row omits it. A returned resolution
-has its own `facilitator_source` and includes
+`created_by_membership_id`; Terra- and agent-authored rows omit it. A returned
+resolution has its own `facilitator_source` and includes
 `resolved_by_membership_id` only for a human resolution. After the owner
-recovery path, the interaction correctly remains Terra-authored while its
-resolution is human-attributed.
+recovery path, the interaction correctly retains its automated source while
+its resolution is human-attributed.
+
+In an `agent` world, `POST .../agent-dm/continue` accepts an optional `title`
+and required `prompt`, derives the same ready audience/responders/context as
+Terra, and creates the interaction directly as `open`. Once responders have
+acted, `POST .../agent-dm/resolve` accepts the ordinary expected interaction and
+rules revisions, idempotency key, optional selected action/summary, public
+`narrative`, and concrete `effects`. It does not accept private notes. The
+server enters adjudication, previews deterministically, and commits through the
+same atomic transition and immutable receipt path; an equivalent retry returns
+`replayed:true`, while different key reuse conflicts.
 
 Presented cancelled interactions remain readable to their audience and contain
 no resolution. A cancelled draft remains visible only to the human facilitator.

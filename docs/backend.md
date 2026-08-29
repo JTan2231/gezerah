@@ -2,7 +2,7 @@
 
 ## Stack and process model
 
-The backend is a Go 1.25.12 application with two direct runtime dependencies:
+The backend is a Go 1.25.14 application with two direct runtime dependencies:
 `github.com/jackc/pgx/v5` and `golang.org/x/crypto` for Argon2id. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
 the PostgreSQL schema and production frontend.
@@ -92,8 +92,8 @@ HTTP and persistence adapter:
 
 Durable membership and live responsibility are deliberately separate. The one
 membership vocabulary remains owner/editor/player/spectator for world access.
-A world-level assignment designates either one active non-spectator membership
-or Terra as facilitator, and response mapping derives the current
+A world-level assignment designates either one active non-spectator membership,
+Terra, or an external agent as facilitator, and response mapping derives the current
 facilitator/player/spectator play role without rewriting membership.
 
 ### `internal/migrations`
@@ -106,7 +106,9 @@ event invalidations; and
 `004_password_auth.sql` installs credentials and server sessions.
 `005_auto_dm.sql` adds the world-level human/Terra source discriminator;
 `006_facilitator_assignment.sql` adds the designated human membership and
-human/Terra attribution on interactions, resolutions, and events. See
+human/Terra attribution on interactions, resolutions, and events; and
+`007_agent_facilitator.sql` extends the non-membership attribution shape to
+page agents. See
 [Database](database.md).
 
 ### `internal/openai`

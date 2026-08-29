@@ -196,7 +196,7 @@ export function OpenProblemView({
               >
                 {model.saving ? "Submitting…" : "Submit action"}
               </button>
-              {model.terraFacilitated ? (
+              {model.terraFacilitated || model.agentFacilitated ? (
                 <button
                   className="button button-quiet"
                   type="button"
@@ -276,6 +276,22 @@ export function OpenProblemView({
           ) : null}
         </div>
       ) : null}
+      {model.agentFacilitated ? (
+        <div className="adjudicate-callout agent-decision-callout">
+          <div>
+            <p>
+              <strong>
+                {model.allRespondersReady
+                  ? "ChatGPT can resolve"
+                  : "Waiting for every responder"}
+              </strong>
+              <small>
+                {model.responseProgressLabel} Continue the adventure in ChatGPT.
+              </small>
+            </p>
+          </div>
+        </div>
+      ) : null}
       {model.issue === null ? null : <ErrorMessage error={model.issue} />}
     </section>
   );
@@ -313,6 +329,19 @@ export function TerraDecisionPendingView({
             ? "Retry if stalled"
             : "Retry Terra"}
       </button>
+    </section>
+  );
+}
+
+export function AgentDecisionPendingView() {
+  return (
+    <section className="agent-decision-pending" aria-live="polite">
+      <h3>ChatGPT resolution pending</h3>
+      <p>
+        Return to ChatGPT and ask it to inspect the game, then retry resolving
+        this problem. The submitted actions remain locked until it succeeds or
+        you skip the problem.
+      </p>
     </section>
   );
 }

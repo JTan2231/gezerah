@@ -29,7 +29,7 @@ development, testing, operations, and security.
 
 ## Stack
 
-- Go 1.25.12, standard-library HTTP routing, and embedded static assets.
+- Go 1.25.14, standard-library HTTP routing, and embedded static assets.
 - PostgreSQL through `pgx/v5`, with forward-only embedded SQL migrations.
 - React 19 and TypeScript, built by Vite and managed with Bun 1.1.42.
 - One production Go binary serving both `/api/*` and the frontend.

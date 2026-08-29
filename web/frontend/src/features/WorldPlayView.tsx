@@ -7,6 +7,7 @@ import {
   LoadingState,
 } from "../components/StudioUI";
 import type {
+  AgentModeViewModel,
   CharacterOnboardingViewActions,
   CharacterOnboardingViewModel,
   HistoryCardViewModel,
@@ -117,6 +118,13 @@ export function WorldPlayView({
         </div>
       )}
 
+      {model.agentMode === null ? null : (
+        <AgentModeNotice
+          model={model.agentMode}
+          onCopyPrompt={actions.copyAgentPrompt}
+        />
+      )}
+
       <div className="play-grid">
         <aside className="roster-panel">
           <header>
@@ -191,6 +199,7 @@ export function WorldPlayView({
               facilitator={model.facilitator}
               canCreate={model.canCreateProblem}
               terraFacilitated={model.idle.terraFacilitated}
+              agentFacilitated={model.idle.agentFacilitated}
               canContinue={model.idle.canContinue}
               continuing={model.idle.continuing}
               issue={model.idle.issue}
@@ -269,13 +278,67 @@ export function CharacterOnboardingView({
         <ErrorMessage error={model.issue} onRetry={actions.retry} />
       )}
       {!model.loading && model.characters.length === 0 ? (
-        <div className="onboarding-waiting panel">
-          <EmptyState
-            title="No character assigned"
-            description="An owner or editor must create an entity and assign you as a controller."
-          />
-        </div>
+        model.claimableCharacters.length === 0 ? (
+          <div className="onboarding-waiting panel">
+            <EmptyState
+              title={
+                model.agentMode === null
+                  ? "No character assigned"
+                  : "No character available"
+              }
+              description={
+                model.agentMode === null
+                  ? "An owner or editor must create an entity and assign you as a controller."
+                  : "There are no unclaimed characters at this table yet."
+              }
+            />
+          </div>
+        ) : (
+          <section className="panel claimable-characters">
+            <header>
+              <h2>Choose your character</h2>
+              <p>
+                Claim one available character to take your seat at the table.
+              </p>
+            </header>
+            <div className="claimable-character-list">
+              {model.claimableCharacters.map((character) => (
+                <article key={character.id}>
+                  <span className="entity-token" aria-hidden="true">
+                    {character.name.slice(0, 1).toUpperCase()}
+                  </span>
+                  <div>
+                    <strong>{character.name}</strong>
+                    {character.summary === undefined ? null : (
+                      <p>{character.summary}</p>
+                    )}
+                  </div>
+                  <button
+                    className="button button-play"
+                    type="button"
+                    disabled={model.claimingCharacterId !== undefined}
+                    onClick={() => actions.claimCharacter(character.id)}
+                  >
+                    {model.claimingCharacterId === character.id
+                      ? "Claiming…"
+                      : "Choose character"}
+                  </button>
+                </article>
+              ))}
+            </div>
+            {model.claimIssue === null ? null : (
+              <ErrorMessage error={model.claimIssue} />
+            )}
+          </section>
+        )
       ) : null}
+
+      {model.agentMode === null ? null : (
+        <AgentModeNotice
+          model={model.agentMode}
+          onCopyPrompt={actions.copyAgentPrompt}
+        />
+      )}
 
       {profile === null ? null : (
         <div className="onboarding-layout">
@@ -315,6 +378,7 @@ function IdleTableView({
   facilitator,
   canCreate,
   terraFacilitated,
+  agentFacilitated,
   canContinue,
   continuing,
   issue,
@@ -324,6 +388,7 @@ function IdleTableView({
   facilitator: boolean;
   canCreate: boolean;
   terraFacilitated: boolean;
+  agentFacilitated: boolean;
   canContinue: boolean;
   continuing: boolean;
   issue: WorldPlayViewModel["idle"]["issue"];
@@ -334,15 +399,17 @@ function IdleTableView({
     <section className="idle-table">
       <h2>No active problem</h2>
       <p>
-        {terraFacilitated && continuing
-          ? "Terra is preparing the next problem from the current world and table history."
-          : terraFacilitated
-            ? "Terra Auto DM is running the table. A ready player can ask Terra to continue."
-            : facilitator && !canCreate
-              ? "This world is archived."
-              : facilitator
-                ? "Create a problem to begin."
-                : "A facilitator can create the next problem."}
+        {agentFacilitated
+          ? "ChatGPT is running the table. Continue the adventure in your ChatGPT conversation."
+          : terraFacilitated && continuing
+            ? "Terra is preparing the next problem from the current world and table history."
+            : terraFacilitated
+              ? "Terra Auto DM is running the table. A ready player can ask Terra to continue."
+              : facilitator && !canCreate
+                ? "This world is archived."
+                : facilitator
+                  ? "Create a problem to begin."
+                  : "A facilitator can create the next problem."}
       </p>
       {issue === null ? null : <ErrorMessage error={issue} />}
       {terraFacilitated && canContinue ? (
@@ -364,6 +431,40 @@ function IdleTableView({
         </button>
       ) : null}
     </section>
+  );
+}
+
+function AgentModeNotice({
+  model,
+  onCopyPrompt,
+}: {
+  model: AgentModeViewModel;
+  onCopyPrompt: () => void;
+}) {
+  return (
+    <aside className="agent-mode-notice" aria-label="ChatGPT Dungeon Master">
+      <div>
+        <strong>ChatGPT is Dungeon Master</strong>
+        <p>
+          {model.siteToolsAvailable
+            ? "Site Tools are connected. Keep this page open beside the chat."
+            : "Open in ChatGPT launches this exact Play page and starter prompt; sign in there if asked."}
+        </p>
+        <code>{model.starterPrompt}</code>
+      </div>
+      <div className="agent-mode-actions">
+        <a className="button button-play" href={model.launchURL}>
+          Open in ChatGPT
+        </a>
+        <button
+          className="button button-quiet"
+          type="button"
+          onClick={onCopyPrompt}
+        >
+          {model.promptCopied ? "Prompt copied" : "Copy starter prompt"}
+        </button>
+      </div>
+    </aside>
   );
 }
 

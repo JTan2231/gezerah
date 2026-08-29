@@ -226,6 +226,18 @@ func requireFacilitator(ctx context.Context, db queryer, r *http.Request, worldI
 }
 
 func requireTerraFacilitator(ctx context.Context, db queryer, worldID string) error {
+	return requireFacilitatorSource(ctx, db, worldID, terraFacilitatorSource, "Terra")
+}
+
+func requireAgentFacilitator(ctx context.Context, db queryer, worldID string) error {
+	return requireFacilitatorSource(ctx, db, worldID, agentFacilitatorSource, "the external agent")
+}
+
+func requireFacilitatorSource(
+	ctx context.Context,
+	db queryer,
+	worldID, expectedSource, label string,
+) error {
 	if !validID(worldID) {
 		return &statusError{Status: http.StatusBadRequest, Code: "invalid_id", Message: "world ID is malformed"}
 	}
@@ -240,8 +252,11 @@ func requireTerraFacilitator(ctx context.Context, db queryer, worldID string) er
 	if status != "active" {
 		return &statusError{Status: http.StatusConflict, Code: "world_archived", Message: "archived worlds cannot be changed"}
 	}
-	if source != "terra" || facilitatorMembershipID != nil {
-		return &statusError{Status: http.StatusForbidden, Code: "facilitator_required", Message: "Terra is not the current facilitator"}
+	if source != expectedSource || facilitatorMembershipID != nil {
+		return &statusError{
+			Status: http.StatusForbidden, Code: "facilitator_required",
+			Message: label + " is not the current facilitator",
+		}
 	}
 	return nil
 }

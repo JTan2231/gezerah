@@ -136,6 +136,29 @@ func TestFacilitatorAssignmentMigrationContract(t *testing.T) {
 	}
 }
 
+func TestAgentFacilitatorMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("007_agent_facilitator.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"dm_source in ('human', 'terra', 'agent')",
+		"dm_source in ('terra', 'agent') and facilitator_membership_id is null",
+		"facilitator_source in ('human', 'terra', 'agent')",
+		"facilitator_source in ('terra', 'agent') and created_by_membership_id is null",
+		"facilitator_source in ('terra', 'agent') and resolved_by_membership_id is null",
+		"actor_source in ('human', 'terra', 'agent')",
+		"actor_source in ('terra', 'agent') and actor_membership_id is null",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing agent facilitator contract fragment %q", fragment)
+		}
+	}
+}
+
 func TestInteractionAudienceInvalidationMigrationContract(t *testing.T) {
 	t.Parallel()
 

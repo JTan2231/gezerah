@@ -40,7 +40,7 @@ export interface WorldPlayViewModel {
   hasActiveProblem: boolean;
   dungeonMaster: {
     name: string;
-    source: "human" | "terra";
+    source: "human" | "terra" | "agent";
     selectedValue: string;
     canChange: boolean;
     canTakeOver: boolean;
@@ -50,6 +50,7 @@ export interface WorldPlayViewModel {
   };
   idle: {
     terraFacilitated: boolean;
+    agentFacilitated: boolean;
     canContinue: boolean;
     continuing: boolean;
     issue: PlayViewIssue | null;
@@ -66,6 +67,7 @@ export interface WorldPlayViewModel {
     issue: PlayViewIssue | null;
   };
   history: HistoryCardViewModel[];
+  agentMode: AgentModeViewModel | null;
 }
 
 export interface WorldPlayViewActions {
@@ -73,6 +75,7 @@ export interface WorldPlayViewActions {
   changeFacilitator: (value: string) => void;
   takeOverFacilitation: () => void;
   continueWithTerra: () => void;
+  copyAgentPrompt: () => void;
   retryRoster: () => void;
   retryProblems: () => void;
   selectEntity: (id: string) => void;
@@ -84,6 +87,19 @@ export interface CharacterChoiceViewModel {
   completedFieldCount: number;
   requiredFieldCount: number;
   selected: boolean;
+}
+
+export interface ClaimableCharacterViewModel {
+  id: string;
+  name: string;
+  summary?: string | undefined;
+}
+
+export interface AgentModeViewModel {
+  siteToolsAvailable: boolean;
+  starterPrompt: string;
+  launchURL: string;
+  promptCopied: boolean;
 }
 
 export interface CharacterOnboardingViewModel {
@@ -98,12 +114,18 @@ export interface CharacterOnboardingViewModel {
   loading: boolean;
   issue: PlayViewIssue | null;
   characters: CharacterChoiceViewModel[];
+  claimableCharacters: ClaimableCharacterViewModel[];
+  claimingCharacterId?: string | undefined;
+  claimIssue: PlayViewIssue | null;
+  agentMode: AgentModeViewModel | null;
 }
 
 export interface CharacterOnboardingViewActions {
   retry: () => void;
   selectCharacter: (id: string) => void;
   becomeFacilitator: () => void;
+  claimCharacter: (id: string) => void;
+  copyAgentPrompt: () => void;
 }
 
 export interface NewProblemDraftViewModel {
@@ -154,6 +176,7 @@ export interface OpenProblemViewModel {
   saving: boolean;
   closing: boolean;
   terraFacilitated: boolean;
+  agentFacilitated: boolean;
   canRequestDecision: boolean;
   allRespondersReady: boolean;
   decisionEnabled: boolean;

@@ -42,6 +42,7 @@ describe("WorldPlayView", () => {
           },
           idle: {
             terraFacilitated: false,
+            agentFacilitated: false,
             canContinue: false,
             continuing: false,
             issue: null,
@@ -103,12 +104,14 @@ describe("WorldPlayView", () => {
               effectiveChanges: [],
             },
           ],
+          agentMode: null,
         }}
         actions={{
           createProblem: noop,
           changeFacilitator: noop,
           takeOverFacilitation: noop,
           continueWithTerra: noop,
+          copyAgentPrompt: noop,
           retryRoster: noop,
           retryProblems: noop,
           selectEntity: noop,
@@ -160,11 +163,16 @@ describe("WorldPlayView", () => {
               selected: false,
             },
           ],
+          claimableCharacters: [],
+          claimIssue: null,
+          agentMode: null,
         }}
         actions={{
           retry: noop,
           selectCharacter: noop,
           becomeFacilitator: noop,
+          claimCharacter: noop,
+          copyAgentPrompt: noop,
         }}
         profile={<form aria-label="Character profile">Profile fixture</form>}
       />,
@@ -177,6 +185,57 @@ describe("WorldPlayView", () => {
     expect(html).toContain("2 of 3 complete");
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Profile fixture");
+  });
+
+  test("renders ChatGPT launch guidance and atomic character choices", () => {
+    const html = renderToStaticMarkup(
+      <CharacterOnboardingView
+        model={{
+          worldName: "The Glass Coast",
+          currentUserName: "Mara Vale",
+          dungeonMasterName: "ChatGPT",
+          statusLabel: "Waiting for a character",
+          facilitatorActionLabel: "Take over from ChatGPT",
+          canBecomeFacilitator: false,
+          changingFacilitator: false,
+          facilitatorIssue: null,
+          loading: false,
+          issue: null,
+          characters: [],
+          claimableCharacters: [
+            {
+              id: "ash",
+              name: "Ash",
+              summary: "A courier who knows the flooded roads.",
+            },
+          ],
+          claimIssue: null,
+          agentMode: {
+            siteToolsAvailable: true,
+            starterPrompt:
+              "Use https://game.example/play/world-1 as the game table.",
+            launchURL:
+              "codex://threads/new?prompt=fixture&browserUrl=https%3A%2F%2Fgame.example%2Fplay%2Fworld-1",
+            promptCopied: false,
+          },
+        }}
+        actions={{
+          retry: noop,
+          selectCharacter: noop,
+          becomeFacilitator: noop,
+          claimCharacter: noop,
+          copyAgentPrompt: noop,
+        }}
+        profile={null}
+      />,
+    );
+
+    expect(html).toContain("Dungeon Master: ChatGPT");
+    expect(html).toContain("Choose your character");
+    expect(html).toContain("A courier who knows the flooded roads.");
+    expect(html).toContain("Open in ChatGPT");
+    expect(html).toContain("codex://threads/new?");
+    expect(html).toContain("https://game.example/play/world-1");
   });
 
   test("renders problem creation and action submission states", () => {
@@ -222,6 +281,7 @@ describe("WorldPlayView", () => {
           saving: true,
           closing: false,
           terraFacilitated: false,
+          agentFacilitated: false,
           canRequestDecision: false,
           allRespondersReady: false,
           decisionEnabled: true,
@@ -270,6 +330,7 @@ describe("WorldPlayView", () => {
           },
           idle: {
             terraFacilitated: true,
+            agentFacilitated: false,
             canContinue: true,
             continuing: false,
             issue: null,
@@ -283,12 +344,14 @@ describe("WorldPlayView", () => {
           },
           problems: { loading: false, issue: null },
           history: [],
+          agentMode: null,
         }}
         actions={{
           createProblem: noop,
           changeFacilitator: noop,
           takeOverFacilitation: noop,
           continueWithTerra: noop,
+          copyAgentPrompt: noop,
           retryRoster: noop,
           retryProblems: noop,
           selectEntity: noop,
@@ -313,6 +376,7 @@ describe("WorldPlayView", () => {
           saving: false,
           closing: false,
           terraFacilitated: true,
+          agentFacilitated: false,
           canRequestDecision: true,
           allRespondersReady: true,
           decisionEnabled: true,

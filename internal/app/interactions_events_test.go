@@ -153,7 +153,7 @@ func TestWorldEventStreamChunkOverridesGlobalWriteTimeout(t *testing.T) {
 	}
 }
 
-func TestVisibleWorldEventsAudiencePolicyIncludesTerraAdjudicationAndInvalidation(t *testing.T) {
+func TestVisibleWorldEventsAudiencePolicyIncludesAutomatedAdjudicationAndInvalidation(t *testing.T) {
 	t.Parallel()
 
 	got := strings.Join(strings.Fields(visibleWorldEventsAudiencePolicyQuery), " ")
@@ -172,7 +172,7 @@ func TestVisibleWorldEventsAudiencePolicyIncludesTerraAdjudicationAndInvalidatio
 				and exists (
 					select 1 from worlds assigned_world
 					where assigned_world.id = interaction.world_id
-						and assigned_world.dm_source = 'terra'
+							and assigned_world.dm_source in ('terra', 'agent')
 				)
 			)
 			or event.invalidates_interaction_audience
@@ -236,6 +236,32 @@ func TestTerraPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
 					"terraPlayerCanCancelInteraction(%q, %q) = %t, want %t",
 					test.facilitatorSource, test.status, got, test.want,
 				)
+			}
+		})
+	}
+}
+
+func TestAutomatedPlayerCanCancelOnlyCurrentSourceUnfinishedInteraction(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name, assignedSource, interactionSource, status string
+		want                                            bool
+	}{
+		{name: "agent open", assignedSource: agentFacilitatorSource, interactionSource: agentFacilitatorSource, status: "open", want: true},
+		{name: "agent adjudicating", assignedSource: agentFacilitatorSource, interactionSource: agentFacilitatorSource, status: "adjudicating", want: true},
+		{name: "agent cannot cancel Terra", assignedSource: agentFacilitatorSource, interactionSource: terraFacilitatorSource, status: "open"},
+		{name: "Terra cannot cancel agent", assignedSource: terraFacilitatorSource, interactionSource: agentFacilitatorSource, status: "open"},
+		{name: "human is not automated", assignedSource: "human", interactionSource: "human", status: "open"},
+		{name: "final agent interaction", assignedSource: agentFacilitatorSource, interactionSource: agentFacilitatorSource, status: "resolved"},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := automatedPlayerCanCancelInteraction(
+				test.assignedSource, test.interactionSource, test.status,
+			); got != test.want {
+				t.Fatalf("automatedPlayerCanCancelInteraction() = %t, want %t", got, test.want)
 			}
 		})
 	}

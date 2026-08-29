@@ -29,7 +29,7 @@ esac
 
 cd "$(dirname "$0")"
 
-go_required_version="go1.25.12"
+go_required_version="go1.25.14"
 golangci_lint_required_version="2.12.2"
 govulncheck_version="v1.6.0"
 golangci_lint_binary=""

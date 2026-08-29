@@ -12,7 +12,14 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const terraFacilitatorSource = "terra"
+const (
+	terraFacilitatorSource = "terra"
+	agentFacilitatorSource = "agent"
+)
+
+func isAutomatedFacilitatorSource(source string) bool {
+	return source == terraFacilitatorSource || source == agentFacilitatorSource
+}
 
 func (s *Server) handleContinueAutoDM(w http.ResponseWriter, r *http.Request) {
 	worldID := r.PathValue("world_id")
@@ -200,19 +207,58 @@ func requireTerraReadyPlayer(
 	db queryer,
 	member authorizedWorldMember,
 ) error {
-	if err := requireTerraFacilitator(ctx, db, member.WorldID); err != nil {
+	return requireAutomatedReadyPlayer(ctx, db, member, terraFacilitatorSource, "Terra")
+}
+
+func requireAgentReadyPlayer(
+	ctx context.Context,
+	db queryer,
+	member authorizedWorldMember,
+) error {
+	return requireAutomatedReadyPlayer(ctx, db, member, agentFacilitatorSource, "the external agent")
+}
+
+func requireAutomatedReadyPlayer(
+	ctx context.Context,
+	db queryer,
+	member authorizedWorldMember,
+	source, label string,
+) error {
+	if err := requireFacilitatorSource(ctx, db, member.WorldID, source, label); err != nil {
 		return err
 	}
 	if member.Role == "spectator" || member.Facilitator {
 		return &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
-			Message: "only a ready player may pace Terra",
+			Message: "only a ready player may pace " + label,
 		}
 	}
 	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
 		return err
 	}
 	return nil
+}
+
+func requireAssignedAutomatedReadyPlayer(
+	ctx context.Context,
+	db queryer,
+	member authorizedWorldMember,
+) (string, error) {
+	var source string
+	if err := db.QueryRow(ctx, `select dm_source from worlds where id = $1`, member.WorldID).Scan(&source); err != nil {
+		return "", err
+	}
+	label := "Terra"
+	if source == agentFacilitatorSource {
+		label = agentFacilitatorLabel
+	}
+	if !isAutomatedFacilitatorSource(source) {
+		return "", facilitatorRequired()
+	}
+	if err := requireAutomatedReadyPlayer(ctx, db, member, source, label); err != nil {
+		return "", err
+	}
+	return source, nil
 }
 
 func requireNoUnfinishedInteraction(ctx context.Context, db queryer, worldID string) error {
@@ -225,7 +271,7 @@ func requireNoUnfinishedInteraction(ctx context.Context, db queryer, worldID str
 		return err
 	}
 	if unfinished {
-		return interactionLifecycleConflict("finish the current interaction before asking Terra to continue")
+		return interactionLifecycleConflict("finish the current interaction before continuing")
 	}
 	return nil
 }
@@ -234,6 +280,18 @@ func (s *Server) createAndPresentAutoDMInteraction(
 	ctx context.Context,
 	r *http.Request,
 	worldID, prompt string,
+) (string, error) {
+	return s.createAndPresentAutomatedInteraction(
+		ctx, r, worldID, nil, prompt, terraFacilitatorSource, "Terra",
+	)
+}
+
+func (s *Server) createAndPresentAutomatedInteraction(
+	ctx context.Context,
+	r *http.Request,
+	worldID string,
+	title *string,
+	prompt, facilitatorSource, label string,
 ) (string, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -250,13 +308,7 @@ func (s *Server) createAndPresentAutoDMInteraction(
 	if err != nil {
 		return "", err
 	}
-	if err := requireTerraFacilitator(ctx, tx, worldID); err != nil {
-		return "", err
-	}
-	if member.Role == "spectator" || member.Facilitator {
-		return "", &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace Terra"}
-	}
-	if err := requireInteractionMemberReadiness(ctx, tx, member); err != nil {
+	if err := requireAutomatedReadyPlayer(ctx, tx, member, facilitatorSource, label); err != nil {
 		return "", err
 	}
 	if err := requireNoUnfinishedInteraction(ctx, tx, worldID); err != nil {
@@ -270,7 +322,7 @@ func (s *Server) createAndPresentAutoDMInteraction(
 	if len(related.ResponderIDs) == 0 {
 		return "", &statusError{
 			Status: http.StatusConflict, Code: "no_ready_players",
-			Message: "Terra needs at least one ready player before continuing",
+			Message: label + " needs at least one ready player before continuing",
 		}
 	}
 	interactionID, err := newID()
@@ -279,20 +331,24 @@ func (s *Server) createAndPresentAutoDMInteraction(
 	}
 	if _, err := tx.Exec(ctx, `
 		insert into interactions (
-			id, world_id, prompt, status, revision, facilitator_source,
+			id, world_id, title, prompt, status, revision, facilitator_source,
 			created_by_membership_id, presented_at
-		) values ($1, $2, $3, 'open', 1, 'terra', null, now())`,
-		interactionID, worldID, prompt,
+		) values ($1, $2, $3, $4, 'open', 1, $5, null, now())`,
+		interactionID, worldID, nullableOptionalString(title), prompt, facilitatorSource,
 	); err != nil {
 		return "", err
 	}
 	if err := replaceInteractionChildren(ctx, tx, interactionID, worldID, related); err != nil {
 		return "", err
 	}
-	if err := appendAutoDMWorldEvent(ctx, tx, worldID, "interaction-created", &interactionID, false); err != nil {
+	if err := appendAutomatedWorldEvent(
+		ctx, tx, worldID, "interaction-created", &interactionID, false, facilitatorSource,
+	); err != nil {
 		return "", err
 	}
-	if err := appendAutoDMWorldEvent(ctx, tx, worldID, "interaction-presented", &interactionID, false); err != nil {
+	if err := appendAutomatedWorldEvent(
+		ctx, tx, worldID, "interaction-presented", &interactionID, false, facilitatorSource,
+	); err != nil {
 		return "", err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -435,6 +491,19 @@ func (s *Server) beginAutoDMAdjudication(
 	worldID, interactionID string,
 	expectedRevision, expectedRulesRevision int64,
 ) (int64, error) {
+	return s.beginAutomatedAdjudication(
+		ctx, r, worldID, interactionID, expectedRevision, expectedRulesRevision,
+		terraFacilitatorSource, "Terra",
+	)
+}
+
+func (s *Server) beginAutomatedAdjudication(
+	ctx context.Context,
+	r *http.Request,
+	worldID, interactionID string,
+	expectedRevision, expectedRulesRevision int64,
+	expectedFacilitatorSource, label string,
+) (int64, error) {
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return 0, err
@@ -444,32 +513,27 @@ func (s *Server) beginAutoDMAdjudication(
 	if err != nil {
 		return 0, err
 	}
-	if err := requireTerraFacilitator(ctx, tx, worldID); err != nil {
-		return 0, err
-	}
-	if member.Role == "spectator" || member.Facilitator {
-		return 0, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace Terra"}
-	}
-	if err := requireInteractionMemberReadiness(ctx, tx, member); err != nil {
+	if err := requireAutomatedReadyPlayer(ctx, tx, member, expectedFacilitatorSource, label); err != nil {
 		return 0, err
 	}
 	if _, err := requireRulesRevision(ctx, tx, worldID, &expectedRulesRevision); err != nil {
 		return 0, err
 	}
-	var status, facilitatorSource string
+	var status, interactionFacilitatorSource string
 	var revision int64
 	if err := tx.QueryRow(ctx, `
 		select status, revision, facilitator_source from interactions
 		where world_id = $1 and id = $2 for update`, worldID, interactionID,
-	).Scan(&status, &revision, &facilitatorSource); err != nil {
+	).Scan(&status, &revision, &interactionFacilitatorSource); err != nil {
 		return 0, err
 	}
 	missingResponders, err := countMissingResponders(ctx, tx, worldID, interactionID)
 	if err != nil {
 		return 0, err
 	}
-	plan, err := planAutoDMAdjudication(
-		status, facilitatorSource, revision, expectedRevision, missingResponders,
+	plan, err := planAutomatedAdjudication(
+		status, interactionFacilitatorSource, revision, expectedRevision, missingResponders,
+		expectedFacilitatorSource, label,
 	)
 	if err != nil {
 		return 0, err
@@ -480,8 +544,9 @@ func (s *Server) beginAutoDMAdjudication(
 			where world_id = $1 and id = $2`, worldID, interactionID); err != nil {
 			return 0, err
 		}
-		if err := appendAutoDMWorldEvent(
+		if err := appendAutomatedWorldEvent(
 			ctx, tx, worldID, interactionAdjudicatingEventType, &interactionID, false,
+			expectedFacilitatorSource,
 		); err != nil {
 			return 0, err
 		}
@@ -502,19 +567,31 @@ func planAutoDMAdjudication(
 	revision, expectedRevision int64,
 	missingResponders int,
 ) (autoDMAdjudicationPlan, error) {
+	return planAutomatedAdjudication(
+		status, facilitatorSource, revision, expectedRevision, missingResponders,
+		terraFacilitatorSource, "Terra",
+	)
+}
+
+func planAutomatedAdjudication(
+	status, facilitatorSource string,
+	revision, expectedRevision int64,
+	missingResponders int,
+	expectedSource, label string,
+) (autoDMAdjudicationPlan, error) {
 	if revision != expectedRevision {
 		return autoDMAdjudicationPlan{}, revisionConflict("interaction", expectedRevision, revision)
 	}
 	if status != "open" && status != "adjudicating" {
-		return autoDMAdjudicationPlan{}, interactionLifecycleConflict("only an open or adjudicating interaction can be decided by Terra")
+		return autoDMAdjudicationPlan{}, interactionLifecycleConflict("only an open or adjudicating interaction can be decided by " + label)
 	}
-	if facilitatorSource != terraFacilitatorSource {
-		return autoDMAdjudicationPlan{}, interactionLifecycleConflict("Terra can decide only an interaction it is facilitating")
+	if facilitatorSource != expectedSource {
+		return autoDMAdjudicationPlan{}, interactionLifecycleConflict(label + " can decide only an interaction it is facilitating")
 	}
 	if missingResponders > 0 {
 		return autoDMAdjudicationPlan{}, &statusError{
 			Status: http.StatusConflict, Code: "responses_incomplete",
-			Message: "every eligible responder must submit an action before Terra decides",
+			Message: "every eligible responder must submit an action before " + label + " decides",
 			Fields:  map[string]string{"missing_responses": fmt.Sprint(missingResponders)},
 		}
 	}
@@ -549,21 +626,18 @@ func countMissingResponders(
 	return missing, nil
 }
 
-func appendAutoDMWorldEvent(
+func appendAutomatedWorldEvent(
 	ctx context.Context,
 	tx pgx.Tx,
 	worldID, eventType string,
 	interactionID *string,
 	invalidatesInteractionAudience bool,
+	facilitatorSource string,
 ) error {
-	_, err := tx.Exec(ctx, `
-		insert into world_events (
-			world_id, event_type, actor_membership_id, actor_source, interaction_id,
-			invalidates_interaction_audience
-		) values ($1, $2, null, 'terra', $3, $4)`,
-		worldID, eventType, interactionID, invalidatesInteractionAudience,
+	return appendWorldEventForSource(
+		ctx, tx, worldID, eventType, facilitatorSource, nil,
+		interactionID, nil, nil, invalidatesInteractionAudience,
 	)
-	return err
 }
 
 func (s *Server) loadTerraAutoDMContextSnapshot(

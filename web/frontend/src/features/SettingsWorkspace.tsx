@@ -107,7 +107,9 @@ export function SettingsWorkspace({
             world.facilitator.display_name ??
             (world.facilitator.source === "terra"
               ? "Terra Auto DM"
-              : "Human facilitator"),
+              : world.facilitator.source === "agent"
+                ? "ChatGPT"
+                : "Human facilitator"),
         },
         canArchive: world.role === "owner" && world.status === "active",
       }}

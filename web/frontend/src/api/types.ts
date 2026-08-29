@@ -1,7 +1,7 @@
 export type WorldRole = "owner" | "editor" | "player" | "spectator";
 type WorldStatus = "active" | "archived";
 export type CurrentPlayRole = "facilitator" | "player" | "spectator";
-type FacilitatorSource = "human" | "terra";
+export type FacilitatorSource = "human" | "terra" | "agent";
 
 export interface WorldFacilitator {
   source: FacilitatorSource;
@@ -13,7 +13,7 @@ export interface World {
   id: string;
   name: string;
   description?: string | undefined;
-  dm_source: "human" | "terra";
+  dm_source: FacilitatorSource;
   status: WorldStatus;
   revision: number;
   role: WorldRole;
@@ -163,6 +163,24 @@ export interface WorldEntity {
   completed_field_count: number;
   created_at: string;
   updated_at: string;
+}
+
+export interface AvailableCharacter {
+  id: string;
+  display_name: string;
+  profile_summary?: string | undefined;
+}
+
+export interface AvailableCharacters {
+  table_revision: number;
+  characters: AvailableCharacter[];
+}
+
+export interface CharacterClaimResult {
+  entity_id: string;
+  controller_world_membership_ids: string[];
+  table_revision: number;
+  play_status: PlayStatus;
 }
 
 export interface User {

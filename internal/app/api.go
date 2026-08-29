@@ -364,6 +364,28 @@ type worldEntityControllersResponse struct {
 	TableRevision                int64    `json:"table_revision"`
 }
 
+type claimWorldEntityRequest struct {
+	ExpectedTableRevision *int64 `json:"expected_table_revision"`
+}
+
+type availableAgentCharacterResponse struct {
+	ID             string  `json:"id"`
+	DisplayName    string  `json:"display_name"`
+	ProfileSummary *string `json:"profile_summary,omitempty"`
+}
+
+type availableAgentCharactersResponse struct {
+	TableRevision int64                             `json:"table_revision"`
+	Characters    []availableAgentCharacterResponse `json:"characters"`
+}
+
+type claimedWorldEntityResponse struct {
+	EntityID                     string   `json:"entity_id"`
+	ControllerWorldMembershipIDs []string `json:"controller_world_membership_ids"`
+	TableRevision                int64    `json:"table_revision"`
+	PlayStatus                   string   `json:"play_status"`
+}
+
 type saveWorldCharacterFieldRequest struct {
 	ID         string  `json:"id,omitempty"`
 	Label      string  `json:"label"`
@@ -482,6 +504,21 @@ type autoDMDecideRequest struct {
 	ExpectedRevision      *int64 `json:"expected_revision"`
 	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
 	IdempotencyKey        string `json:"idempotency_key"`
+}
+
+type agentDMContinueRequest struct {
+	Title  *string `json:"title,omitempty"`
+	Prompt string  `json:"prompt"`
+}
+
+type agentDMResolveRequest struct {
+	ExpectedRevision      *int64              `json:"expected_revision"`
+	ExpectedRulesRevision *int64              `json:"expected_rules_revision"`
+	IdempotencyKey        string              `json:"idempotency_key"`
+	SelectedActionID      *string             `json:"selected_action_id,omitempty"`
+	ActionSummary         *string             `json:"action_summary,omitempty"`
+	Narrative             string              `json:"narrative"`
+	Effects               []concreteEffectDTO `json:"effects"`
 }
 
 type compileConsequenceRequest struct {

@@ -165,7 +165,7 @@ func (s *Server) resolveInteractionAs(
 		if replayInteractionID != interactionID || replaySource != facilitatorSource {
 			return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was already used for another ruling"}
 		}
-		if facilitatorSource == "human" {
+		if facilitatorSource != terraFacilitatorSource {
 			matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
 			if err != nil {
 				return zero, err
@@ -207,7 +207,7 @@ func (s *Server) resolveInteractionAs(
 				worldID, strings.TrimSpace(request.IdempotencyKey),
 			).Scan(&committedInteractionID, &committedSource)
 			if replayErr == nil && committedInteractionID == interactionID && committedSource == facilitatorSource {
-				if facilitatorSource == "human" {
+				if facilitatorSource != terraFacilitatorSource {
 					matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
 					if err != nil {
 						return zero, err
@@ -229,7 +229,7 @@ func (s *Server) resolveInteractionAs(
 		}
 		return zero, interactionLifecycleConflict("interaction must be adjudicating before it can be resolved")
 	}
-	if facilitatorSource == terraFacilitatorSource && interactionFacilitatorSource != terraFacilitatorSource {
+	if facilitatorSource != "human" && interactionFacilitatorSource != facilitatorSource {
 		return zero, interactionLifecycleConflict("interaction facilitator source does not match this ruling")
 	}
 	if revision != *request.ExpectedRevision {
@@ -333,8 +333,8 @@ func (s *Server) resolveInteractionAs(
 		where world_id = $1 and id = $2`, worldID, interactionID); err != nil {
 		return zero, err
 	}
-	if facilitatorSource == terraFacilitatorSource {
-		if err := appendAutoDMResolutionEvent(ctx, tx, worldID, interactionID, resolutionID); err != nil {
+	if facilitatorSource != "human" {
+		if err := appendAutomatedResolutionEvent(ctx, tx, worldID, interactionID, resolutionID, facilitatorSource); err != nil {
 			return zero, err
 		}
 	} else if err := appendWorldEvent(ctx, tx, worldID, "resolution-applied", member.ID, &interactionID, nil, &resolutionID); err != nil {
@@ -360,7 +360,7 @@ func requireResolutionActor(
 	if facilitatorSource == "human" {
 		return requireFacilitator(ctx, db, r, worldID)
 	}
-	if facilitatorSource != terraFacilitatorSource {
+	if !isAutomatedFacilitatorSource(facilitatorSource) {
 		return authorizedWorldMember{}, fmt.Errorf("unsupported facilitator source %q", facilitatorSource)
 	}
 	var member authorizedWorldMember
@@ -368,7 +368,7 @@ func requireResolutionActor(
 	if lock {
 		tx, ok := db.(pgx.Tx)
 		if !ok {
-			return member, errors.New("terra resolution lock requires a transaction")
+			return member, errors.New("automated resolution lock requires a transaction")
 		}
 		member, err = lockInteractionWorldMember(ctx, tx, r, worldID)
 	} else {
@@ -377,11 +377,15 @@ func requireResolutionActor(
 	if err != nil {
 		return member, err
 	}
-	if err := requireTerraFacilitator(ctx, db, worldID); err != nil {
+	label := "Terra"
+	if facilitatorSource == agentFacilitatorSource {
+		label = "the external agent"
+	}
+	if err := requireFacilitatorSource(ctx, db, worldID, facilitatorSource, label); err != nil {
 		return member, err
 	}
 	if member.Role == "spectator" || member.Facilitator {
-		return member, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace Terra"}
+		return member, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace " + label}
 	}
 	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
 		return member, err
@@ -389,19 +393,15 @@ func requireResolutionActor(
 	return member, nil
 }
 
-func appendAutoDMResolutionEvent(
+func appendAutomatedResolutionEvent(
 	ctx context.Context,
 	tx pgx.Tx,
-	worldID, interactionID, resolutionID string,
+	worldID, interactionID, resolutionID, facilitatorSource string,
 ) error {
-	_, err := tx.Exec(ctx, `
-		insert into world_events (
-			world_id, event_type, actor_membership_id, actor_source,
-			interaction_id, resolution_id, invalidates_interaction_audience
-		) values ($1, 'resolution-applied', null, 'terra', $2, $3, false)`,
-		worldID, interactionID, resolutionID,
+	return appendWorldEventForSource(
+		ctx, tx, worldID, "resolution-applied", facilitatorSource, nil,
+		&interactionID, nil, &resolutionID, false,
 	)
-	return err
 }
 
 func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireIdempotency bool) map[string]string {

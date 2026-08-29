@@ -187,8 +187,8 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 	fields := map[string]string{}
 	validateRequired(fields, "name", currentName, 200)
-	if currentDMSource != "human" && currentDMSource != "terra" {
-		fields["dm_source"] = "must be human or terra"
+	if currentDMSource != "human" && currentDMSource != "terra" && currentDMSource != "agent" {
+		fields["dm_source"] = "must be human, terra, or agent"
 	}
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", fields)
@@ -235,12 +235,12 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 		if request.MembershipID == nil || !validID(strings.TrimSpace(*request.MembershipID)) {
 			fields["membership_id"] = "a human facilitator membership UUID is required"
 		}
-	case "terra":
+	case "terra", "agent":
 		if request.MembershipID != nil {
-			fields["membership_id"] = "must be omitted when Terra is the facilitator"
+			fields["membership_id"] = "must be omitted for a non-human facilitator"
 		}
 	default:
-		fields["source"] = "must be human or terra"
+		fields["source"] = "must be human, terra, or agent"
 	}
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "facilitator assignment is invalid", fields)
@@ -365,8 +365,8 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 	rows.Close()
 	emergencyTakeover := len(unfinished) == 1 &&
 		(unfinished[0].status == "open" || unfinished[0].status == "adjudicating") &&
-		unfinished[0].facilitatorSource == terraFacilitatorSource &&
-		currentSource == terraFacilitatorSource && request.Source == "human" &&
+		isAutomatedFacilitatorSource(unfinished[0].facilitatorSource) &&
+		currentSource == unfinished[0].facilitatorSource && request.Source == "human" &&
 		nextMembershipID != nil && *nextMembershipID == member.ID && membershipRole == "owner"
 	if len(unfinished) > 0 && !emergencyTakeover {
 		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "interactions_unfinished", Message: "resolve or cancel active interactions before changing facilitator"})

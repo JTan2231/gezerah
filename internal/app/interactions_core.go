@@ -41,7 +41,7 @@ const (
 						and exists (
 							select 1 from worlds assigned_world
 							where assigned_world.id = interaction.world_id
-								and assigned_world.dm_source = 'terra'
+								and assigned_world.dm_source in ('terra', 'agent')
 						)
 					)
 					or event.invalidates_interaction_audience
@@ -95,7 +95,7 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 							and exists (
 								select 1 from worlds assigned_world
 								where assigned_world.id = interaction.world_id
-									and assigned_world.dm_source = 'terra'
+									and assigned_world.dm_source in ('terra', 'agent')
 							)
 						)
 					)
@@ -441,17 +441,19 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	terraPlayerCancellation := false
+	automatedPlayerCancellation := false
+	playerFacilitatorSource := ""
 	if !actor.Facilitator {
 		if command != "cancel" {
 			handleAppError(w, facilitatorRequired())
 			return
 		}
-		if err := requireTerraReadyPlayer(r.Context(), tx, actor); err != nil {
+		playerFacilitatorSource, err = requireAssignedAutomatedReadyPlayer(r.Context(), tx, actor)
+		if err != nil {
 			handleAppError(w, err)
 			return
 		}
-		terraPlayerCancellation = true
+		automatedPlayerCancellation = true
 	}
 
 	var status, facilitatorSource string
@@ -464,9 +466,11 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	if terraPlayerCancellation && !terraPlayerCanCancelInteraction(facilitatorSource, status) {
+	if automatedPlayerCancellation && !automatedPlayerCanCancelInteraction(
+		playerFacilitatorSource, facilitatorSource, status,
+	) {
 		handleAppError(w, interactionLifecycleConflict(
-			"players may cancel only an open or adjudicating Terra interaction",
+			"players may cancel only an open or adjudicating interaction of the current automated facilitator",
 		))
 		return
 	}
@@ -556,7 +560,16 @@ func interactionLifecycleInvalidatesAudience(command, priorStatus string) bool {
 }
 
 func terraPlayerCanCancelInteraction(facilitatorSource, status string) bool {
-	return facilitatorSource == terraFacilitatorSource &&
+	return automatedPlayerCanCancelInteraction(
+		terraFacilitatorSource, facilitatorSource, status,
+	)
+}
+
+func automatedPlayerCanCancelInteraction(
+	assignedSource, interactionSource, status string,
+) bool {
+	return isAutomatedFacilitatorSource(assignedSource) &&
+		interactionSource == assignedSource &&
 		(status == "open" || status == "adjudicating")
 }
 
@@ -1603,7 +1616,7 @@ func requireInteractionVisibility(
 						and exists (
 							select 1 from worlds assigned_world
 							where assigned_world.id = interaction.world_id
-								and assigned_world.dm_source = 'terra'
+								and assigned_world.dm_source in ('terra', 'agent')
 						)
 					)
 				)
