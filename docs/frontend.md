@@ -3,28 +3,28 @@
 ## Product surface
 
 The React application presents two deliberately separate product areas over the
-same world model. `/play` is the live table and `/build` is the configuration area; the
+same World model. `/play` is the Play area and `/build` is the configuration area; the
 root route only asks which area the user wants to enter. A signed-in account
 sees only worlds it owns or has joined. Authors configure three
 user-authored lists:
 
 - **capacities**: numeric input or derived scores/pools carried by every entity;
-- **capabilities**: Boolean/numeric input or derived skills carried by every entity;
+- **capabilities**: Boolean/numeric input or derived ratings carried by every Entity;
 - **character fields**: ordered text prompts required for each
-  participant-controlled entity before it can enter play.
+  membership-controlled Entity before it can enter Play.
 
-Entity sheets are generated from active mechanics and expose intrinsic versus
-effective values plus active-status explanations. An entity controlled by an
-active non-spectator is presented as that participant's character, with a
+Entity sheets are generated from active Mechanics and expose intrinsic versus
+effective values plus active Status-instance explanations. An Entity controlled
+by an active non-spectator membership is presented as that membership's Character, with a
 separately loaded profile generated from the world's active character fields.
 Those values never become engine state.
 Problems are not a configuration resource in this UI. A facilitator describes
-each problem at the table, or Terra creates it when designated as Dungeon
-Master. Players offer free-form actions or pass. A human DM writes one
+each Problem during Play, or Terra creates it when designated as Dungeon
+Master. Responders offer free-form Actions or pass. A human DM writes one
 unstructured account of what transpires and reviews Luna's compiled preview.
-Terra instead writes, compiles, previews, and resolves its outcome without
-exposing model output for human editing or approval. Applying a compiled status
-defines it in that problem and snapshots it onto each affected entity.
+Terra instead authors and compiles a Consequence, then commits its Resolution without
+exposing model output for human editing or approval. An apply-status Effect
+defines an inline status in that Problem and snapshots it onto each affected Entity.
 
 ## Stack and source layout
 
@@ -39,7 +39,7 @@ component framework, or service worker.
 | `src/worldRoutes.ts`                        | Play and Build path parsing plus URL construction.                               |
 | `src/api/client.ts`                         | Credentialed JSON fetch adapter, in-memory CSRF token, errors, and path helpers. |
 | `src/api/types.ts`                          | Compile-time contract for the world and live-play APIs.                          |
-| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, roles.             |
+| `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, and role labels.   |
 | `src/**/*View.tsx`                          | Backend-independent markup, layout, accessibility, and local UI interaction.     |
 | `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
 | `src/features/HomeChoice.tsx`               | Data-free root navigation controller for Play and Build.                         |
@@ -53,11 +53,11 @@ component framework, or service worker.
 | `src/features/RosterModals.tsx`             | Entity creation and controller-assignment command controllers.                   |
 | `src/features/EntityDetail.tsx`             | Profile/sheet coordination and direct sheet persistence controller.              |
 | `src/features/MechanicsWorkspace.tsx`       | Mechanic resource, transport mapping, and save/archive controller.               |
-| `src/features/CharacterFieldsWorkspace.tsx` | Ordered character-requirement persistence controller.                            |
-| `src/features/PeopleWorkspace.tsx`          | Member/invite resources and invitation command controller.                       |
+| `src/features/CharacterFieldsWorkspace.tsx` | Ordered character-field-set persistence controller.                              |
+| `src/features/MembersWorkspace.tsx`         | Member/invite resources and invitation command controller.                       |
 | `src/features/SettingsWorkspace.tsx`        | World-details save and owner-only archive controller.                            |
 | `src/features/WorldPlay.tsx`                | Live resources, SSE/revision coordination, and problem command controllers.      |
-| `src/features/EntityProfilePanel.tsx`       | Character-profile resource and persistence controller.                           |
+| `src/features/EntityProfilePanel.tsx`       | Entity-profile resource and persistence controller.                              |
 | `src/hooks/`                                | Collection/resource loading, dirty guards, and SSE refresh.                      |
 | `src/styles/tokens.css`                     | The only file allowed to contain literal design colors.                          |
 | `src/styles/app.css`                        | Responsive neutral layouts for libraries, editors, invitations, and live play.   |
@@ -72,7 +72,7 @@ Frontend features use a controller/view boundary so visual work does not depend
 on the HTTP contract. This is an import boundary, not an attempt to make the
 product generic or to support interchangeable backends. Views still speak the
 product language—worlds, mechanics, character readiness, interactions,
-Consequences, and roles—while remaining unaware of how those concepts are
+Consequences, membership roles, and current play roles—while remaining unaware of how those concepts are
 loaded or persisted.
 
 ```mermaid
@@ -193,7 +193,7 @@ revision label when it is intentionally visible diagnostic information.
 
 Permission booleans and readiness modes may be passed to views because they
 materially change presentation. They are conveniences, not security controls.
-The server remains authoritative for membership, role, readiness, visibility,
+The server remains authoritative for membership roles, current play roles, Play status, visibility,
 and mutations; restricted properties must still be removed before
 serialization.
 
@@ -225,15 +225,15 @@ Routes are parsed without an external router:
 | URL                                             | Surface                                       |
 | ----------------------------------------------- | --------------------------------------------- |
 | `/`                                             | Neutral Play or Build choice; no API load.    |
-| `/play`                                         | Current account's table list.                 |
-| `/play/{world-id}`                              | Onboarding or live table.                     |
+| `/play`                                         | Current account's World list for Play.        |
+| `/play/{world-id}`                              | Onboarding or Play.                           |
 | `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
 | `/build`                                        | Editable-world list and world creation.       |
 | `/build/{world-id}/capacities/{mechanic-id?}`   | Capacity catalog/editor.                      |
 | `/build/{world-id}/capabilities/{mechanic-id?}` | Capability catalog/editor.                    |
 | `/build/{world-id}/character-fields`            | Required character-field editor.              |
 | `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
-| `/build/{world-id}/people`                      | Members and invite links.                     |
+| `/build/{world-id}/members`                     | World memberships and invite links.           |
 | `/build/{world-id}/settings`                    | World details, current-DM summary, lifecycle. |
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
@@ -270,8 +270,8 @@ revoking the account's other sessions.
 Both libraries request `GET /api/worlds`. The Build library filters to
 owner/editor memberships, offers world creation, and
 opens the capacity editor. The Play library shows every admitted world and
-emphasizes the derived play role, player readiness, table size, and last
-activity. Durable access remains available separately inside the table. Neither
+emphasizes the current play role, Play status, roster size, and last
+activity. The membership role remains available separately inside the World. Neither
 library exposes actions belonging to the other area.
 
 ## Static configuration
@@ -282,7 +282,7 @@ The Build sidebar contains exactly:
 - Capabilities;
 - Character fields;
 - Roster & sheets;
-- People & invites;
+- Members & invites;
 - Settings.
 
 Capacity modes are `score` and `pool`. Capability modes are `binary` and
@@ -299,72 +299,72 @@ section changes, mechanic and roster child selection, Settings, Home, and both
 desktop and mobile exits to the Build library. Cancelling keeps the current
 draft and destination; accepting discards the draft before navigation. The
 capacity and capability editors archive rather than delete and include a
-generated-sheet preview. Archiving removes a mechanic from new use while
-preserving stored input, historical status snapshots, and receipts. Active
-derived dependents must be archived and active statuses whose modifiers target
+generated-sheet preview. Archiving removes a Mechanic from new use while
+preserving stored overrides, historical Status instances and modifier snapshots, and Resolution receipts. Active
+derived dependents must be archived and active Status instances whose modifiers target
 the mechanic must be removed first; the server explains either conflict. There
 are no privileged configured keys or predefined mechanic names; stable internal
 IDs are not a user-facing ontology.
 
-The character-field screen edits the whole ordered requirement set as one
+The character-field screen edits the whole ordered character-field set as one
 draft. Each field has a user-authored label, optional guidance, and either
-`table` or `controllers-and-facilitators` visibility. The latter is currently
+`world` or `restricted` visibility. The latter is currently
 readable by active controllers, durable owners/editors, and the designated
 human facilitator. Every published field is required; there is no per-field
-required toggle. Publishing uses the current schema revision, preserves
-durable IDs, and warns when adding/removing requirements can change existing
+required toggle. Publishing uses the current character-field-set revision, preserves
+durable IDs, and warns when adding/removing character fields can change existing
 character readiness.
 
-## People and invite links
+## World memberships and invite links
 
 Editors can mint player, spectator, or editor links with an expiry from one to
 90 days. The raw token is returned only by the create response. The screen
 builds the same-origin URL, offers a clipboard action, and warns that the token
-will not be listed again. Existing invite rows show creator, role, use count,
+will not be listed again. Existing invite rows show creator, membership role, use count,
 expiry/revocation state, and an explicit revoke command.
 
 Redeeming a link creates or reactivates one world membership. Returning to the
 same valid link as an existing active member is idempotent and does not silently
-escalate the existing role.
+escalate the existing membership role.
 
 ## Play surface
 
-The live table has three regions on wide screens: roster, current problem and
+The Play surface has three regions on wide screens: roster, current Problem and
 history, and selected entity sheet. It collapses to a single-column flow on
 narrow screens.
 
 An owner/editor creates world entities, assigns active non-spectator
 controllers, edits profiles, and makes direct setup sheet changes in the Build
 roster. Every active capacity and capability appears automatically on
-the generated sheet. Inputs begin at configured defaults; derived values are
-calculated from the current graph. The sheet displays active status chips,
-labels derived fields as calculated, and lists the modifier trail from
+the generated sheet. Inputs begin at authored defaults; derived values are
+evaluated from their expressions. The sheet displays active Status-instance chips,
+labels derived fields as Derived, and lists the modifier trail from
 intrinsic to effective value whenever modifiers are present. Build inputs
-edit only base input values and send both state and mechanic-rules revisions.
-Play renders sheets read-only. Each active status exposes its optional
-description and the source problem, so equal names remain distinguishable
+edit only logical input values and send both logical-state and rules revisions.
+Play renders sheets read-only. Each active Status instance exposes its optional
+description and the source Problem, so equal names remain distinguishable
 without becoming keys.
 
-The roster labels entities controlled by the current membership as “Your
-character” and otherwise names active controllers. The selected entity panel
-has Character and Sheet tabs. Active controllers and owner/editors fill the
+The roster labels Entities controlled by the current membership as “Your
+character” and otherwise names active Controllers. The selected Entity panel
+has Profile and Sheet tabs. Active Controllers and owner/editors fill the
 configured fields and may save partial drafts; other members see only completed
-table-visible prose. The designated human facilitator can also read restricted
+world-visible prose. The designated human facilitator can also read restricted
 profile prose. Mechanical sheet inputs remain disabled in Play.
 Profile values are fetched only for the selected entity rather than embedded in
 the roster collection.
 
-A current player who has no controlled entity sees a waiting screen. A player
+A current player who has no controlled Entity sees a waiting screen. A current player
 whose controlled-character setup is incomplete sees only the onboarding
 profile UI, including completion counts and every field they are authorized to
 fill. The
 client does not request live interactions or the event stream until
-`play_status` becomes `ready`; onboarding uses world/entity/profile resources.
-If requirements later make the player incomplete, stream reconnect also
+`play_status` becomes `ready`; onboarding uses World/Entity/profile resources.
+If a character-field-set change later makes the current player's setup incomplete, stream reconnect also
 triggers an authoritative reload.
 
 Archived worlds bypass player-seat onboarding so every admitted member can
-read the frozen table and any audience-visible resolved/cancelled history. All
+read the frozen Play history and any audience-visible resolved/cancelled Interactions. All
 archived Play controls remain read-only.
 
 `play_status` remains the underlying player-seat readiness while that
@@ -372,8 +372,8 @@ membership is facilitator. The facilitator can enter Play regardless, and a
 handoff confirmation warns whether they will return to a ready seat or to
 character setup. Spectators are always ready and read-only.
 
-The Play header names the current Dungeon Master, the viewer's derived play
-role, and their durable world access. Between problems, an owner/editor or the
+The Play header names the current Dungeon Master, the viewer's current play
+role, and their membership role. Between Problems, an owner/editor or the
 current human facilitator can use the DM picker to assign another active
 non-spectator or Terra. The control is unavailable while an interaction is
 unfinished; Settings only displays the assignment. The sole recovery exception
@@ -388,12 +388,12 @@ With a human DM, the lifecycle is:
    and context entities;
 3. responders offer or withdraw one action, optionally attributed to a ready
    controlled entity;
-4. the facilitator closes submissions and enters private adjudication;
-5. the facilitator writes **What transpires?**, asks Luna to compile an
-   optional selected action/summary and effects, and reviews the advisory
+4. the facilitator closes Action entry and enters private Adjudication;
+5. the facilitator writes **What transpires?**, asks Luna to compile optional
+   selected-Action metadata and Effects, and reviews the advisory
    preview;
-6. the facilitator resolves, atomically storing state/status changes, source
-   provenance, the immutable receipt, lifecycle change, and event cursor.
+6. the facilitator resolves, atomically storing logical-state/Status-instance changes, source
+   provenance, the immutable Resolution receipt, lifecycle change, and World-event cursor.
 
 The facilitator may instead choose **Cancel problem** while it is unfinished; a
 presented cancellation remains in audience history, while a cancelled draft
@@ -401,39 +401,39 @@ remains private.
 
 With Terra as DM, the human controls are pacing only:
 
-1. while the table is idle, any ready current player clicks **Ask Terra to
+1. while Play is idle, any ready current player clicks **Ask Terra to
    continue**;
 2. Terra creates and presents a problem to all ready active memberships; all
    ready non-spectators are responders and ready controlled entities are
    context;
 3. every responder submits an action or clicks **Pass**. The UI shows acted-or-
-   passed progress and enables the decision only after every response arrives;
+   passed progress and enables the decision only after every responder Action is submitted;
 4. while the problem is open or Terra is adjudicating it, any ready current
    player may confirm **Skip problem**. The interaction becomes cancelled
-   without a Consequence, Terra remains Dungeon Master, and the table returns
+   without a Consequence, Terra remains Dungeon Master, and Play returns
    to idle without automatically preparing a replacement;
 5. any ready current player asks Terra to decide. The UI moves to a Terra
    pending state while the server generates prose, compiles it with Luna,
    previews it internally, and resolves it;
-6. the pacing player cannot edit or approve the narrative, selection, notes, or
+6. the pacing current player cannot edit or approve the narrative, selection, notes, or
    effects. On a provider failure the client reloads the adjudicating
    interaction and offers a retry with the same idempotency key. As an explicit
    recovery path, the owner may confirm **Take over** during the open or
    adjudicating interaction; their own submitted action is withdrawn. An open
    problem exposes the human close/adjudicate flow, while an adjudicating one
-   opens the human-DM ruling UI directly.
+   opens the human-DM Consequence UI directly.
 
 Resolved and presented-cancelled history remains visible to its audience.
 Human cancellations are labelled **Cancelled**; cancelled Terra-authored
-problems are labelled **Skipped · Terra Auto DM**. Cancelled drafts remain
+Problems are labelled **Skipped · Terra**. Cancelled drafts remain
 facilitator-only. There is deliberately no problem-template catalog, problem
 editor, pre-authored problem route, or Terra output approval screen.
 
 `useWorldEvents` holds the authorized SSE stream and reconnects with its last
 cursor when the connection ends. Event data is treated as invalidation; the
-client reloads authoritative world, entity, and interaction resources rather
+client reloads authoritative World, Entity, and Interaction resources rather
 than reconstructing state from the event payload. `rules-updated` also reloads
-the revision-wrapped mechanic catalog. Play waits until mechanic and entity
+the revision-wrapped world mechanic graph. Play waits until mechanic and Entity
 rules revisions agree before allowing a Consequence built from them.
 
 ## Client state and errors
@@ -445,7 +445,7 @@ or reload the authoritative collection.
 
 `api<T>()` sends same-origin JSON, maps the server error envelope to `ApiError`,
 and exposes field errors where forms can attach them. Successful payloads are
-compile-time typed but are not runtime-schema validated. Exact ruleset decimals
+compile-time typed but are not runtime-schema validated. Exact decimal Mechanic values
 remain strings in API models and numeric form state; outgoing authored payloads
 canonicalize valid decimal text, while compiled Consequence effects are
 forwarded unchanged. Ordinary JavaScript JSON parsing therefore cannot round

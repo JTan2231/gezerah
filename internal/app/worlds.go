@@ -160,9 +160,8 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 	var currentName string
 	var currentDescription *string
-	var currentDMSource string
 	var actual int64
-	if err := s.db.QueryRow(r.Context(), `select name, description, dm_source, revision from worlds where id = $1`, member.WorldID).Scan(&currentName, &currentDescription, &currentDMSource, &actual); err != nil {
+	if err := s.db.QueryRow(r.Context(), `select name, description, revision from worlds where id = $1`, member.WorldID).Scan(&currentName, &currentDescription, &actual); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -176,20 +175,8 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	if request.Description.Set {
 		currentDescription = cleanOptional(request.Description.Value)
 	}
-	if request.DMSource != nil {
-		requestedDMSource := strings.TrimSpace(*request.DMSource)
-		if requestedDMSource != currentDMSource {
-			writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", map[string]string{
-				"dm_source": "must be changed through the facilitator assignment command",
-			})
-			return
-		}
-	}
 	fields := map[string]string{}
 	validateRequired(fields, "name", currentName, 200)
-	if currentDMSource != "human" && currentDMSource != "terra" && currentDMSource != "agent" {
-		fields["dm_source"] = "must be human, terra, or agent"
-	}
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", fields)
 		return
@@ -246,8 +233,8 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "facilitator assignment is invalid", fields)
 		return
 	}
-	if request.Source == "terra" && s.autoDM == nil {
-		handleAppError(w, autoDMUnavailable())
+	if request.Source == "terra" && s.models == nil {
+		handleAppError(w, modelProviderUnavailable())
 		return
 	}
 
@@ -261,7 +248,7 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 	var currentMembershipID *string
 	var actualRevision int64
 	if err := tx.QueryRow(r.Context(), `
-		select status, revision, dm_source, facilitator_membership_id::text
+		select status, revision, facilitator_source, facilitator_membership_id::text
 		from worlds where id = $1 for update`, worldID,
 	).Scan(&worldStatus, &actualRevision, &currentSource, &currentMembershipID); err != nil {
 		handleAppError(w, err)
@@ -374,20 +361,20 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 	}
 	if emergencyTakeover {
 		interactionID := unfinished[0].id
-		var submissionID string
+		var actionID string
 		err := tx.QueryRow(r.Context(), `
-			select id::text from interaction_action_submissions
+			select id::text from interaction_actions
 			where world_id = $1 and interaction_id = $2
 				and submitted_by_membership_id = $3 and status = 'submitted'
 			order by created_at desc, id desc
 			limit 1 for update`, worldID, interactionID, member.ID,
-		).Scan(&submissionID)
+		).Scan(&actionID)
 		if err == nil {
 			if _, err := tx.Exec(r.Context(), `
-				update interaction_action_submissions
+				update interaction_actions
 				set status = 'withdrawn', revision = revision + 1
 				where world_id = $1 and interaction_id = $2 and id = $3`,
-				worldID, interactionID, submissionID,
+				worldID, interactionID, actionID,
 			); err != nil {
 				handleAppError(w, err)
 				return
@@ -400,8 +387,8 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 				return
 			}
 			if err := appendWorldEvent(
-				r.Context(), tx, worldID, "submission-withdrawn", member.ID,
-				&interactionID, &submissionID, nil,
+				r.Context(), tx, worldID, "action-withdrawn", member.ID,
+				&interactionID, &actionID, nil,
 			); err != nil {
 				handleAppError(w, err)
 				return
@@ -413,7 +400,7 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 	}
 	if _, err := tx.Exec(r.Context(), `
 		update worlds
-		set dm_source = $2, facilitator_membership_id = $3, revision = revision + 1
+		set facilitator_source = $2, facilitator_membership_id = $3, revision = revision + 1
 		where id = $1`, worldID, request.Source, nextMembershipID,
 	); err != nil {
 		handleAppError(w, err)
@@ -509,10 +496,11 @@ func (s *Server) handleArchiveWorld(w http.ResponseWriter, r *http.Request) {
 func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) (worldResponse, error) {
 	var item worldResponse
 	var membershipStatus string
+	var facilitatorSource string
 	err := db.QueryRow(ctx, `
-		select world.id::text, world.name, world.description, world.dm_source, world.status,
+		select world.id::text, world.name, world.description, world.facilitator_source, world.status,
 			world.facilitator_membership_id::text, facilitator_user.display_name,
-			world.revision, world.table_revision, membership.role, membership.id::text,
+			world.revision, world.roster_revision, membership.role, membership.id::text,
 			membership.status,
 			(select count(*)::int from world_memberships where world_id = world.id and status = 'active'),
 			(select count(*)::int from world_mechanics where world_id = world.id and kind = 'capacity' and not archived),
@@ -522,16 +510,16 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 			world.created_at, world.updated_at,
 			(select max(created_at) from interactions where world_id = world.id)
 		from worlds world
-		join world_rule_sets rules on rules.world_id = world.id
+		join world_mechanic_graphs rules on rules.world_id = world.id
 		join world_memberships membership on membership.world_id = world.id and membership.user_id = $2
 		left join world_memberships facilitator
 			on facilitator.world_id = world.id and facilitator.id = world.facilitator_membership_id
 		left join users facilitator_user on facilitator_user.id = facilitator.user_id
 		where world.id = $1`, worldID, userID,
 	).Scan(
-		&item.ID, &item.Name, &item.Description, &item.DMSource, &item.Status,
+		&item.ID, &item.Name, &item.Description, &facilitatorSource, &item.Status,
 		&item.Facilitator.MembershipID, &item.Facilitator.DisplayName,
-		&item.Revision, &item.TableRevision, &item.Role, &item.MembershipID,
+		&item.Revision, &item.RosterRevision, &item.Role, &item.MembershipID,
 		&membershipStatus, &item.MemberCount, &item.CapacityCount, &item.CapabilityCount,
 		&item.CharacterFieldCount, &item.RulesRevision,
 		&item.CreatedAt, &item.UpdatedAt, &item.LastInteractionAt,
@@ -539,10 +527,10 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	if err != nil {
 		return item, err
 	}
-	item.Facilitator.Source = item.DMSource
+	item.Facilitator.Source = facilitatorSource
 	item.CurrentPlayRole = currentPlayRole(
 		item.Role,
-		item.DMSource == "human" && item.Facilitator.MembershipID != nil &&
+		facilitatorSource == "human" && item.Facilitator.MembershipID != nil &&
 			*item.Facilitator.MembershipID == item.MembershipID,
 	)
 	item.PlayStatus, err = membershipPlayStatus(ctx, db, worldID, item.MembershipID, item.Role, membershipStatus)
@@ -558,7 +546,7 @@ func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) 
 	var facilitatorSource string
 	var facilitatorMembershipID *string
 	if err := s.db.QueryRow(r.Context(), `
-		select dm_source, facilitator_membership_id::text from worlds where id = $1`, member.WorldID,
+		select facilitator_source, facilitator_membership_id::text from worlds where id = $1`, member.WorldID,
 	).Scan(&facilitatorSource, &facilitatorMembershipID); err != nil {
 		handleAppError(w, err)
 		return
@@ -815,7 +803,7 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		if err == nil {
-			if _, err := tx.Exec(r.Context(), `update worlds set table_revision = table_revision + 1 where id = $1`, worldID); err != nil {
+			if _, err := tx.Exec(r.Context(), `update worlds set roster_revision = roster_revision + 1 where id = $1`, worldID); err != nil {
 				handleAppError(w, err)
 				return
 			}
@@ -857,7 +845,7 @@ func (s *Server) handleRedeemWorldInvite(w http.ResponseWriter, r *http.Request)
 			handleAppError(w, err)
 			return
 		}
-		if _, err := tx.Exec(r.Context(), `update worlds set table_revision = table_revision + 1 where id = $1`, worldID); err != nil {
+		if _, err := tx.Exec(r.Context(), `update worlds set roster_revision = roster_revision + 1 where id = $1`, worldID); err != nil {
 			handleAppError(w, err)
 			return
 		}
@@ -921,10 +909,10 @@ func inviteNotFound() error {
 	return &statusError{Status: http.StatusNotFound, Code: "invite_not_found", Message: "invite is unavailable"}
 }
 
-func appendWorldEvent(ctx context.Context, tx pgx.Tx, worldID, eventType, actorMembershipID string, interactionID, submissionID, resolutionID *string) error {
+func appendWorldEvent(ctx context.Context, tx pgx.Tx, worldID, eventType, actorMembershipID string, interactionID, actionID, resolutionID *string) error {
 	return appendWorldEventForSource(
 		ctx, tx, worldID, eventType, "human", &actorMembershipID,
-		interactionID, submissionID, resolutionID, false,
+		interactionID, actionID, resolutionID, false,
 	)
 }
 
@@ -932,12 +920,12 @@ func appendWorldEventWithAudienceInvalidation(
 	ctx context.Context,
 	tx pgx.Tx,
 	worldID, eventType, actorMembershipID string,
-	interactionID, submissionID, resolutionID *string,
+	interactionID, actionID, resolutionID *string,
 	invalidatesInteractionAudience bool,
 ) error {
 	return appendWorldEventForSource(
 		ctx, tx, worldID, eventType, "human", &actorMembershipID,
-		interactionID, submissionID, resolutionID, invalidatesInteractionAudience,
+		interactionID, actionID, resolutionID, invalidatesInteractionAudience,
 	)
 }
 
@@ -945,15 +933,15 @@ func appendWorldEventForSource(
 	ctx context.Context,
 	tx pgx.Tx,
 	worldID, eventType, actorSource string,
-	actorMembershipID, interactionID, submissionID, resolutionID *string,
+	actorMembershipID, interactionID, actionID, resolutionID *string,
 	invalidatesInteractionAudience bool,
 ) error {
 	_, err := tx.Exec(ctx, `
 		insert into world_events (
 			world_id, event_type, actor_source, actor_membership_id, interaction_id,
-			submission_id, resolution_id, invalidates_interaction_audience
+			action_id, resolution_id, invalidates_interaction_audience
 		) values ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		worldID, eventType, actorSource, actorMembershipID, interactionID, submissionID, resolutionID,
+		worldID, eventType, actorSource, actorMembershipID, interactionID, actionID, resolutionID,
 		invalidatesInteractionAudience)
 	return err
 }

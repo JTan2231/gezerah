@@ -7,47 +7,47 @@ import (
 )
 
 // ApplyRuntimeTransition atomically applies ordered scalar mutations and
-// consequence-owned status lifecycle operations to a cloned runtime snapshot.
+// consequence-owned Status-instance lifecycle operations to a cloned runtime snapshot.
 // Status instance IDs are assigned by the caller for each apply-status target.
 func ApplyRuntimeTransition(
 	plan TransitionPlan,
 	entities map[ID]Entity,
 	mechanics map[ID]MechanicDefinition,
-	statusSnapshots map[ID]StatusSnapshot,
+	inlineStatuses map[ID]InlineStatus,
 	snapshot RuntimeSnapshot,
 ) (RuntimeTransitionResult, error) {
 	if errs := ValidateMechanicGraph(mechanics); len(errs) > 0 {
 		return RuntimeTransitionResult{}, domainError(ErrInvalidDefinition, errs)
 	}
-	if errs := ValidateStatusSnapshots(statusSnapshots, mechanics); len(errs) > 0 {
+	if errs := ValidateInlineStatuses(inlineStatuses, mechanics); len(errs) > 0 {
 		return RuntimeTransitionResult{}, domainError(ErrInvalidDefinition, errs)
 	}
-	if errs := ValidateRuntimeTransitionPlan(plan, entities, mechanics, statusSnapshots); len(errs) > 0 {
+	if errs := ValidateRuntimeTransitionPlan(plan, entities, mechanics, inlineStatuses); len(errs) > 0 {
 		return RuntimeTransitionResult{}, domainError(ErrInvalidTransition, errs)
 	}
-	if errs := ValidateSnapshot(snapshot.State, entities, mechanics); len(errs) > 0 {
-		return RuntimeTransitionResult{}, domainError(ErrInvalidState, errs)
+	if errs := ValidateInputOverrideSnapshot(snapshot.InputOverrides, entities, mechanics); len(errs) > 0 {
+		return RuntimeTransitionResult{}, domainError(ErrInvalidRuntimeSnapshot, errs)
 	}
-	if errs := ValidateRuntimeStatusSnapshot(snapshot.ActiveStatuses, entities, statusSnapshots); len(errs) > 0 {
-		return RuntimeTransitionResult{}, domainError(ErrInvalidState, errs)
+	if errs := ValidateRuntimeStatusInstances(snapshot.StatusInstances, entities, inlineStatuses); len(errs) > 0 {
+		return RuntimeTransitionResult{}, domainError(ErrInvalidRuntimeSnapshot, errs)
 	}
 	for _, effect := range plan.Effects {
 		for _, entityID := range effect.EntityIDs {
-			if _, exists := snapshot.State.Records[entityID]; !exists {
-				return RuntimeTransitionResult{}, domainError(ErrInvalidState, ValidationErrors{validation(
-					"missing_state_record",
-					"records["+string(entityID)+"]",
-					"effect target state record is absent from the runtime snapshot",
+			if _, exists := snapshot.InputOverrides.ByEntity[entityID]; !exists {
+				return RuntimeTransitionResult{}, domainError(ErrInvalidRuntimeSnapshot, ValidationErrors{validation(
+					"missing_input_override_record",
+					"by_entity["+string(entityID)+"]",
+					"effect target input override record is absent from the runtime snapshot",
 				)})
 			}
 		}
 	}
 
-	workingState := CloneSnapshot(snapshot.State)
-	workingStatuses := cloneActiveStatuses(snapshot.ActiveStatuses)
-	appliedEffects := make([]AppliedEffect, 0)
-	appliedStatuses := make([]AppliedStatusCommand, 0)
-	changedRecords := make(map[ID]struct{})
+	workingInputOverrides := CloneInputOverrideSnapshot(snapshot.InputOverrides)
+	workingStatuses := cloneStatusInstances(snapshot.StatusInstances)
+	scalarApplications := make([]ScalarApplication, 0)
+	statusApplications := make([]StatusApplication, 0)
+	changedEntities := make(map[ID]struct{})
 	effects := append([]ConcreteEffect(nil), plan.Effects...)
 	sort.SliceStable(effects, func(i, j int) bool { return effects[i].Position < effects[j].Position })
 	for _, effect := range effects {
@@ -55,19 +55,19 @@ func ApplyRuntimeTransition(
 		case EffectSet, EffectAdjustNumber:
 			definition := mechanics[effect.MechanicID]
 			for _, entityID := range effect.EntityIDs {
-				record := workingState.Records[entityID]
-				before := LogicalStateValue(record, definition).Value
-				updated, err := applyEffectToRecord(effect, definition, entities[entityID], record)
+				record := workingInputOverrides.ByEntity[entityID]
+				before := ResolveLogicalInputValue(record, definition).Value
+				updated, err := applyScalarEffectToInputOverrideRecord(effect, definition, entities[entityID], record)
 				if err != nil {
 					return RuntimeTransitionResult{}, err
 				}
-				after := LogicalStateValue(updated, definition).Value
-				changed := storedMechanicChanged(record, updated, definition.ID)
+				after := ResolveLogicalInputValue(updated, definition).Value
+				changed := storedOverrideChanged(record, updated, definition.ID)
 				if changed {
-					changedRecords[entityID] = struct{}{}
+					changedEntities[entityID] = struct{}{}
 				}
-				workingState.Records[entityID] = updated
-				appliedEffects = append(appliedEffects, AppliedEffect{
+				workingInputOverrides.ByEntity[entityID] = updated
+				scalarApplications = append(scalarApplications, ScalarApplication{
 					EffectID: effect.ID, EntityID: entityID, MechanicID: definition.ID,
 					Before: before, After: after, Changed: changed,
 				})
@@ -83,11 +83,11 @@ func ApplyRuntimeTransition(
 					}
 					instance.AppliedOrder = appliedOrder
 				}
-				if findActiveStatusID(workingStatuses, entityID, instance.ID) >= 0 {
+				if findStatusInstanceID(workingStatuses, entityID, instance.ID) >= 0 {
 					return RuntimeTransitionResult{}, effectApplicationError(effect, entities[entityID], "status instance ID is already active")
 				}
 				workingStatuses = append(workingStatuses, instance)
-				appliedStatuses = append(appliedStatuses, AppliedStatusCommand{
+				statusApplications = append(statusApplications, StatusApplication{
 					EffectID: effect.ID, EntityID: entityID, SourceEffectID: effect.ID,
 					StatusInstanceID: instance.ID, Operation: effect.Operation, Changed: true,
 				})
@@ -96,13 +96,13 @@ func ApplyRuntimeTransition(
 		case EffectRemoveStatus:
 			for _, entityID := range effect.EntityIDs {
 				instanceID := effect.StatusInstanceIDs[entityID]
-				index := findActiveStatusID(workingStatuses, entityID, instanceID)
+				index := findStatusInstanceID(workingStatuses, entityID, instanceID)
 				if index < 0 {
 					return RuntimeTransitionResult{}, effectApplicationError(effect, entities[entityID], "status instance is not active on the target entity")
 				}
 				removed := workingStatuses[index]
 				workingStatuses = append(workingStatuses[:index], workingStatuses[index+1:]...)
-				appliedStatuses = append(appliedStatuses, AppliedStatusCommand{
+				statusApplications = append(statusApplications, StatusApplication{
 					EffectID: effect.ID, EntityID: entityID, SourceEffectID: removed.SourceEffectID,
 					StatusInstanceID: removed.ID, Operation: effect.Operation, Changed: true,
 				})
@@ -112,8 +112,8 @@ func ApplyRuntimeTransition(
 		}
 	}
 
-	changedIDs := make([]ID, 0, len(changedRecords))
-	for entityID := range changedRecords {
+	changedIDs := make([]ID, 0, len(changedEntities))
+	for entityID := range changedEntities {
 		changedIDs = append(changedIDs, entityID)
 	}
 	sort.Slice(changedIDs, func(i, j int) bool { return changedIDs[i] < changedIDs[j] })
@@ -127,8 +127,8 @@ func ApplyRuntimeTransition(
 		return workingStatuses[i].ID < workingStatuses[j].ID
 	})
 	return RuntimeTransitionResult{
-		AppliedEffects: appliedEffects, AppliedStatusCommands: appliedStatuses,
-		State: workingState, ActiveStatuses: workingStatuses, ChangedRecordIDs: changedIDs,
+		ScalarApplications: scalarApplications, StatusApplications: statusApplications,
+		InputOverrides: workingInputOverrides, StatusInstances: workingStatuses, ChangedEntityIDs: changedIDs,
 	}, nil
 }
 
@@ -139,7 +139,7 @@ func ValidateRuntimeTransitionPlan(
 	plan TransitionPlan,
 	entities map[ID]Entity,
 	mechanics map[ID]MechanicDefinition,
-	statusSnapshots map[ID]StatusSnapshot,
+	inlineStatuses map[ID]InlineStatus,
 ) ValidationErrors {
 	var errs ValidationErrors
 	ids := make(map[ID]struct{}, len(plan.Effects))
@@ -163,7 +163,7 @@ func ValidateRuntimeTransitionPlan(
 		}
 		positions[effect.Position] = struct{}{}
 
-		worldID, targetKnown := validateRuntimeEffectOperands(effect, path, mechanics, statusSnapshots, &errs)
+		worldID, targetKnown := validateRuntimeEffectOperands(effect, path, mechanics, inlineStatuses, &errs)
 		seenEntities := make(map[ID]struct{}, len(effect.EntityIDs))
 		for entityIndex, entityID := range effect.EntityIDs {
 			entityPath := fmt.Sprintf("%s.entity_ids[%d]", path, entityIndex)
@@ -231,12 +231,12 @@ func validateRuntimeEffectOperands(
 	effect ConcreteEffect,
 	path string,
 	mechanics map[ID]MechanicDefinition,
-	statusSnapshots map[ID]StatusSnapshot,
+	inlineStatuses map[ID]InlineStatus,
 	errs *ValidationErrors,
 ) (ID, bool) {
 	switch effect.Operation {
 	case EffectSet, EffectAdjustNumber:
-		if effect.Status != nil || len(effect.StatusInstances) > 0 || len(effect.StatusInstanceIDs) > 0 {
+		if effect.InlineStatus != nil || len(effect.StatusInstances) > 0 || len(effect.StatusInstanceIDs) > 0 {
 			*errs = append(*errs, validation("invalid_effect_operand", path, "scalar effects cannot declare status operands"))
 		}
 		definition, exists := mechanics[effect.MechanicID]
@@ -256,10 +256,10 @@ func validateRuntimeEffectOperands(
 		if !definition.Mutable {
 			*errs = append(*errs, validation("mechanic_not_mutable", path+".mechanic_id", "mechanic is not mutable during play"))
 		}
-		if !operationAllowed(effect.Operation, definition) {
+		if !scalarEffectOperationAllowed(effect.Operation, definition) {
 			*errs = append(*errs, validation("operation_not_allowed", path+".operation", "operation is not allowed for the mechanic"))
 		}
-		for _, item := range validateEffectOperand(effect, definition) {
+		for _, item := range validateScalarEffectOperand(effect, definition) {
 			item.Path = pathForNestedValidation(path, item.Path)
 			*errs = append(*errs, item)
 		}
@@ -269,17 +269,17 @@ func validateRuntimeEffectOperands(
 		if effect.MechanicID.Valid() || effect.Value != nil || effect.AdjustmentAmount != nil || len(effect.StatusInstanceIDs) > 0 {
 			*errs = append(*errs, validation("invalid_effect_operand", path, "apply-status cannot declare scalar or removal operands"))
 		}
-		if effect.Status == nil {
-			*errs = append(*errs, validation("required", path+".status", "apply-status requires an inline status specification"))
+		if effect.InlineStatus == nil {
+			*errs = append(*errs, validation("required", path+".status", "apply-status requires an Inline status"))
 			return "", false
 		}
-		snapshot := *effect.Status
-		if snapshot.ID != effect.ID {
+		inlineStatus := *effect.InlineStatus
+		if inlineStatus.ID != effect.ID {
 			*errs = append(*errs, validation("status_id_mismatch", path+".status.id", "inline status ID must equal its owning effect ID"))
 		}
-		configured, exists := statusSnapshots[effect.ID]
-		if !exists || configured.ID != snapshot.ID {
-			*errs = append(*errs, validation("unknown_status", path+".status", "inline status snapshot is missing from the transition configuration"))
+		configured, exists := inlineStatuses[effect.ID]
+		if !exists || configured.ID != inlineStatus.ID {
+			*errs = append(*errs, validation("unknown_status", path+".status", "Inline status is missing from the transition configuration"))
 		}
 		for _, entityID := range effect.EntityIDs {
 			instance, supplied := effect.StatusInstances[entityID]
@@ -294,26 +294,26 @@ func validateRuntimeEffectOperands(
 			if instance.EntityID != entityID {
 				*errs = append(*errs, validation("entity_mismatch", instancePath+".entity_id", "status instance does not belong to its target entity"))
 			}
-			if instance.WorldID != snapshot.WorldID {
+			if instance.WorldID != inlineStatus.WorldID {
 				*errs = append(*errs, validation("cross_world_reference", instancePath+".world_id", "status instance and inline status belong to different worlds"))
 			}
-			if instance.SourceEffectID != snapshot.ID {
+			if instance.SourceEffectID != inlineStatus.ID {
 				*errs = append(*errs, validation("status_id_mismatch", instancePath+".source_effect_id", "status instance references a different source effect"))
 			}
 			if instance.AppliedOrder < 0 {
 				*errs = append(*errs, validation("invalid_position", instancePath+".applied_order", "status applied order cannot be negative"))
 			}
 		}
-		return snapshot.WorldID, true
+		return inlineStatus.WorldID, true
 
 	case EffectRemoveStatus:
-		if effect.MechanicID.Valid() || effect.Value != nil || effect.AdjustmentAmount != nil || effect.Status != nil || len(effect.StatusInstances) > 0 {
+		if effect.MechanicID.Valid() || effect.Value != nil || effect.AdjustmentAmount != nil || effect.InlineStatus != nil || len(effect.StatusInstances) > 0 {
 			*errs = append(*errs, validation("invalid_effect_operand", path, "remove-status can declare only exact status-instance targets"))
 		}
 		for _, entityID := range effect.EntityIDs {
 			instanceID, supplied := effect.StatusInstanceIDs[entityID]
 			if !supplied || !instanceID.Valid() {
-				*errs = append(*errs, validation("required", path+".status_instance_ids["+string(entityID)+"]", "remove-status requires an active status instance for every target entity"))
+				*errs = append(*errs, validation("required", path+".status_instance_ids["+string(entityID)+"]", "remove-status requires a Status instance for every target Entity"))
 			}
 		}
 		return "", false
@@ -323,21 +323,21 @@ func validateRuntimeEffectOperands(
 	}
 }
 
-// ValidateRuntimeStatusSnapshot validates active instances across all target
-// entities. Snapshot maps are keyed by immutable source effect IDs.
-func ValidateRuntimeStatusSnapshot(active []ActiveStatus, entities map[ID]Entity, statusSnapshots map[ID]StatusSnapshot) ValidationErrors {
+// ValidateRuntimeStatusInstances validates active Status instances across all
+// target Entities. Inline statuses are keyed by immutable source Effect IDs.
+func ValidateRuntimeStatusInstances(instances []StatusInstance, entities map[ID]Entity, inlineStatuses map[ID]InlineStatus) ValidationErrors {
 	var errs ValidationErrors
-	grouped := make(map[ID][]ActiveStatus)
-	globalIDs := make(map[ID]struct{}, len(active))
-	for index, status := range active {
-		path := fmt.Sprintf("active_statuses[%d]", index)
+	grouped := make(map[ID][]StatusInstance)
+	globalIDs := make(map[ID]struct{}, len(instances))
+	for index, status := range instances {
+		path := fmt.Sprintf("active_status_instances[%d]", index)
 		if _, duplicate := globalIDs[status.ID]; duplicate {
-			errs = append(errs, validation("duplicate", path+".id", "active status ID is repeated"))
+			errs = append(errs, validation("duplicate", path+".id", "status instance ID is repeated"))
 		}
 		globalIDs[status.ID] = struct{}{}
 		entity, exists := entities[status.EntityID]
 		if !exists {
-			errs = append(errs, validation("unknown_entity", path+".entity_id", "active status entity does not exist"))
+			errs = append(errs, validation("unknown_entity", path+".entity_id", "status instance entity does not exist"))
 			continue
 		}
 		grouped[entity.ID] = append(grouped[entity.ID], status)
@@ -348,7 +348,7 @@ func ValidateRuntimeStatusSnapshot(active []ActiveStatus, entities map[ID]Entity
 	}
 	sort.Slice(entityIDs, func(i, j int) bool { return entityIDs[i] < entityIDs[j] })
 	for _, entityID := range entityIDs {
-		for _, item := range ValidateActiveStatuses(entities[entityID], statusSnapshots, grouped[entityID]) {
+		for _, item := range ValidateStatusInstances(entities[entityID], inlineStatuses, grouped[entityID]) {
 			item.Path = pathForNestedValidation("entities["+string(entityID)+"]", item.Path)
 			errs = append(errs, item)
 		}
@@ -356,29 +356,29 @@ func ValidateRuntimeStatusSnapshot(active []ActiveStatus, entities map[ID]Entity
 	return errs
 }
 
-func findActiveStatusID(active []ActiveStatus, entityID, statusID ID) int {
-	for index, status := range active {
-		if status.EntityID == entityID && status.ID == statusID {
+func findStatusInstanceID(instances []StatusInstance, entityID, statusInstanceID ID) int {
+	for index, status := range instances {
+		if status.EntityID == entityID && status.ID == statusInstanceID {
 			return index
 		}
 	}
 	return -1
 }
 
-func nextAppliedOrder(active []ActiveStatus, entityID ID) (int64, error) {
+func nextAppliedOrder(instances []StatusInstance, entityID ID) (int64, error) {
 	var maximum int64
-	for _, status := range active {
+	for _, status := range instances {
 		if status.EntityID == entityID && status.AppliedOrder > maximum {
 			maximum = status.AppliedOrder
 		}
 	}
 	if maximum == math.MaxInt64 {
-		return 0, fmt.Errorf("active status applied order is exhausted")
+		return 0, fmt.Errorf("status instance applied order is exhausted")
 	}
 	return maximum + 1, nil
 }
 
-func sortedStatusInstanceEntityIDs(instances map[ID]ActiveStatus) []ID {
+func sortedStatusInstanceEntityIDs(instances map[ID]StatusInstance) []ID {
 	result := make([]ID, 0, len(instances))
 	for entityID := range instances {
 		result = append(result, entityID)

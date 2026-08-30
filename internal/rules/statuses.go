@@ -5,19 +5,19 @@ import (
 	"sort"
 )
 
-// ValidateStatusSnapshot validates one user-authored status snapshot against
-// the mechanic definitions it may modify.
-func ValidateStatusSnapshot(snapshot StatusSnapshot, mechanics map[ID]MechanicDefinition) ValidationErrors {
+// ValidateInlineStatus validates one user-authored Inline status against the
+// Mechanic definitions it may modify.
+func ValidateInlineStatus(inlineStatus InlineStatus, mechanics map[ID]MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
-	if !snapshot.ID.Valid() {
-		errs = append(errs, validation("required", "id", "status snapshot source effect ID is required"))
+	if !inlineStatus.ID.Valid() {
+		errs = append(errs, validation("required", "id", "inline status source Effect ID is required"))
 	}
-	if !snapshot.WorldID.Valid() {
-		errs = append(errs, validation("required", "world_id", "status snapshot world ID is required"))
+	if !inlineStatus.WorldID.Valid() {
+		errs = append(errs, validation("required", "world_id", "inline status World ID is required"))
 	}
-	ids := make(map[ID]struct{}, len(snapshot.Modifiers))
-	positions := make(map[int]struct{}, len(snapshot.Modifiers))
-	for index, modifier := range snapshot.Modifiers {
+	ids := make(map[ID]struct{}, len(inlineStatus.Modifiers))
+	positions := make(map[int]struct{}, len(inlineStatus.Modifiers))
+	for index, modifier := range inlineStatus.Modifiers {
 		path := fmt.Sprintf("modifiers[%d]", index)
 		if !modifier.ID.Valid() {
 			errs = append(errs, validation("required", path+".id", "modifier ID is required"))
@@ -42,18 +42,18 @@ func ValidateStatusSnapshot(snapshot StatusSnapshot, mechanics map[ID]MechanicDe
 		if mechanic.ID != modifier.MechanicID {
 			errs = append(errs, validation("mechanic_id_mismatch", path+".mechanic_id", "mechanic map key and definition ID differ"))
 		}
-		if mechanic.WorldID != snapshot.WorldID {
+		if mechanic.WorldID != inlineStatus.WorldID {
 			errs = append(errs, validation("cross_world_reference", path+".mechanic_id", "status and modified mechanic belong to different worlds"))
 		}
 		if mechanic.Archived {
-			errs = append(errs, validation("archived_dependency", path+".mechanic_id", "status effects cannot target archived mechanics"))
+			errs = append(errs, validation("archived_dependency", path+".mechanic_id", "status modifiers cannot target archived Mechanics"))
 		}
 		for _, item := range validateStatusModifier(modifier, mechanic) {
 			item.Path = pathForNestedValidation(path, item.Path)
 			errs = append(errs, item)
 		}
 	}
-	for position := 0; position < len(snapshot.Modifiers); position++ {
+	for position := 0; position < len(inlineStatus.Modifiers); position++ {
 		if _, exists := positions[position]; !exists {
 			errs = append(errs, validation("incomplete_positions", "modifiers", "modifier positions must form a complete zero-based sequence"))
 			break
@@ -62,20 +62,20 @@ func ValidateStatusSnapshot(snapshot StatusSnapshot, mechanics map[ID]MechanicDe
 	return errs
 }
 
-func ValidateStatusSnapshots(snapshots map[ID]StatusSnapshot, mechanics map[ID]MechanicDefinition) ValidationErrors {
+func ValidateInlineStatuses(inlineStatuses map[ID]InlineStatus, mechanics map[ID]MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
-	ids := make([]ID, 0, len(snapshots))
-	for id := range snapshots {
+	ids := make([]ID, 0, len(inlineStatuses))
+	for id := range inlineStatuses {
 		ids = append(ids, id)
 	}
 	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
 	for _, id := range ids {
-		snapshot := snapshots[id]
+		inlineStatus := inlineStatuses[id]
 		path := "statuses[" + string(id) + "]"
-		if snapshot.ID != id {
-			errs = append(errs, validation("status_id_mismatch", path+".id", "status map key and snapshot source effect ID differ"))
+		if inlineStatus.ID != id {
+			errs = append(errs, validation("status_id_mismatch", path+".id", "status map key and inline-status source Effect ID differ"))
 		}
-		for _, item := range ValidateStatusSnapshot(snapshot, mechanics) {
+		for _, item := range ValidateInlineStatus(inlineStatus, mechanics) {
 			item.Path = pathForNestedValidation(path, item.Path)
 			errs = append(errs, item)
 		}
@@ -83,44 +83,44 @@ func ValidateStatusSnapshots(snapshots map[ID]StatusSnapshot, mechanics map[ID]M
 	return errs
 }
 
-// ValidateActiveStatuses validates the status-instance snapshot supplied for
-// one entity. Snapshot values are immutable consequences retained by those
-// instances, not instructions to reload current configuration.
-func ValidateActiveStatuses(entity Entity, snapshots map[ID]StatusSnapshot, active []ActiveStatus) ValidationErrors {
+// ValidateStatusInstances validates the active Status instances supplied for
+// one Entity. Inline-status values come from immutable instance snapshots, not
+// instructions to reload current configuration.
+func ValidateStatusInstances(entity Entity, inlineStatuses map[ID]InlineStatus, instances []StatusInstance) ValidationErrors {
 	var errs ValidationErrors
-	instanceIDs := make(map[ID]struct{}, len(active))
-	sourceEffectsOnEntity := make(map[ID]struct{}, len(active))
-	for index, status := range active {
-		path := fmt.Sprintf("active_statuses[%d]", index)
+	instanceIDs := make(map[ID]struct{}, len(instances))
+	sourceEffectsOnEntity := make(map[ID]struct{}, len(instances))
+	for index, status := range instances {
+		path := fmt.Sprintf("active_status_instances[%d]", index)
 		if !status.ID.Valid() {
-			errs = append(errs, validation("required", path+".id", "active status ID is required"))
+			errs = append(errs, validation("required", path+".id", "status instance ID is required"))
 		}
 		if _, exists := instanceIDs[status.ID]; exists {
-			errs = append(errs, validation("duplicate", path+".id", "active status ID is repeated"))
+			errs = append(errs, validation("duplicate", path+".id", "status instance ID is repeated"))
 		}
 		instanceIDs[status.ID] = struct{}{}
 		if status.EntityID != entity.ID {
-			errs = append(errs, validation("entity_mismatch", path+".entity_id", "active status does not belong to the evaluated entity"))
+			errs = append(errs, validation("entity_mismatch", path+".entity_id", "status instance does not belong to the evaluated entity"))
 		}
 		if status.WorldID != entity.WorldID {
-			errs = append(errs, validation("cross_world_reference", path+".world_id", "active status and entity belong to different worlds"))
+			errs = append(errs, validation("cross_world_reference", path+".world_id", "status instance and entity belong to different worlds"))
 		}
 		if status.AppliedOrder < 0 {
-			errs = append(errs, validation("invalid_position", path+".applied_order", "active status applied order cannot be negative"))
+			errs = append(errs, validation("invalid_position", path+".applied_order", "status instance applied order cannot be negative"))
 		}
-		snapshot, exists := snapshots[status.SourceEffectID]
+		inlineStatus, exists := inlineStatuses[status.SourceEffectID]
 		if !exists {
-			errs = append(errs, validation("unknown_status", path+".source_effect_id", "active status source-effect snapshot does not exist"))
+			errs = append(errs, validation("unknown_status", path+".source_effect_id", "status instance source Inline status does not exist"))
 			continue
 		}
-		if snapshot.ID != status.SourceEffectID {
-			errs = append(errs, validation("status_id_mismatch", path+".source_effect_id", "status map key and snapshot source effect ID differ"))
+		if inlineStatus.ID != status.SourceEffectID {
+			errs = append(errs, validation("status_id_mismatch", path+".source_effect_id", "status map key and inline-status source Effect ID differ"))
 		}
-		if snapshot.WorldID != status.WorldID {
-			errs = append(errs, validation("cross_world_reference", path+".source_effect_id", "active status and snapshot belong to different worlds"))
+		if inlineStatus.WorldID != status.WorldID {
+			errs = append(errs, validation("cross_world_reference", path+".source_effect_id", "Status instance and Inline status belong to different Worlds"))
 		}
 		if _, exists := sourceEffectsOnEntity[status.SourceEffectID]; exists {
-			errs = append(errs, validation("duplicate_active_status", path+".source_effect_id", "only one instance from a source effect may be active on an entity"))
+			errs = append(errs, validation("duplicate_status_instance", path+".source_effect_id", "only one instance from a source effect may be active on an entity"))
 		}
 		sourceEffectsOnEntity[status.SourceEffectID] = struct{}{}
 	}
@@ -129,7 +129,7 @@ func ValidateActiveStatuses(entity Entity, snapshots map[ID]StatusSnapshot, acti
 
 func validateStatusModifier(modifier StatusModifier, mechanic MechanicDefinition) ValidationErrors {
 	var errs ValidationErrors
-	if !validStateValueShape(modifier.Value) {
+	if !validMechanicValueShape(modifier.Value) {
 		return ValidationErrors{validation("invalid_typed_value", "value", "modifier requires exactly one literal number or boolean value")}
 	}
 	switch modifier.Operation {
@@ -147,6 +147,6 @@ func validateStatusModifier(modifier StatusModifier, mechanic MechanicDefinition
 	return errs
 }
 
-func cloneActiveStatuses(active []ActiveStatus) []ActiveStatus {
-	return append([]ActiveStatus(nil), active...)
+func cloneStatusInstances(instances []StatusInstance) []StatusInstance {
+	return append([]StatusInstance(nil), instances...)
 }

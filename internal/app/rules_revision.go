@@ -10,7 +10,7 @@ import (
 
 func loadRulesRevision(ctx context.Context, db queryer, worldID string) (int64, error) {
 	var revision int64
-	err := db.QueryRow(ctx, `select revision from world_rule_sets where world_id = $1`, worldID).Scan(&revision)
+	err := db.QueryRow(ctx, `select revision from world_mechanic_graphs where world_id = $1`, worldID).Scan(&revision)
 	return revision, err
 }
 
@@ -43,7 +43,7 @@ func lockRulesRevision(ctx context.Context, tx pgx.Tx, worldID string, expected 
 		}
 	}
 	var actual int64
-	if err := tx.QueryRow(ctx, `select revision from world_rule_sets where world_id = $1 for update`, worldID).Scan(&actual); err != nil {
+	if err := tx.QueryRow(ctx, `select revision from world_mechanic_graphs where world_id = $1 for update`, worldID).Scan(&actual); err != nil {
 		return 0, err
 	}
 	if actual != *expected {
@@ -56,7 +56,7 @@ func rulesRevisionConflict(expected, actual int64) error {
 	return &statusError{
 		Status:  http.StatusConflict,
 		Code:    "revision_conflict",
-		Message: "world rules changed since they were loaded",
+		Message: "world mechanic graph changed since it was loaded",
 		Fields: map[string]string{
 			"expected_rules_revision": fmt.Sprint(expected),
 			"actual_rules_revision":   fmt.Sprint(actual),

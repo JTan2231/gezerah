@@ -355,7 +355,7 @@ func hashSessionToken(token string) string {
 }
 
 func deriveCSRFToken(token string) string {
-	digest := sha256.Sum256(append([]byte("worldwright.csrf.v1\x00"), []byte(token)...))
+	digest := sha256.Sum256(append([]byte("dnd.csrf.v1\x00"), []byte(token)...))
 	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 

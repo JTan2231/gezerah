@@ -35,17 +35,17 @@ func TestAgentAdjudicationPlanPreservesLifecycleAndRevisionGuards(t *testing.T) 
 		"open", terraFacilitatorSource, 4, 4, 0,
 		agentFacilitatorSource, agentFacilitatorLabel,
 	)
-	assertAutoDMStatusError(t, err, "interaction_lifecycle_conflict")
+	assertAutomatedStatusError(t, err, "interaction_lifecycle_conflict")
 	_, err = planAutomatedAdjudication(
 		"open", agentFacilitatorSource, 4, 3, 0,
 		agentFacilitatorSource, agentFacilitatorLabel,
 	)
-	assertAutoDMStatusError(t, err, "revision_conflict")
+	assertAutomatedStatusError(t, err, "revision_conflict")
 	_, err = planAutomatedAdjudication(
 		"open", agentFacilitatorSource, 4, 4, 1,
 		agentFacilitatorSource, agentFacilitatorLabel,
 	)
-	assertAutoDMStatusError(t, err, "responses_incomplete")
+	assertAutomatedStatusError(t, err, "responses_incomplete")
 }
 
 func TestAgentResolutionRequestRejectsPrivateNotes(t *testing.T) {
@@ -54,29 +54,29 @@ func TestAgentResolutionRequestRejectsPrivateNotes(t *testing.T) {
 	request := httptest.NewRequestWithContext(
 		t.Context(),
 		http.MethodPost,
-		"/agent-dm/resolve",
+		"/agent/resolve",
 		strings.NewReader(`{
 			"expected_revision":1,
 			"expected_rules_revision":2,
-			"idempotency_key":"one ruling",
+			"idempotency_key":"one consequence",
 			"narrative":"The door opens.",
 			"private_notes":"hidden",
 			"effects":[]
 		}`),
 	)
-	var decoded agentDMResolveRequest
+	var decoded agentResolveRequest
 	if err := decodeJSON(request, &decoded); err == nil {
 		t.Fatal("agent resolution unexpectedly accepted facilitator-private notes")
 	}
 }
 
-func TestSummarizePublicCharacterProfile(t *testing.T) {
+func TestSummarizePublicEntityProfile(t *testing.T) {
 	t.Parallel()
 
 	calling := "A careful scout"
 	secret := ""
-	summary := summarizePublicCharacterProfile(entityProfileResponse{
-		Fields: []entityProfileFieldResponse{
+	summary := summarizePublicEntityProfile(entityProfileResponse{
+		Fields: []entityProfileCharacterFieldResponse{
 			{Label: "Calling", Value: &calling},
 			{Label: "Empty", Value: &secret},
 		},

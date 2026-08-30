@@ -1,28 +1,28 @@
-create table world_rule_sets (
+create table world_mechanic_graphs (
 	world_id uuid primary key,
 	revision bigint not null default 0,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
-	constraint world_rule_sets_revision_nonnegative check (revision >= 0),
-	constraint world_rule_sets_world_fk foreign key (world_id)
+	constraint world_mechanic_graphs_revision_nonnegative check (revision >= 0),
+	constraint world_mechanic_graphs_world_fk foreign key (world_id)
 		references worlds (id) on delete cascade
 );
 
-insert into world_rule_sets (world_id)
+insert into world_mechanic_graphs (world_id)
 select id from worlds;
 
-create trigger world_rule_sets_set_updated_at before update on world_rule_sets
+create trigger world_mechanic_graphs_set_updated_at before update on world_mechanic_graphs
 for each row execute function set_updated_at();
 
-create function create_world_rule_set() returns trigger language plpgsql as $$
+create function create_world_mechanic_graph() returns trigger language plpgsql as $$
 begin
-	insert into world_rule_sets (world_id) values (new.id);
+	insert into world_mechanic_graphs (world_id) values (new.id);
 	return new;
 end;
 $$;
 
-create trigger worlds_create_rule_set after insert on worlds
-for each row execute function create_world_rule_set();
+create trigger worlds_create_mechanic_graph after insert on worlds
+for each row execute function create_world_mechanic_graph();
 
 alter table world_mechanics
 	add column source_kind text not null default 'input';
@@ -44,12 +44,12 @@ alter table world_mechanics
 	add constraint world_mechanics_id_world_value_source_unique
 		unique (id, world_id, value_kind, source_kind);
 
-alter table state_values
+alter table entity_input_value_overrides
 	add column mechanic_source_kind text not null default 'input',
-	drop constraint state_values_mechanic_fk,
-	add constraint state_values_mechanic_source_input
+	drop constraint entity_input_value_overrides_mechanic_fk,
+	add constraint entity_input_value_overrides_mechanic_source_input
 		check (mechanic_source_kind = 'input'),
-	add constraint state_values_mechanic_fk
+	add constraint entity_input_value_overrides_mechanic_fk
 		foreign key (mechanic_id, world_id, value_kind, mechanic_source_kind)
 		references world_mechanics (id, world_id, value_kind, source_kind) on delete restrict;
 
@@ -165,9 +165,9 @@ alter table interaction_resolutions
 	add column rules_revision bigint;
 
 update interaction_resolutions resolution
-set rules_revision = rule_set.revision
-from world_rule_sets rule_set
-where rule_set.world_id = resolution.world_id;
+set rules_revision = mechanic_graph.revision
+from world_mechanic_graphs mechanic_graph
+where mechanic_graph.world_id = resolution.world_id;
 
 alter table interaction_resolutions
 	alter column rules_revision set not null,
@@ -240,7 +240,7 @@ alter table interaction_resolution_effect_targets
 	add constraint interaction_resolution_effect_targets_status_receipt_unique
 		unique (effect_id, entity_id, resolution_id, world_id, effect_operation, status_instance_id);
 
-create table interaction_resolution_status_effect_modifiers (
+create table interaction_resolution_inline_status_modifiers (
 	id uuid primary key default gen_random_uuid(),
 	effect_id uuid not null,
 	resolution_id uuid not null,
@@ -254,12 +254,12 @@ create table interaction_resolution_status_effect_modifiers (
 	number_value numeric,
 	boolean_value boolean,
 	created_at timestamptz not null default now(),
-	constraint interaction_resolution_status_effect_modifiers_apply_owner
+	constraint interaction_resolution_inline_status_modifiers_apply_owner
 		check (effect_operation = 'apply-status'),
-	constraint interaction_resolution_status_effect_modifiers_position_nonnegative check (position >= 0),
-	constraint interaction_resolution_status_effect_modifiers_operation_valid
+	constraint interaction_resolution_inline_status_modifiers_position_nonnegative check (position >= 0),
+	constraint interaction_resolution_inline_status_modifiers_operation_valid
 		check (operation in ('set', 'add-number', 'multiply-number')),
-	constraint interaction_resolution_status_effect_modifiers_value_shape check (
+	constraint interaction_resolution_inline_status_modifiers_value_shape check (
 		(operation = 'set' and (
 			(value_kind = 'number' and number_value is not null and boolean_value is null)
 			or (value_kind = 'boolean' and number_value is null and boolean_value is not null)
@@ -267,21 +267,21 @@ create table interaction_resolution_status_effect_modifiers (
 		or (operation in ('add-number', 'multiply-number') and value_kind = 'number'
 			and number_value is not null and boolean_value is null)
 	),
-	constraint interaction_resolution_status_effect_modifiers_effect_position_unique
+	constraint interaction_resolution_inline_status_modifiers_effect_position_unique
 		unique (effect_id, position),
-	constraint interaction_resolution_status_effect_modifiers_id_effect_resolution_world_unique
+	constraint interaction_resolution_inline_status_modifiers_id_effect_resolution_world_unique
 		unique (id, effect_id, resolution_id, world_id),
-	constraint interaction_resolution_status_effect_modifiers_effect_fk
+	constraint interaction_resolution_inline_status_modifiers_effect_fk
 		foreign key (effect_id, resolution_id, world_id, effect_operation)
 		references interaction_resolution_effects (id, resolution_id, world_id, operation)
 		on delete cascade,
-	constraint interaction_resolution_status_effect_modifiers_mechanic_fk
+	constraint interaction_resolution_inline_status_modifiers_mechanic_fk
 		foreign key (mechanic_id, world_id, value_kind)
 		references world_mechanics (id, world_id, value_kind) on delete restrict
 );
 
-create index interaction_resolution_status_effect_modifiers_mechanic_idx
-	on interaction_resolution_status_effect_modifiers (world_id, mechanic_id, effect_id);
+create index interaction_resolution_inline_status_modifiers_mechanic_idx
+	on interaction_resolution_inline_status_modifiers (world_id, mechanic_id, effect_id);
 
 create table entity_status_instances (
 	id uuid primary key default gen_random_uuid(),
@@ -371,7 +371,7 @@ create table entity_status_instance_modifiers (
 		references entity_status_instances (id, entity_id, world_id) on delete cascade,
 	constraint entity_status_instance_modifiers_source_fk
 		foreign key (source_modifier_id, source_effect_id, source_resolution_id, world_id)
-		references interaction_resolution_status_effect_modifiers
+		references interaction_resolution_inline_status_modifiers
 			(id, effect_id, resolution_id, world_id)
 		on delete restrict deferrable initially deferred,
 	constraint entity_status_instance_modifiers_mechanic_fk
@@ -493,15 +493,15 @@ alter table world_events
 		'entity-created', 'entity-control-updated', 'entity-profile-updated',
 		'character-fields-updated', 'rules-updated', 'interaction-created', 'interaction-updated',
 		'interaction-presented', 'interaction-adjudicating', 'interaction-cancelled',
-		'submission-created', 'submission-withdrawn', 'resolution-updated', 'resolution-applied'
-	));
+		'action-submitted', 'action-withdrawn', 'resolution-committed'
+));
 
-create trigger interaction_resolution_status_applications_protect_applied
+create trigger interaction_resolution_status_applications_protect_committed
 	before update or delete on interaction_resolution_status_applications
-	for each row execute function protect_applied_resolution_tree();
-create trigger interaction_resolution_status_effect_modifiers_protect_applied
-	before update or delete on interaction_resolution_status_effect_modifiers
-	for each row execute function protect_applied_resolution_tree();
-create trigger interaction_resolution_effective_changes_protect_applied
+	for each row execute function protect_committed_resolution_tree();
+create trigger interaction_resolution_inline_status_modifiers_protect_committed
+	before update or delete on interaction_resolution_inline_status_modifiers
+	for each row execute function protect_committed_resolution_tree();
+create trigger interaction_resolution_effective_changes_protect_committed
 	before update or delete on interaction_resolution_effective_changes
-	for each row execute function protect_applied_resolution_tree();
+	for each row execute function protect_committed_resolution_tree();

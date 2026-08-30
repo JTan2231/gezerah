@@ -69,13 +69,11 @@ describe("scenario evidence", () => {
         "/play/invite/play-bearer",
         "/build/invite/build-bearer",
         "/api/world-invites/api-bearer/redeem",
-        "/api/invites/legacy-bearer",
       ].map(sanitizeURL),
       [
         `/play/invite/${REDACTED}`,
         `/build/invite/${REDACTED}`,
         `/api/world-invites/${REDACTED}/redeem`,
-        `/api/invites/${REDACTED}`,
       ],
     );
     assert.equal(

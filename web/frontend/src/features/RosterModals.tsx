@@ -29,7 +29,7 @@ export function NewEntityModal({
   const [controllerIDs, setControllerIDs] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [issue, setIssue] = useState<RosterModalIssue | null>(null);
-  const players = members.filter(
+  const eligibleControllers = members.filter(
     (member) => member.status === "active" && member.role !== "spectator",
   );
   async function submit() {
@@ -53,9 +53,9 @@ export function NewEntityModal({
     <NewEntityModalView
       name={name}
       controllerIds={controllerIDs}
-      players={players.map((player) => ({
-        id: player.id,
-        displayName: player.display_name,
+      eligibleControllers={eligibleControllers.map((controller) => ({
+        id: controller.id,
+        displayName: controller.display_name,
       }))}
       saving={saving}
       issue={issue}
@@ -86,13 +86,13 @@ export function ManageControllersModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const players = members.filter(
+  const eligibleControllers = members.filter(
     (member) => member.status === "active" && member.role !== "spectator",
   );
   const initialControllerIDs =
     entity === undefined
       ? []
-      : players
+      : eligibleControllers
           .filter((member) => member.controlled_entity_ids.includes(entity.id))
           .map((member) => member.id);
   const [controllerIDs, setControllerIDs] = useState(initialControllerIDs);
@@ -109,14 +109,14 @@ export function ManageControllersModal({
       await api(worldPath(world.id, `entities/${entityID}/controllers`), {
         method: "PUT",
         ...jsonBody({
-          expected_table_revision: world.table_revision,
+          expected_roster_revision: world.roster_revision,
           controller_world_membership_ids: controllerIDs,
         }),
       });
       onSaved();
     } catch (reason) {
       setIssue(
-        toRosterModalIssue(reason, "Could not update character control."),
+        toRosterModalIssue(reason, "Could not update Entity controllers."),
       );
       setSaving(false);
     }
@@ -126,9 +126,9 @@ export function ManageControllersModal({
     <ManageControllersModalView
       entityName={entity.display_name}
       controllerIds={controllerIDs}
-      players={players.map((player) => ({
-        id: player.id,
-        displayName: player.display_name,
+      eligibleControllers={eligibleControllers.map((controller) => ({
+        id: controller.id,
+        displayName: controller.display_name,
       }))}
       saving={saving}
       issue={issue}

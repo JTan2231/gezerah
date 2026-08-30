@@ -117,19 +117,19 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var characterFieldsRevision int64
+	var characterFieldSetRevision int64
 	if err := tx.QueryRow(r.Context(), `
 		select revision
 		from world_character_field_sets
 		where world_id = $1
 		for share`, worldID,
-	).Scan(&characterFieldsRevision); err != nil {
+	).Scan(&characterFieldSetRevision); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	if characterFieldsRevision != *request.ExpectedCharacterFieldsRevision {
+	if characterFieldSetRevision != *request.ExpectedCharacterFieldSetRevision {
 		handleAppError(w, revisionConflict(
-			"character fields", *request.ExpectedCharacterFieldsRevision, characterFieldsRevision,
+			"character field set", *request.ExpectedCharacterFieldSetRevision, characterFieldSetRevision,
 		))
 		return
 	}
@@ -150,7 +150,7 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 			handleAppError(w, &statusError{
 				Status:  http.StatusUnprocessableEntity,
 				Code:    "invalid_character_field",
-				Message: "character profile values are invalid",
+				Message: "Entity profile values are invalid",
 				Fields: map[string]string{
 					fmt.Sprintf("values[%d].field_id", index): "active field does not exist in this world",
 				},
@@ -206,7 +206,7 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 	// Values for archived fields are intentionally retained. They become
 	// visible again if an editor restores the same user-authored field.
 	if _, err := tx.Exec(r.Context(), `
-		delete from entity_profile_field_values value
+		delete from entity_profile_values value
 		using world_character_fields field
 		where value.entity_id = $1
 			and value.world_id = $2
@@ -218,7 +218,7 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 	}
 	for _, value := range request.Values {
 		if _, err := tx.Exec(r.Context(), `
-			insert into entity_profile_field_values (
+			insert into entity_profile_values (
 				entity_id, field_id, world_id, body,
 				created_by_user_id, updated_by_user_id
 			) values ($1, $2, $3, $4, $5, $5)
@@ -300,13 +300,13 @@ func loadEntityProfileResponse(
 	result := entityProfileResponse{
 		EntityID: entityID,
 		CanEdit:  canEdit,
-		Fields:   make([]entityProfileFieldResponse, 0),
+		Fields:   make([]entityProfileCharacterFieldResponse, 0),
 	}
 	if err := db.QueryRow(ctx, `
 		select revision
 		from world_character_field_sets
 		where world_id = $1`, worldID,
-	).Scan(&result.CharacterFieldsRevision); err != nil {
+	).Scan(&result.CharacterFieldSetRevision); err != nil {
 		return result, err
 	}
 
@@ -338,19 +338,19 @@ func loadEntityProfileResponse(
 		select field.id::text, field.label, field.help_text, field.visibility,
 			value.body, value.updated_by_user_id::text, value.updated_at
 		from world_character_fields field
-		left join entity_profile_field_values value
+		left join entity_profile_values value
 			on value.field_id = field.id
 			and value.world_id = field.world_id
 			and value.entity_id = $2
 		where field.world_id = $1 and not field.archived
-			and ($3 or (field.visibility = 'table' and value.body is not null))
+			and ($3 or (field.visibility = 'world' and value.body is not null))
 		order by field.position, field.id`, worldID, entityID, includeRestricted)
 	if err != nil {
 		return result, err
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var field entityProfileFieldResponse
+		var field entityProfileCharacterFieldResponse
 		if err := rows.Scan(
 			&field.ID, &field.Label, &field.HelpText, &field.Visibility,
 			&field.Value, &field.UpdatedByUserID, &field.UpdatedAt,
@@ -370,15 +370,15 @@ func validateEntityProfileRequest(request *replaceEntityProfileRequest) map[stri
 	if request.ExpectedRevision == nil || *request.ExpectedRevision < 0 {
 		fields["expected_revision"] = "a non-negative expected revision is required"
 	}
-	if request.ExpectedCharacterFieldsRevision == nil || *request.ExpectedCharacterFieldsRevision < 0 {
-		fields["expected_character_fields_revision"] = "a non-negative expected character fields revision is required"
+	if request.ExpectedCharacterFieldSetRevision == nil || *request.ExpectedCharacterFieldSetRevision < 0 {
+		fields["expected_character_field_set_revision"] = "a non-negative expected character field set revision is required"
 	}
 	if len(request.Values) > maxWorldCharacterFields {
 		fields["values"] = fmt.Sprintf("must contain at most %d values", maxWorldCharacterFields)
 	}
 
 	seenIDs := make(map[string]struct{}, len(request.Values))
-	normalized := make([]saveEntityProfileFieldValueRequest, 0, len(request.Values))
+	normalized := make([]saveEntityProfileValueRequest, 0, len(request.Values))
 	for index := range request.Values {
 		value := &request.Values[index]
 		value.Value = strings.TrimSpace(value.Value)
@@ -401,8 +401,8 @@ func validateEntityProfileRequest(request *replaceEntityProfileRequest) map[stri
 }
 
 func entityProfileMatches(
-	current []entityProfileFieldResponse,
-	desired []saveEntityProfileFieldValueRequest,
+	current []entityProfileCharacterFieldResponse,
+	desired []saveEntityProfileValueRequest,
 ) bool {
 	currentValues := make(map[string]string)
 	for _, field := range current {

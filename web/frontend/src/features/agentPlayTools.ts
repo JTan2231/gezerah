@@ -2,8 +2,8 @@ import { useEffect } from "react";
 
 import { api, ApiError, jsonBody, worldPath } from "../api/client";
 import type {
-  AvailableCharacters,
-  CharacterClaimResult,
+  AvailableEntities,
+  EntityClaimResult,
   EntityProfile,
   Interaction,
   InteractionAction,
@@ -15,7 +15,7 @@ import type {
 } from "../api/types";
 
 export function buildAgentStarterPrompt(playURL: string): string {
-  return `Open ${playURL} in your built-in browser. If the page asks, sign in; the Play page provides Site Tools. Be the Dungeon Master for this world. Inspect the game, help me choose a character if needed, then set the first scene.`;
+  return `Open ${playURL} in your built-in browser. If the page asks, sign in; the Play page provides Site Tools. Be the Dungeon Master for this World. Use inspect_play, help me choose an available Entity if needed, then present the first Problem.`;
 }
 
 export function buildAgentLaunchURL(playURL: string, prompt: string): string {
@@ -37,7 +37,7 @@ const emptyInputSchema = {
   additionalProperties: false,
 } as const;
 
-const stateValueSchema = {
+const mechanicValueSchema = {
   oneOf: [
     {
       type: "object",
@@ -70,7 +70,7 @@ const targetEntityIDsSchema = {
   uniqueItems: true,
 } as const;
 
-const statusTargetsSchema = {
+const statusLifecycleEffectTargetsSchema = {
   type: "array",
   items: {
     type: "object",
@@ -89,7 +89,7 @@ const effectSchema = {
         type: { const: "set" },
         entity_ids: targetEntityIDsSchema,
         mechanic_id: { type: "string" },
-        value: stateValueSchema,
+        value: mechanicValueSchema,
       },
       required: ["type", "entity_ids", "mechanic_id", "value"],
       additionalProperties: false,
@@ -112,7 +112,7 @@ const effectSchema = {
       type: "object",
       properties: {
         type: { const: "apply-status" },
-        targets: statusTargetsSchema,
+        targets: statusLifecycleEffectTargetsSchema,
         status: {
           type: "object",
           properties: {
@@ -127,7 +127,7 @@ const effectSchema = {
                   operation: {
                     enum: ["set", "add-number", "multiply-number"],
                   },
-                  value: stateValueSchema,
+                  value: mechanicValueSchema,
                   priority: { type: "integer" },
                 },
                 required: ["mechanic_id", "operation", "value", "priority"],
@@ -203,9 +203,9 @@ export function createAgentPlayTools(
 
   return [
     {
-      name: "inspect_game",
+      name: "inspect_play",
       description:
-        "Inspect the current world, player seat, available characters, table, character sheets, active problem, actions, and recent history. Call this before taking another game action.",
+        "Inspect the current World, current-player Play status, available Entities, World roster, Entity sheets, active Problem, Actions, and recent history. Call this before taking another Play action.",
       inputSchema: emptyInputSchema,
       annotations: { readOnlyHint: true },
       execute: async (input, options) => {
@@ -232,16 +232,16 @@ export function createAgentPlayTools(
 
         if (!playReady) {
           if (world.play_status === "waiting-for-character") {
-            const available = await api<AvailableCharacters>(
-              worldPath(worldId, "available-characters"),
+            const available = await api<AvailableEntities>(
+              worldPath(worldId, "available-entities"),
               { signal: requestSignal },
             );
             return toolResult({
-              world: gameWorldSummary(world),
+              world: worldSummary(world),
               viewer: viewerSummary(viewer, world),
-              available_characters: available.characters,
-              table_revision: available.table_revision,
-              next_step: "Choose one available character with claim_character.",
+              available_entities: available.entities,
+              roster_revision: available.roster_revision,
+              next_step: "Choose one available entity with claim_entity.",
             });
           }
           const controlledEntities = entities.filter((entity) =>
@@ -256,7 +256,7 @@ export function createAgentPlayTools(
             ),
           );
           return toolResult({
-            world: gameWorldSummary(world),
+            world: worldSummary(world),
             viewer: viewerSummary(viewer, world),
             claimed_characters: controlledEntities.map((entity) => {
               const profile = controlledProfiles.find(
@@ -271,7 +271,7 @@ export function createAgentPlayTools(
               };
             }),
             next_step:
-              "Ask the player to complete the claimed character's required fields in the page.",
+              "Ask the current player to complete the claimed Character's required fields in the page.",
           });
         }
 
@@ -296,7 +296,7 @@ export function createAgentPlayTools(
         const profilesByEntity = new Map(
           profiles.map((profile) => [profile.entity_id, profile]),
         );
-        const activeProblem = interactions.find(isUnfinishedInteraction);
+        const activeInteraction = interactions.find(isUnfinishedInteraction);
         const recentHistory = interactions
           .filter(
             (interaction) =>
@@ -306,14 +306,14 @@ export function createAgentPlayTools(
           .slice(0, 3);
 
         return toolResult({
-          world: gameWorldSummary(world),
+          world: worldSummary(world),
           viewer: viewerSummary(viewer, world),
           members: members
             .filter((membership) => membership.status === "active")
             .map((membership) => ({
               id: membership.id,
               name: membership.display_name,
-              play_role: membership.current_play_role,
+              current_play_role: membership.current_play_role,
               play_status: membership.play_status,
               controlled_entity_ids: membership.controlled_entity_ids,
             })),
@@ -321,34 +321,31 @@ export function createAgentPlayTools(
           mechanics: mechanics.mechanics.filter(
             (mechanic) => !mechanic.archived,
           ),
-          characters: entities
+          entities: entities
             .filter((entity) => !entity.archived)
             .map((entity) => ({
               id: entity.id,
               name: entity.display_name,
               character_status: entity.character_status,
               profile: profilesByEntity.get(entity.id)?.fields ?? [],
-              effective_values: entity.state.effective_values,
-              active_statuses: entity.state.active_statuses,
-              state_revision: entity.state.revision,
-              status_revision: entity.state.status_revision,
+              sheet: entity.sheet,
             })),
-          current_problem: activeProblem,
+          active_interaction: activeInteraction,
           recent_history: recentHistory,
-          next_step: nextGameStep(world, viewer, activeProblem),
+          next_step: nextPlayStep(world, viewer, activeInteraction),
         });
       },
     },
     {
-      name: "claim_character",
+      name: "claim_entity",
       description:
-        "Claim one currently available character for the signed-in player. Use an entity_id returned by inspect_game. This changes the player's table seat.",
+        "Claim one currently available Entity for the signed-in current player. Use an entity_id returned by inspect_play. Claiming it makes the Entity the current player's Character and advances the World roster.",
       inputSchema: {
         type: "object",
         properties: {
           entity_id: {
             type: "string",
-            description: "The available character entity ID.",
+            description: "The available Entity ID.",
           },
         },
         required: ["entity_id"],
@@ -357,43 +354,43 @@ export function createAgentPlayTools(
       execute: async (input, options) => {
         const requestSignal = toolSignal(signal, options?.signal);
         const entityID = requiredString(input, "entity_id", 200);
-        const available = await api<AvailableCharacters>(
-          worldPath(worldId, "available-characters"),
+        const available = await api<AvailableEntities>(
+          worldPath(worldId, "available-entities"),
           { signal: requestSignal },
         );
-        const character = available.characters.find(
+        const entity = available.entities.find(
           (candidate) => candidate.id === entityID,
         );
-        if (character === undefined)
+        if (entity === undefined)
           throw new AgentToolUsageError(
-            "That character is no longer available to claim.",
+            "That entity is no longer available to claim.",
           );
-        const result = await api<CharacterClaimResult>(
+        const result = await api<EntityClaimResult>(
           worldPath(worldId, `entities/${entityID}/claim`),
           {
             method: "POST",
             signal: requestSignal,
             ...jsonBody({
-              expected_table_revision: available.table_revision,
+              expected_roster_revision: available.roster_revision,
             }),
           },
         );
         onChanged();
         return toolResult({
-          claimed_character: character,
+          claimed_character: entity,
           play_status: result.play_status,
-          table_revision: result.table_revision,
+          roster_revision: result.roster_revision,
           next_step:
             result.play_status === "ready"
-              ? "Inspect the game again, then begin the adventure."
-              : "Ask the player to complete the claimed character's required fields in the page.",
+              ? "Use inspect_play again, then present the first Problem."
+              : "Ask the current player to complete the claimed Character's required fields in the page.",
         });
       },
     },
     {
       name: "present_problem",
       description:
-        "As ChatGPT Dungeon Master, present the next fictional problem to the ready table. Use only while the table has no unfinished problem.",
+        "As ChatGPT Dungeon Master, present the next fictional Problem to ready World memberships. Use only while the World has no unfinished Problem.",
       inputSchema: {
         type: "object",
         properties: {
@@ -402,7 +399,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 10000,
             description:
-              "Public prose that sets a concrete situation and invites the player to act.",
+              "Public prose that presents a concrete Problem and invites the current player to act.",
           },
         },
         required: ["prompt"],
@@ -413,7 +410,7 @@ export function createAgentPlayTools(
         const prompt = requiredString(input, "prompt", 10000);
         const title = optionalString(input, "title", 200);
         const interaction = await api<Interaction>(
-          worldPath(worldId, "agent-dm/continue"),
+          worldPath(worldId, "agent/continue"),
           {
             method: "POST",
             signal: requestSignal,
@@ -422,15 +419,16 @@ export function createAgentPlayTools(
         );
         onChanged();
         return toolResult({
-          presented_problem: interaction,
-          next_step: "Invite the player to describe what their character does.",
+          presented_interaction: interaction,
+          next_step:
+            "Invite the current player to describe what their Character does.",
         });
       },
     },
     {
       name: "submit_action",
       description:
-        "Record the signed-in player's action for the current open ChatGPT-authored problem. Use acting_entity_id only when the action is attributed to one of their ready characters.",
+        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities.",
       inputSchema: {
         type: "object",
         properties: {
@@ -475,14 +473,14 @@ export function createAgentPlayTools(
         return toolResult({
           submitted_action: action,
           next_step:
-            "Inspect the game. Once every responder has acted, decide and resolve the outcome.",
+            "Use inspect_play. Once every responder has acted, resolve the Problem.",
         });
       },
     },
     {
       name: "resolve_problem",
       description:
-        "As ChatGPT Dungeon Master, resolve the current open or adjudicating problem with public consequence prose and optional mechanical effects. Inspect the game first and account for every submitted action. An empty effects array is valid.",
+        "As ChatGPT Dungeon Master, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. Use inspect_play first and account for every submitted Action. An empty effects array is valid.",
       inputSchema: {
         type: "object",
         properties: {
@@ -497,7 +495,7 @@ export function createAgentPlayTools(
             type: "array",
             items: effectSchema,
             description:
-              "Ordered mechanical effects. Use IDs and exact value shapes from inspect_game.",
+              "Ordered mechanical Effects. Use IDs and exact value shapes from inspect_play.",
           },
         },
         required: ["narrative", "effects"],
@@ -540,7 +538,7 @@ export function createAgentPlayTools(
           resolutionKeys.set(interaction.id, idempotencyKey);
         }
         const result = await api<InteractionResolutionResult>(
-          worldPath(worldId, `interactions/${interaction.id}/agent-dm/resolve`),
+          worldPath(worldId, `interactions/${interaction.id}/agent/resolve`),
           {
             method: "POST",
             signal: requestSignal,
@@ -563,7 +561,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Describe the consequence to the player. Inspect the game before presenting another problem.",
+            "Describe the Consequence to the current player. Use inspect_play before presenting another Problem.",
         });
       },
     },
@@ -583,7 +581,7 @@ export async function registerTools(
           ...tool,
           execute: async (input, options) => {
             if (toolCallAborted(signal, options?.signal))
-              throw new DOMException("The game page changed.", "AbortError");
+              throw new DOMException("The Play page changed.", "AbortError");
             try {
               return await tool.execute(input, options);
             } catch (reason) {
@@ -600,14 +598,16 @@ export async function registerTools(
                     message: reason.message,
                     fields: reason.fields,
                   },
-                  next_step: "Inspect the game and retry with fresh state.",
+                  next_step:
+                    "Use inspect_play and retry with fresh World and Entity-sheet data.",
                 });
               }
               if (reason instanceof AgentToolUsageError) {
                 return toolResult({
                   ok: false,
                   error: { code: "tool_usage_error", message: reason.message },
-                  next_step: "Inspect the game and retry with fresh state.",
+                  next_step:
+                    "Use inspect_play and retry with fresh World and Entity-sheet data.",
                 });
               }
               throw reason;
@@ -684,14 +684,14 @@ function toolSignal(
     : AbortSignal.any([registrationSignal, invocationSignal]);
 }
 
-function gameWorldSummary(world: World) {
+function worldSummary(world: World) {
   return {
     id: world.id,
     name: world.name,
     description: world.description,
     status: world.status,
-    dungeon_master: world.facilitator.source,
-    table_revision: world.table_revision,
+    facilitator_source: world.facilitator.source,
+    roster_revision: world.roster_revision,
     rules_revision: world.rules_revision,
   };
 }
@@ -699,8 +699,8 @@ function gameWorldSummary(world: World) {
 function viewerSummary(member: WorldMember | undefined, world: World) {
   return {
     membership_id: world.membership_id,
-    durable_role: world.role,
-    play_role: world.current_play_role,
+    membership_role: world.role,
+    current_play_role: world.current_play_role,
     play_status: world.play_status,
     controlled_entity_ids: member?.controlled_entity_ids ?? [],
   };
@@ -714,7 +714,7 @@ function isUnfinishedInteraction(interaction: Interaction): boolean {
   );
 }
 
-function nextGameStep(
+function nextPlayStep(
   world: World,
   viewer: WorldMember | undefined,
   interaction: Interaction | undefined,
@@ -723,9 +723,9 @@ function nextGameStep(
   if (interaction === undefined)
     return "Present the next problem with present_problem.";
   if (interaction.status === "adjudicating")
-    return "Retry the pending outcome with resolve_problem using fresh state.";
+    return "Retry the pending Resolution with resolve_problem using fresh World and Entity-sheet data.";
   if (interaction.status !== "open")
-    return "Wait for the current problem state to finish updating.";
+    return "Wait for the current problem to finish updating.";
   const submittedMembershipIDs = new Set(
     interaction.actions
       .filter((action) => action.status === "submitted")
@@ -736,11 +736,12 @@ function nextGameStep(
     interaction.eligible_responder_membership_ids.includes(viewer.id) &&
     !submittedMembershipIDs.has(viewer.id)
   )
-    return "Ask the player what they do, then record it with submit_action.";
-  const allResponded = interaction.eligible_responder_membership_ids.every(
-    (membershipID) => submittedMembershipIDs.has(membershipID),
-  );
-  return allResponded
-    ? "Resolve the outcome with resolve_problem."
+    return "Ask the current player what they do, then record it with submit_action.";
+  const allRespondersActed =
+    interaction.eligible_responder_membership_ids.every((membershipID) =>
+      submittedMembershipIDs.has(membershipID),
+    );
+  return allRespondersActed
+    ? "Resolve the Problem with resolve_problem."
     : "Wait for the remaining responders.";
 }

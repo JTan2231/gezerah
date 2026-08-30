@@ -41,7 +41,7 @@ const (
 						and exists (
 							select 1 from worlds assigned_world
 							where assigned_world.id = interaction.world_id
-								and assigned_world.dm_source in ('terra', 'agent')
+								and assigned_world.facilitator_source in ('terra', 'agent')
 						)
 					)
 					or event.invalidates_interaction_audience
@@ -49,9 +49,9 @@ const (
 )
 
 type interactionAudience struct {
-	AudienceIDs  []string
-	ResponderIDs []string
-	EntityIDs    []string
+	AudienceIDs      []string
+	ResponderIDs     []string
+	ContextEntityIDs []string
 }
 
 func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) {
@@ -95,7 +95,7 @@ func (s *Server) handleListInteractions(w http.ResponseWriter, r *http.Request) 
 							and exists (
 								select 1 from worlds assigned_world
 								where assigned_world.id = interaction.world_id
-									and assigned_world.dm_source in ('terra', 'agent')
+									and assigned_world.facilitator_source in ('terra', 'agent')
 							)
 						)
 					)
@@ -441,19 +441,19 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	automatedPlayerCancellation := false
-	playerFacilitatorSource := ""
+	currentPlayerCancellation := false
+	assignedAutomatedFacilitatorSource := ""
 	if !actor.Facilitator {
 		if command != "cancel" {
 			handleAppError(w, facilitatorRequired())
 			return
 		}
-		playerFacilitatorSource, err = requireAssignedAutomatedReadyPlayer(r.Context(), tx, actor)
+		assignedAutomatedFacilitatorSource, err = requireAssignedAutomatedReadyCurrentPlayer(r.Context(), tx, actor)
 		if err != nil {
 			handleAppError(w, err)
 			return
 		}
-		automatedPlayerCancellation = true
+		currentPlayerCancellation = true
 	}
 
 	var status, facilitatorSource string
@@ -466,11 +466,11 @@ func (s *Server) handleInteractionLifecycle(w http.ResponseWriter, r *http.Reque
 		handleAppError(w, err)
 		return
 	}
-	if automatedPlayerCancellation && !automatedPlayerCanCancelInteraction(
-		playerFacilitatorSource, facilitatorSource, status,
+	if currentPlayerCancellation && !automatedCurrentPlayerCanCancelInteraction(
+		assignedAutomatedFacilitatorSource, facilitatorSource, status,
 	) {
 		handleAppError(w, interactionLifecycleConflict(
-			"players may cancel only an open or adjudicating interaction of the current automated facilitator",
+			"current players may cancel only an open or adjudicating Interaction of the current Terra or Agent facilitator",
 		))
 		return
 	}
@@ -559,13 +559,13 @@ func interactionLifecycleInvalidatesAudience(command, priorStatus string) bool {
 		(command == "cancel" && (priorStatus == "open" || priorStatus == "adjudicating"))
 }
 
-func terraPlayerCanCancelInteraction(facilitatorSource, status string) bool {
-	return automatedPlayerCanCancelInteraction(
+func terraCurrentPlayerCanCancelInteraction(facilitatorSource, status string) bool {
+	return automatedCurrentPlayerCanCancelInteraction(
 		terraFacilitatorSource, facilitatorSource, status,
 	)
 }
 
-func automatedPlayerCanCancelInteraction(
+func automatedCurrentPlayerCanCancelInteraction(
 	assignedSource, interactionSource, status string,
 ) bool {
 	return isAutomatedFacilitatorSource(assignedSource) &&
@@ -619,11 +619,11 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 	if member.Role == "spectator" || member.Facilitator {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
-			Message: "only players may submit actions",
+			Message: "only current players may submit Actions",
 		})
 		return
 	}
-	if err := requireInteractionMemberReadiness(r.Context(), tx, member); err != nil {
+	if err := requireInteractionPlayAccess(r.Context(), tx, member); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -661,7 +661,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 	if !eligible {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "responder_required",
-			Message: "this player is not eligible to respond to the interaction",
+			Message: "this current player is not a Responder for the Interaction",
 		})
 		return
 	}
@@ -683,9 +683,9 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		if errors.Is(err, pgx.ErrNoRows) {
 			handleAppError(w, &statusError{
 				Status: http.StatusForbidden, Code: "entity_control_required",
-				Message: "the acting entity must be controlled by the submitting player",
+				Message: "the acting Entity must be controlled by the submitting Responder",
 				Fields: map[string]string{
-					"acting_entity_id": "player does not control this entity",
+					"acting_entity_id": "Responder does not control this Entity",
 				},
 			})
 			return
@@ -725,7 +725,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 	if err := tx.QueryRow(r.Context(), `
 		select exists(
 			select 1
-			from interaction_action_submissions
+			from interaction_actions
 			where interaction_id = $1 and world_id = $2
 				and submitted_by_membership_id = $3 and status = 'submitted'
 		)`, interactionID, worldID, member.ID).Scan(&alreadySubmitted); err != nil {
@@ -740,7 +740,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if _, err := tx.Exec(r.Context(), `
-		insert into interaction_action_submissions (
+		insert into interaction_actions (
 			id, interaction_id, world_id, submitted_by_membership_id,
 			acting_entity_id, acting_entity_name, text, status
 		) values ($1, $2, $3, $4, $5, $6, $7, 'submitted')`,
@@ -758,7 +758,7 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		return
 	}
 	if err := appendWorldEvent(
-		r.Context(), tx, worldID, "submission-created", member.ID,
+		r.Context(), tx, worldID, "action-submitted", member.ID,
 		&interactionID, &actionID, nil,
 	); err != nil {
 		handleAppError(w, err)
@@ -815,11 +815,11 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 	if member.Role == "spectator" || member.Facilitator {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
-			Message: "only players may withdraw actions",
+			Message: "only current players may withdraw Actions",
 		})
 		return
 	}
-	if err := requireInteractionMemberReadiness(r.Context(), tx, member); err != nil {
+	if err := requireInteractionPlayAccess(r.Context(), tx, member); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -844,7 +844,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 	var revision int64
 	if err := tx.QueryRow(r.Context(), `
 		select submitted_by_membership_id::text, status, revision
-		from interaction_action_submissions
+		from interaction_actions
 		where world_id = $1 and interaction_id = $2 and id = $3
 		for update`, worldID, interactionID, actionID,
 	).Scan(&submittedBy, &actionStatus, &revision); err != nil {
@@ -854,7 +854,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 	if submittedBy != member.ID {
 		handleAppError(w, &statusError{
 			Status: http.StatusForbidden, Code: "action_forbidden",
-			Message: "players may withdraw only their own actions",
+			Message: "a current player may withdraw only their own Action",
 		})
 		return
 	}
@@ -870,7 +870,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 		return
 	}
 	if _, err := tx.Exec(r.Context(), `
-		update interaction_action_submissions
+		update interaction_actions
 		set status = 'withdrawn', revision = revision + 1
 		where world_id = $1 and interaction_id = $2 and id = $3`,
 		worldID, interactionID, actionID,
@@ -886,7 +886,7 @@ func (s *Server) handleWithdrawInteractionAction(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := appendWorldEvent(
-		r.Context(), tx, worldID, "submission-withdrawn", member.ID,
+		r.Context(), tx, worldID, "action-withdrawn", member.ID,
 		&interactionID, &actionID, nil,
 	); err != nil {
 		handleAppError(w, err)
@@ -1074,7 +1074,7 @@ func loadInteractionResponse(
 	if err != nil {
 		return result, err
 	}
-	result.EntityIDs, err = loadInteractionStringColumn(ctx, db, `
+	result.ContextEntityIDs, err = loadInteractionStringColumn(ctx, db, `
 		select entity_id::text
 		from interaction_context_entities
 		where world_id = $1 and interaction_id = $2 and ($3 or visibility = 'public')
@@ -1131,7 +1131,7 @@ func loadInteractionActions(
 			app_user.display_name, action.acting_entity_id::text, action.acting_entity_name,
 			action.text, action.status, action.revision,
 			action.created_at, action.updated_at
-		from interaction_action_submissions action
+		from interaction_actions action
 		join world_memberships membership
 			on membership.world_id = action.world_id
 			and membership.id = action.submitted_by_membership_id
@@ -1170,7 +1170,7 @@ func loadInteractionAction(
 			app_user.display_name, action.acting_entity_id::text, action.acting_entity_name,
 			action.text, action.status, action.revision,
 			action.created_at, action.updated_at
-		from interaction_action_submissions action
+		from interaction_actions action
 		join world_memberships membership
 			on membership.world_id = action.world_id
 			and membership.id = action.submitted_by_membership_id
@@ -1215,11 +1215,11 @@ func validateInteractionRequest(
 	audienceOmitted := request.AudienceMembershipIDs == nil
 	request.AudienceMembershipIDs = uniqueSorted(request.AudienceMembershipIDs)
 	request.EligibleResponderMembershipIDs = uniqueSorted(request.EligibleResponderMembershipIDs)
-	request.EntityIDs = uniqueInOrder(request.EntityIDs)
+	request.ContextEntityIDs = uniqueInOrder(request.ContextEntityIDs)
 	for path, values := range map[string][]string{
 		"audience_membership_ids":           request.AudienceMembershipIDs,
 		"eligible_responder_membership_ids": request.EligibleResponderMembershipIDs,
-		"entity_ids":                        request.EntityIDs,
+		"context_entity_ids":                request.ContextEntityIDs,
 	} {
 		if len(values) > 500 {
 			fields[path] = "must contain at most 500 IDs"
@@ -1238,7 +1238,7 @@ func validateInteractionRequest(
 	memberFacilitators := make(map[string]bool)
 	rows, err := tx.Query(ctx, `
 		select membership.id::text, membership.role,
-			(world.dm_source = 'human' and world.facilitator_membership_id = membership.id)
+			(world.facilitator_source = 'human' and world.facilitator_membership_id = membership.id)
 		from world_memberships membership
 		join worlds world on world.id = membership.world_id
 		where membership.world_id = $1 and membership.status = 'active'
@@ -1295,14 +1295,14 @@ func validateInteractionRequest(
 	for index, membershipID := range request.EligibleResponderMembershipIDs {
 		role, exists := memberRoles[membershipID]
 		if !exists || role == "spectator" || memberFacilitators[membershipID] {
-			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "active play-ready player membership is required"
+			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "membership must belong to a ready current player"
 			continue
 		}
 		if _, visible := audience[membershipID]; !visible {
 			fields[fmt.Sprintf("eligible_responder_membership_ids[%d]", index)] = "eligible responder must also be in the audience"
 		}
 	}
-	for index, entityID := range request.EntityIDs {
+	for index, entityID := range request.ContextEntityIDs {
 		var archived bool
 		err := tx.QueryRow(ctx, `
 			select archived
@@ -1310,14 +1310,14 @@ func validateInteractionRequest(
 			where world_id = $1 and id = $2
 			for share`, worldID, entityID).Scan(&archived)
 		if errors.Is(err, pgx.ErrNoRows) {
-			fields[fmt.Sprintf("entity_ids[%d]", index)] = "entity does not exist in this world"
+			fields[fmt.Sprintf("context_entity_ids[%d]", index)] = "entity does not exist in this world"
 			continue
 		}
 		if err != nil {
 			return interactionAudience{}, nil, err
 		}
 		if archived {
-			fields[fmt.Sprintf("entity_ids[%d]", index)] = "archived entity cannot be added to a new interaction"
+			fields[fmt.Sprintf("context_entity_ids[%d]", index)] = "archived entity cannot be added to a new interaction"
 			continue
 		}
 		status, _, _, err := entityCharacterStatus(ctx, tx, worldID, entityID)
@@ -1325,13 +1325,13 @@ func validateInteractionRequest(
 			return interactionAudience{}, nil, err
 		}
 		if status == "setup-required" {
-			fields[fmt.Sprintf("entity_ids[%d]", index)] = "controlled character setup must be complete"
+			fields[fmt.Sprintf("context_entity_ids[%d]", index)] = "controlled character setup must be complete"
 		}
 	}
 	return interactionAudience{
-		AudienceIDs:  request.AudienceMembershipIDs,
-		ResponderIDs: request.EligibleResponderMembershipIDs,
-		EntityIDs:    request.EntityIDs,
+		AudienceIDs:      request.AudienceMembershipIDs,
+		ResponderIDs:     request.EligibleResponderMembershipIDs,
+		ContextEntityIDs: request.ContextEntityIDs,
 	}, fields, nil
 }
 
@@ -1369,7 +1369,7 @@ func validateStoredInteractionForPresentation(
 	if err != nil {
 		return nil, err
 	}
-	request.EntityIDs, err = loadInteractionStringColumn(ctx, tx, `
+	request.ContextEntityIDs, err = loadInteractionStringColumn(ctx, tx, `
 		select entity_id::text
 		from interaction_context_entities
 		where world_id = $1 and interaction_id = $2
@@ -1417,7 +1417,7 @@ func replaceInteractionChildren(
 			return err
 		}
 	}
-	for position, entityID := range related.EntityIDs {
+	for position, entityID := range related.ContextEntityIDs {
 		if _, err := tx.Exec(ctx, `
 			insert into interaction_context_entities (
 				interaction_id, world_id, entity_id, visibility, position
@@ -1440,7 +1440,7 @@ func loadVisibleWorldEvents(
 	facilitator := member.Facilitator
 	rows, err := db.Query(ctx, `
 		select event.id, event.event_type, event.interaction_id::text,
-			event.submission_id::text, event.resolution_id::text,
+			event.action_id::text, event.resolution_id::text,
 			event.actor_membership_id::text, event.actor_source, event.created_at,
 			event.invalidates_interaction_audience
 		from world_events event
@@ -1465,7 +1465,7 @@ func loadVisibleWorldEvents(
 		var item worldEventResponse
 		var invalidatesInteractionAudience bool
 		if err := rows.Scan(
-			&item.ID, &item.Type, &item.InteractionID, &item.SubmissionID,
+			&item.ID, &item.Type, &item.InteractionID, &item.ActionID,
 			&item.ResolutionID, &item.ActorMembershipID, &item.ActorSource, &item.CreatedAt,
 			&invalidatesInteractionAudience,
 		); err != nil {
@@ -1487,7 +1487,7 @@ func projectVisibleWorldEvent(
 	}
 	item.Type = interactionFeedInvalidatedEventType
 	item.InteractionID = nil
-	item.SubmissionID = nil
+	item.ActionID = nil
 	item.ResolutionID = nil
 	item.ActorMembershipID = nil
 	return item
@@ -1506,13 +1506,13 @@ func requirePlayReadyWorldMember(
 	if member.WorldStatus == "archived" {
 		return member, nil
 	}
-	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
+	if err := requireInteractionPlayAccess(ctx, db, member); err != nil {
 		return member, err
 	}
 	return member, nil
 }
 
-func requireInteractionMemberReadiness(
+func requireInteractionPlayAccess(
 	ctx context.Context,
 	db queryer,
 	member authorizedWorldMember,
@@ -1550,7 +1550,7 @@ func lockInteractionWorldMember(
 	err = tx.QueryRow(ctx, `
 		select membership.id::text, membership.world_id::text, membership.user_id::text,
 			membership.role, membership.status, world.status,
-			(world.dm_source = 'human' and world.facilitator_membership_id = membership.id)
+			(world.facilitator_source = 'human' and world.facilitator_membership_id = membership.id)
 		from world_memberships membership
 		join worlds world on world.id = membership.world_id
 		where membership.id = $1 and membership.world_id = $2 and membership.user_id = $3
@@ -1616,7 +1616,7 @@ func requireInteractionVisibility(
 						and exists (
 							select 1 from worlds assigned_world
 							where assigned_world.id = interaction.world_id
-								and assigned_world.dm_source in ('terra', 'agent')
+								and assigned_world.facilitator_source in ('terra', 'agent')
 						)
 					)
 				)
@@ -1662,7 +1662,7 @@ func interactionDraftMatches(
 		interactionOptionalStringsEqual(current.PrivateNotes, request.PrivateNotes) &&
 		interactionStringSlicesEqual(current.AudienceMembershipIDs, related.AudienceIDs) &&
 		interactionStringSlicesEqual(current.EligibleResponderMembershipIDs, related.ResponderIDs) &&
-		interactionStringSlicesEqual(current.EntityIDs, related.EntityIDs)
+		interactionStringSlicesEqual(current.ContextEntityIDs, related.ContextEntityIDs)
 }
 
 func interactionOptionalStringsEqual(left, right *string) bool {

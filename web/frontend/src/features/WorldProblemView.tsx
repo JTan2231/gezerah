@@ -55,14 +55,16 @@ export function NewProblemView({
                 <label
                   key={entity.id}
                   className={
-                    model.draft.selectedEntityIds.includes(entity.id)
+                    model.draft.selectedContextEntityIDs.includes(entity.id)
                       ? "selected"
                       : ""
                   }
                 >
                   <input
                     type="checkbox"
-                    checked={model.draft.selectedEntityIds.includes(entity.id)}
+                    checked={model.draft.selectedContextEntityIDs.includes(
+                      entity.id,
+                    )}
                     onChange={() => actions.toggleContextEntity(entity.id)}
                   />
                   <span>{entity.name}</span>
@@ -76,8 +78,8 @@ export function NewProblemView({
           <div className="responder-picker">
             {model.responders.length === 0 ? (
               <p>
-                No active players are available. You can create a problem
-                without responders.
+                No ready current players are available. You can create a Problem
+                without Responders.
               </p>
             ) : (
               model.responders.map((responder) => (
@@ -130,22 +132,22 @@ export function OpenProblemView({
       <header>
         <h3>Actions</h3>
         <p>
-          {model.submissions.length === 0
+          {model.actions.length === 0
             ? "No actions submitted"
-            : `${model.submissions.length} ${model.submissions.length === 1 ? "action" : "actions"} submitted`}
+            : `${model.actions.length} ${model.actions.length === 1 ? "action" : "actions"} submitted`}
         </p>
       </header>
-      {model.submissions.length > 0 ? (
+      {model.actions.length > 0 ? (
         <div className="action-list">
-          {model.submissions.map((submission) => (
-            <blockquote key={submission.id}>
-              <Avatar name={submission.actorName} size="small" />
+          {model.actions.map((action) => (
+            <blockquote key={action.id}>
+              <Avatar name={action.actorName} size="small" />
               <div>
-                <strong>{submission.actorName}</strong>
-                {submission.playerName === undefined ? null : (
-                  <small>played by {submission.playerName}</small>
+                <strong>{action.actorName}</strong>
+                {action.playerName === undefined ? null : (
+                  <small>played by {action.playerName}</small>
                 )}
-                <p>{submission.text}</p>
+                <p>{action.text}</p>
               </div>
             </blockquote>
           ))}
@@ -234,7 +236,8 @@ export function OpenProblemView({
             <p>
               <strong>Close actions</strong>
               <small>
-                Players cannot submit or withdraw actions after you close them.
+                Responders cannot submit or withdraw Actions after you close
+                them.
               </small>
             </p>
           </div>
@@ -253,11 +256,11 @@ export function OpenProblemView({
           <div>
             <p>
               <strong>
-                {model.allRespondersReady
+                {model.allRespondersActed
                   ? "Terra can decide"
                   : "Waiting for every responder"}
               </strong>
-              <small>{model.responseProgressLabel}</small>
+              <small>{model.actionProgressLabel}</small>
             </p>
           </div>
           {model.canRequestDecision ? (
@@ -265,7 +268,7 @@ export function OpenProblemView({
               className="button button-ink"
               type="button"
               disabled={
-                !model.allRespondersReady ||
+                !model.allRespondersActed ||
                 !model.decisionEnabled ||
                 model.deciding
               }
@@ -281,12 +284,12 @@ export function OpenProblemView({
           <div>
             <p>
               <strong>
-                {model.allRespondersReady
+                {model.allRespondersActed
                   ? "ChatGPT can resolve"
                   : "Waiting for every responder"}
               </strong>
               <small>
-                {model.responseProgressLabel} Continue the adventure in ChatGPT.
+                {model.actionProgressLabel} Continue Play in ChatGPT.
               </small>
             </p>
           </div>
@@ -313,8 +316,8 @@ export function TerraDecisionPendingView({
       </h3>
       <p>
         {issue === null
-          ? "Terra is considering the submitted actions and Luna is validating the mechanical outcome. If this appears stalled, any ready player can retry."
-          : "The submitted actions remain locked. Any ready player can ask Terra to try again."}
+          ? "Terra is considering the submitted Actions and Luna is validating the mechanical Consequence. If this appears stalled, any ready current player can retry."
+          : "The submitted Actions remain locked. Any ready current player can ask Terra to try again."}
       </p>
       {issue === null ? null : <ErrorMessage error={issue} />}
       <button
@@ -338,7 +341,7 @@ export function AgentDecisionPendingView() {
     <section className="agent-decision-pending" aria-live="polite">
       <h3>ChatGPT resolution pending</h3>
       <p>
-        Return to ChatGPT and ask it to inspect the game, then retry resolving
+        Return to ChatGPT and ask it to use inspect_play, then retry resolving
         this problem. The submitted actions remain locked until it succeeds or
         you skip the problem.
       </p>

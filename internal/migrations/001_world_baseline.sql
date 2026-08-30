@@ -1,3 +1,4 @@
+-- World schema baseline.
 create extension if not exists pgcrypto;
 
 create function set_updated_at() returns trigger language plpgsql as $$
@@ -31,7 +32,7 @@ create table worlds (
 	description text,
 	status text not null default 'active',
 	revision bigint not null default 0,
-	table_revision bigint not null default 0,
+	roster_revision bigint not null default 0,
 	created_by_user_id uuid not null,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
@@ -39,7 +40,7 @@ create table worlds (
 	constraint worlds_name_length check (char_length(name) <= 200),
 	constraint worlds_status_valid check (status in ('active', 'archived')),
 	constraint worlds_revision_nonnegative check (revision >= 0),
-	constraint worlds_table_revision_nonnegative check (table_revision >= 0),
+	constraint worlds_roster_revision_nonnegative check (roster_revision >= 0),
 	constraint worlds_created_by_user_fk foreign key (created_by_user_id)
 		references users (id) on delete restrict
 );
@@ -190,23 +191,23 @@ create index entities_world_idx on entities (world_id, archived, lower(display_n
 create trigger entities_set_updated_at before update on entities
 for each row execute function set_updated_at();
 
-create table state_records (
+create table entity_logical_states (
 	entity_id uuid primary key,
 	world_id uuid not null,
 	revision bigint not null default 0,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
-	constraint state_records_revision_nonnegative check (revision >= 0),
-	constraint state_records_id_world_unique unique (entity_id, world_id),
-	constraint state_records_entity_fk foreign key (entity_id, world_id)
+	constraint entity_logical_states_revision_nonnegative check (revision >= 0),
+	constraint entity_logical_states_entity_world_unique unique (entity_id, world_id),
+	constraint entity_logical_states_entity_fk foreign key (entity_id, world_id)
 		references entities (id, world_id) on delete cascade
 );
 
-create index state_records_world_idx on state_records (world_id, entity_id);
-create trigger state_records_set_updated_at before update on state_records
+create index entity_logical_states_world_idx on entity_logical_states (world_id, entity_id);
+create trigger entity_logical_states_set_updated_at before update on entity_logical_states
 for each row execute function set_updated_at();
 
-create table state_values (
+create table entity_input_value_overrides (
 	entity_id uuid not null,
 	world_id uuid not null,
 	mechanic_id uuid not null,
@@ -215,19 +216,19 @@ create table state_values (
 	boolean_value boolean,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
-	constraint state_values_pk primary key (entity_id, mechanic_id),
-	constraint state_values_shape check (
+	constraint entity_input_value_overrides_pk primary key (entity_id, mechanic_id),
+	constraint entity_input_value_overrides_shape check (
 		(value_kind = 'number' and number_value is not null and boolean_value is null)
 		or (value_kind = 'boolean' and number_value is null and boolean_value is not null)
 	),
-	constraint state_values_record_fk foreign key (entity_id, world_id)
-		references state_records (entity_id, world_id) on delete cascade,
-	constraint state_values_mechanic_fk foreign key (mechanic_id, world_id, value_kind)
+	constraint entity_input_value_overrides_logical_state_fk foreign key (entity_id, world_id)
+		references entity_logical_states (entity_id, world_id) on delete cascade,
+	constraint entity_input_value_overrides_mechanic_fk foreign key (mechanic_id, world_id, value_kind)
 		references world_mechanics (id, world_id, value_kind) on delete restrict
 );
 
-create index state_values_mechanic_idx on state_values (world_id, mechanic_id, entity_id);
-create trigger state_values_set_updated_at before update on state_values
+create index entity_input_value_overrides_mechanic_idx on entity_input_value_overrides (world_id, mechanic_id, entity_id);
+create trigger entity_input_value_overrides_set_updated_at before update on entity_input_value_overrides
 for each row execute function set_updated_at();
 
 create table world_character_field_sets (
@@ -248,7 +249,7 @@ create table world_character_fields (
 	world_id uuid not null,
 	label text not null,
 	help_text text,
-	visibility text not null default 'table',
+	visibility text not null default 'world',
 	position integer not null,
 	archived boolean not null default false,
 	created_by_user_id uuid not null,
@@ -259,7 +260,7 @@ create table world_character_fields (
 	constraint world_character_fields_label_length check (char_length(label) <= 200),
 	constraint world_character_fields_help_length check (help_text is null or char_length(help_text) <= 2000),
 	constraint world_character_fields_visibility_valid
-		check (visibility in ('table', 'controllers-and-facilitators')),
+		check (visibility in ('world', 'restricted')),
 	constraint world_character_fields_position_nonnegative check (position >= 0),
 	constraint world_character_fields_id_world_unique unique (id, world_id),
 	constraint world_character_fields_set_fk foreign key (world_id)
@@ -297,7 +298,7 @@ create index entity_profiles_world_idx on entity_profiles (world_id, entity_id);
 create trigger entity_profiles_set_updated_at before update on entity_profiles
 for each row execute function set_updated_at();
 
-create table entity_profile_field_values (
+create table entity_profile_values (
 	entity_id uuid not null,
 	field_id uuid not null,
 	world_id uuid not null,
@@ -306,22 +307,22 @@ create table entity_profile_field_values (
 	updated_by_user_id uuid not null,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
-	constraint entity_profile_field_values_pk primary key (entity_id, field_id),
-	constraint entity_profile_field_values_body_nonempty check (btrim(body) <> ''),
-	constraint entity_profile_field_values_body_length check (char_length(body) <= 20000),
-	constraint entity_profile_field_values_profile_fk foreign key (entity_id, world_id)
+	constraint entity_profile_values_pk primary key (entity_id, field_id),
+	constraint entity_profile_values_body_nonempty check (btrim(body) <> ''),
+	constraint entity_profile_values_body_length check (char_length(body) <= 20000),
+	constraint entity_profile_values_profile_fk foreign key (entity_id, world_id)
 		references entity_profiles (entity_id, world_id) on delete cascade,
-	constraint entity_profile_field_values_field_fk foreign key (field_id, world_id)
+	constraint entity_profile_values_character_field_fk foreign key (field_id, world_id)
 		references world_character_fields (id, world_id) on delete restrict,
-	constraint entity_profile_field_values_created_by_user_fk foreign key (created_by_user_id)
+	constraint entity_profile_values_created_by_user_fk foreign key (created_by_user_id)
 		references users (id) on delete restrict,
-	constraint entity_profile_field_values_updated_by_user_fk foreign key (updated_by_user_id)
+	constraint entity_profile_values_updated_by_user_fk foreign key (updated_by_user_id)
 		references users (id) on delete restrict
 );
 
-create index entity_profile_field_values_world_field_idx
-	on entity_profile_field_values (world_id, field_id, entity_id);
-create trigger entity_profile_field_values_set_updated_at before update on entity_profile_field_values
+create index entity_profile_values_world_character_field_idx
+	on entity_profile_values (world_id, field_id, entity_id);
+create trigger entity_profile_values_set_updated_at before update on entity_profile_values
 for each row execute function set_updated_at();
 
 create table world_membership_entity_controls (
@@ -428,7 +429,7 @@ create table interaction_context_entities (
 create index interaction_context_entities_entity_idx
 	on interaction_context_entities (world_id, entity_id, interaction_id);
 
-create table interaction_action_submissions (
+create table interaction_actions (
 	id uuid primary key default gen_random_uuid(),
 	interaction_id uuid not null,
 	world_id uuid not null,
@@ -440,47 +441,47 @@ create table interaction_action_submissions (
 	revision bigint not null default 0,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
-	constraint interaction_action_submissions_text_nonempty check (btrim(text) <> ''),
-	constraint interaction_action_submissions_text_length check (char_length(text) <= 10000),
-	constraint interaction_action_submissions_status_valid
+	constraint interaction_actions_text_nonempty check (btrim(text) <> ''),
+	constraint interaction_actions_text_length check (char_length(text) <= 10000),
+	constraint interaction_actions_status_valid
 		check (status in ('submitted', 'withdrawn', 'selected', 'declined')),
-	constraint interaction_action_submissions_revision_nonnegative check (revision >= 0),
-	constraint interaction_action_submissions_acting_shape check (
+	constraint interaction_actions_revision_nonnegative check (revision >= 0),
+	constraint interaction_actions_acting_shape check (
 		(acting_entity_id is null and acting_entity_name is null)
 		or (acting_entity_id is not null and acting_entity_name is not null and btrim(acting_entity_name) <> '')
 	),
-	constraint interaction_action_submissions_id_world_unique unique (id, world_id),
-	constraint interaction_action_submissions_id_interaction_world_unique unique (id, interaction_id, world_id),
-	constraint interaction_action_submissions_interaction_fk foreign key (interaction_id, world_id)
+	constraint interaction_actions_id_world_unique unique (id, world_id),
+	constraint interaction_actions_id_interaction_world_unique unique (id, interaction_id, world_id),
+	constraint interaction_actions_interaction_fk foreign key (interaction_id, world_id)
 		references interactions (id, world_id) on delete cascade,
-	constraint interaction_action_submissions_membership_fk foreign key (submitted_by_membership_id, world_id)
+	constraint interaction_actions_membership_fk foreign key (submitted_by_membership_id, world_id)
 		references world_memberships (id, world_id) on delete restrict,
-	constraint interaction_action_submissions_acting_entity_fk foreign key (acting_entity_id, world_id)
+	constraint interaction_actions_acting_entity_fk foreign key (acting_entity_id, world_id)
 		references entities (id, world_id) on delete restrict
 );
 
-create index interaction_action_submissions_interaction_idx
-	on interaction_action_submissions (interaction_id, status, created_at, id);
-create index interaction_action_submissions_member_idx
-	on interaction_action_submissions (world_id, submitted_by_membership_id, created_at desc, id);
-create unique index interaction_action_submissions_one_selected_unique
-	on interaction_action_submissions (interaction_id) where status = 'selected';
-create trigger interaction_action_submissions_set_updated_at before update on interaction_action_submissions
+create index interaction_actions_interaction_idx
+	on interaction_actions (interaction_id, status, created_at, id);
+create index interaction_actions_member_idx
+	on interaction_actions (world_id, submitted_by_membership_id, created_at desc, id);
+create unique index interaction_actions_one_selected_unique
+	on interaction_actions (interaction_id) where status = 'selected';
+create trigger interaction_actions_set_updated_at before update on interaction_actions
 for each row execute function set_updated_at();
 
 create table interaction_resolutions (
 	id uuid primary key default gen_random_uuid(),
 	interaction_id uuid not null,
 	world_id uuid not null,
-	selected_submission_id uuid,
+	selected_action_id uuid,
 	action_summary text,
 	public_narrative text not null,
 	private_notes text,
-	status text not null default 'draft',
+	status text not null default 'building',
 	created_by_membership_id uuid not null,
 	resolved_by_membership_id uuid,
 	idempotency_key text,
-	applied_at timestamptz,
+	resolved_at timestamptz,
 	created_at timestamptz not null default now(),
 	updated_at timestamptz not null default now(),
 	constraint interaction_resolutions_action_summary_nonempty
@@ -495,10 +496,10 @@ create table interaction_resolutions (
 		check (idempotency_key is null or btrim(idempotency_key) <> ''),
 	constraint interaction_resolutions_idempotency_key_length
 		check (idempotency_key is null or char_length(idempotency_key) <= 200),
-	constraint interaction_resolutions_status_valid check (status in ('draft', 'applied')),
-	constraint interaction_resolutions_applied_shape check (
-		(status = 'draft' and resolved_by_membership_id is null and applied_at is null and idempotency_key is null)
-		or (status = 'applied' and resolved_by_membership_id is not null and applied_at is not null and idempotency_key is not null)
+	constraint interaction_resolutions_status_valid check (status in ('building', 'committed')),
+	constraint interaction_resolutions_committed_shape check (
+		(status = 'building' and resolved_by_membership_id is null and resolved_at is null and idempotency_key is null)
+		or (status = 'committed' and resolved_by_membership_id is not null and resolved_at is not null and idempotency_key is not null)
 	),
 	constraint interaction_resolutions_interaction_unique unique (interaction_id),
 	constraint interaction_resolutions_id_world_unique unique (id, world_id),
@@ -506,9 +507,9 @@ create table interaction_resolutions (
 		references worlds (id) on delete cascade,
 	constraint interaction_resolutions_interaction_fk foreign key (interaction_id, world_id)
 		references interactions (id, world_id) on delete cascade,
-	constraint interaction_resolutions_selected_submission_fk
-		foreign key (selected_submission_id, interaction_id, world_id)
-		references interaction_action_submissions (id, interaction_id, world_id) on delete restrict,
+	constraint interaction_resolutions_selected_action_fk
+		foreign key (selected_action_id, interaction_id, world_id)
+		references interaction_actions (id, interaction_id, world_id) on delete restrict,
 	constraint interaction_resolutions_created_by_membership_fk
 		foreign key (created_by_membership_id, world_id)
 		references world_memberships (id, world_id) on delete restrict,
@@ -573,7 +574,7 @@ create table interaction_resolution_effect_targets (
 create index interaction_resolution_effect_targets_entity_idx
 	on interaction_resolution_effect_targets (world_id, entity_id, effect_id);
 
-create table interaction_resolution_effect_applications (
+create table interaction_resolution_scalar_applications (
 	id uuid primary key default gen_random_uuid(),
 	resolution_id uuid not null,
 	effect_id uuid not null,
@@ -587,27 +588,27 @@ create table interaction_resolution_effect_applications (
 	before_boolean boolean,
 	after_number numeric,
 	after_boolean boolean,
-	constraint interaction_resolution_effect_applications_position_nonnegative check (position >= 0),
-	constraint interaction_resolution_effect_applications_value_shape check (
+	constraint interaction_resolution_scalar_applications_position_nonnegative check (position >= 0),
+	constraint interaction_resolution_scalar_applications_value_shape check (
 		(value_kind = 'number' and before_number is not null and before_boolean is null
 			and after_number is not null and after_boolean is null)
 		or (value_kind = 'boolean' and before_number is null and before_boolean is not null
 			and after_number is null and after_boolean is not null)
 	),
-	constraint interaction_resolution_effect_applications_effect_entity_unique unique (effect_id, entity_id),
-	constraint interaction_resolution_effect_applications_resolution_position_unique unique (resolution_id, position),
-	constraint interaction_resolution_effect_applications_effect_fk
+	constraint interaction_resolution_scalar_applications_effect_entity_unique unique (effect_id, entity_id),
+	constraint interaction_resolution_scalar_applications_resolution_position_unique unique (resolution_id, position),
+	constraint interaction_resolution_scalar_applications_effect_fk
 		foreign key (effect_id, resolution_id, world_id)
 		references interaction_resolution_effects (id, resolution_id, world_id) on delete cascade,
-	constraint interaction_resolution_effect_applications_mechanic_fk
+	constraint interaction_resolution_scalar_applications_mechanic_fk
 		foreign key (mechanic_id, world_id, value_kind)
 		references world_mechanics (id, world_id, value_kind) on delete restrict,
-	constraint interaction_resolution_effect_applications_entity_fk foreign key (entity_id, world_id)
+	constraint interaction_resolution_scalar_applications_entity_fk foreign key (entity_id, world_id)
 		references entities (id, world_id) on delete restrict
 );
 
-create index interaction_resolution_effect_applications_entity_idx
-	on interaction_resolution_effect_applications (world_id, entity_id, resolution_id);
+create index interaction_resolution_scalar_applications_entity_idx
+	on interaction_resolution_scalar_applications (world_id, entity_id, resolution_id);
 
 create table world_events (
 	id bigint generated always as identity primary key,
@@ -615,7 +616,7 @@ create table world_events (
 	event_type text not null,
 	actor_membership_id uuid,
 	interaction_id uuid,
-	submission_id uuid,
+	action_id uuid,
 	resolution_id uuid,
 	created_at timestamptz not null default now(),
 	constraint world_events_type_valid check (event_type in (
@@ -623,7 +624,7 @@ create table world_events (
 		'entity-created', 'entity-control-updated', 'entity-profile-updated',
 		'character-fields-updated', 'interaction-created', 'interaction-updated',
 		'interaction-presented', 'interaction-adjudicating', 'interaction-cancelled',
-		'submission-created', 'submission-withdrawn', 'resolution-updated', 'resolution-applied'
+		'action-submitted', 'action-withdrawn', 'resolution-committed'
 	)),
 	constraint world_events_world_fk foreign key (world_id)
 		references worlds (id) on delete cascade,
@@ -631,8 +632,8 @@ create table world_events (
 		references world_memberships (id, world_id) on delete restrict,
 	constraint world_events_interaction_fk foreign key (interaction_id, world_id)
 		references interactions (id, world_id) on delete restrict,
-	constraint world_events_submission_fk foreign key (submission_id, world_id)
-		references interaction_action_submissions (id, world_id) on delete restrict,
+	constraint world_events_action_fk foreign key (action_id, world_id)
+		references interaction_actions (id, world_id) on delete restrict,
 	constraint world_events_resolution_fk foreign key (resolution_id, world_id)
 		references interaction_resolutions (id, world_id) on delete restrict
 );
@@ -651,7 +652,7 @@ $$;
 create trigger interactions_protect_final before update or delete on interactions
 for each row execute function protect_final_interaction();
 
-create function protect_applied_resolution_tree() returns trigger language plpgsql as $$
+create function protect_committed_resolution_tree() returns trigger language plpgsql as $$
 declare
 	parent_status text;
 begin
@@ -661,25 +662,25 @@ begin
 		select status into parent_status from interaction_resolutions
 		where id = old.resolution_id;
 	end if;
-	if parent_status = 'applied' then
-		raise exception 'applied resolution history cannot be changed';
+	if parent_status = 'committed' then
+		raise exception 'committed resolution history cannot be changed';
 	end if;
 	return new;
 end;
 $$;
 
-create trigger interaction_resolutions_protect_applied
+create trigger interaction_resolutions_protect_committed
 before update or delete on interaction_resolutions
-for each row execute function protect_applied_resolution_tree();
-create trigger interaction_resolution_effects_protect_applied
+for each row execute function protect_committed_resolution_tree();
+create trigger interaction_resolution_effects_protect_committed
 before update or delete on interaction_resolution_effects
-for each row execute function protect_applied_resolution_tree();
-create trigger interaction_resolution_effect_targets_protect_applied
+for each row execute function protect_committed_resolution_tree();
+create trigger interaction_resolution_effect_targets_protect_committed
 before update or delete on interaction_resolution_effect_targets
-for each row execute function protect_applied_resolution_tree();
-create trigger interaction_resolution_effect_applications_protect_applied
-before update or delete on interaction_resolution_effect_applications
-for each row execute function protect_applied_resolution_tree();
+for each row execute function protect_committed_resolution_tree();
+create trigger interaction_resolution_scalar_applications_protect_committed
+before update or delete on interaction_resolution_scalar_applications
+for each row execute function protect_committed_resolution_tree();
 
 create trigger world_events_protect_immutable before update or delete on world_events
 for each row execute function reject_change();

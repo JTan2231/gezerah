@@ -15,7 +15,7 @@ import {
   EntityProfileLoadErrorView,
   EntityProfileLoadingView,
   EntityProfileView,
-  type EntityProfileFieldViewModel,
+  type EntityProfileCharacterFieldViewModel,
   type EntityProfileIssue,
   type EntityProfileViewModel,
 } from "./EntityProfileView";
@@ -62,7 +62,7 @@ export function EntityProfilePanel({
       editor={
         canEdit ? (
           <EntityProfileEditorController
-            key={`${entity.id}:${profile.value.revision}:${profile.value.character_fields_revision}`}
+            key={`${entity.id}:${profile.value.revision}:${profile.value.character_field_set_revision}`}
             entity={entity}
             profile={profile.value}
             fields={profileView.fields}
@@ -88,7 +88,7 @@ function EntityProfileEditorController({
   world: World;
   entity: WorldEntity;
   profile: EntityProfile;
-  fields: EntityProfileFieldViewModel[];
+  fields: EntityProfileCharacterFieldViewModel[];
   onSaved: () => void;
 }) {
   const initial = useMemo(
@@ -120,8 +120,8 @@ function EntityProfileEditorController({
           method: "PUT",
           ...jsonBody({
             expected_revision: profile.revision,
-            expected_character_fields_revision:
-              profile.character_fields_revision,
+            expected_character_field_set_revision:
+              profile.character_field_set_revision,
             values: profile.fields.map((characterField) => ({
               field_id: characterField.id,
               value: (values[characterField.id] ?? "").trim(),

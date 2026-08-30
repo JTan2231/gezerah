@@ -11,7 +11,7 @@ import {
 
 export function PlayWorkspaceView({
   worldName,
-  roleLabel,
+  currentPlayRoleLabel,
   user,
   accountControls,
   onHome,
@@ -19,7 +19,7 @@ export function PlayWorkspaceView({
   children,
 }: {
   worldName: string;
-  roleLabel: string;
+  currentPlayRoleLabel: string;
   user: { displayName: string; username: string };
   accountControls: ReactNode;
   onHome: () => void;
@@ -52,7 +52,7 @@ export function PlayWorkspaceView({
           </span>
         </button>
         <div className="play-app-account">
-          <RolePill role={roleLabel} />
+          <RolePill role={currentPlayRoleLabel} />
           <Avatar name={user.displayName} size="small" />
           <span className="play-account-name">
             <strong>{user.displayName}</strong>

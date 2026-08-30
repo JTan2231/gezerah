@@ -10,9 +10,9 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-const agentFacilitatorLabel = "the external agent"
+const agentFacilitatorLabel = "the agent"
 
-func (s *Server) handleListAvailableAgentCharacters(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListAvailableEntities(w http.ResponseWriter, r *http.Request) {
 	worldID := r.PathValue("world_id")
 	if !validID(worldID) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "world ID is malformed", nil)
@@ -27,15 +27,15 @@ func (s *Server) handleListAvailableAgentCharacters(w http.ResponseWriter, r *ht
 		return
 	}
 	defer rollbackTx(r.Context(), tx)
-	if _, err := requireAgentCharacterPicker(r.Context(), tx, r, worldID); err != nil {
+	if _, err := requireAgentEntityPicker(r.Context(), tx, r, worldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
 
-	result := availableAgentCharactersResponse{Characters: []availableAgentCharacterResponse{}}
+	result := availableEntitiesResponse{Entities: []availableEntityResponse{}}
 	if err := tx.QueryRow(r.Context(), `
-		select table_revision from worlds where id = $1`, worldID,
-	).Scan(&result.TableRevision); err != nil {
+		select roster_revision from worlds where id = $1`, worldID,
+	).Scan(&result.RosterRevision); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -60,13 +60,13 @@ func (s *Server) handleListAvailableAgentCharacters(w http.ResponseWriter, r *ht
 		return
 	}
 	for rows.Next() {
-		var item availableAgentCharacterResponse
+		var item availableEntityResponse
 		if err := rows.Scan(&item.ID, &item.DisplayName); err != nil {
 			rows.Close()
 			handleAppError(w, err)
 			return
 		}
-		result.Characters = append(result.Characters, item)
+		result.Entities = append(result.Entities, item)
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
@@ -74,15 +74,15 @@ func (s *Server) handleListAvailableAgentCharacters(w http.ResponseWriter, r *ht
 		return
 	}
 	rows.Close()
-	for index := range result.Characters {
+	for index := range result.Entities {
 		profile, err := loadEntityProfileResponse(
-			r.Context(), tx, worldID, result.Characters[index].ID, false, false,
+			r.Context(), tx, worldID, result.Entities[index].ID, false, false,
 		)
 		if err != nil {
 			handleAppError(w, err)
 			return
 		}
-		result.Characters[index].ProfileSummary = summarizePublicCharacterProfile(profile)
+		result.Entities[index].ProfileSummary = summarizePublicEntityProfile(profile)
 	}
 	if err := tx.Commit(r.Context()); err != nil {
 		handleAppError(w, err)
@@ -102,11 +102,11 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
-	if request.ExpectedTableRevision == nil || *request.ExpectedTableRevision < 0 {
+	if request.ExpectedRosterRevision == nil || *request.ExpectedRosterRevision < 0 {
 		writeError(
 			w, http.StatusUnprocessableEntity, "validation_failed",
-			"expected_table_revision is required",
-			map[string]string{"expected_table_revision": "a non-negative expected revision is required"},
+			"expected_roster_revision is required",
+			map[string]string{"expected_roster_revision": "a non-negative expected revision is required"},
 		)
 		return
 	}
@@ -122,11 +122,11 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	var worldStatus, facilitatorSource string
-	var tableRevision int64
+	var rosterRevision int64
 	if err := tx.QueryRow(r.Context(), `
-		select status, dm_source, table_revision
+		select status, facilitator_source, roster_revision
 		from worlds where id = $1 for update`, worldID,
-	).Scan(&worldStatus, &facilitatorSource, &tableRevision); err != nil {
+	).Scan(&worldStatus, &facilitatorSource, &rosterRevision); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -149,17 +149,17 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 		handleAppError(w, err)
 		return
 	}
-	if err := requireWaitingAgentPlayer(r.Context(), tx, member); err != nil {
+	if err := requireWaitingAgentCurrentPlayer(r.Context(), tx, member); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	if tableRevision != *request.ExpectedTableRevision {
+	if rosterRevision != *request.ExpectedRosterRevision {
 		handleAppError(w, &statusError{
 			Status: http.StatusConflict, Code: "revision_conflict",
-			Message: "world table changed since it was loaded",
+			Message: "world roster changed since it was loaded",
 			Fields: map[string]string{
-				"expected_table_revision": stringInt(*request.ExpectedTableRevision),
-				"actual_table_revision":   stringInt(tableRevision),
+				"expected_roster_revision": stringInt(*request.ExpectedRosterRevision),
+				"actual_roster_revision":   stringInt(rosterRevision),
 			},
 		})
 		return
@@ -193,8 +193,8 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 	}
 	if archived || controlled {
 		handleAppError(w, &statusError{
-			Status: http.StatusConflict, Code: "character_unavailable",
-			Message: "character is no longer available to claim",
+			Status: http.StatusConflict, Code: "entity_unavailable",
+			Message: "Entity is no longer available to claim",
 		})
 		return
 	}
@@ -206,7 +206,7 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if _, err := tx.Exec(r.Context(), `
-		update worlds set table_revision = table_revision + 1 where id = $1`, worldID,
+		update worlds set roster_revision = roster_revision + 1 where id = $1`, worldID,
 	); err != nil {
 		handleAppError(w, err)
 		return
@@ -230,21 +230,21 @@ func (s *Server) handleClaimWorldEntity(w http.ResponseWriter, r *http.Request) 
 	}
 	writeJSON(w, http.StatusOK, claimedWorldEntityResponse{
 		EntityID: entityID, ControllerWorldMembershipIDs: []string{member.ID},
-		TableRevision: tableRevision + 1, PlayStatus: playStatus,
+		RosterRevision: rosterRevision + 1, PlayStatus: playStatus,
 	})
 }
 
-func (s *Server) handleContinueAgentDM(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleContinueAgent(w http.ResponseWriter, r *http.Request) {
 	worldID := r.PathValue("world_id")
 	if !validID(worldID) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "world ID is malformed", nil)
 		return
 	}
-	if err := requireAgentDMReadyPlayer(r.Context(), s.db, r, worldID); err != nil {
+	if err := requireAgentReadyCurrentPlayerRequest(r.Context(), s.db, r, worldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	var request agentDMContinueRequest
+	var request agentContinueRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
@@ -257,7 +257,7 @@ func (s *Server) handleContinueAgentDM(w http.ResponseWriter, r *http.Request) {
 		fields["title"] = "must be 200 characters or fewer"
 	}
 	if len(fields) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "agent scene is invalid", fields)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "agent problem is invalid", fields)
 		return
 	}
 	interactionID, err := s.createAndPresentAutomatedInteraction(
@@ -277,17 +277,17 @@ func (s *Server) handleContinueAgentDM(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, item)
 }
 
-func (s *Server) handleResolveAgentDMInteraction(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleResolveAgentInteraction(w http.ResponseWriter, r *http.Request) {
 	worldID, interactionID := r.PathValue("world_id"), r.PathValue("interaction_id")
 	if !validID(worldID) || !validID(interactionID) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "resource ID is malformed", nil)
 		return
 	}
-	if err := requireAgentDMReadyPlayer(r.Context(), s.db, r, worldID); err != nil {
+	if err := requireAgentReadyCurrentPlayerRequest(r.Context(), s.db, r, worldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	var supplied agentDMResolveRequest
+	var supplied agentResolveRequest
 	if err := decodeJSON(r, &supplied); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
@@ -302,10 +302,10 @@ func (s *Server) handleResolveAgentDMInteraction(w http.ResponseWriter, r *http.
 		Effects:               supplied.Effects,
 	}
 	if fields := validateAdjudicationRequest(&request, true); len(fields) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "agent ruling is invalid", fields)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "agent consequence is invalid", fields)
 		return
 	}
-	replay, found, err := s.loadAgentDMResolutionReplay(
+	replay, found, err := s.loadAgentResolutionReplay(
 		r.Context(), worldID, interactionID, strings.TrimSpace(request.IdempotencyKey), request,
 	)
 	if err != nil {
@@ -326,7 +326,7 @@ func (s *Server) handleResolveAgentDMInteraction(w http.ResponseWriter, r *http.
 		return
 	}
 	request.ExpectedRevision = &adjudicatingRevision
-	if _, err := s.previewInteractionResolutionAs(
+	if _, err := s.previewInteractionConsequenceAs(
 		r.Context(), r, worldID, interactionID, request, agentFacilitatorSource,
 	); err != nil {
 		handleAppError(w, err)
@@ -342,7 +342,7 @@ func (s *Server) handleResolveAgentDMInteraction(w http.ResponseWriter, r *http.
 	writeJSON(w, http.StatusOK, result)
 }
 
-func requireAgentDMReadyPlayer(
+func requireAgentReadyCurrentPlayerRequest(
 	ctx context.Context,
 	db queryer,
 	r *http.Request,
@@ -352,10 +352,10 @@ func requireAgentDMReadyPlayer(
 	if err != nil {
 		return err
 	}
-	return requireAgentReadyPlayer(ctx, db, member)
+	return requireAgentReadyCurrentPlayer(ctx, db, member)
 }
 
-func requireAgentCharacterPicker(
+func requireAgentEntityPicker(
 	ctx context.Context,
 	db queryer,
 	r *http.Request,
@@ -368,13 +368,13 @@ func requireAgentCharacterPicker(
 	if err := requireAgentFacilitator(ctx, db, worldID); err != nil {
 		return member, err
 	}
-	if err := requireWaitingAgentPlayer(ctx, db, member); err != nil {
+	if err := requireWaitingAgentCurrentPlayer(ctx, db, member); err != nil {
 		return member, err
 	}
 	return member, nil
 }
 
-func requireWaitingAgentPlayer(
+func requireWaitingAgentCurrentPlayer(
 	ctx context.Context,
 	db queryer,
 	member authorizedWorldMember,
@@ -382,7 +382,7 @@ func requireWaitingAgentPlayer(
 	if member.Role == "spectator" || member.Facilitator {
 		return &statusError{
 			Status: http.StatusForbidden, Code: "player_required",
-			Message: "only a player may claim a character",
+			Message: "only a current player may claim an Entity",
 		}
 	}
 	playStatus, err := membershipPlayStatus(
@@ -393,15 +393,15 @@ func requireWaitingAgentPlayer(
 	}
 	if playStatus != "waiting-for-character" {
 		return &statusError{
-			Status: http.StatusConflict, Code: "character_claim_unavailable",
-			Message: "a character may be claimed only while waiting for one",
+			Status: http.StatusConflict, Code: "entity_claim_unavailable",
+			Message: "a current player may claim an Entity only while waiting for one",
 			Fields:  map[string]string{"play_status": playStatus},
 		}
 	}
 	return nil
 }
 
-func summarizePublicCharacterProfile(profile entityProfileResponse) *string {
+func summarizePublicEntityProfile(profile entityProfileResponse) *string {
 	parts := make([]string, 0, len(profile.Fields))
 	for _, field := range profile.Fields {
 		if field.Value == nil || strings.TrimSpace(*field.Value) == "" {
@@ -416,43 +416,43 @@ func summarizePublicCharacterProfile(profile entityProfileResponse) *string {
 	return &summary
 }
 
-func (s *Server) loadAgentDMResolutionReplay(
+func (s *Server) loadAgentResolutionReplay(
 	ctx context.Context,
 	worldID, interactionID, idempotencyKey string,
 	request adjudicateInteractionRequest,
-) (interactionResolutionResultResponse, bool, error) {
+) (consequenceApplicationResultResponse, bool, error) {
 	var existingInteractionID, source string
 	err := s.db.QueryRow(ctx, `
 		select interaction_id::text, facilitator_source
 		from interaction_resolutions
-		where world_id = $1 and idempotency_key = $2 and status = 'applied'`,
+		where world_id = $1 and idempotency_key = $2 and status = 'committed'`,
 		worldID, idempotencyKey,
 	).Scan(&existingInteractionID, &source)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return interactionResolutionResultResponse{}, false, nil
+		return consequenceApplicationResultResponse{}, false, nil
 	}
 	if err != nil {
-		return interactionResolutionResultResponse{}, false, err
+		return consequenceApplicationResultResponse{}, false, err
 	}
 	if existingInteractionID != interactionID || source != agentFacilitatorSource {
-		return interactionResolutionResultResponse{}, false, &statusError{
+		return consequenceApplicationResultResponse{}, false, &statusError{
 			Status: http.StatusConflict, Code: "idempotency_conflict",
-			Message: "idempotency key was already used for another ruling",
+			Message: "idempotency key was already used for another resolution",
 		}
 	}
 	matches, err := resolutionRequestMatches(ctx, s.db, worldID, interactionID, request)
 	if err != nil {
-		return interactionResolutionResultResponse{}, false, err
+		return consequenceApplicationResultResponse{}, false, err
 	}
 	if !matches {
-		return interactionResolutionResultResponse{}, false, &statusError{
+		return consequenceApplicationResultResponse{}, false, &statusError{
 			Status: http.StatusConflict, Code: "idempotency_conflict",
-			Message: "idempotency key was reused with a different ruling",
+			Message: "idempotency key was reused with a different consequence",
 		}
 	}
-	result, err := loadAppliedResolutionResult(ctx, s.db, worldID, interactionID)
+	result, err := loadCommittedResolutionResult(ctx, s.db, worldID, interactionID)
 	if err != nil {
-		return interactionResolutionResultResponse{}, false, err
+		return consequenceApplicationResultResponse{}, false, err
 	}
 	result.Replayed = true
 	return result, true, nil

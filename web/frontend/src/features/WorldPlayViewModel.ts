@@ -20,7 +20,7 @@ export interface RosterEntityViewModel {
   setupRequired: boolean;
 }
 
-export interface ReadyMemberViewModel {
+export interface PlayReadyMemberViewModel {
   id: string;
   name: string;
 }
@@ -33,8 +33,8 @@ export interface FacilitatorChoiceViewModel {
 export interface WorldPlayViewModel {
   worldName: string;
   currentUserName: string;
-  roleLabel: string;
-  accessLabel: string;
+  currentPlayRoleLabel: string;
+  membershipRoleLabel: string;
   facilitator: boolean;
   canCreateProblem: boolean;
   hasActiveProblem: boolean;
@@ -60,7 +60,7 @@ export interface WorldPlayViewModel {
     showEmpty: boolean;
     issue: PlayViewIssue | null;
     entities: RosterEntityViewModel[];
-    readyMembers: ReadyMemberViewModel[];
+    playReadyMembers: PlayReadyMemberViewModel[];
   };
   problems: {
     loading: boolean;
@@ -89,7 +89,7 @@ export interface CharacterChoiceViewModel {
   selected: boolean;
 }
 
-export interface ClaimableCharacterViewModel {
+export interface AvailableEntityViewModel {
   id: string;
   name: string;
   summary?: string | undefined;
@@ -114,8 +114,8 @@ export interface CharacterOnboardingViewModel {
   loading: boolean;
   issue: PlayViewIssue | null;
   characters: CharacterChoiceViewModel[];
-  claimableCharacters: ClaimableCharacterViewModel[];
-  claimingCharacterId?: string | undefined;
+  availableEntities: AvailableEntityViewModel[];
+  claimingEntityId?: string | undefined;
   claimIssue: PlayViewIssue | null;
   agentMode: AgentModeViewModel | null;
 }
@@ -124,14 +124,14 @@ export interface CharacterOnboardingViewActions {
   retry: () => void;
   selectCharacter: (id: string) => void;
   becomeFacilitator: () => void;
-  claimCharacter: (id: string) => void;
+  claimEntity: (id: string) => void;
   copyAgentPrompt: () => void;
 }
 
 export interface NewProblemDraftViewModel {
   title: string;
   description: string;
-  selectedEntityIds: string[];
+  selectedContextEntityIDs: string[];
   selectedResponderIds: string[];
 }
 
@@ -166,7 +166,7 @@ export interface SubmittedActionViewModel {
 }
 
 export interface OpenProblemViewModel {
-  submissions: SubmittedActionViewModel[];
+  actions: SubmittedActionViewModel[];
   facilitator: boolean;
   eligibleResponder: boolean;
   actionSubmitted: boolean;
@@ -178,9 +178,9 @@ export interface OpenProblemViewModel {
   terraFacilitated: boolean;
   agentFacilitated: boolean;
   canRequestDecision: boolean;
-  allRespondersReady: boolean;
+  allRespondersActed: boolean;
   decisionEnabled: boolean;
-  responseProgressLabel: string;
+  actionProgressLabel: string;
   deciding: boolean;
   issue: PlayViewIssue | null;
 }
@@ -213,57 +213,57 @@ export interface PreviewApplicationViewModel {
   id: string;
   entityName: string;
   effectLabel: string;
-  outcomeLabel: string;
+  resultLabel: string;
 }
 
 export interface PreviewChangeViewModel {
   id: string;
   label: string;
-  outcomeLabel: string;
+  resultLabel: string;
 }
 
-export interface RulingPreviewViewModel {
+export interface ConsequencePreviewViewModel {
   applicationSummary: string;
   applications: PreviewApplicationViewModel[];
   effectiveChanges: PreviewChangeViewModel[];
 }
 
-export interface RulingViewModel {
-  submissions: SubmittedActionViewModel[];
+export interface ConsequenceViewModel {
+  actions: SubmittedActionViewModel[];
   narrative: string;
   selectedAction: {
     actorName: string;
     text: string;
   } | null;
-  preview: RulingPreviewViewModel | null;
+  preview: ConsequencePreviewViewModel | null;
   rulesReady: boolean;
   previewStale: boolean;
   saving: "compile" | "resolve" | null;
   issue: PlayViewIssue | null;
 }
 
-export interface RulingViewActions {
+export interface ConsequenceViewActions {
   changeNarrative: (value: string) => void;
   prepare: () => void;
   resolve: () => void;
 }
 
-export interface HistoryEffectViewModel {
+export interface HistoryDetailViewModel {
   id: string;
   label: string;
 }
 
 export interface HistoryCardViewModel {
   id: string;
-  outcome: "resolved" | "cancelled";
+  resolutionStatus: "resolved" | "cancelled";
   cancellationLabel?: "Cancelled" | "Skipped" | undefined;
   occurredLabel: string;
   facilitatorLabel: string;
   title: string;
   prompt: string;
   narrative?: string | undefined;
-  effects: HistoryEffectViewModel[];
-  effectiveChanges: HistoryEffectViewModel[];
+  applications: HistoryDetailViewModel[];
+  effectiveChanges: HistoryDetailViewModel[];
 }
 
 export interface WorldPlayViewSlots {

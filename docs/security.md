@@ -8,13 +8,12 @@ public-release gate or production-audience commitment has been opened. The
 conditions in this document therefore remain requirements before broader or
 real-user use; reachability and a healthy smoke check do not satisfy them.
 
-dnd now has native username/password authentication and revocable
-server sessions. A caller-supplied user UUID is not an authentication mechanism:
-the former `X-DND-User-ID` adapter and public user directory are gone. Health,
+dnd has native username/password authentication and revocable server sessions.
+Caller-selected identity headers do not authenticate or override a session. Health,
 signup, and signin are the explicit public API exceptions; every other product
 endpoint derives its actor from a valid session.
 
-This closes the direct impersonation gap identified in the identity audit. The
+This prevents direct caller-selected impersonation. The
 active preview has Railway HTTPS termination and an exact external
 `DND_PUBLIC_ORIGIN`, but broader public use still needs deployed secure-cookie
 verification, backups, monitoring, capacity/abuse testing, and an explicit
@@ -116,18 +115,18 @@ are `private, no-store` and vary on `Cookie`.
 | `GET /api/me`                       | Active session                                  | Returns current user and session CSRF token.                              |
 | Logout/password change              | Active session + origin + CSRF                  | Revokes current/all sessions as documented above.                         |
 | Invite preview                      | Active session + opaque bearer token            | Exposes active invite/world metadata.                                     |
-| Invite redemption                   | Session + origin + CSRF + bearer token          | Creates/reactivates one membership; never changes an already-active role. |
+| Invite redemption                   | Session + origin + CSRF + bearer token          | Creates/reactivates one membership; never changes an already-active membership role. |
 | World list/read                     | Active session + active membership              | Returns only worlds for the session user.                                 |
 | World configuration/setup reads     | Active session + active membership              | Server-side scope and visibility projections still apply.                 |
 | World configuration/setup mutations | Active owner/editor + origin + CSRF             | Resource scope and revisions still apply.                                 |
-| Character profiles                  | Active member; controller/owner-editor/current-facilitator filtering | Restricted definitions/values are removed server-side. |
+| Entity profiles                     | Active member; Controller/owner-editor/current-facilitator filtering | Restricted Character-field definitions/values are removed server-side. |
 | World archive                       | Active owner                                    | Requires no unfinished interaction.                                       |
 | Live reads/events                   | Active, play-ready membership                   | Streams periodically revalidate session and membership.                   |
 | Facilitator assignment              | Owner/editor or current human facilitator       | Revisioned; normally requires no unfinished interaction.                  |
 | Human facilitator commands          | Current designated human facilitator            | Lifecycle, scope, revision, and idempotency checks apply.                 |
 | Terra pacing commands               | Active ready current player                     | Terra assignment, responder completion, revisions, and idempotency apply. |
 | Agent pacing commands               | Active ready current player                     | Agent assignment, responder completion, revisions, and idempotency apply. |
-| Preset character claim              | Active current player waiting for a character   | Agent assignment, availability, and table revision apply.                 |
+| Available Entity claim              | Active current player waiting for a Character   | Agent assignment, availability, and roster revision apply.                |
 | Player actions                      | Active ready eligible current player            | Server enforces responder, ownership, and control.                        |
 
 Network reachability, React routes, and hidden controls are never treated as
@@ -140,26 +139,26 @@ continues to decide what that user may do:
 
 - world lists are membership-filtered and direct reads require active
   membership;
-- configuration, invite, entity, and setup-state mutation requires
+- configuration, invite, Entity, and logical-state mutation requires
   owner/editor authority;
 - archive requires owner authority and no unfinished interaction;
 - controller grants name active non-spectator memberships and entities in the same
-  world and use `table_revision`;
-- profile writes require owner/editor or current control and check profile plus
-  field-schema revisions;
-- restricted profile reads additionally admit the designated human facilitator;
-- restricted fields and facilitator-private prose are removed server-side;
-- live access requires current-player readiness; the designated human
-  facilitator bypasses that gate while their underlying player-seat status is
+  world and use `roster_revision`;
+- Entity-profile writes require owner/editor or current control and check profile plus
+  character-field-set revisions;
+- restricted Entity-profile reads additionally admit the designated human facilitator;
+- restricted Character fields and facilitator-private prose are removed server-side;
+- live access requires ready Play status for a current player; the designated human
+  facilitator bypasses that gate while their underlying Play status is
   still projected, and spectators are ready/read-only;
-- only eligible current players submit, with at most one current action each;
-- players withdraw only their own submitted actions;
-- live human-DM commands require the exact designated facilitator membership,
-  regardless of its durable access role;
+- only eligible Responders submit, with at most one current Action each;
+- Responders withdraw only their own submitted Actions;
+- live human-facilitator commands require the exact designated facilitator membership,
+  regardless of its membership role;
 - Terra Continue/Decide requires a ready current player but persists Terra—not
   that player—as the interaction, resolution, and event source;
 - agent Continue/Resolve likewise requires a ready current player and persists
-  `agent`, while accepting only public prose and rules-valid effects from the
+  `agent`, while accepting only public prose and valid Effects from the
   page tool; WebMCP itself is not treated as an authenticated identity;
 - facilitator handoff uses the world revision and normally rejects unfinished
   interactions. The sole exception lets the owner take over one Terra-authored
@@ -169,10 +168,10 @@ continues to decide what that user may do:
   world;
 - interaction lifecycle, expected revisions, and resolve idempotency gate live
   mutation;
-- final interaction roots, applied receipts, and world events have database
+- final Interaction roots, committed resolution receipts, and World events have database
   immutability protections.
 
-Command bodies cannot choose the actor. On an anonymous request, a retired
+Command bodies cannot choose the actor. On an anonymous request, a caller-supplied
 identity header does not authenticate; on an authenticated request, it is
 ignored and cannot override the session user. A user UUID in a command body
 likewise does not replace the actor established by the session.
@@ -183,7 +182,7 @@ likewise does not replace the actor established by the session.
 
 The world is the tenant/resource boundary. Composite `world_id` foreign keys
 and application checks prevent mechanics, entities, memberships, profiles,
-interactions, effects, receipts, and events from crossing worlds. There is no
+Interactions, Effects, Resolution receipts, and World events from crossing worlds. There is no
 second API surface that bypasses membership.
 
 ### Invite bearer scope
@@ -193,16 +192,16 @@ bit token is returned once, while PostgreSQL stores only a SHA-256 digest. A
 valid invite can be previewed and redeemed by any signed-in account that holds
 the link; it is not bound to an email or intended username and has no maximum
 use count. It expires, can be revoked, is unavailable after world archive, and
-cannot change the role of an already-active membership.
+cannot change the membership role of an already-active membership.
 
 Treat invite URLs as secrets. Request logs redact their bearer path segment.
 
-### Participant versus entity
+### User account versus Entity
 
-`users` and `world_memberships` represent real participants. `entities`
+`users` and `world_memberships` represent real-person identities and their World memberships. `entities`
 represent fictional state owners. A username, mechanic name, entity name, or
-profile value grants no product authority. Durable owner/editor/player/spectator
-access and the current facilitator/player/spectator play role are separate.
+Entity-profile value grants no product authority. Owner/editor/player/spectator
+membership roles and facilitator/player/spectator current play roles are separate.
 Human facilitator authority comes only from the world's same-world membership
 assignment; Terra and agent sources carry no user or membership identity. None
 is a mechanical class.
@@ -248,7 +247,7 @@ they do not consume forwarded-address headers. A shared reverse proxy can
 therefore aggregate unrelated users into one bucket and cause an availability
 lockout. Public or multi-replica deployments need a trusted, shared,
 proxy-aware limiter. World writes, invite use, actions, resolutions, and SSE
-connections and outbound Auto DM pacing still have no general per-user quotas.
+connections and outbound Terra/Luna model requests still have no general per-user quotas.
 
 ## Future-target risks and hardening
 
@@ -263,7 +262,7 @@ If a public launch is ever proposed:
    system and add aggregate quotas/backpressure.
 5. Separate migration and least-privilege runtime database roles.
 6. Add actor-attributed audit facts for privileged configuration, membership,
-   and direct state changes, with privacy-aware retention.
+   and direct logical-state changes, with privacy-aware retention.
 7. Establish backup/restore evidence, monitoring, alerting, dependency scanning,
    incident response, and an external security review.
 8. Define user-data export/erasure and retention policies for display names,
@@ -281,22 +280,22 @@ For every route or field:
 - Is the route explicitly public or wrapped by session authentication?
 - For an unsafe route, are origin and CSRF enforced before the handler?
 - Is the actor taken only from authenticated request context?
-- Is membership/role/readiness/control checked for the exact path world?
+- Are World membership, membership role, current play role, play status, and control checked for the exact path World?
 - Can any referenced ID be substituted from another world?
 - Does the response omit private notes and restricted profile prose?
 - Is a revision/idempotency guard required?
-- Can failure partially mutate state or create an incomplete receipt?
+- Can failure partially mutate state or create an incomplete Resolution receipt?
 - Do the application, proxy, database, and provider logging paths omit or redact
   password, cookie, CSRF, invite, and narrative values?
 - Are anonymous, expired/revoked-session, forged-header, CSRF/origin,
-  wrong-role, and cross-world failures tested server-side?
+  wrong-authority, and cross-world failures tested server-side?
 
 ## Responsible operation
 
 - Use a fresh empty database for the password-auth migration; it intentionally
   refuses to invent credentials for preexisting users.
 - Keep `DND_PUBLIC_ORIGIN` aligned exactly with the browser-visible origin.
-- Do not put personal secrets in narrative/profile fields.
+- Do not put personal secrets in narrative or character-field values.
 - Protect database and deployment configuration independently of application
   authentication.
 - Treat invite URLs and browser sessions as bearer secrets.

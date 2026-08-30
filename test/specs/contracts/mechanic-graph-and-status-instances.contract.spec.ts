@@ -21,7 +21,7 @@ import {
 
 type DecimalText = string;
 
-type TaggedValue =
+type MechanicValue =
   { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
 test.afterEach(async () => disposeAuthenticatedActors());
@@ -37,7 +37,7 @@ interface WorldResponse extends IdentifiedResource {
 interface Expression {
   operation: string;
   mechanic_id?: string;
-  value?: TaggedValue;
+  value?: MechanicValue;
   operands?: Expression[];
 }
 
@@ -65,28 +65,29 @@ interface AppliedModifier {
   status_instance_id: string;
   status_name: string;
   operation: string;
-  operand: TaggedValue;
-  before: TaggedValue;
-  after: TaggedValue;
+  operand: MechanicValue;
+  before: MechanicValue;
+  after: MechanicValue;
 }
 
-interface StateResponse {
-  revision: number;
-  status_revision: number;
+interface EntitySheetResponse {
+  entity_id: string;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, TaggedValue>;
-  effective_values: Record<string, TaggedValue>;
+  logical_input_values: Record<string, MechanicValue>;
+  effective_values: Record<string, MechanicValue>;
   evaluations: Record<
     string,
     {
       source_kind: "input" | "derived";
-      presence: "stored" | "defaulted" | "derived";
-      intrinsic: TaggedValue;
-      effective: TaggedValue;
+      presence: "stored-override" | "authored-default" | "derived";
+      intrinsic: MechanicValue;
+      effective: MechanicValue;
       modifiers: AppliedModifier[];
     }
   >;
-  active_statuses: Array<{
+  active_status_instances: Array<{
     id: string;
     name: string;
     description?: string;
@@ -94,10 +95,11 @@ interface StateResponse {
     source_resolution_id?: string;
     source_effect_id: string;
   }>;
+  authored_default_input_mechanic_ids: string[];
 }
 
 interface EntityResponse extends IdentifiedResource {
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
 interface InteractionResponse extends IdentifiedResource {
@@ -105,36 +107,45 @@ interface InteractionResponse extends IdentifiedResource {
   status: "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
 }
 
-interface AppliedEffect {
+interface EffectApplication {
   type: "set" | "adjust-number" | "apply-status" | "remove-status";
   effect_id: string;
   entity_id: string;
+  mechanic_id?: string;
   status_instance_id?: string;
   status_name?: string;
   active_before?: boolean;
   active_after?: boolean;
+  before?: MechanicValue;
+  after?: MechanicValue;
   changed: boolean;
 }
 
 interface EffectiveChange {
   entity_id: string;
   mechanic_id: string;
-  before: TaggedValue;
-  after: TaggedValue;
+  before: MechanicValue;
+  after: MechanicValue;
 }
 
-interface ResolutionResult {
-  preview?: boolean;
-  replayed?: boolean;
+interface ConsequenceApplicationResult {
   interaction_id: string;
   interaction_revision: number;
   rules_revision: number;
-  applied_effects: AppliedEffect[];
+  applications: EffectApplication[];
   effective_changes: EffectiveChange[];
-  state: { records: Record<string, StateResponse> };
+  entity_sheets: Record<string, EntitySheetResponse>;
 }
 
-test("contract: typed rules publish atomically and statuses change effective state with receipts", async ({
+interface ConsequencePreviewResult extends ConsequenceApplicationResult {
+  preview?: boolean;
+}
+
+interface InteractionResolutionResult extends ConsequenceApplicationResult {
+  replayed?: boolean;
+}
+
+test("world mechanic graph publishes atomically and Status instances change effective values with Resolution receipts", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
@@ -143,7 +154,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
   const world = await postJSON<WorldResponse>(
     request,
     `${baseURL}/api/worlds`,
-    { name: `Calculated Coast ${unique}` },
+    { name: `Derived Coast ${unique}` },
     owner.id,
   );
   expect(world.rules_revision).toBe(0);
@@ -232,7 +243,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     "validation_failed",
   );
   expect(JSON.stringify(cycleError)).toContain("cycle");
-  await expectPublishedRules(
+  await expectPublishedMechanicGraph(
     request,
     baseURL,
     world.id,
@@ -264,7 +275,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     "validation_failed",
   );
   expect(JSON.stringify(typeError)).toContain("boolean");
-  await expectPublishedRules(
+  await expectPublishedMechanicGraph(
     request,
     baseURL,
     world.id,
@@ -282,41 +293,48 @@ test("contract: typed rules publish atomically and statuses change effective sta
     { display_name: "Ilya Stone" },
     owner.id,
   );
-  expect(entity.state.values).toEqual({ [vigor.id]: numberValue("10") });
-  expect(entity.state.effective_values).toMatchObject({
+  expect(entity.sheet.logical_input_values).toEqual({
+    [vigor.id]: numberValue("10"),
+  });
+  expect(entity.sheet.effective_values).toMatchObject({
     [vigor.id]: numberValue("10"),
     [impact.id]: numberValue("20"),
   });
+  expect(entity.sheet.evaluations[vigor.id]).toMatchObject({
+    presence: "authored-default",
+  });
+  expect(entity.sheet.authored_default_input_mechanic_ids).toEqual([vigor.id]);
 
-  const authoredState =
-    await test.step("CCY-V03 rejects a stale state/rules save and accepts the authoritative retry", async () => {
-      const staleStateWrite = await actorRequest(owner.id).put(
-        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+  const authoredSheet =
+    await test.step("CCY-V03 rejects a stale logical-state/rules save and accepts the authoritative retry", async () => {
+      const staleLogicalStateWrite = await actorRequest(owner.id).put(
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
         {
           data: {
-            expected_revision: entity.state.revision,
+            expected_logical_state_revision:
+              entity.sheet.logical_state_revision,
             expected_rules_revision: rulesRevision - 1,
-            values: { [vigor.id]: numberValue("6") },
+            logical_input_values: { [vigor.id]: numberValue("6") },
           },
         },
       );
-      await expectAPIError(staleStateWrite, 409, "revision_conflict");
+      await expectAPIError(staleLogicalStateWrite, 409, "revision_conflict");
 
-      const result = await putJSON<StateResponse>(
+      const result = await putJSON<EntitySheetResponse>(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
         {
-          expected_revision: entity.state.revision,
+          expected_logical_state_revision: entity.sheet.logical_state_revision,
           expected_rules_revision: rulesRevision,
-          values: { [vigor.id]: numberValue("6") },
+          logical_input_values: { [vigor.id]: numberValue("6") },
         },
         owner.id,
       );
       expect(result).toMatchObject({
-        revision: 1,
-        status_revision: 0,
+        logical_state_revision: 1,
+        status_set_revision: 0,
         rules_revision: rulesRevision,
-        values: { [vigor.id]: numberValue("6") },
+        logical_input_values: { [vigor.id]: numberValue("6") },
         effective_values: {
           [vigor.id]: numberValue("6"),
           [impact.id]: numberValue("12"),
@@ -324,7 +342,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
         evaluations: {
           [vigor.id]: {
             source_kind: "input",
-            presence: "stored",
+            presence: "stored-override",
             intrinsic: numberValue("6"),
             effective: numberValue("6"),
             modifiers: [],
@@ -337,8 +355,9 @@ test("contract: typed rules publish atomically and statuses change effective sta
             modifiers: [],
           },
         },
+        authored_default_input_mechanic_ids: [],
       });
-      expect(Object.keys(result.values)).toEqual([vigor.id]);
+      expect(Object.keys(result.logical_input_values)).toEqual([vigor.id]);
       return result;
     });
 
@@ -385,7 +404,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
   );
   await expectAPIError(stalePreview, 409, "revision_conflict");
 
-  const applyPreview = await postJSON<ResolutionResult>(
+  const applyPreview = await postJSON<ConsequencePreviewResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
     applyPayload,
@@ -396,7 +415,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     interaction_id: applyInteraction.id,
     interaction_revision: applyInteraction.revision,
     rules_revision: rulesRevision,
-    applied_effects: [
+    applications: [
       {
         type: "apply-status",
         effect_id: applyEffectID,
@@ -408,14 +427,16 @@ test("contract: typed rules publish atomically and statuses change effective sta
       },
     ],
   });
-  expect(applyPreview.applied_effects[0]?.status_instance_id).toBeTruthy();
+  expect(applyPreview.applications[0]?.status_instance_id).toBeTruthy();
   expect(applyPreview.effective_changes).toEqual(
     expect.arrayContaining([
       effectiveChange(entity.id, vigor.id, "6", "4"),
       effectiveChange(entity.id, impact.id, "12", "8"),
     ]),
   );
-  expect(applyPreview.state.records[entity.id]?.active_statuses).toMatchObject([
+  expect(
+    applyPreview.entity_sheets[entity.id]?.active_status_instances,
+  ).toMatchObject([
     {
       name: "Weakened",
       description: "Vigor is reduced while this consequence remains active.",
@@ -424,19 +445,19 @@ test("contract: typed rules publish atomically and statuses change effective sta
     },
   ]);
 
-  const stateAfterPreview = await getJSON<StateResponse>(
+  const sheetAfterPreview = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
-  expect(stateAfterPreview).toMatchObject({
-    revision: authoredState.revision,
-    status_revision: 0,
-    active_statuses: [],
+  expect(sheetAfterPreview).toMatchObject({
+    logical_state_revision: authoredSheet.logical_state_revision,
+    status_set_revision: 0,
+    active_status_instances: [],
   });
 
   const applyIdempotencyKey = randomUUID();
-  const applyResult = await postJSON<ResolutionResult>(
+  const applyResult = await postJSON<InteractionResolutionResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
     { ...applyPayload, idempotency_key: applyIdempotencyKey },
@@ -446,7 +467,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     interaction_id: applyInteraction.id,
     interaction_revision: applyInteraction.revision + 1,
     rules_revision: rulesRevision,
-    applied_effects: [
+    applications: [
       {
         type: "apply-status",
         effect_id: applyEffectID,
@@ -465,7 +486,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     ]),
   );
 
-  const replayedApply = await postJSON<ResolutionResult>(
+  const replayedApply = await postJSON<InteractionResolutionResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
     { ...applyPayload, idempotency_key: applyIdempotencyKey },
@@ -475,7 +496,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     replayed: true,
     interaction_id: applyResult.interaction_id,
     interaction_revision: applyResult.interaction_revision,
-    applied_effects: applyResult.applied_effects,
+    applications: applyResult.applications,
   });
   await expectAPIError(
     await actorRequest(owner.id).post(
@@ -492,21 +513,21 @@ test("contract: typed rules publish atomically and statuses change effective sta
     "idempotency_conflict",
   );
 
-  const weakenedState = await getJSON<StateResponse>(
+  const weakenedSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
-  expect(weakenedState).toMatchObject({
-    revision: authoredState.revision,
-    status_revision: 1,
+  expect(weakenedSheet).toMatchObject({
+    logical_state_revision: authoredSheet.logical_state_revision,
+    status_set_revision: 1,
     rules_revision: rulesRevision,
-    values: { [vigor.id]: numberValue("6") },
+    logical_input_values: { [vigor.id]: numberValue("6") },
     effective_values: {
       [vigor.id]: numberValue("4"),
       [impact.id]: numberValue("8"),
     },
-    active_statuses: [
+    active_status_instances: [
       {
         name: "Weakened",
         description: "Vigor is reduced while this consequence remains active.",
@@ -517,7 +538,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     evaluations: {
       [vigor.id]: {
         source_kind: "input",
-        presence: "stored",
+        presence: "stored-override",
         intrinsic: numberValue("6"),
         effective: numberValue("4"),
         modifiers: [
@@ -540,7 +561,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     },
   });
 
-  const weakenedInstance = weakenedState.active_statuses[0];
+  const weakenedInstance = weakenedSheet.active_status_instances[0];
   expect(weakenedInstance).toBeDefined();
   if (weakenedInstance === undefined) {
     throw new Error("resolved consequence did not create a status instance");
@@ -573,13 +594,13 @@ test("contract: typed rules publish atomically and statuses change effective sta
       },
     ],
   };
-  const removePreview = await postJSON<ResolutionResult>(
+  const removePreview = await postJSON<ConsequencePreviewResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${removeInteraction.id}/preview`,
     removePayload,
     owner.id,
   );
-  expect(removePreview.applied_effects).toMatchObject([
+  expect(removePreview.applications).toMatchObject([
     {
       type: "remove-status",
       effect_id: removeEffectID,
@@ -598,7 +619,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     ]),
   );
 
-  const removeResult = await postJSON<ResolutionResult>(
+  const removeResult = await postJSON<InteractionResolutionResult>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${removeInteraction.id}/resolve`,
     { ...removePayload, idempotency_key: randomUUID() },
@@ -608,7 +629,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
     interaction_id: removeInteraction.id,
     interaction_revision: removeInteraction.revision + 1,
     rules_revision: rulesRevision,
-    applied_effects: [
+    applications: [
       {
         type: "remove-status",
         effect_id: removeEffectID,
@@ -628,21 +649,21 @@ test("contract: typed rules publish atomically and statuses change effective sta
     ]),
   );
 
-  const restoredState = await getJSON<StateResponse>(
+  const restoredSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/state`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
-  expect(restoredState).toMatchObject({
-    revision: authoredState.revision,
-    status_revision: 2,
+  expect(restoredSheet).toMatchObject({
+    logical_state_revision: authoredSheet.logical_state_revision,
+    status_set_revision: 2,
     rules_revision: rulesRevision,
-    values: { [vigor.id]: numberValue("6") },
+    logical_input_values: { [vigor.id]: numberValue("6") },
     effective_values: {
       [vigor.id]: numberValue("6"),
       [impact.id]: numberValue("12"),
     },
-    active_statuses: [],
+    active_status_instances: [],
   });
 
   const competingInteraction = await createAdjudicatingInteraction(
@@ -656,7 +677,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
   const competingPayload = {
     expected_revision: competingInteraction.revision,
     expected_rules_revision: rulesRevision,
-    narrative: `Only one ruling wins ${unique}`,
+    narrative: `Only one consequence wins ${unique}`,
     effects: [],
   };
   const competingResponses = await Promise.all([
@@ -687,7 +708,7 @@ test("contract: typed rules publish atomically and statuses change effective sta
   );
 });
 
-async function expectPublishedRules(
+async function expectPublishedMechanicGraph(
   request: APIRequestContext,
   baseURL: string,
   worldID: string,
@@ -711,7 +732,7 @@ async function createAdjudicatingInteraction(
   request: APIRequestContext,
   baseURL: string,
   worldID: string,
-  entityID: string,
+  contextEntityID: string,
   userID: string,
   prompt: string,
 ): Promise<InteractionResponse> {
@@ -722,7 +743,7 @@ async function createAdjudicatingInteraction(
       present: true,
       prompt,
       eligible_responder_membership_ids: [],
-      entity_ids: [entityID],
+      context_entity_ids: [contextEntityID],
     },
     userID,
   );
@@ -737,11 +758,11 @@ async function createAdjudicatingInteraction(
   return adjudicating;
 }
 
-function numberValue(value: DecimalText): TaggedValue {
+function numberValue(value: DecimalText): MechanicValue {
   return { kind: "number", value };
 }
 
-function booleanValue(value: boolean): TaggedValue {
+function booleanValue(value: boolean): MechanicValue {
   return { kind: "boolean", value };
 }
 

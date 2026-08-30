@@ -5,31 +5,31 @@
 dnd separates world membership, user-authored mechanics, fictional
 entities, and improvised live play. Nothing in the mechanical vocabulary is
 globally special: every mechanic name and entity is created by a user inside a
-world. Problems exist only as live interactions created at the table.
+World. Problems exist only as live Interactions created during Play.
 
 ```mermaid
 erDiagram
     WORLD ||--|{ WORLD_MEMBERSHIP : admits
     WORLD ||--o{ WORLD_INVITE : offers
-    WORLD ||--|| WORLD_RULE_SET : versions
+    WORLD ||--|| WORLD_MECHANIC_GRAPH : owns
     WORLD ||--o{ WORLD_MECHANIC : defines
     WORLD_MECHANIC ||--o{ EXPRESSION_NODE : derives_through
     WORLD ||--o{ ENTITY : contains
     WORLD ||--|| CHARACTER_FIELD_SET : configures
-    ENTITY ||--|| STATE_RECORD : owns
+    ENTITY ||--|| ENTITY_LOGICAL_STATE : owns
     ENTITY ||--|| ENTITY_STATUS_SET : owns
     ENTITY_STATUS_SET ||--o{ STATUS_INSTANCE : contains
     STATUS_INSTANCE ||--o{ STATUS_MODIFIER_SNAPSHOT : preserves
     ENTITY ||--o| ENTITY_PROFILE : describes
-    ENTITY_PROFILE ||--o{ PROFILE_FIELD_VALUE : contains
+    ENTITY_PROFILE ||--o{ PROFILE_VALUE : contains
     CHARACTER_FIELD_SET ||--o{ CHARACTER_FIELD : contains
-    CHARACTER_FIELD ||--o{ PROFILE_FIELD_VALUE : receives
+    CHARACTER_FIELD ||--o{ PROFILE_VALUE : receives
     WORLD_MEMBERSHIP }o--o{ ENTITY : controls
     WORLD ||--o{ INTERACTION : hosts
     INTERACTION ||--o{ ACTION : receives
     INTERACTION ||--o| RESOLUTION : concludes
     RESOLUTION ||--o{ RESOLUTION_EFFECT : orders
-    RESOLUTION_EFFECT ||--o{ STATUS_EFFECT_MODIFIER : defines
+    RESOLUTION_EFFECT ||--o{ INLINE_STATUS_MODIFIER : defines
     RESOLUTION_EFFECT ||--o{ STATUS_INSTANCE : creates
     WORLD ||--o{ WORLD_EVENT : emits
 ```
@@ -37,10 +37,10 @@ erDiagram
 ## World product model
 
 A world is the single authorization, configuration, entity, live-play, and
-event boundary. It owns lifecycle and table revisions. A world membership has
-an `owner`, `editor`, `player`, or `spectator` role. That durable role controls
-Build access and survives every table handoff; it is not the participant's
-momentary role in Play.
+event boundary. It owns lifecycle and roster revisions. A World membership has
+an `owner`, `editor`, `player`, or `spectator` membership role. That membership role controls
+Build access and survives every facilitator handoff; it is not the membership's
+momentary current play role in Play.
 
 Exactly one facilitator assignment identifies the Dungeon Master. Its source
 is `human`, with one active non-spectator `facilitator_membership_id`, or a
@@ -50,10 +50,11 @@ the designated human is `facilitator`, a spectator remains `spectator`, and
 every other active non-spectator is a `player`, including owners and editors.
 Changing the assignment does not rewrite any durable membership role.
 
-`dm_source` stores the assignment discriminator for compatibility. Handoff is
-a separate world-revisioned command, not an ordinary settings patch. An
-owner/editor or the current human facilitator may hand the table to another
-active non-spectator, Terra, or an external agent, but only when no interaction
+The assignment is represented by its `facilitator_source` and, for a human,
+its membership. Handoff is a separate world-revisioned command, not an
+ordinary settings patch. An
+owner/editor or the current human facilitator may hand the DM assignment to another
+active non-spectator, Terra, or an agent, but only when no Interaction
 is draft, open, or adjudicating. The narrow recovery exception lets the owner
 assign themself when
 the sole unfinished interaction is authored by the currently assigned
@@ -63,12 +64,12 @@ Terra mode the world description also serves as the campaign
 brief supplied to generation; it remains ordinary user-authored prose rather
 than a privileged rules field.
 
-A world mechanic is a typed scalar state definition with an author-facing
+A world Mechanic is a typed scalar definition with an author-facing
 classification and a source:
 
 - a capacity is a numeric `score` or `pool`;
 - a capability is a Boolean `binary` value or numeric `rating`;
-- an `input` owns a default and optional stored override;
+- an `input` owns an authored default and optional stored override;
 - a `derived` owns a typed expression over other mechanics;
 - `mutable_during_play` determines whether a live Consequence may directly
   target an input with a scalar `set` or `adjust-number` effect; it does not
@@ -76,13 +77,13 @@ classification and a source:
 
 The classification adds no canonical name, entity class, or special key.
 
-World problems are interactions: prompt-first, free-form moments created during
-play by the current human facilitator, Terra, or an external agent. Their
-audience, responders, context entities, player actions, Consequence, requested
-effects, and before/after receipt are captured relationally. A Consequence is
-one prose account of what transpires plus ordered targeted effects compiled
-from that prose. An apply-status effect defines its name, optional description,
-and modifiers in that problem; it is not selected from world configuration.
+World Problems are carried by Interactions: prompt-first, free-form moments created during
+Play by the current human facilitator, Terra, or an agent. Their
+audience, Responders, Context Entities, Actions, Consequence, requested
+Effects, and before/after facts in the Resolution receipt are captured relationally. A Consequence is
+the public narrative of what transpires, optional selected-Action metadata, and
+zero or more ordered requested Effects. An apply-status Effect defines an Inline status with a name,
+optional description, and modifiers in that Problem; it is not selected from World configuration.
 
 A character is a product projection over an ordinary world entity. It becomes
 a character when at least one active non-spectator control relationship points
@@ -92,24 +93,24 @@ without introducing an engine class.
 ## Authored identity and scope
 
 The world is the isolation boundary for mechanics, entities, memberships,
-interactions, receipts, and events. Durable resources use UUIDs. Human-readable
+Interactions, Resolution receipts, and World events. Durable resources use UUIDs. Human-readable
 names are authored presentation and have no privileged meaning in application
 code. Composite foreign keys carry `world_id` so relationships cannot cross
 worlds when application code is bypassed.
 
 ## Entities, character fields, and profiles
 
-An entity is a durable fictional state owner with a display name, archive
-state, one optimistic base-state revision, and one independent runtime-status
-revision. Creating an entity also creates its empty state-record and status-set
+An Entity is a durable fictional state owner with a display name, archive
+state, one optimistic logical-state revision, and one independent status-set
+revision. Creating an Entity also creates its empty logical-state and status-set
 roots.
 
 Each world owns one independently revisioned, ordered set of active character
 fields. A field has a durable UUID, user-authored label, optional guidance,
 position, and visibility:
 
-- `table` is readable by every active world member;
-- `controllers-and-facilitators` is readable only by the entity's active
+- `world` is readable by every active World member;
+- `restricted` is readable only by the entity's active
   non-spectator controllers, world owners/editors, and the currently designated
   human facilitator.
 
@@ -124,30 +125,30 @@ Any entity may have one profile root with its own optimistic revision. Its
 value rows connect that entity to configured fields and contain non-empty plain
 text. A complete replacement may omit fields, allowing an incomplete draft to
 be saved. It must match both the profile revision and field-set revision so a
-draft cannot silently ignore a concurrent schema change.
+draft cannot silently ignore a concurrent character-field-set change.
 
 Owners/editors may edit any active entity profile. Any other active
 non-spectator may edit a profile only while their world membership controls
 that entity. Control
-removal, leaving, or a role change revokes edit authority without deleting the
+removal, leaving, or a membership-role change revokes edit authority without deleting the
 profile. The designated human facilitator may read restricted values even when
 they are neither an editor nor controller. Ordinary admitted members receive
-only completed table-visible values.
+only completed world-visible values.
 
-Completion and live-play admission are derived, never stored. An uncontrolled
-entity is `not-controlled`. A controlled entity is `setup-required` while any
-active field lacks a non-empty value and `ready` otherwise; with zero fields it
-is immediately ready. An active non-spectator's persistent player seat is
+Completion and live-Play admission are derived, never stored. An uncontrolled
+Entity has Character status `not-controlled`. A controlled Entity has Character status `setup-required` while any
+active Character field lacks a non-empty value and `ready` otherwise; with zero fields it
+is immediately ready. An active non-spectator membership's Play status is
 `waiting-for-character` with no control, `setup-required` while their
 controlled-character setup is incomplete, and `ready` when it meets the current
-requirements. This `play_status` remains projected even while they are
+character fields. This `play_status` remains projected even while they are
 designated facilitator. A human
 facilitator bypasses the readiness gate to run Play but may still report the
 seat they will return to after handoff. Spectators report `ready` and remain
 read-only.
 
-Profile prose is not mechanical state. It cannot change mechanic applicability,
-be targeted by effects, or advance the entity-state revision.
+Profile prose is not mechanical state. It cannot change Mechanic applicability,
+be targeted by Effects, or advance the Entity's logical-state revision.
 
 ## Capacities, capabilities, and the mechanic graph
 
@@ -173,14 +174,14 @@ The Go `Decimal` zero value is numeric zero; optionality is represented only by
 
 Every mechanic applies to every entity in the world. There is no applicability
 taxonomy, built-in class, or manufactured catch-all resource. Derived
-mechanics have no default, bounds, step, stored row, or direct-play mutability.
+Mechanics have no authored default, bounds, step, stored override, or direct-Play mutability.
 
 A derived expression is a recursive typed tree whose leaves are typed literals
 or stable mechanic-ID references. Supported internal operations are numeric
 addition, subtraction, multiplication, minimum, maximum, and negation; Boolean
 `and`, `or`, and `not`; equality; numeric comparisons; and a typed `if`.
 References consume the dependency's effective value, not merely its stored
-input. The collection of references across a world is therefore a directed
+override. The collection of references across a World is therefore a directed
 dependency graph even though each expression is represented as a tree.
 
 Every mechanic save validates the proposed complete world graph. Type
@@ -189,35 +190,35 @@ inside the world and cannot point at an archived dependency from an active
 mechanic, and cycle detection reports a concrete dependency path. Any error
 rejects the whole save before the rules revision advances. Evaluation uses a
 compiled dependency order and also detects a cycle defensively at runtime.
-Literal status modifiers authored in a Consequence introduce no dependency
+Status modifiers authored in a Consequence introduce no dependency
 edges, so they cannot create a second kind of graph cycle.
 
-Archiving a mechanic removes it from current sheet presentation and new live
-effects while retaining stored values and receipts so history remains
-interpretable. An active mechanic cannot be archived while an active derived
-mechanic depends on it or an active status modifier targets it. Archive the
-derived dependents and remove the active statuses first. Existing problem
-receipts and removed status snapshots retain their references for history.
+Archiving a Mechanic removes it from current sheet presentation and new live
+Effects while retaining stored overrides and Resolution receipts so history remains
+interpretable. An active Mechanic cannot be archived while an active derived
+Mechanic depends on it or a modifier from an active Status instance targets it. Archive the
+derived dependents and remove the active Status instances first. Existing Resolution receipts,
+removed Status instances, and modifier snapshots retain their references for history.
 
-## Base, intrinsic, and effective state
+## Logical state and intrinsic/effective values
 
-`state_records` provides one revision root per entity. Relational scalar rows
-store input overrides by mechanic ID. Missing input storage materializes the
-mechanic's authored default, so a new entity immediately has a complete
-generated sheet without redundant value rows. Derived values are never stored
-in `state_values`.
+`entity_logical_states` provides one revision root per Entity.
+`entity_input_value_overrides` stores sparse overrides by Mechanic ID. A
+missing override materializes the Mechanic's authored default, so a new Entity
+immediately has a complete generated sheet without redundant rows. Derived
+values are never stored.
 
 Evaluation distinguishes three layers:
 
 1. An input's intrinsic value is its stored override or authored default.
 2. A derived mechanic's intrinsic value is its expression result; references
    recursively consume the effective values of dependencies.
-3. A mechanic's effective value is its intrinsic value after all active status
-   modifiers targeting that mechanic have run.
+3. A Mechanic's effective value is its intrinsic value after all Status modifiers
+   from active instances targeting that Mechanic have run.
 
 ```mermaid
 flowchart LR
-    Base["Stored override or input default"] --> InputIntrinsic["Input intrinsic"]
+    LogicalInput["Stored override or authored default"] --> InputIntrinsic["Input intrinsic"]
     InputIntrinsic --> InputModifiers["Literal modifiers targeting input"]
     InputModifiers --> InputEffective["Input effective"]
     InputEffective --> DerivedExpression["Derived expression reference"]
@@ -226,110 +227,110 @@ flowchart LR
     DerivedModifiers --> DerivedEffective["Derived effective"]
 ```
 
-This ordering makes changes propagate naturally. A status that adds to an
-input affects every derived mechanic that references it, while a modifier on a
-derived mechanic layers over that derived expression's result. Evaluation is
-pure and memoized for one entity snapshot; it either returns the complete
+This ordering makes changes propagate naturally. A Status modifier that adds to an
+input affects every derived Mechanic that references it, while a Status modifier on a
+derived Mechanic layers over that derived expression's result. Evaluation is
+pure and memoized for one Entity snapshot; it either returns the complete
 result or no result.
 
-State responses contain:
+Entity-sheet responses contain:
 
-- `values`: materialized logical input values only;
-- `effective_values`: calculated values for all active and retained mechanics;
+- `logical_input_values`: materialized logical input values only;
+- `effective_values`: effective values for all active and retained Mechanics;
 - `evaluations`: source, presence, intrinsic/effective values, and applied
   modifier explanations by mechanic;
-- `active_statuses`: active instance names/descriptions, source interaction,
+- `active_status_instances`: active instance names/descriptions, source interaction,
   resolution, and effect IDs, and snapshotted modifiers;
-- `defaulted_mechanic_ids`: inputs whose value came from the default;
-- state, status-set, and world-rules revisions.
+- `authored_default_input_mechanic_ids`: inputs whose value came from the authored default;
+- `logical_state_revision`, `status_set_revision`, and `rules_revision`.
 
-A full state replacement supplies the desired logical input values, not a
-patch, and rejects derived IDs. It must match both the entity-state revision
-and the world mechanic-rules revision. Values equal to their authored defaults
+A full logical-state replacement supplies the desired logical input values,
+not a patch, and rejects derived IDs. It must match both the logical-state revision
+and the rules revision. Values equal to their authored defaults
 normalize back to absence.
 
 The same separation applies during Consequences: scalar `set` and `adjust-number`
-read and mutate the logical base input, never its status-modified effective
-value. Active modifiers are reapplied by evaluation after the base transition;
-their adjustments do not get baked into `state_values`.
+read and mutate the logical input value, never its status-modified effective
+value. Active modifiers are reapplied by evaluation after the logical-state transition;
+their adjustments do not get baked into stored overrides.
 
 ## Problem-authored status instances
 
-Statuses are live consequences, not world configuration. During adjudication,
-an `apply-status` effect defines a required name, optional description, and an
+An Inline status is authored in a live Consequence, not World configuration. During Adjudication,
+an `apply-status` Effect defines a required name, optional description, and an
 ordered list of modifiers inline. A modifier names one mechanic, one literal
 typed operand, an operation, and an integer priority. `set` must match the
 mechanic's scalar kind; `add-number` and `multiply-number` require numeric
 mechanics and operands. An empty modifier list is valid for a purely named
 fictional condition.
 
-Each apply target creates a durable entity status instance. The instance
+Each apply target creates a durable Entity-specific Status instance. The instance
 snapshots the inline name, description, and modifiers and records the source
 interaction, resolution, and effect. Status names are presentation rather than
-identity, so independently authored same-name statuses may coexist. A later
+identity, so independently authored same-name Status instances may coexist. A later
 Consequence removes one by supplying the exact active `status_instance_id` for
 its entity target; an unknown, removed, cross-world, or mismatched instance is
 a stale or invalid target rather than a name-based lookup. Removal retains the
-instance and its source receipt as history. Resolve-level idempotency prevents
+instance and its source Resolution receipt as history. Resolve-level idempotency prevents
 an equivalent retry from creating or removing an instance twice.
 
-For each mechanic, active modifiers execute by ascending priority, status
-application order, status-instance ID, modifier position, and modifier ID. The
+For each Mechanic, active Status modifiers execute by ascending priority, Status-instance
+applied order, Status-instance ID, modifier position, and modifier ID. The
 last ID comparisons make the order total and reproducible even if query order
 changes. Exact decimal arithmetic is used throughout.
 
-## Participants, memberships, and invitations
+## User accounts, memberships, and invitations
 
-A `user` represents a real participant and owns a case-insensitive username,
+A `user` represents a real person and owns a case-insensitive username,
 display name, Argon2id password hash, and account status. Authentication binds
 an opaque server session to that user. A `world_membership` grants an owner,
-editor, player, or spectator durable role and lifecycle status. Separately,
-the world's facilitator assignment derives the live role. A designated human
-DM does not respond to their own interaction; any other ready non-spectator may
-respond even when their durable access role is owner or editor.
+editor, player, or spectator membership role and membership status. Separately,
+the world's facilitator assignment derives the current play role. A designated
+human facilitator does not respond to their own Interaction; any other ready non-spectator may
+respond even when their membership role is owner or editor.
 
-An invite is an expiring and revocable bearer grant for a non-owner role. The
+An invite is an expiring and revocable bearer grant for a non-owner membership role. The
 raw URL-safe token is returned only when the invite is created. PostgreSQL
 stores its SHA-256 digest, and a redemption row makes use counting idempotent
 per invite/user pair. Redeeming a valid link creates or reactivates one world
-membership. An already-active membership keeps its current role, so a bearer
+membership. An already-active membership keeps its membership role, so a bearer
 link cannot silently escalate or downgrade it.
 
 The server derives the actor only from an active, unexpired session and then
-enforces membership and roles. User UUIDs remain durable internal identifiers,
+enforces membership roles and current play roles. User UUIDs remain durable internal identifiers,
 but sending one in a header or command body does not authenticate or select an
 actor.
 
-## World table scope and control
+## World roster and control
 
 `world_membership_entity_controls` is the only character-authority edge. An
 active non-spectator may control multiple entities, and an entity may have
 multiple active non-spectator controllers. An optional acting entity on an
-action must be both controlled by the submitting player and complete at
-submission time. The
+Action must be both controlled by the submitting current player and complete at
+the moment the Action is submitted. The
 accepted action snapshots its display name for stable history.
 
-The world's `table_revision` guards complete controller-set replacements. It
-advances when table-scoped membership/control state changes independently of
+The world's `roster_revision` guards complete controller-set replacements. It
+advances when roster membership/control composition changes independently of
 the world settings revision.
 
-An agent-mode waiting player has one additional narrow command: atomically
+An agent-mode current player waiting for a Character has one additional narrow command: atomically
 claim an active entity with no active non-spectator controller. The same world
-lock and `table_revision` guard make the availability snapshot and claim race
+lock and `roster_revision` guard make the availability snapshot and claim race
 explicit without granting general controller-editing authority.
 
-Readiness gates the live table for the current `player` role. Onboarding
-players remain active world members so they can read and edit authorized
-character profiles, but
+Play status gates Play for current play role `player`. Memberships still in
+onboarding remain active World members so they can read and edit authorized
+Entity profiles, but
 interactions/events return `character_setup_required` until their controlled
 character setup is ready. An active uncontrolled entity or ready
 controlled entity may be interaction context or a live-effect target; a
 setup-required controlled entity may not. Acting-entity attribution also
-requires the submitting player to control the ready entity.
+requires the submitting Responder to control the ready Entity.
 
 ## Interactions and actions
 
-An interaction is an improvised live problem with this lifecycle:
+An Interaction carries an improvised live Problem through this lifecycle:
 
 ```text
 draft ──present──> open ──adjudicate──> adjudicating ──resolve──> resolved
@@ -337,11 +338,11 @@ draft ──present──> open ──adjudicate──> adjudicating ──resol
 ```
 
 - `draft`: facilitator-editable prompt and audience setup;
-- `open`: visible to its audience and accepting eligible player actions;
-- `adjudicating`: submissions are closed; a human-DM interaction is hidden
+- `open`: visible to its audience and accepting Responder Actions;
+- `adjudicating`: Action entry is closed; a human-facilitated Interaction is hidden
   from its non-facilitator audience, while a Terra or agent interaction remains
   visible as the automated source finishes or retries its decision;
-- `resolved`: immutable Consequence and applied receipt exist;
+- `resolved`: an immutable Consequence and committed resolution receipt exist;
 - `cancelled`: final without a Consequence. A presented cancellation remains
   visible to its audience as history; a cancelled draft remains private.
 
@@ -352,62 +353,63 @@ active, ready current-player subset of the audience. The interaction snapshots
 `facilitator_source`; a human-authored interaction records its creator
 membership, while Terra and agent interactions have no human creator.
 
-Each eligible player may have at most one submitted action. The player may
-withdraw it while the interaction is open. During adjudication the compiled
-Consequence may identify one submitted action or explicitly select none.
+Each Responder may have at most one Action. The Responder may withdraw it
+while the Interaction is open. During Adjudication the compiled Consequence may
+identify one Action or explicitly select none.
 
-Non-facilitators may read open, resolved, and presented-cancelled interactions
+Non-facilitators may read open, resolved, and presented-cancelled Interactions
 in whose audience they participate, plus an adjudicating Terra or agent
-interaction while the automated decision is pending. Responses omit private notes and
-facilitator-only receipt fields.
+Interaction while the automated decision is pending. Responses omit private notes and
+facilitator-only Resolution-receipt fields.
 
 ## Consequences and transition semantics
 
-A problem's Consequence contains exactly one prose summary and an ordered list
-of zero or more scalar and status effects:
+A Problem's Consequence contains one public narrative, optional selected-Action
+metadata, and an ordered list of zero or more set, adjust-number, apply-status,
+and remove-status Effects:
 
 | Operation       | Target                                | Behavior                                                  |
 | --------------- | ------------------------------------- | --------------------------------------------------------- |
 | `set`           | Mutable input on one or more entities | Replaces a numeric or Boolean logical input value.        |
-| `adjust-number` | Mutable numeric input on entities     | Adds an exact amount, then validates the stored result.   |
+| `adjust-number` | Mutable numeric input on Entities     | Adds an exact amount, then validates the logical input result. |
 | `apply-status`  | Entities plus one inline status       | Creates a distinct snapshotted instance for every target. |
 | `remove-status` | Exact active instance per entity      | Removes only the identified persistent status instance.   |
 
-Every target entity must belong to the world, be active and eligible, and own a
-state root. An effect value must match the mechanic kind; numeric results must
+Every target Entity must belong to the World, be active and eligible, and own a
+logical-state root. An Effect value must match the Mechanic kind; numeric results must
 satisfy configured bounds and step.
 
-The prose is the authoring surface and immutable input to compilation. A human
-facilitator writes it, asks GPT-5.6 Luna for a strict optional selected
-action/summary plus zero or more effects, reviews the advisory preview, and
-chooses whether to resolve.
+For a human-facilitated Problem, the public narrative is the authoring surface
+and immutable input to compilation. The facilitator writes it, asks GPT-5.6
+Luna for optional selected-Action metadata and zero or more Effects, reviews
+the advisory preview, and chooses whether to resolve.
 
 When Terra is the facilitator there is no human-authored draft or approval
-stage. Any ready current player may ask Terra to continue while the table is
+stage. Any ready current player may ask Terra to continue while Play is
 idle. Terra creates and presents an interaction to every ready active member,
 with every ready non-spectator as an eligible responder and every ready
-controlled entity as context. Responders submit an action or use the ordinary
-action text `I pass.` to pass. After all responders have submitted, a ready
-player may
+controlled Entity as context. Responders submit an Action or use the ordinary
+Action text `I pass.` to pass. After all responders have acted, a ready
+current player may
 ask Terra to decide. That single lifecycle command enters adjudication,
 generates Terra's prose, compiles it through Luna, runs the same deterministic
 preview internally, and invokes the ordinary atomic resolve path. The pacing
-player supplies revisions and an idempotency key but cannot edit, select, or
+current player supplies revisions and an idempotency key but cannot edit, select, or
 approve model output.
 
 With `agent` assigned, the server does not call a model. A ready current player
 may present agent-supplied public prose through the dedicated agent command;
-audience, responders, and context are still server-derived. After all responders
-act, the agent command supplies public narrative and concrete effects, while the
+Audience, Responders, and Context Entities are still server-derived. After all Responders
+act, the agent command supplies public narrative and concrete Effects, while the
 server enforces revisions, validates a deterministic preview, and commits the
-ordinary atomic receipt. The authenticated membership remains a player and is
-not persisted as the author of agent-attributed rows or events.
+ordinary atomic Resolution. The authenticated membership's current play role remains `player` and is
+not persisted as the author of agent-attributed rows or World events.
 
 While an automated interaction is open or adjudicating and its source remains
 assigned, any ready current player may use the ordinary cancellation command,
-surfaced in Play as **Skip problem**. It records that player as the human event
+surfaced in Play as **Skip problem**. It records that current player as the human event
 actor but retains Terra as the interaction source, applies no Consequence, and
-leaves Terra assigned. The table returns to idle; creating a replacement still
+leaves Terra assigned. Play returns to idle; creating a replacement still
 requires a separate Continue command.
 
 A failed Terra decision may be retried while the interaction remains
@@ -418,21 +420,21 @@ withdraws the owner's own action if any, and lets the owner close/adjudicate as
 needed and author a human-attributed resolution. No other handoff may cross an
 unfinished interaction.
 
-Effects execute in author order. A scalar effect observes earlier scalar
-changes to the same logical base input. Status lifecycle effects validate their
-ordered entity/instance targets, but applying a status does not change the
-operand seen by a later scalar adjustment—status modifiers are evaluation
-layers, not stored values. After the ordered transition, the engine evaluates
-the resulting base state and active statuses together. It clones both input
-snapshots first, and any effect or evaluation failure returns no partially
+Effects execute in author order. A scalar Effect observes earlier scalar
+changes to the same logical input value. Status-lifecycle Effects validate their
+ordered Entity/Status-instance targets, but creating a Status instance does not change the
+operand seen by a later scalar adjustment—Status modifiers are evaluation
+layers, not logical input values. After the ordered transition, the engine evaluates
+the resulting logical state and active Status instances together. It clones the
+stored-override and Status-instance snapshots first, and any Effect or evaluation failure returns no partially
 usable result. The application adds database transaction atomicity.
 
 Preview optionally runs the same validation and application logic without
 persisting. It is advisory and does not reserve a revision or need to precede
-resolution. Terra's autonomous decision uses this same preview path internally;
-model output never bypasses world scope, mutability, type, bound, status,
-lifecycle, or revision checks. Resolve remains the only path that locks the
-relevant roots, rechecks revisions, applies the plan, and commits state plus
+Resolution. Terra's autonomous decision uses this same preview path internally;
+model output never bypasses World scope, mutability, type, bound, Status-lifecycle,
+Interaction-lifecycle, or revision checks. Resolve remains the only path that locks the
+relevant roots, rechecks revisions, applies the plan, and commits logical state plus
 history together.
 
 ## Resolution receipts and events
@@ -440,9 +442,9 @@ history together.
 A resolved interaction owns one immutable resolution representing its
 Consequence and containing:
 
-- the public prose summary in the transport field `narrative` and optional
+- the public narrative in the transport field `narrative` and optional
   facilitator-private notes;
-- selected action, if any;
+- selected-Action metadata, if any;
 - `facilitator_source`, a nullable human resolver membership, and the
   idempotency key;
 - ordered requested effects and concrete targets, including each inline apply
@@ -452,22 +454,23 @@ Consequence and containing:
   before/after active flags;
 - every changed effective value, including transitive derived changes that
   were not directly targeted;
-- the exact mechanic rules revision used for evaluation;
-- affected state records after commit.
+- the exact rules revision used for evaluation;
+- affected Entity sheets after commit.
 
-Normally interaction and resolution sources agree. An owner takeover is the
-intentional exception: the interaction remains attributed to its automated
+Normally Interaction and Resolution sources agree. An owner takeover is the
+intentional exception: the Interaction remains attributed to its automated
 source and the
-resolution records the human owner, preserving both authorship facts.
+Resolution records the human owner, preserving both authorship facts.
 
-Resolution is unique per interaction. A world-scoped idempotency key makes retry
-safe: equivalent reuse returns the existing receipt with `replayed: true`,
-while different content conflicts. Replay rebuilds current state records rather
+Resolution is unique per Interaction. A world-scoped idempotency key makes retry
+safe: equivalent reuse returns the existing Resolution receipt with `replayed: true`,
+while different content conflicts. Replay rebuilds current Entity sheets rather
 than pretending the original response snapshot is still current.
 
-The receipt tree and final interaction root are protected from mutation by
-database triggers. A committed Consequence, its state changes, receipt, action
-statuses, interaction lifecycle, and world event share one transaction.
+The Resolution-receipt tree and final Interaction root are protected from mutation by
+database triggers. A committed Resolution, its Consequence, logical-state and
+Status-instance changes, Resolution receipt, Action
+statuses, Interaction lifecycle, and World event share one transaction.
 
 `world_events` is an append-only monotonic cursor used for SSE invalidation. Its
 payload carries `actor_source` (`human`, `terra`, or `agent`), a human membership only
@@ -480,30 +483,30 @@ event even though the interaction remains attributed to Terra.
 ## Revisions and lifecycle rules
 
 Optimistic revisions protect world details, complete controller-set
-replacements through the world table, character-field sets, profiles, entity
-state, interactions, action submissions, and the world mechanic graph. Each
+replacements through the World roster, character-field sets, profiles, Entity
+logical state, Interactions, Actions, and the world mechanic graph. Each
 entity also has a status-set revision.
 The facilitator assignment shares the world revision and normally changes only
 between interactions; the owner recovery handoff is the single unfinished-state
 exception.
-Mechanic mutations advance the world-rules counter. State replacement,
+Mechanic mutations advance the rules revision. Logical-state replacement,
 preview, and resolve carry `expected_rules_revision`; status modifiers authored
 inside a Consequence are validated against that exact mechanic graph, and the
-applied resolution receipt retains the matched revision. A stale command
+committed Resolution receipt retains the matched revision. A stale command
 returns `409 revision_conflict`. Preview does not reserve a revision; resolve
-must use fresh authoritative values. Applying or removing a status does not
+must use fresh authoritative values. Executing an apply-status or remove-status Effect does not
 publish configuration or advance the mechanic graph revision.
 
 Archive and final-state rules include:
 
 - archived mechanics cannot be used by new effects;
-- derived mechanics cannot be stored or directly targeted by scalar effects;
-- archived entities reject setup/profile mutation and new live references;
-- a world cannot archive while an interaction is unfinished;
-- audience-visible resolved/cancelled interactions and applied receipts remain
-  readable history, including for admitted members whose player seat is not
+- derived Mechanics cannot own stored overrides or be directly targeted by scalar Effects;
+- archived Entities reject setup/Entity-profile mutation and new live references;
+- a World cannot archive while an Interaction is unfinished;
+- audience-visible resolved/cancelled Interactions and committed Resolution receipts remain
+  readable history, including for admitted members whose Play status is not
   ready.
 
-Configuration and state are normalized relational data. JSON is a transport
+Configuration and logical state are normalized relational data. JSON is a transport
 shape, never the canonical persisted aggregate, and no migration seeds a world
 vocabulary.

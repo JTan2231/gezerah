@@ -8,14 +8,14 @@ import (
 	"dnd/internal/rules"
 )
 
-func TestResolutionTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t *testing.T) {
+func TestConsequenceTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t *testing.T) {
 	t.Parallel()
 	plan := rules.TransitionPlan{Effects: []rules.ConcreteEffect{
 		{ID: "first", Position: 0, EntityIDs: []rules.ID{"ready", "incomplete"}},
 		{ID: "second", Position: 1, EntityIDs: []rules.ID{"incomplete"}},
 	}}
 
-	err := resolutionTargetEligibilityError(plan, map[rules.ID]string{
+	err := consequenceTargetEligibilityError(plan, map[rules.ID]string{
 		"ready":      "ready",
 		"incomplete": "setup-required",
 	})
@@ -37,13 +37,13 @@ func TestResolutionTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t 
 	}
 }
 
-func TestResolutionTargetEligibilityAllowsReadyAndNonCharacterTargets(t *testing.T) {
+func TestConsequenceTargetEligibilityAllowsReadyAndNonCharacterTargets(t *testing.T) {
 	t.Parallel()
 	plan := rules.TransitionPlan{Effects: []rules.ConcreteEffect{{
 		ID: "effect", Position: 0, EntityIDs: []rules.ID{"ready", "npc", "unknown"},
 	}}}
 
-	if err := resolutionTargetEligibilityError(plan, map[rules.ID]string{
+	if err := consequenceTargetEligibilityError(plan, map[rules.ID]string{
 		"ready": "ready",
 		"npc":   "not-controlled",
 	}); err != nil {

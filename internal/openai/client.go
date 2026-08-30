@@ -1,6 +1,6 @@
 // Package openai provides the narrow OpenAI Responses API surface used by the
-// Auto DM pipeline. It deliberately exposes only one-shot Terra text generation
-// and Luna structured generation.
+// Package openai exposes only one-shot Terra text generation and Luna structured
+// generation for the application's model provider.
 package openai
 
 import (

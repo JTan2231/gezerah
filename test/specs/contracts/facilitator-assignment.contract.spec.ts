@@ -7,7 +7,7 @@ import {
   type APIResponse,
 } from "@playwright/test";
 
-import { TERRA_FORCED_FAILURE_MARKER } from "../../src/autoDMServer";
+import { TERRA_MODEL_FAILURE_MARKER } from "../../src/openAIStubServer";
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
 import {
@@ -20,20 +20,20 @@ import {
 
 test.afterEach(async () => disposeAuthenticatedActors());
 
-type DurableRole = "owner" | "editor" | "player" | "spectator";
+type MembershipRole = "owner" | "editor" | "player" | "spectator";
 type CurrentPlayRole = "facilitator" | "player" | "spectator";
 type PlayStatus =
   "waiting-for-character" | "setup-required" | "ready" | "unavailable";
+type FacilitatorSource = "human" | "terra" | "agent";
 
 interface WorldResponse {
   id: string;
   membership_id: string;
-  role: DurableRole;
+  role: MembershipRole;
   revision: number;
   rules_revision: number;
-  dm_source: "human" | "terra";
   facilitator: {
-    source: "human" | "terra";
+    source: FacilitatorSource;
     membership_id?: string;
     display_name?: string;
   };
@@ -44,7 +44,7 @@ interface WorldResponse {
 interface WorldMemberResponse {
   id: string;
   user_id: string;
-  role: DurableRole;
+  role: MembershipRole;
   current_play_role: CurrentPlayRole;
   play_status: PlayStatus;
   controlled_entity_ids: string[];
@@ -52,7 +52,7 @@ interface WorldMemberResponse {
 
 interface InviteResponse {
   id: string;
-  role: Exclude<DurableRole, "owner">;
+  role: Exclude<MembershipRole, "owner">;
   join_path?: string;
 }
 
@@ -73,14 +73,14 @@ interface InteractionActionResponse {
 interface InteractionResponse {
   id: string;
   prompt: string;
-  facilitator_source: "human" | "terra";
+  facilitator_source: FacilitatorSource;
   status: "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
   revision: number;
   eligible_responder_membership_ids: string[];
   actions: InteractionActionResponse[];
 }
 
-test("contract: facilitator assignment changes play authority without rewriting durable roles", async ({
+test("contract: facilitator assignment changes play authority without rewriting membership roles", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
@@ -97,7 +97,6 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   expect(world).toMatchObject({
     role: "owner",
-    dm_source: "human",
     facilitator: { source: "human", membership_id: world.membership_id },
     current_play_role: "facilitator",
     play_status: "waiting-for-character",
@@ -191,7 +190,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
       prompt: `The delegated facilitator asks the owner to act ${unique}.`,
       audience_membership_ids: [world.membership_id],
       eligible_responder_membership_ids: [world.membership_id],
-      entity_ids: [character.id],
+      context_entity_ids: [character.id],
     },
     delegate.id,
   );
@@ -204,7 +203,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}/actions`,
     {
-      text: `The owner acts as a ready player ${unique}.`,
+      text: `The owner acts as a ready current player ${unique}.`,
       acting_entity_id: character.id,
       expected_revision: humanInteraction.revision,
     },
@@ -249,7 +248,6 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   expect(terraWorld).toMatchObject({
     role: "owner",
-    dm_source: "terra",
     facilitator: { source: "terra" },
     current_play_role: "player",
     play_status: "ready",
@@ -276,7 +274,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const terraInteraction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    `${baseURL}/api/worlds/${world.id}/terra/continue`,
     undefined,
     owner.id,
   );
@@ -289,7 +287,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/actions`,
     {
-      text: `${TERRA_FORCED_FAILURE_MARKER} The owner braces the crossing.`,
+      text: `${TERRA_MODEL_FAILURE_MARKER} The owner braces the crossing.`,
       acting_entity_id: character.id,
       expected_revision: terraInteraction.revision,
     },
@@ -303,7 +301,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/auto-dm/decide`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/terra/decide`,
       {
         expected_revision: terraReadyToDecide.revision,
         expected_rules_revision: terraWorld.rules_revision,
@@ -312,7 +310,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
       owner.id,
     ),
     502,
-    "auto_dm_failed",
+    "model_failed",
   );
   const terraAdjudicating = await getJSON<InteractionResponse>(
     request,
@@ -372,7 +370,6 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   expect(recovered).toMatchObject({
     role: "owner",
-    dm_source: "human",
     facilitator: { source: "human", membership_id: world.membership_id },
     current_play_role: "facilitator",
     play_status: "ready",
@@ -414,7 +411,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   ]);
 });
 
-test("contract: a ready player can skip open and adjudicating Terra problems", async ({
+test("contract: a ready current player can skip open and adjudicating Terra problems", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
@@ -453,7 +450,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
       private_notes: `Private draft notes ${unique}`,
       audience_membership_ids: [playerWorld.membership_id],
       eligible_responder_membership_ids: [playerWorld.membership_id],
-      entity_ids: [character.id],
+      context_entity_ids: [character.id],
     },
     owner.id,
   );
@@ -481,7 +478,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
   );
   const open = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    `${baseURL}/api/worlds/${world.id}/terra/continue`,
     undefined,
     player.id,
   );
@@ -511,7 +508,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
 
   const next = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+    `${baseURL}/api/worlds/${world.id}/terra/continue`,
     undefined,
     player.id,
   );
@@ -519,7 +516,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/actions`,
     {
-      text: `${TERRA_FORCED_FAILURE_MARKER} The player waits for Terra.`,
+      text: `${TERRA_MODEL_FAILURE_MARKER} The player waits for Terra.`,
       acting_entity_id: character.id,
       expected_revision: next.revision,
     },
@@ -533,7 +530,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/auto-dm/decide`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/terra/decide`,
       {
         expected_revision: readyToDecide.revision,
         expected_rules_revision: terraWorld.rules_revision,
@@ -542,7 +539,7 @@ test("contract: a ready player can skip open and adjudicating Terra problems", a
       player.id,
     ),
     502,
-    "auto_dm_failed",
+    "model_failed",
   );
   const adjudicating = await getJSON<InteractionResponse>(
     request,

@@ -1,4 +1,4 @@
-export type WorldRole = "owner" | "editor" | "player" | "spectator";
+export type MembershipRole = "owner" | "editor" | "player" | "spectator";
 type WorldStatus = "active" | "archived";
 export type CurrentPlayRole = "facilitator" | "player" | "spectator";
 export type FacilitatorSource = "human" | "terra" | "agent";
@@ -13,14 +13,13 @@ export interface World {
   id: string;
   name: string;
   description?: string | undefined;
-  dm_source: FacilitatorSource;
   status: WorldStatus;
   revision: number;
-  role: WorldRole;
+  role: MembershipRole;
   membership_id: string;
   facilitator: WorldFacilitator;
   current_play_role: CurrentPlayRole;
-  table_revision: number;
+  roster_revision: number;
   member_count: number;
   capacity_count: number;
   capability_count: number;
@@ -36,7 +35,7 @@ export interface WorldMember {
   id: string;
   user_id: string;
   display_name: string;
-  role: WorldRole;
+  role: MembershipRole;
   status: "active" | "left";
   play_status: PlayStatus;
   current_play_role: CurrentPlayRole;
@@ -49,7 +48,7 @@ export interface WorldMember {
 
 export interface WorldInvite {
   id: string;
-  role: Exclude<WorldRole, "owner">;
+  role: Exclude<MembershipRole, "owner">;
   created_by_display_name: string;
   expires_at: string;
   revoked_at?: string | undefined;
@@ -62,7 +61,7 @@ export interface WorldInvitePreview {
   world_id: string;
   world_name: string;
   world_description?: string | undefined;
-  role: Exclude<WorldRole, "owner">;
+  role: Exclude<MembershipRole, "owner">;
   invited_by_display_name: string;
   expires_at: string;
 }
@@ -73,7 +72,7 @@ export type MechanicSourceKind = "input" | "derived";
 export type DecimalText = string;
 
 export type MechanicExpression =
-  | { operation: "literal"; value: StateValue }
+  | { operation: "literal"; value: MechanicValue }
   | { operation: "mechanic-reference"; mechanic_id: string }
   | {
       operation:
@@ -132,7 +131,7 @@ interface StatusModifier {
   id: string;
   mechanic_id: string;
   operation: StatusModifierOperation;
-  value: StateValue;
+  value: MechanicValue;
   priority: number;
   position: number;
 }
@@ -141,7 +140,7 @@ interface StatusModifierInput {
   id?: string | undefined;
   mechanic_id: string;
   operation: StatusModifierOperation;
-  value: StateValue;
+  value: MechanicValue;
   priority: number;
 }
 
@@ -155,9 +154,7 @@ export interface WorldEntity {
   id: string;
   display_name: string;
   archived: boolean;
-  state_revision: number;
-  status_revision: number;
-  state: StateRecordResponse;
+  sheet: EntitySheet;
   character_status: CharacterStatus;
   required_field_count: number;
   completed_field_count: number;
@@ -165,21 +162,21 @@ export interface WorldEntity {
   updated_at: string;
 }
 
-export interface AvailableCharacter {
+export interface AvailableEntity {
   id: string;
   display_name: string;
   profile_summary?: string | undefined;
 }
 
-export interface AvailableCharacters {
-  table_revision: number;
-  characters: AvailableCharacter[];
+export interface AvailableEntities {
+  roster_revision: number;
+  entities: AvailableEntity[];
 }
 
-export interface CharacterClaimResult {
+export interface EntityClaimResult {
   entity_id: string;
   controller_world_membership_ids: string[];
-  table_revision: number;
+  roster_revision: number;
   play_status: PlayStatus;
 }
 
@@ -201,7 +198,7 @@ export type PlayStatus =
 
 export type CharacterStatus = "not-controlled" | "setup-required" | "ready";
 
-export type StateValue =
+export type MechanicValue =
   { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
 export type ConcreteEffect =
@@ -210,7 +207,7 @@ export type ConcreteEffect =
       type: "set";
       entity_ids: string[];
       mechanic_id: string;
-      value: StateValue;
+      value: MechanicValue;
     }
   | {
       id?: string | undefined;
@@ -251,13 +248,13 @@ export interface InteractionAction {
   updated_at?: string | undefined;
 }
 
-type EntityProfileVisibility = "table" | "controllers-and-facilitators";
+type CharacterFieldVisibility = "world" | "restricted";
 
 export interface WorldCharacterField {
   id: string;
   label: string;
   help_text?: string | undefined;
-  visibility: EntityProfileVisibility;
+  visibility: CharacterFieldVisibility;
   created_by_user_id: string;
   updated_by_user_id: string;
   created_at: string;
@@ -274,38 +271,38 @@ export interface WorldCharacterFieldSet {
 export interface EntityProfile {
   entity_id: string;
   revision: number;
-  character_fields_revision: number;
+  character_field_set_revision: number;
   character_status: CharacterStatus;
   required_field_count: number;
   completed_field_count: number;
   missing_field_ids?: string[] | undefined;
   can_edit: boolean;
-  fields: EntityProfileField[];
+  fields: EntityProfileCharacterField[];
   updated_by_user_id?: string | undefined;
   created_at?: string | undefined;
   updated_at?: string | undefined;
 }
 
-export interface EntityProfileField {
+export interface EntityProfileCharacterField {
   id: string;
   label: string;
   help_text?: string | undefined;
-  visibility: EntityProfileVisibility;
+  visibility: CharacterFieldVisibility;
   value?: string | undefined;
   updated_by_user_id?: string | undefined;
   updated_at?: string | undefined;
 }
 
-interface ScalarAppliedEffect {
+interface ScalarApplicationFields {
   effect_id: string;
   entity_id: string;
   mechanic_id: string;
-  before: StateValue;
-  after: StateValue;
+  before: MechanicValue;
+  after: MechanicValue;
   changed: boolean;
 }
 
-interface StatusAppliedEffect {
+interface StatusApplicationFields {
   effect_id: string;
   entity_id: string;
   status_instance_id: string;
@@ -315,11 +312,11 @@ interface StatusAppliedEffect {
   changed: boolean;
 }
 
-export type ConcreteAppliedEffect =
-  | (ScalarAppliedEffect & { type: "set" })
-  | (ScalarAppliedEffect & { type: "adjust-number" })
-  | (StatusAppliedEffect & { type: "apply-status" })
-  | (StatusAppliedEffect & { type: "remove-status" });
+type EffectApplication =
+  | (ScalarApplicationFields & { type: "set" })
+  | (ScalarApplicationFields & { type: "adjust-number" })
+  | (StatusApplicationFields & { type: "apply-status" })
+  | (StatusApplicationFields & { type: "remove-status" });
 
 interface InteractionResolution {
   id: string;
@@ -331,7 +328,7 @@ interface InteractionResolution {
   resolved_by_membership_id?: string | undefined;
   rules_revision: number;
   effects: ConcreteEffect[];
-  applied_effects: ConcreteAppliedEffect[];
+  applications: EffectApplication[];
   effective_changes: EffectiveChange[];
   resolved_at?: string | undefined;
 }
@@ -347,7 +344,7 @@ export interface Interaction {
   facilitator_source: FacilitatorSource;
   created_by_membership_id?: string | undefined;
   audience_membership_ids: string[];
-  entity_ids: string[];
+  context_entity_ids: string[];
   eligible_responder_membership_ids: string[];
   actions: InteractionAction[];
   resolution?: InteractionResolution | undefined;
@@ -358,16 +355,22 @@ export interface Interaction {
   updated_at?: string | undefined;
 }
 
-export interface InteractionResolutionResult {
-  preview?: boolean | undefined;
-  replayed?: boolean | undefined;
+interface ConsequenceApplicationResult {
   interaction_id: string;
   interaction_revision: number;
   rules_revision: number;
   narrative: string;
-  applied_effects: ConcreteAppliedEffect[];
+  applications: EffectApplication[];
   effective_changes: EffectiveChange[];
-  state: { records: Record<string, StateRecordResponse> };
+  entity_sheets: Record<string, EntitySheet>;
+}
+
+export interface ConsequencePreviewResult extends ConsequenceApplicationResult {
+  preview?: boolean | undefined;
+}
+
+export interface InteractionResolutionResult extends ConsequenceApplicationResult {
+  replayed?: boolean | undefined;
 }
 
 export interface ConsequenceCompilation {
@@ -375,19 +378,19 @@ export interface ConsequenceCompilation {
   selected_action_id?: string | undefined;
   action_summary?: string | undefined;
   effects: ConcreteEffect[];
-  preview: InteractionResolutionResult;
+  preview: ConsequencePreviewResult;
 }
 
-export interface ActiveStatus {
+export interface StatusInstance {
   id: string;
   name: string;
   description?: string | undefined;
   source_interaction_id: string;
-  // A hypothetical status in a preview has not acquired a durable resolution yet.
+  // A Status instance projected only in preview has no committed Resolution yet.
   source_resolution_id?: string | undefined;
   source_effect_id: string;
   applied_order: number;
-  applied_at: string;
+  resolved_at: string;
   modifiers: StatusModifier[];
 }
 
@@ -397,37 +400,36 @@ interface AppliedModifier {
   modifier_id: string;
   operation: StatusModifierOperation;
   priority: number;
-  operand: StateValue;
-  before: StateValue;
-  after: StateValue;
+  operand: MechanicValue;
+  before: MechanicValue;
+  after: MechanicValue;
 }
 
 interface EvaluatedMechanic {
   source_kind: MechanicSourceKind;
-  presence: "stored" | "defaulted" | "derived";
-  intrinsic: StateValue;
-  effective: StateValue;
+  presence: "stored-override" | "authored-default" | "derived";
+  intrinsic: MechanicValue;
+  effective: MechanicValue;
   modifiers: AppliedModifier[];
 }
 
-export interface EffectiveChange {
+interface EffectiveChange {
   entity_id: string;
   mechanic_id: string;
-  before: StateValue;
-  after: StateValue;
+  before: MechanicValue;
+  after: MechanicValue;
 }
 
-export interface StateRecordResponse {
+export interface EntitySheet {
   entity_id: string;
-  revision: number;
-  status_revision: number;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, StateValue>;
-  effective_values: Record<string, StateValue>;
+  logical_input_values: Record<string, MechanicValue>;
+  effective_values: Record<string, MechanicValue>;
   evaluations: Record<string, EvaluatedMechanic>;
-  active_statuses: ActiveStatus[];
-  defaulted_mechanic_ids: string[];
-  updated_at: string;
+  active_status_instances: StatusInstance[];
+  authored_default_input_mechanic_ids: string[];
 }
 
 export interface ApiErrorPayload {

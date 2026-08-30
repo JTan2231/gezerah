@@ -10,8 +10,11 @@ and Vite frontend in the background and exits. Use `./run.sh status`,
 services when debugging is complete.
 
 Do not add built-in entity classes, privileged configured keys, canonical JSON
-storage, or seed vocabulary. Configuration is user-authored and ruleset-scoped.
+storage, or seed vocabulary. Configuration is user-authored and world-scoped.
 
 We do not have active users. Please do not consider them in your design considerations.
+
+Always consult `docs/glossary.md` before answering questions about the product
+or architecture.
 
 Please refer `docs/` before making any code changes or considerations.

@@ -19,7 +19,7 @@ import {
 
 test.afterEach(async () => disposeAuthenticatedActors());
 
-type DurableRole = "owner" | "editor" | "player" | "spectator";
+type MembershipRole = "owner" | "editor" | "player" | "spectator";
 type CurrentPlayRole = "facilitator" | "player" | "spectator";
 type PlayStatus =
   "waiting-for-character" | "setup-required" | "ready" | "unavailable";
@@ -27,11 +27,10 @@ type PlayStatus =
 interface WorldResponse {
   id: string;
   membership_id: string;
-  role: DurableRole;
+  role: MembershipRole;
   revision: number;
-  table_revision: number;
+  roster_revision: number;
   rules_revision: number;
-  dm_source: "human" | "terra" | "agent";
   facilitator: {
     source: "human" | "terra" | "agent";
     membership_id?: string;
@@ -42,7 +41,7 @@ interface WorldResponse {
 
 interface InviteResponse {
   id: string;
-  role: Exclude<DurableRole, "owner">;
+  role: Exclude<MembershipRole, "owner">;
   join_path?: string;
 }
 
@@ -56,22 +55,22 @@ interface EntityResponse {
   display_name: string;
   archived: boolean;
   character_status: "not-controlled" | "setup-required" | "ready";
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
-interface AvailableCharactersResponse {
-  table_revision: number;
-  characters: Array<{
+interface AvailableEntitiesResponse {
+  roster_revision: number;
+  entities: Array<{
     id: string;
     display_name: string;
     profile_summary?: string;
   }>;
 }
 
-interface CharacterClaimResponse {
+interface EntityClaimResponse {
   entity_id: string;
   controller_world_membership_ids: string[];
-  table_revision: number;
+  roster_revision: number;
 }
 
 interface InteractionActionResponse {
@@ -83,13 +82,17 @@ interface InteractionActionResponse {
   revision: number;
 }
 
-interface AppliedEffect {
+interface EffectApplication {
   type: "set" | "adjust-number" | "apply-status" | "remove-status";
   effect_id: string;
   entity_id: string;
   mechanic_id?: string;
-  before?: TaggedValue;
-  after?: TaggedValue;
+  status_instance_id?: string;
+  status_name?: string;
+  active_before?: boolean;
+  active_after?: boolean;
+  before?: MechanicValue;
+  after?: MechanicValue;
   changed: boolean;
 }
 
@@ -103,7 +106,7 @@ interface InteractionResponse {
   revision: number;
   audience_membership_ids: string[];
   eligible_responder_membership_ids: string[];
-  entity_ids: string[];
+  context_entity_ids: string[];
   actions: InteractionActionResponse[];
   resolution?: {
     id: string;
@@ -111,7 +114,8 @@ interface InteractionResponse {
     resolved_by_membership_id?: string;
     narrative: string;
     effects: unknown[];
-    applied_effects: AppliedEffect[];
+    applications: EffectApplication[];
+    resolved_at: string;
   };
 }
 
@@ -121,22 +125,26 @@ interface AgentResolutionResult {
   interaction_revision: number;
   rules_revision: number;
   narrative: string;
-  applied_effects: AppliedEffect[];
-  state: { records: Record<string, StateResponse> };
+  applications: EffectApplication[];
+  entity_sheets: Record<string, EntitySheetResponse>;
 }
 
-interface StateResponse {
+interface EntitySheetResponse {
   entity_id: string;
-  revision: number;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, TaggedValue>;
-  effective_values: Record<string, TaggedValue>;
+  logical_input_values: Record<string, MechanicValue>;
+  effective_values: Record<string, MechanicValue>;
+  evaluations: Record<string, unknown>;
+  active_status_instances: Array<unknown>;
+  authored_default_input_mechanic_ids: string[];
 }
 
-type TaggedValue =
+type MechanicValue =
   { kind: "number"; value: string } | { kind: "boolean"; value: boolean };
 
-test("contract: an agent facilitator uses player authority without impersonating a membership", async ({
+test("contract: Agent facilitation uses current-player authority without impersonating a membership", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
@@ -208,7 +216,6 @@ test("contract: an agent facilitator uses player authority without impersonating
   );
   expect(agentWorld).toMatchObject({
     role: "owner",
-    dm_source: "agent",
     facilitator: { source: "agent" },
     current_play_role: "player",
     play_status: "waiting-for-character",
@@ -227,7 +234,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     await expectAPIError(
       await getAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/sheet`,
         player.id,
       ),
       403,
@@ -243,23 +250,23 @@ test("contract: an agent facilitator uses player authority without impersonating
       "character_setup_required",
     );
 
-    const available = await getJSON<AvailableCharactersResponse>(
+    const available = await getJSON<AvailableEntitiesResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/available-characters`,
+      `${baseURL}/api/worlds/${world.id}/available-entities`,
       player.id,
     );
-    expect(available.table_revision).toBe(agentWorld.table_revision);
-    expect(available.characters.map(({ id }) => id).sort()).toEqual(
+    expect(available.roster_revision).toBe(agentWorld.roster_revision);
+    expect(available.entities.map(({ id }) => id).sort()).toEqual(
       [preset.id, otherPreset.id].sort(),
     );
-    for (const character of available.characters) {
-      expect(character).not.toHaveProperty("state");
-      expect(character).not.toHaveProperty("controller_world_membership_ids");
+    for (const entity of available.entities) {
+      expect(entity).not.toHaveProperty("sheet");
+      expect(entity).not.toHaveProperty("controller_world_membership_ids");
     }
     await expectAPIError(
       await getAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/available-characters`,
+        `${baseURL}/api/worlds/${world.id}/available-entities`,
         outsider.id,
       ),
       403,
@@ -269,7 +276,7 @@ test("contract: an agent facilitator uses player authority without impersonating
       await postAs(
         request,
         `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
-        { expected_table_revision: agentWorld.table_revision },
+        { expected_roster_revision: agentWorld.roster_revision },
         spectator.id,
       ),
       403,
@@ -282,16 +289,16 @@ test("contract: an agent facilitator uses player authority without impersonating
     `${baseURL}/api/worlds/${world.id}`,
     player.id,
   );
-  const claim = await postJSON<CharacterClaimResponse>(
+  const claim = await postJSON<EntityClaimResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
-    { expected_table_revision: claimWorld.table_revision },
+    { expected_roster_revision: claimWorld.roster_revision },
     player.id,
   );
   expect(claim).toMatchObject({
     entity_id: preset.id,
     controller_world_membership_ids: [playerWorld.membership_id],
-    table_revision: claimWorld.table_revision + 1,
+    roster_revision: claimWorld.roster_revision + 1,
     play_status: "ready",
   });
   expect(
@@ -303,25 +310,27 @@ test("contract: an agent facilitator uses player authority without impersonating
   ).toMatchObject({
     current_play_role: "player",
     play_status: "ready",
-    table_revision: claim.table_revision,
+    roster_revision: claim.roster_revision,
   });
   expect(
-    await getJSON<StateResponse>(
+    await getJSON<EntitySheetResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/state`,
+      `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/sheet`,
       player.id,
     ),
   ).toMatchObject({
     entity_id: preset.id,
     rules_revision: mechanic.revision,
-    values: { [mechanic.mechanic.id]: { kind: "number", value: "3" } },
+    logical_input_values: {
+      [mechanic.mechanic.id]: { kind: "number", value: "3" },
+    },
   });
 
   await expectAPIError(
     await postAs(
       request,
       `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
-      { expected_table_revision: claimWorld.table_revision },
+      { expected_roster_revision: claimWorld.roster_revision },
       owner.id,
     ),
     409,
@@ -332,7 +341,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     await expectAPIError(
       await postAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/auto-dm/continue`,
+        `${baseURL}/api/worlds/${world.id}/terra/continue`,
         undefined,
         player.id,
       ),
@@ -342,7 +351,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     await expectAPIError(
       await postAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/agent-dm/continue`,
+        `${baseURL}/api/worlds/${world.id}/agent/continue`,
         { prompt: `The lantern wakes beneath the lake ${unique}.` },
         spectator.id,
       ),
@@ -353,7 +362,7 @@ test("contract: an agent facilitator uses player authority without impersonating
 
   const interaction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/agent-dm/continue`,
+    `${baseURL}/api/worlds/${world.id}/agent/continue`,
     {
       title: `The light below ${unique}`,
       prompt: `The drowned lantern answers with a knock ${unique}. What do you do?`,
@@ -366,7 +375,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     revision: 1,
     facilitator_source: "agent",
     eligible_responder_membership_ids: [playerWorld.membership_id],
-    entity_ids: [preset.id],
+    context_entity_ids: [preset.id],
     actions: [],
   });
   expect(interaction.created_by_membership_id).toBeUndefined();
@@ -395,7 +404,7 @@ test("contract: an agent facilitator uses player authority without impersonating
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/auto-dm/decide`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/terra/decide`,
       {
         expected_revision: readyToResolve.revision,
         expected_rules_revision: mechanic.revision,
@@ -428,7 +437,7 @@ test("contract: an agent facilitator uses player authority without impersonating
   };
   const resolved = await postJSON<AgentResolutionResult>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent-dm/resolve`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
     resolutionRequest,
     player.id,
   );
@@ -436,7 +445,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     interaction_id: interaction.id,
     rules_revision: mechanic.revision,
     narrative: resolutionRequest.narrative,
-    applied_effects: [
+    applications: [
       {
         type: "adjust-number",
         effect_id: effectID,
@@ -451,7 +460,7 @@ test("contract: an agent facilitator uses player authority without impersonating
 
   const replay = await postJSON<AgentResolutionResult>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent-dm/resolve`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
     resolutionRequest,
     player.id,
   );
@@ -459,7 +468,7 @@ test("contract: an agent facilitator uses player authority without impersonating
     replayed: true,
     interaction_id: resolved.interaction_id,
     interaction_revision: resolved.interaction_revision,
-    applied_effects: resolved.applied_effects,
+    applications: resolved.applications,
   });
 
   const durable = await getJSON<InteractionResponse>(
@@ -480,7 +489,8 @@ test("contract: an agent facilitator uses player authority without impersonating
     resolution: {
       facilitator_source: "agent",
       narrative: resolutionRequest.narrative,
-      applied_effects: [{ effect_id: effectID, changed: true }],
+      applications: [{ effect_id: effectID, changed: true }],
+      resolved_at: expect.any(String),
     },
   });
   expect(durable.resolution?.resolved_by_membership_id).toBeUndefined();

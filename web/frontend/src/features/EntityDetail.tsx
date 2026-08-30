@@ -8,9 +8,9 @@ import {
   worldPath,
 } from "../api/client";
 import type {
-  ActiveStatus,
+  StatusInstance,
   DecimalText,
-  StateValue,
+  MechanicValue,
   World,
   WorldEntity,
   WorldMechanic,
@@ -50,11 +50,11 @@ export function EntityDetail({
   onProfileChanged: () => void;
   onSaved: () => void;
 }) {
-  const [tab, setTab] = useState<"story" | "sheet">(
-    controlledByCurrentMember && !facilitator ? "story" : "sheet",
+  const [tab, setTab] = useState<"profile" | "sheet">(
+    controlledByCurrentMember && !facilitator ? "profile" : "sheet",
   );
 
-  function selectTab(nextTab: "story" | "sheet") {
+  function selectTab(nextTab: "profile" | "sheet") {
     if (nextTab === tab || !confirmDiscardDraft()) return;
     setTab(nextTab);
   }
@@ -65,7 +65,7 @@ export function EntityDetail({
       showControllers={facilitator && world.status === "active"}
       onSelectTab={selectTab}
       onManageControllers={onManageControllers}
-      characterPanel={
+      profilePanel={
         <EntityProfilePanel
           world={world}
           entity={entity}
@@ -107,39 +107,45 @@ function EntitySheetController({
   const inputMechanics = mechanics.filter(
     (mechanic) => mechanic.source_kind === "input",
   );
-  const initial = useMemo(
+  const initialLogicalInputValues = useMemo(
     () =>
       Object.fromEntries(
         activeMechanics
           .filter((mechanic) => mechanic.source_kind === "input")
           .map((mechanic) => [
             mechanic.id,
-            mechanicValue(entity.state.values[mechanic.id], mechanic),
+            logicalInputEditorValue(
+              entity.sheet.logical_input_values[mechanic.id],
+              mechanic,
+            ),
           ]),
       ),
     [activeMechanics, entity],
   );
-  const [values, setValues] =
-    useState<Record<string, DecimalText | boolean>>(initial);
+  const [logicalInputValues, setLogicalInputValues] = useState<
+    Record<string, DecimalText | boolean>
+  >(initialLogicalInputValues);
   const [saving, setSaving] = useState(false);
   const [issue, setIssue] = useState<EntitySheetIssue | null>(null);
-  const dirty = JSON.stringify(values) !== JSON.stringify(initial);
+  const dirty =
+    JSON.stringify(logicalInputValues) !==
+    JSON.stringify(initialLogicalInputValues);
   const clearDirtyGuard = useDirtyGuard(dirty);
 
-  async function save() {
+  async function saveLogicalState() {
     setSaving(true);
     setIssue(null);
-    const stateValues: Record<string, StateValue> = {};
+    const nextLogicalInputValues: Record<string, MechanicValue> = {};
     for (const mechanic of inputMechanics) {
-      const current = entity.state.values[mechanic.id];
-      if (current !== undefined) stateValues[mechanic.id] = current;
+      const current = entity.sheet.logical_input_values[mechanic.id];
+      if (current !== undefined) nextLogicalInputValues[mechanic.id] = current;
     }
     for (const mechanic of activeMechanics.filter(
       (candidate) => candidate.source_kind === "input",
     )) {
-      const value = values[mechanic.id];
+      const value = logicalInputValues[mechanic.id];
       if (mechanic.mode === "binary") {
-        stateValues[mechanic.id] = {
+        nextLogicalInputValues[mechanic.id] = {
           kind: "boolean",
           value: Boolean(value),
         };
@@ -155,15 +161,18 @@ function EntitySheetController({
         });
         return;
       }
-      stateValues[mechanic.id] = { kind: "number", value: decimal };
+      nextLogicalInputValues[mechanic.id] = {
+        kind: "number",
+        value: decimal,
+      };
     }
     try {
-      await api(worldPath(world.id, `entities/${entity.id}/state`), {
+      await api(worldPath(world.id, `entities/${entity.id}/logical-state`), {
         method: "PUT",
         ...jsonBody({
-          expected_revision: entity.state.revision,
+          expected_logical_state_revision: entity.sheet.logical_state_revision,
           expected_rules_revision: rulesRevision,
-          values: stateValues,
+          logical_input_values: nextLogicalInputValues,
         }),
       });
       clearDirtyGuard();
@@ -178,17 +187,17 @@ function EntitySheetController({
   return (
     <EntitySheetView
       displayName={entity.display_name}
-      metadata={`Entity sheet · state r${entity.state.revision} · statuses r${entity.state.status_revision} · rules r${rulesRevision}`}
-      statuses={entity.state.active_statuses.map((status) => ({
+      metadata={`Entity sheet · logical state r${entity.sheet.logical_state_revision} · status set r${entity.sheet.status_set_revision} · rules revision r${rulesRevision}`}
+      statusInstances={entity.sheet.active_status_instances.map((status) => ({
         id: status.id,
         name: status.name,
-        details: activeStatusDetails(status),
+        details: statusInstanceDetails(status),
       }))}
       mechanics={activeMechanics.map((mechanic) => {
         const effective =
-          entity.state.effective_values[mechanic.id] ??
-          entity.state.evaluations[mechanic.id]?.effective ??
-          entity.state.values[mechanic.id];
+          entity.sheet.effective_values[mechanic.id] ??
+          entity.sheet.evaluations[mechanic.id]?.effective ??
+          entity.sheet.logical_input_values[mechanic.id];
         return {
           id: mechanic.id,
           kind: mechanic.kind,
@@ -200,29 +209,32 @@ function EntitySheetController({
           unit: mechanic.unit,
           effectiveValue: formatMechanicValue(effective, mechanic),
           modifiers:
-            entity.state.evaluations[mechanic.id]?.modifiers.map(
+            entity.sheet.evaluations[mechanic.id]?.modifiers.map(
               (modifier) => ({
                 id: `${modifier.status_instance_id}:${modifier.modifier_id}`,
                 statusName: modifier.status_name,
-                summary: `${modifierOperationLabel(modifier.operation)} ${formatStateValue(modifier.operand)} · ${formatStateValue(modifier.before)} → ${formatStateValue(modifier.after)}`,
+                summary: `${modifierOperationLabel(modifier.operation)} ${formatTypedValue(modifier.operand)} · ${formatTypedValue(modifier.before)} → ${formatTypedValue(modifier.after)}`,
               }),
             ) ?? [],
         };
       })}
       editable={editable}
-      values={values}
+      logicalInputValues={logicalInputValues}
       saving={saving}
       issue={issue}
       onValueChange={(mechanicId, value) =>
-        setValues((current) => ({ ...current, [mechanicId]: value }))
+        setLogicalInputValues((current) => ({
+          ...current,
+          [mechanicId]: value,
+        }))
       }
-      onSubmit={() => void save()}
+      onSubmit={() => void saveLogicalState()}
     />
   );
 }
 
-function mechanicValue(
-  value: StateValue | undefined,
+function logicalInputEditorValue(
+  value: MechanicValue | undefined,
   mechanic: WorldMechanic,
 ): DecimalText | boolean {
   if (value === undefined)
@@ -235,17 +247,17 @@ function mechanicValue(
 }
 
 function formatMechanicValue(
-  value: StateValue | undefined,
+  value: MechanicValue | undefined,
   mechanic: WorldMechanic,
 ): string {
-  const rendered = formatStateValue(value);
+  const rendered = formatTypedValue(value);
   if (value?.kind !== "number") return rendered;
   if (mechanic.mode === "pool" && mechanic.maximum !== undefined)
     return `${rendered} / ${mechanic.maximum}${mechanic.unit === undefined ? "" : ` ${mechanic.unit}`}`;
   return `${rendered}${mechanic.unit === undefined ? "" : ` ${mechanic.unit}`}`;
 }
 
-function formatStateValue(value: StateValue | undefined): string {
+function formatTypedValue(value: MechanicValue | undefined): string {
   if (value === undefined) return "Unavailable";
   return value.kind === "number" ? value.value : value.value ? "Yes" : "No";
 }
@@ -263,14 +275,14 @@ function modifierOperationLabel(operation: string): string {
 
 function toEntitySheetIssue(reason: unknown): EntitySheetIssue {
   if (!(reason instanceof ApiError))
-    return { kind: "request", message: "Could not save this sheet." };
+    return { kind: "request", message: "Could not save logical state." };
   return toErrorNotice(reason);
 }
 
-function activeStatusDetails(status: ActiveStatus): string {
+function statusInstanceDetails(status: StatusInstance): string {
   const description =
     status.description === undefined ? "" : `${status.description} · `;
-  return `${description}Problem ${shortID(status.source_interaction_id)} · applied ${formatRelativeDate(status.applied_at)} · instance ${shortID(status.id)}`;
+  return `${description}Problem ${shortID(status.source_interaction_id)} · resolved ${formatRelativeDate(status.resolved_at)} · instance ${shortID(status.id)}`;
 }
 
 function shortID(id: string): string {

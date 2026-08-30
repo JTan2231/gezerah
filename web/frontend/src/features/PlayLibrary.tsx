@@ -32,10 +32,13 @@ export function PlayLibrary({
           id: world.id,
           name: world.name,
           description: world.description ?? "No description",
-          role: world.role,
-          roleLabel: humanize(world.current_play_role),
+          membershipRole: world.role,
+          currentPlayRoleLabel:
+            world.current_play_role === "facilitator"
+              ? "Dungeon Master"
+              : humanize(world.current_play_role),
           status: world.status,
-          readiness: playStatus(world),
+          playStatus: playStatus(world),
           memberCount: world.member_count,
           lastActive: formatRelativeDate(
             world.last_interaction_at ?? world.updated_at,

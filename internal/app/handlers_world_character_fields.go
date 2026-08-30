@@ -127,7 +127,7 @@ func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Re
 			handleAppError(w, &statusError{
 				Status:  http.StatusConflict,
 				Code:    "character_fields_in_use",
-				Message: "finish or cancel active interactions before changing character requirements",
+				Message: "finish or cancel active interactions before changing character fields",
 			})
 			return
 		}
@@ -232,7 +232,7 @@ func loadWorldCharacterFieldSetResponse(
 			created_by_user_id::text, updated_by_user_id::text, created_at, updated_at
 		from world_character_fields
 		where world_id = $1 and not archived
-			and ($2 or visibility = 'table')
+			and ($2 or visibility = 'world')
 		order by position, id`, worldID, includeRestricted)
 	if err != nil {
 		return result, err
@@ -268,7 +268,7 @@ func validateWorldCharacterFieldsRequest(request *replaceWorldCharacterFieldsReq
 		field.Label = strings.TrimSpace(field.Label)
 		field.HelpText = cleanOptional(field.HelpText)
 		if field.Visibility == "" {
-			field.Visibility = "table"
+			field.Visibility = "world"
 		}
 
 		path := fmt.Sprintf("fields[%d]", index)
@@ -289,8 +289,8 @@ func validateWorldCharacterFieldsRequest(request *replaceWorldCharacterFieldsReq
 		if field.HelpText != nil && len([]rune(*field.HelpText)) > 2000 {
 			fields[path+".help_text"] = "must be 2000 characters or fewer"
 		}
-		if field.Visibility != "table" && field.Visibility != "controllers-and-facilitators" {
-			fields[path+".visibility"] = "must be table or controllers-and-facilitators"
+		if field.Visibility != "world" && field.Visibility != "restricted" {
+			fields[path+".visibility"] = "must be world or restricted"
 		}
 	}
 	return fields

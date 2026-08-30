@@ -16,13 +16,11 @@ export interface IdentifiedResource {
   id: string;
 }
 
-export type User = AuthenticatedActor;
-
 export interface World extends IdentifiedResource {
   name: string;
   revision: number;
   rules_revision: number;
-  table_revision: number;
+  roster_revision: number;
   membership_id: string;
   play_status: "waiting-for-character" | "setup-required" | "ready";
 }
@@ -41,7 +39,7 @@ export interface CharacterFieldSet {
     id: string;
     label: string;
     help_text?: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
   }>;
 }
 
@@ -57,15 +55,22 @@ export interface MechanicMutation {
 export interface Entity extends IdentifiedResource {
   display_name: string;
   character_status: "not-controlled" | "setup-required" | "ready";
-  state: {
-    revision: number;
+  sheet: {
+    entity_id: string;
+    logical_state_revision: number;
+    status_set_revision: number;
     rules_revision: number;
+    logical_input_values: Record<string, unknown>;
+    effective_values: Record<string, unknown>;
+    evaluations: Record<string, unknown>;
+    active_status_instances: unknown[];
+    authored_default_input_mechanic_ids: string[];
   };
 }
 
 export interface EntityProfile {
   revision: number;
-  character_fields_revision: number;
+  character_field_set_revision: number;
   fields: Array<{ id: string; label: string; value?: string }>;
 }
 
@@ -83,7 +88,7 @@ export async function createActor(
   _request: APIRequestContext,
   baseURL: string,
   displayName: string,
-): Promise<User> {
+): Promise<AuthenticatedActor> {
   return signupActor(baseURL, displayName);
 }
 
@@ -139,7 +144,7 @@ export async function putCharacterFields(
     id?: string;
     label: string;
     help_text?: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
   }>,
 ): Promise<CharacterFieldSet> {
   return putJSON<CharacterFieldSet>(
@@ -175,14 +180,14 @@ export async function replaceControllers(
   worldID: string,
   entityID: string,
   ownerID: string,
-  expectedTableRevision: number,
+  expectedRosterRevision: number,
   controllerMembershipIDs: readonly string[],
 ): Promise<void> {
   await putJSON(
     request,
     `${baseURL}/api/worlds/${worldID}/entities/${entityID}/controllers`,
     {
-      expected_table_revision: expectedTableRevision,
+      expected_roster_revision: expectedRosterRevision,
       controller_world_membership_ids: controllerMembershipIDs,
     },
     ownerID,
@@ -217,7 +222,8 @@ export async function putProfile(
     `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: profile.revision,
-      expected_character_fields_revision: profile.character_fields_revision,
+      expected_character_field_set_revision:
+        profile.character_field_set_revision,
       values,
     },
     actorID,
@@ -286,7 +292,7 @@ export async function createOpenInteraction(
   ownerID: string,
   prompt: string,
   responderMembershipIDs: readonly string[] = [],
-  entityIDs: readonly string[] = [],
+  contextEntityIDs: readonly string[] = [],
 ): Promise<Interaction> {
   return postJSON<Interaction>(
     request,
@@ -295,7 +301,7 @@ export async function createOpenInteraction(
       present: true,
       prompt,
       eligible_responder_membership_ids: responderMembershipIDs,
-      entity_ids: entityIDs,
+      context_entity_ids: contextEntityIDs,
     },
     ownerID,
   );

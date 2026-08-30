@@ -18,10 +18,10 @@ interface PlayLibraryWorld {
   id: string;
   name: string;
   description: string;
-  role: "owner" | "editor" | "player" | "spectator";
-  roleLabel: string;
+  membershipRole: "owner" | "editor" | "player" | "spectator";
+  currentPlayRoleLabel: string;
   status: "active" | "archived";
-  readiness: string;
+  playStatus: string;
   memberCount: number;
   lastActive: string;
 }
@@ -93,7 +93,7 @@ export function PlayLibraryView({
           {model.worlds.map((world) => (
             <article className="world-card play-world-card" key={world.id}>
               <header>
-                <RolePill role={world.role} />
+                <RolePill role={world.membershipRole} />
                 <span
                   className={
                     world.status === "active"
@@ -116,12 +116,12 @@ export function PlayLibraryView({
               </button>
               <dl className="world-stats play-world-stats">
                 <div>
-                  <dt>Play role</dt>
-                  <dd>{world.roleLabel}</dd>
+                  <dt>Current play role</dt>
+                  <dd>{world.currentPlayRoleLabel}</dd>
                 </div>
                 <div>
-                  <dt>Readiness</dt>
-                  <dd>{world.readiness}</dd>
+                  <dt>Play status</dt>
+                  <dd>{world.playStatus}</dd>
                 </div>
                 <div>
                   <dt>Members</dt>

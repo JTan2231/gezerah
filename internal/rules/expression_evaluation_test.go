@@ -79,9 +79,9 @@ func TestEvaluationDefensivelyRejectsRuntimeCycleInCompiledGraph(t *testing.T) {
 	corrupted := graph.definitions[a.ID]
 	corrupted.Expression = expressionPointer(mechanicReference(b.ID))
 	graph.definitions[a.ID] = corrupted
-	result, err := EvaluateEntityStateWithGraph(
+	result, err := EvaluateEntityWithGraph(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{}},
 		graph, nil, nil,
 	)
 	if !errors.Is(err, ErrEvaluation) || !strings.Contains(err.Error(), "a -> b -> a") {
@@ -121,11 +121,11 @@ func TestCompiledMechanicGraphIsDependencyFirstAndDeterministic(t *testing.T) {
 	// compiled evaluation plan.
 	graph.Order = []ID{top.ID}
 
-	result, err := EvaluateEntityStateWithGraph(
+	result, err := EvaluateEntityWithGraph(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{}},
 		graph,
-		map[ID]StatusSnapshot{},
+		map[ID]InlineStatus{},
 		nil,
 	)
 	if err != nil {
@@ -146,29 +146,29 @@ func TestEvaluationPropagatesInputModifiersThroughDerivedMechanics(t *testing.T)
 		Operation: ExpressionAddNumber,
 		Operands:  []Expression{mechanicReference(strength.ID), numberLiteral("2")},
 	})
-	statuses := map[ID]StatusSnapshot{
+	statuses := map[ID]InlineStatus{
 		"weakened": {
 			ID: "weakened", WorldID: "world",
 			Modifiers: []StatusModifier{{
 				ID: "weak-strength", Position: 0, Priority: 0, MechanicID: strength.ID,
-				Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("-2")),
+				Operation: ModifierAddNumber, Value: NewNumberMechanicValue(MustDecimal("-2")),
 			}},
 		},
 		"blessed": {
 			ID: "blessed", WorldID: "world",
 			Modifiers: []StatusModifier{{
 				ID: "bless-attack", Position: 0, Priority: 0, MechanicID: attack.ID,
-				Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("1")),
+				Operation: ModifierAddNumber, Value: NewNumberMechanicValue(MustDecimal("1")),
 			}},
 		},
 	}
-	active := []ActiveStatus{
+	active := []StatusInstance{
 		{ID: "active-blessed", WorldID: "world", EntityID: "e1", SourceEffectID: "blessed", AppliedOrder: 2},
 		{ID: "active-weakened", WorldID: "world", EntityID: "e1", SourceEffectID: "weakened", AppliedOrder: 1},
 	}
-	result, err := EvaluateEntityState(
+	result, err := EvaluateEntity(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Revision: 4, Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Revision: 4, Overrides: map[ID]MechanicValue{}},
 		definitionMap(attack, strength),
 		statuses,
 		active,
@@ -201,33 +201,33 @@ func TestEvaluationPropagatesInputModifiersThroughDerivedMechanics(t *testing.T)
 func TestEvaluationOrdersLiteralModifiersByPriorityAndStableInstanceOrder(t *testing.T) {
 	t.Parallel()
 	score := namedNumberInput("score", "10")
-	statuses := map[ID]StatusSnapshot{
+	statuses := map[ID]InlineStatus{
 		"multiplier": {
 			ID: "multiplier", WorldID: "world",
 			Modifiers: []StatusModifier{{
 				ID: "times-two", Position: 0, Priority: 0, MechanicID: score.ID,
-				Operation: ModifierMultiplyNumber, Value: NewNumberValue(MustDecimal("2")),
+				Operation: ModifierMultiplyNumber, Value: NewNumberMechanicValue(MustDecimal("2")),
 			}},
 		},
 		"setter": {
 			ID: "setter", WorldID: "world",
 			// Deliberately supplied out of slice order: authored Position remains
-			// the deterministic tie-break within an active status.
+			// the deterministic tie-break within a Status instance.
 			Modifiers: []StatusModifier{
-				{ID: "plus-three", Position: 1, Priority: 10, MechanicID: score.ID, Operation: ModifierAddNumber, Value: NewNumberValue(MustDecimal("3"))},
-				{ID: "set-five", Position: 0, Priority: 0, MechanicID: score.ID, Operation: ModifierSet, Value: NewNumberValue(MustDecimal("5"))},
+				{ID: "plus-three", Position: 1, Priority: 10, MechanicID: score.ID, Operation: ModifierAddNumber, Value: NewNumberMechanicValue(MustDecimal("3"))},
+				{ID: "set-five", Position: 0, Priority: 0, MechanicID: score.ID, Operation: ModifierSet, Value: NewNumberMechanicValue(MustDecimal("5"))},
 			},
 		},
 	}
-	active := []ActiveStatus{
+	active := []StatusInstance{
 		// Deliberately reverse slice order. Equal-priority modifiers use durable
 		// application order, not input query order.
 		{ID: "a-multiplier", WorldID: "world", EntityID: "e1", SourceEffectID: "multiplier", AppliedOrder: 9},
 		{ID: "z-setter", WorldID: "world", EntityID: "e1", SourceEffectID: "setter", AppliedOrder: 2},
 	}
-	result, err := EvaluateEntityState(
+	result, err := EvaluateEntity(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{}},
 		definitionMap(score), statuses, active,
 	)
 	if err != nil {
@@ -268,12 +268,12 @@ func TestExpressionEvaluationSupportsExactArithmeticBooleanAndConditionalOperato
 		Operation: ExpressionAnd,
 		Operands: []Expression{
 			{Operation: ExpressionEqual, Operands: []Expression{mechanicReference(selected.ID), numberLiteral("0.2")}},
-			{Operation: ExpressionNot, Operands: []Expression{{Operation: ExpressionLiteral, Literal: stateValuePointer(NewBooleanValue(false))}}},
+			{Operation: ExpressionNot, Operands: []Expression{{Operation: ExpressionLiteral, Literal: mechanicValuePointer(NewBooleanMechanicValue(false))}}},
 		},
 	})
-	result, err := EvaluateEntityState(
+	result, err := EvaluateEntity(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{}},
 		definitionMap(truth, selected, base), nil, nil,
 	)
 	if err != nil {
@@ -290,19 +290,19 @@ func TestExpressionEvaluationSupportsExactArithmeticBooleanAndConditionalOperato
 func TestEvaluationFailureReturnsNoPartialValues(t *testing.T) {
 	t.Parallel()
 	score := namedNumberInput("score", "10")
-	invalid := StatusSnapshot{
+	invalid := InlineStatus{
 		ID: "invalid", WorldID: "world",
 		Modifiers: []StatusModifier{{
 			ID: "bad", Position: 0, MechanicID: score.ID,
-			Operation: ModifierAddNumber, Value: NewBooleanValue(true),
+			Operation: ModifierAddNumber, Value: NewBooleanMechanicValue(true),
 		}},
 	}
-	result, err := EvaluateEntityState(
+	result, err := EvaluateEntity(
 		testEntities()["e1"],
-		StateRecord{EntityID: "e1", Values: map[ID]StateValue{}},
+		InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{}},
 		definitionMap(score),
-		map[ID]StatusSnapshot{invalid.ID: invalid},
-		[]ActiveStatus{{ID: "active", WorldID: "world", EntityID: "e1", SourceEffectID: invalid.ID}},
+		map[ID]InlineStatus{invalid.ID: invalid},
+		[]StatusInstance{{ID: "active", WorldID: "world", EntityID: "e1", SourceEffectID: invalid.ID}},
 	)
 	if !errors.Is(err, ErrInvalidDefinition) {
 		t.Fatalf("error = %v, want ErrInvalidDefinition", err)
@@ -315,14 +315,14 @@ func TestEvaluationFailureReturnsNoPartialValues(t *testing.T) {
 func namedNumberInput(id ID, defaultValue string) MechanicDefinition {
 	return MechanicDefinition{
 		ID: id, WorldID: "world", SourceKind: SourceInput, ValueKind: ValueNumber,
-		DefaultValue: NewNumberValue(MustDecimal(defaultValue)), Mutable: true,
+		DefaultValue: NewNumberMechanicValue(MustDecimal(defaultValue)), Mutable: true,
 	}
 }
 
 func namedBooleanInput(id ID, defaultValue bool) MechanicDefinition {
 	return MechanicDefinition{
 		ID: id, WorldID: "world", SourceKind: SourceInput, ValueKind: ValueBoolean,
-		DefaultValue: NewBooleanValue(defaultValue), Mutable: true,
+		DefaultValue: NewBooleanMechanicValue(defaultValue), Mutable: true,
 	}
 }
 
@@ -346,7 +346,7 @@ func mechanicReference(mechanicID ID) Expression {
 }
 
 func numberLiteral(value string) Expression {
-	literal := NewNumberValue(MustDecimal(value))
+	literal := NewNumberMechanicValue(MustDecimal(value))
 	return Expression{Operation: ExpressionLiteral, Literal: &literal}
 }
 
@@ -354,7 +354,7 @@ func expressionPointer(expression Expression) *Expression {
 	return &expression
 }
 
-func stateValuePointer(value StateValue) *StateValue {
+func mechanicValuePointer(value MechanicValue) *MechanicValue {
 	return &value
 }
 

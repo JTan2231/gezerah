@@ -136,6 +136,11 @@ func TestAccountCredentialValidation(t *testing.T) {
 }
 
 func TestSessionTokenDigestsAndCSRFDerivation(t *testing.T) {
+	const expectedKnownCSRF = "qEj0O7fTHQKYkCwXldrC5wA46TrMZmyzyf7lReZFcvY"
+	if got := deriveCSRFToken("known-token"); got != expectedKnownCSRF {
+		t.Fatalf("known CSRF derivation = %q, want %q", got, expectedKnownCSRF)
+	}
+
 	first, err := newSessionToken()
 	if err != nil {
 		t.Fatalf("new session token: %v", err)
@@ -271,10 +276,10 @@ func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 		t.Fatalf("HTTPS session token = %q, want __Host- cookie", got)
 	}
 
-	secureWithOnlyLegacy := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
-	secureWithOnlyLegacy.Header.Set("Cookie", localSessionCookieName+"=legacy-token")
-	if got := server.sessionCookieToken(secureWithOnlyLegacy); got != "" {
-		t.Fatalf("secure mode accepted legacy cookie %q", got)
+	secureWithOnlyDevelopment := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
+	secureWithOnlyDevelopment.Header.Set("Cookie", localSessionCookieName+"=development-token")
+	if got := server.sessionCookieToken(secureWithOnlyDevelopment); got != "" {
+		t.Fatalf("secure mode accepted development cookie %q", got)
 	}
 }
 
@@ -287,7 +292,7 @@ func TestUnconfiguredRemoteHTTPFailsClosedToSecureCookies(t *testing.T) {
 	}
 }
 
-func TestAuthenticationRoutesAreDenyByDefaultAndLegacyUsersAreGone(t *testing.T) {
+func TestAuthenticationRoutesRejectForgedIdentityAndEnforceOrigin(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
 	handler := server.Routes()
 
@@ -305,12 +310,6 @@ func TestAuthenticationRoutesAreDenyByDefaultAndLegacyUsersAreGone(t *testing.T)
 	}
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/users", nil))
-	if response.Code != http.StatusNotFound {
-		t.Fatalf("legacy GET /api/users status = %d, want 404", response.Code)
-	}
-
-	response = httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/signup", strings.NewReader(`{}`)))
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("signup without Origin status = %d, want 403", response.Code)

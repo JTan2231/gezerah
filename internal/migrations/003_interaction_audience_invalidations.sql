@@ -4,7 +4,7 @@ alter table world_events
 		not invalidates_interaction_audience
 		or (
 			interaction_id is not null
-			and submission_id is null
+			and action_id is null
 			and resolution_id is null
 			and event_type in ('interaction-adjudicating', 'interaction-cancelled')
 		)

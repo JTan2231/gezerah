@@ -172,15 +172,15 @@ snapshots. Coverage includes:
 - exact decimal-string HTTP transport, canonical responses, and rejection of
   JSON number tokens for decimal fields;
 - input/derived numeric/Boolean definition and value validation;
-- authored-default input state and normalization;
+- authored-default logical input values and stored-override normalization;
 - recursive expression type inference with precise field paths;
 - self/multi-node cycle rejection, deterministic dependency ordering, and
   defensive runtime cycle handling;
 - exact numeric, Boolean, comparison, and conditional expression evaluation;
 - intrinsic/effective evaluation, dependency propagation, and deterministic
   status modifier ordering;
-- ordered scalar effects observing earlier logical base mutations;
-- atomic failure and default behavior across scalar/status transitions;
+- ordered scalar Effects observing earlier logical-input mutations;
+- atomic failure and default behavior across scalar and status-lifecycle Effect transitions;
 - inline status apply, exact-instance removal, automatic application order,
   same-name coexistence, and target/world-scope validation.
 
@@ -195,7 +195,7 @@ PostgreSQL integration fixture. They cover:
 - configuration precedence and log levels;
 - strict JSON and the error envelope;
 - static-file/SPA routing and panic recovery;
-- API tagged values and exact numeric transport;
+- API Mechanic values and exact numeric transport;
 - interaction mappings and generated IDs;
 - archived-mechanic and dependency guards;
 - event cursor parsing and matching;
@@ -207,17 +207,16 @@ PostgreSQL integration fixture. They cover:
 - recursive expression transport/storage reconstruction, derived-source
   validation, cycle field mapping, inline status modifier normalization, exact
   remove-target validation, and active derived-dependency guards;
-- denial of removed route families with `404 endpoint_not_found`.
+- unknown route families return `404 endpoint_not_found`.
 
 Migration contract tests also require digest-only invitation storage, the
-forward `002` graph/status tables, existing-world/entity backfill statements,
-root-creation triggers, normalized storage (no JSON/JSONB aggregate),
+world mechanic graph/status tables, root-creation triggers, normalized storage
+(no JSON/JSONB aggregate),
 resolution-owned inline status modifiers, status source-provenance columns,
-expanded receipt tables, immutable receipt triggers, the `003` constrained
-audience-invalidation event flag, and the `004` empty-user cutover to normalized
-usernames/Argon2id/session-token digests, plus the `005` constrained human/Terra
-world source and `006` designated membership plus human/Terra attribution
-shapes. They assert that status authoring rows are owned by the
+expanded Resolution-receipt tables, immutable Resolution-receipt triggers, constrained audience
+invalidation, normalized usernames/Argon2id/session-token digests, and the
+human/Terra/agent facilitator assignment and attribution shapes. They assert
+that Status authoring rows are owned by the
 resolution rather than world configuration. For authentication, the static
 migration contract requires the password-hash/token-digest columns and shape
 constraints and rejects raw-token/session-token/CSRF columns in `auth_sessions`;
@@ -240,9 +239,9 @@ API adapter, and backend-independent view rendering:
   and reset behavior;
 - password minimum-length behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
-  round trips, removed routes, and unknown-route rejection;
+  round trips and unknown-route rejection;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
-  legacy UUID header, stale-CSRF recovery, session-safe mutation replay, and
+  caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown.
 
 Backend-independent `*View.tsx` components also have fixture-driven rendering
@@ -273,7 +272,7 @@ lint rule is the complementary proof that shared components, `*View.tsx`, and
 execution. Four isolated, persistent owner/editor/player/spectator contexts
 sign up through the UI and carry one user-authored world from account creation
 and configuration through invites,
-waiting/setup/readiness, editor authority, a shared live round, same-name status
+waiting/setup/readiness, editor authority, a shared live round, same-name Status-instance
 application and exact removal, and owner-authored archive. `JRN-001` through
 `JRN-007` remain separately named Playwright checkpoints inside that one test.
 The spine does not use API writes, storage injection, or prepared state.
@@ -298,19 +297,19 @@ journey:
   activity older than five minutes touches once, subsequent activity is
   coalesced, and repeated SSE reauthorization does not extend idle expiry;
 - `access-and-invites.contract.spec.ts` covers world isolation, invitation-token
-  secrecy, admission, role denial, editor archive denial, and revocation;
-- `profile-and-readiness.contract.spec.ts` covers waiting/setup/ready
-  transitions, controlled-state authority, profile privacy projections, stale
-  writes, and readiness regression after a schema change;
-- `rules-and-status.contract.spec.ts` covers typed graph publication and atomic
-  graph rejection, exact state/effective-state/status receipts, preview
-  non-persistence, exact replay/conflicting replay, one-winner resolution, and
-  exact-instance removal;
+  secrecy, admission, membership-role/current-play-role denial, editor archive denial, and revocation;
+- `profile-and-readiness.contract.spec.ts` covers play-status
+  transitions, controlled-Entity authority, Entity-profile privacy projections, stale
+  writes, and readiness regression after a character-field-set change;
+- `mechanic-graph-and-status-instances.contract.spec.ts` covers world mechanic graph publication and atomic
+  graph rejection, exact logical-input-value/effective-value results and Status-instance provenance in Resolution receipts, preview
+  non-persistence, exact replay/conflicting replay, one-winner Resolution, and
+  exact Status-instance removal;
 - `authorization-matrices.contract.spec.ts` and
-  `resource-lifecycle.contract.spec.ts` cover closed invitation states, role and
+  `resource-lifecycle.contract.spec.ts` cover closed invitation states, membership-role and
   cross-world matrices, archived/incomplete resources, and atomic rejection;
-- `concurrency-and-status-matrices.contract.spec.ts` covers named status-target
-  and resolution-race/replay matrices;
+- `concurrency-and-status-instance-matrices.contract.spec.ts` covers named Status-instance targets
+  and Resolution race/replay matrices;
 - `direct-gap-closures.contract.spec.ts` owns the remaining small authority,
   lifecycle, cancellation, projection, and no-audience contracts.
 
@@ -450,7 +449,7 @@ the operation can fail after partial progress.
 
 For graph changes, cover inferred result kind, arity, unknown/cross-world and
 archived references, concrete cycle paths, deterministic topological order, and
-runtime defensive failure. For status changes, cover literal kind, stable
+runtime defensive failure. For Status-instance changes, cover literal kind, stable
 modifier ordering, distinct instances per apply target, exact active-instance
 removal, same-name coexistence, and snapshot preservation. Resolve idempotency,
 rather than a name/definition lookup, must prevent duplicate lifecycle
@@ -479,15 +478,10 @@ applicable.
 
 ### Migration
 
-Exercise an empty database through E2E. Extend the migration-history test so
-only prefixes of the full `001`–current chain are accepted, and add focused SQL
-contract assertions for the new schema behavior. If a migration supports a
-populated predecessor, add an explicit database fixture for every supported
-upgrade prefix; the current suite has no automated populated-upgrade matrix.
-`004_password_auth.sql` is intentionally different: it rejects any nonempty
-`users` table, so test and document a separately reviewed data transition before
-claiming such an upgrade is supported. Set `DND_TEST_DATABASE_URL` only to a
-database that can be destroyed or modified without consequence.
+Exercise an empty database through E2E. The migration-history test accepts only
+prefixes of the full `001`–current chain, and focused SQL contracts assert the
+current schema behavior. Set `DND_TEST_DATABASE_URL` only to a database that
+can be destroyed or modified without consequence.
 
 ## Current gaps
 
@@ -498,6 +492,5 @@ database that can be destroyed or modified without consequence.
 - no source line/branch coverage threshold in the root validator;
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;
-- no migration downgrade or automated upgrade-from-populated-fixture matrix;
 - no load, proxy/multi-replica, long-duration SSE soak, fault-injection, or
   backup/restore tests.

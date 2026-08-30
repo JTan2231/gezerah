@@ -45,6 +45,66 @@ func TestDecodeJSONAcceptsOneStrictObject(t *testing.T) {
 	}
 }
 
+func TestEntitySheetResponseUsesCanonicalContract(t *testing.T) {
+	t.Parallel()
+
+	encoded, err := json.Marshal(entitySheetResponse{})
+	if err != nil {
+		t.Fatalf("marshal Entity sheet: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode Entity sheet: %v", err)
+	}
+	want := []string{
+		"entity_id",
+		"logical_state_revision",
+		"status_set_revision",
+		"rules_revision",
+		"logical_input_values",
+		"effective_values",
+		"evaluations",
+		"active_status_instances",
+		"authored_default_input_mechanic_ids",
+	}
+	if len(fields) != len(want) {
+		t.Fatalf("Entity sheet fields = %v, want exactly %v", fields, want)
+	}
+	for _, name := range want {
+		if _, exists := fields[name]; !exists {
+			t.Errorf("Entity sheet is missing %q", name)
+		}
+	}
+}
+
+func TestInteractionContextEntityTransportUsesCanonicalField(t *testing.T) {
+	t.Parallel()
+
+	var request saveInteractionRequest
+	if err := decodeStrictBytes([]byte(`{
+		"prompt":"A bridge collapses.",
+		"eligible_responder_membership_ids":[],
+		"context_entity_ids":["entity-one"]
+	}`), &request); err != nil {
+		t.Fatalf("decode Interaction request: %v", err)
+	}
+	if len(request.ContextEntityIDs) != 1 || request.ContextEntityIDs[0] != "entity-one" {
+		t.Fatalf("Context Entity IDs = %v", request.ContextEntityIDs)
+	}
+
+	encoded, err := json.Marshal(interactionResponse{ContextEntityIDs: []string{"entity-one"}})
+	if err != nil {
+		t.Fatalf("marshal Interaction response: %v", err)
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(encoded, &fields); err != nil {
+		t.Fatalf("decode Interaction response: %v", err)
+	}
+	if got := string(fields["context_entity_ids"]); got != `["entity-one"]` {
+		t.Fatalf("context_entity_ids = %s", got)
+	}
+}
+
 func TestUpdateWorldRequestDistinguishesOmittedAndNullDescription(t *testing.T) {
 	t.Parallel()
 
@@ -103,7 +163,7 @@ func TestWriteJSONPreservesErrorEnvelopeWhenSerializationFails(t *testing.T) {
 
 func TestWriteErrorUsesStableEnvelope(t *testing.T) {
 	response := httptest.NewRecorder()
-	writeError(response, http.StatusConflict, "revision_conflict", "state changed", map[string]string{
+	writeError(response, http.StatusConflict, "revision_conflict", "resource changed", map[string]string{
 		"expected_revision": "4",
 		"actual_revision":   "5",
 	})

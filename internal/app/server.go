@@ -20,7 +20,7 @@ import (
 type Server struct {
 	db                 *pgxpool.Pool
 	api                *http.ServeMux
-	autoDM             autoDMProvider
+	models             modelProvider
 	static             http.Handler
 	staticFS           fs.FS
 	publicOrigin       string
@@ -42,11 +42,11 @@ func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, err
 	}
 	server := newServerWithStaticFS(db, staticFS)
 	if strings.TrimSpace(config.OpenAIAPIKey) != "" {
-		provider, err := newOpenAIAutoDMProvider(config.OpenAIAPIKey, config.OpenAIBaseURL)
+		provider, err := newOpenAIModelProvider(config.OpenAIAPIKey, config.OpenAIBaseURL)
 		if err != nil {
-			return nil, fmt.Errorf("configure Auto DM: %w", err)
+			return nil, fmt.Errorf("configure model provider: %w", err)
 		}
-		server.autoDM = provider
+		server.models = provider
 	}
 	server.publicOrigin = publicOrigin
 	server.securePublicOrigin = securePublicOrigin

@@ -74,7 +74,7 @@ const CHECKPOINT_ACTORS: Readonly<Record<string, readonly ScenarioActorId[]>> =
       "spectator",
     ],
     "JRN-004/status-lifecycle-preserved": ["editor", "player", "spectator"],
-    "JRN-005/spectator-public-table-safe": [
+    "JRN-005/spectator-world-visible-safe": [
       "owner",
       "editor",
       "player",
@@ -146,7 +146,7 @@ const CHECKPOINT_SCENARIO_IDS: Readonly<Record<string, readonly ScenarioId[]>> =
       "CON-007",
       "CON-008",
     ],
-    "JRN-005/spectator-public-table-safe": [
+    "JRN-005/spectator-world-visible-safe": [
       "JRN-005",
       "AUT-003",
       "AUT-004",
@@ -728,14 +728,14 @@ class ScenarioRuntime {
       "id",
       "type",
       "interaction_id",
-      "submission_id",
+      "action_id",
       "resolution_id",
       "actor_membership_id",
       "actor_source",
       "created_at",
     ]);
     for (const { actorId, events } of projections) {
-      if (!events.some((event) => event.type === "resolution-applied")) {
+      if (!events.some((event) => event.type === "resolution-committed")) {
         throw new Error(
           `event projection for ${actorId} omitted resolution invalidation`,
         );
@@ -761,7 +761,7 @@ class ScenarioRuntime {
       }
       for (const key of [
         "interaction_id",
-        "submission_id",
+        "action_id",
         "resolution_id",
         "actor_membership_id",
       ]) {
@@ -837,7 +837,12 @@ function isStaticAsset(request: Request): boolean {
 interface ProjectedWorldEvent {
   readonly id: number;
   readonly type: string;
-  readonly [key: string]: unknown;
+  readonly interaction_id?: string;
+  readonly action_id?: string;
+  readonly resolution_id?: string;
+  readonly actor_membership_id?: string;
+  readonly actor_source?: string;
+  readonly created_at?: string;
 }
 
 async function readAvailableWorldEvents(
@@ -867,7 +872,7 @@ async function readAvailableWorldEvents(
         ]);
         if (result.kind === "idle" || result.value.done) break;
         source += decoder.decode(result.value.value, { stream: true });
-        if (source.includes('"type":"resolution-applied"')) break;
+        if (source.includes('"type":"resolution-committed"')) break;
       }
     } finally {
       controller.abort();

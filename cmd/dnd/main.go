@@ -91,7 +91,7 @@ func newHTTPServer(ctx context.Context, config app.Config, handler http.Handler)
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       15 * time.Second,
-		// Auto DM may make one bounded Terra call followed by one bounded Luna call.
+		// Terra orchestration may make one bounded Terra call followed by one bounded Luna call.
 		WriteTimeout: 130 * time.Second,
 		IdleTimeout:  60 * time.Second,
 		BaseContext: func(net.Listener) context.Context {

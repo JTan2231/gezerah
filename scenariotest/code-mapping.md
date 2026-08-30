@@ -48,11 +48,11 @@ authoritative run.
 | `MEC` mechanics and graph         | `internal/app/mechanics.go`, `internal/rules/`, `MechanicsWorkspace.tsx`, frontend mechanic domain helpers | lifecycle spine; settings/mechanic UI boundary; rules/direct-gap contracts; frontend and Go lower layers       |
 | `CHF` character fields            | `internal/app/handlers_world_character_fields.go`, profile handlers, roster/profile frontend features      | lifecycle spine; authoring/control UI boundary; profile/readiness and direct-gap contracts                     |
 | `RST` roster and onboarding       | `internal/app/entities.go`, profile handlers, `support.go`, `RosterWorkspace.tsx`, `WorldPlay.tsx`         | lifecycle spine; authoring/control UI boundary; profile/readiness and authorization contracts                  |
-| `INV` invitations and roles       | invite/member handlers in `internal/app/worlds.go`, `PeopleWorkspace.tsx`, `InvitePage.tsx`                | lifecycle spine; entry/access UI boundary; access/invite contracts                                             |
+| `INV` invitations and membership roles | invite/member handlers in `internal/app/worlds.go`, `MembersWorkspace.tsx`, `InvitePage.tsx`          | lifecycle spine; entry/access UI boundary; access/invite contracts                                             |
 | `PLY` live problems and actions   | `internal/app/interactions_core.go`, `WorldPlay.tsx`                                                       | lifecycle spine; authoring/live and recovery UI boundaries; concurrency/lifecycle contracts                    |
-| `CON` Consequences and statuses   | `interactions_resolution.go`, `resolution_runtime.go`, `internal/rules/`, frontend consequence helpers     | lifecycle spine; concurrency/status, rules/status, and direct-gap contracts; frontend/Go lower layers          |
+| `CON` Consequences and Status instances | `interactions_resolution.go`, `consequence_runtime.go`, `internal/rules/`, frontend Consequence helpers | lifecycle spine; concurrency-and-Status-instance, mechanic-graph-and-Status-instance, and direct-gap contracts; frontend/Go lower layers |
 | `AUT` privacy and authorization   | authentication/world/profile/interaction authorization loaders and filtered DTOs                           | lifecycle spine; authorization matrices; access/invite and profile/readiness contracts                         |
-| `CCY` concurrency and idempotency | revision checks, transaction locks, idempotency records, immutable receipts                                | UI stale-screen coverage; concurrency/status, direct-gap, and resource-lifecycle contracts                     |
+| `CCY` concurrency and idempotency | revision checks, transaction locks, idempotency records, immutable Resolution receipts                     | UI stale-screen coverage; concurrency-and-Status-instance, direct-gap, and resource-lifecycle contracts        |
 | `LFC` archive lifecycle           | world, mechanic, entity, interaction archive/finalization handlers and UI feedback                         | lifecycle spine; settings/mechanic UI boundary; resource-lifecycle and direct-gap contracts                    |
 | `NAV` navigation and resilience   | frontend route parsing, API client, SSE hook, server SPA/static behavior                                   | all five UI-boundary files; server and frontend lower layers                                                   |
 | `GLO` global invariants           | scenario runtime, reporter, coverage assembly, redaction, migrations, CI                                   | architecture tests, harness policy evidence, and relevant product contracts                                    |
@@ -67,10 +67,10 @@ The serial lifecycle spine owns seven checkpoints:
 | Checkpoint                            | Business milestone                                                          |
 | ------------------------------------- | --------------------------------------------------------------------------- |
 | `JRN-001/playable-world`              | Owner authenticates and authors a playable world.                           |
-| `JRN-002/ready-player`                | Invitation, control, and onboarding reach the documented table-ready state. |
-| `JRN-003/improvised-round-resolved`   | A presented problem receives an action and committed Consequence.           |
-| `JRN-004/status-lifecycle-preserved`  | A persistent status is applied, explained, and removed.                     |
-| `JRN-005/spectator-public-table-safe` | A spectator follows public table state without private data.                |
+| `JRN-002/ready-player`                | Invitation, control, and onboarding reach the documented play-ready state. |
+| `JRN-003/improvised-round-resolved`   | A presented Problem receives an Action and commits a Resolution.             |
+| `JRN-004/status-lifecycle-preserved`  | A Status instance is applied, explained, and removed.                       |
+| `JRN-005/spectator-public-play-safe` | A spectator follows the public Play projection without private data.        |
 | `JRN-006/editor-authority-bounded`    | An editor facilitates without acquiring owner-only authority.               |
 | `JRN-007/archived-history-readable`   | Final work is archived and retained history remains readable.               |
 
@@ -103,11 +103,11 @@ and a 20-second per-test timeout.
 - `access-and-invites.contract.spec.ts`
 - `authentication.contract.spec.ts`
 - `authorization-matrices.contract.spec.ts`
-- `concurrency-and-status-matrices.contract.spec.ts`
+- `concurrency-and-status-instance-matrices.contract.spec.ts`
 - `direct-gap-closures.contract.spec.ts`
 - `profile-and-readiness.contract.spec.ts`
 - `resource-lifecycle.contract.spec.ts`
-- `rules-and-status.contract.spec.ts`
+- `mechanic-graph-and-status-instances.contract.spec.ts`
 
 The lifecycle spine performs its mutable prerequisites through the rendered
 frontend. UI-boundary tests may use direct setup to isolate the rendered
@@ -138,33 +138,33 @@ focus, routing, API, and multi-identity behavior.
 
 Application evidence includes strict JSON/error behavior, static and SPA
 serving, authentication/session policy, audience filtering and invalidation,
-SSE delivery, mechanic graph mapping, status effects, and resolution-runtime
+SSE delivery, mechanic graph mapping, Inline statuses, Status-instance Applications, and Consequence-runtime
 errors. The main regions are:
 
 - `internal/app/auth_test.go`
 - `internal/app/json_test.go`
 - `internal/app/server_test.go`
-- `internal/app/mechanics_graph_test.go`
-- `internal/app/status_effects_test.go`
+- `internal/app/mechanic_graph_test.go`
+- `internal/app/inline_statuses_test.go`
 - `internal/app/interactions_audience_test.go`
 - `internal/app/interactions_events_test.go`
-- `internal/app/resolution_runtime_test.go`
+- `internal/app/consequence_runtime_test.go`
 - `internal/rules/*_test.go`
 
 ### Migrations
 
 The migration contract covers the complete ordered chain:
 
-- `001_worldwright.sql`
-- `002_rules_graph_statuses.sql`
+- `001_world_baseline.sql`
+- `002_mechanic_graph_status_instances.sql`
 - `003_interaction_audience_invalidations.sql`
 - `004_password_auth.sql`
-- `005_auto_dm.sql`
+- `005_terra.sql`
 
-Migration tests validate the prefix/history contract, normalized rule/status
+Migration tests validate the prefix/history contract, normalized Mechanic-graph/Status-instance
 storage, audience invalidation, password authentication schema, invite-token
-digests, world DM-source constraints, backfills, provenance, and immutable
-receipt constraints.
+digests, World facilitator-source constraints, provenance, and immutable
+Resolution-receipt constraints.
 
 ## Runtime and generated evidence
 

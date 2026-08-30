@@ -11,7 +11,7 @@ func TestPLYV01InteractionAudienceDefaultsOnlyWhenOmitted(t *testing.T) {
 		audienceOmitted bool
 		want            bool
 	}{
-		{name: "omitted create audience uses the compatible table default", defaultAudience: true, audienceOmitted: true, want: true},
+		{name: "omitted create audience uses the default Play audience", defaultAudience: true, audienceOmitted: true, want: true},
 		{name: "explicitly empty draft audience remains empty", defaultAudience: true, audienceOmitted: false, want: false},
 		{name: "stored presentation validation never invents an audience", defaultAudience: false, audienceOmitted: true, want: false},
 	}

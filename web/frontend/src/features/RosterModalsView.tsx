@@ -6,7 +6,7 @@ export interface RosterModalIssue {
   fields: { displayName?: string | undefined };
 }
 
-interface RosterPlayerViewModel {
+interface EligibleControllerViewModel {
   id: string;
   displayName: string;
 }
@@ -14,7 +14,7 @@ interface RosterPlayerViewModel {
 export function NewEntityModalView({
   name,
   controllerIds,
-  players,
+  eligibleControllers,
   saving,
   issue,
   onNameChange,
@@ -24,7 +24,7 @@ export function NewEntityModalView({
 }: {
   name: string;
   controllerIds: string[];
-  players: RosterPlayerViewModel[];
+  eligibleControllers: EligibleControllerViewModel[];
   saving: boolean;
   issue: RosterModalIssue | null;
   onNameChange: (name: string) => void;
@@ -53,13 +53,13 @@ export function NewEntityModalView({
             placeholder="Entity name"
           />
         </Field>
-        {players.length === 0 ? null : (
+        {eligibleControllers.length === 0 ? null : (
           <fieldset className="choice-fieldset controller-picker">
             <legend>
               Controlled by <small>Optional</small>
             </legend>
             <ControllerChoices
-              players={players}
+              eligibleControllers={eligibleControllers}
               controllerIds={controllerIds}
               onToggle={onToggleController}
             />
@@ -90,7 +90,7 @@ export function NewEntityModalView({
 export function ManageControllersModalView({
   entityName,
   controllerIds,
-  players,
+  eligibleControllers,
   saving,
   issue,
   onToggleController,
@@ -99,7 +99,7 @@ export function ManageControllersModalView({
 }: {
   entityName: string;
   controllerIds: string[];
-  players: RosterPlayerViewModel[];
+  eligibleControllers: EligibleControllerViewModel[];
   saving: boolean;
   issue: RosterModalIssue | null;
   onToggleController: (membershipId: string) => void;
@@ -108,8 +108,8 @@ export function ManageControllersModalView({
 }) {
   return (
     <Modal
-      title="Manage character control"
-      description={`Choose which players control ${entityName}.`}
+      title="Manage Entity controllers"
+      description={`Choose which eligible members control ${entityName}.`}
       onClose={onClose}
     >
       <form
@@ -119,16 +119,16 @@ export function ManageControllersModalView({
           onSubmit();
         }}
       >
-        {players.length === 0 ? (
+        {eligibleControllers.length === 0 ? (
           <p className="modal-note">
-            Invite a player before assigning control. Saving now will leave this
-            as an uncontrolled world entity.
+            No active owner, editor, or player is available. Saving now will
+            leave this as an uncontrolled world entity.
           </p>
         ) : (
           <fieldset className="choice-fieldset controller-picker">
-            <legend>Player controllers</legend>
+            <legend>Controllers</legend>
             <ControllerChoices
-              players={players}
+              eligibleControllers={eligibleControllers}
               controllerIds={controllerIds}
               onToggle={onToggleController}
             />
@@ -157,25 +157,25 @@ export function ManageControllersModalView({
 }
 
 function ControllerChoices({
-  players,
+  eligibleControllers,
   controllerIds,
   onToggle,
 }: {
-  players: RosterPlayerViewModel[];
+  eligibleControllers: EligibleControllerViewModel[];
   controllerIds: string[];
   onToggle: (membershipId: string) => void;
 }) {
   return (
-    <div className="responder-picker">
-      {players.map((player) => (
-        <label key={player.id}>
+    <div className="controller-picker-options">
+      {eligibleControllers.map((controller) => (
+        <label key={controller.id}>
           <input
             type="checkbox"
-            checked={controllerIds.includes(player.id)}
-            onChange={() => onToggle(player.id)}
+            checked={controllerIds.includes(controller.id)}
+            onChange={() => onToggle(controller.id)}
           />
-          <Avatar name={player.displayName} size="small" />
-          <span>{player.displayName}</span>
+          <Avatar name={controller.displayName} size="small" />
+          <span>{controller.displayName}</span>
         </label>
       ))}
     </div>

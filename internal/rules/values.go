@@ -1,11 +1,11 @@
 package rules
 
-func NewNumberValue(value Decimal) StateValue {
-	return StateValue{Kind: ValueNumber, Number: decimalPointer(value)}
+func NewNumberMechanicValue(value Decimal) MechanicValue {
+	return MechanicValue{Kind: ValueNumber, Number: decimalPointer(value)}
 }
 
-func NewBooleanValue(value bool) StateValue {
-	return StateValue{Kind: ValueBoolean, Boolean: &value}
+func NewBooleanMechanicValue(value bool) MechanicValue {
+	return MechanicValue{Kind: ValueBoolean, Boolean: &value}
 }
 
 func decimalPointer(value Decimal) *Decimal {
@@ -13,7 +13,7 @@ func decimalPointer(value Decimal) *Decimal {
 	return &copy
 }
 
-func CloneStateValue(value StateValue) StateValue {
+func CloneMechanicValue(value MechanicValue) MechanicValue {
 	result := value
 	if value.Number != nil {
 		result.Number = decimalPointer(*value.Number)
@@ -25,7 +25,7 @@ func CloneStateValue(value StateValue) StateValue {
 	return result
 }
 
-func StateValuesEqual(left, right StateValue) bool {
+func MechanicValuesEqual(left, right MechanicValue) bool {
 	if left.Kind != right.Kind {
 		return false
 	}
@@ -39,13 +39,13 @@ func StateValuesEqual(left, right StateValue) bool {
 	}
 }
 
-func ValidateStateValue(definition MechanicDefinition, value StateValue) ValidationErrors {
+func ValidateMechanicValue(definition MechanicDefinition, value MechanicValue) ValidationErrors {
 	var errs ValidationErrors
 	if value.Kind != definition.ValueKind {
-		return append(errs, validation("value_kind_mismatch", "kind", "state value kind does not match its mechanic"))
+		return append(errs, validation("value_kind_mismatch", "kind", "mechanic value kind does not match its definition"))
 	}
-	if !validStateValueShape(value) {
-		return append(errs, validation("invalid_typed_value", "", "state value has missing or unexpected fields"))
+	if !validMechanicValueShape(value) {
+		return append(errs, validation("invalid_typed_value", "", "mechanic value has missing or unexpected fields"))
 	}
 	if value.Kind == ValueNumber {
 		errs = append(errs, validateDecimalAgainstBounds(*value.Number, definition.Minimum, definition.Maximum, definition.Step, "number")...)
@@ -53,7 +53,7 @@ func ValidateStateValue(definition MechanicDefinition, value StateValue) Validat
 	return errs
 }
 
-func validStateValueShape(value StateValue) bool {
+func validMechanicValueShape(value MechanicValue) bool {
 	switch value.Kind {
 	case ValueNumber:
 		return value.Number != nil && value.Boolean == nil

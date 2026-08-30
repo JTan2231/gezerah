@@ -47,7 +47,7 @@ const EXPECTED_CHECKPOINT_KEYS = [
   "JRN-002/ready-player",
   "JRN-003/improvised-round-resolved",
   "JRN-004/status-lifecycle-preserved",
-  "JRN-005/spectator-public-table-safe",
+  "JRN-005/spectator-world-visible-safe",
   "JRN-006/editor-authority-bounded",
   "JRN-007/archived-history-readable",
 ] as const;

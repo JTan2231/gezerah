@@ -172,7 +172,7 @@ func requireActiveWorldMember(ctx context.Context, db queryer, r *http.Request, 
 	err = db.QueryRow(ctx, `
 		select membership.id::text, membership.world_id::text, membership.user_id::text,
 			membership.role, membership.status, world.status,
-			world.dm_source = 'human' and world.facilitator_membership_id = membership.id
+			world.facilitator_source = 'human' and world.facilitator_membership_id = membership.id
 		from world_memberships membership
 		join worlds world on world.id = membership.world_id
 		where membership.world_id = $1 and membership.user_id = $2`, worldID, userID,
@@ -230,7 +230,7 @@ func requireTerraFacilitator(ctx context.Context, db queryer, worldID string) er
 }
 
 func requireAgentFacilitator(ctx context.Context, db queryer, worldID string) error {
-	return requireFacilitatorSource(ctx, db, worldID, agentFacilitatorSource, "the external agent")
+	return requireFacilitatorSource(ctx, db, worldID, agentFacilitatorSource, "the agent")
 }
 
 func requireFacilitatorSource(
@@ -244,7 +244,7 @@ func requireFacilitatorSource(
 	var source, status string
 	var facilitatorMembershipID *string
 	if err := db.QueryRow(ctx, `
-		select dm_source, status, facilitator_membership_id::text
+		select facilitator_source, status, facilitator_membership_id::text
 		from worlds where id = $1`, worldID,
 	).Scan(&source, &status, &facilitatorMembershipID); err != nil {
 		return err
@@ -290,7 +290,7 @@ func membershipPlayStatus(ctx context.Context, db queryer, worldID, membershipID
 				select 1 from world_character_fields field
 				where field.world_id = entity.world_id and not field.archived
 				and not exists (
-					select 1 from entity_profile_field_values value
+					select 1 from entity_profile_values value
 					where value.entity_id = entity.id and value.field_id = field.id and btrim(value.body) <> ''
 				)
 			)
@@ -319,7 +319,7 @@ func entityCharacterStatus(ctx context.Context, db queryer, worldID, entityID st
 				 and membership.status = 'active' and membership.role <> 'spectator'),
 			(select count(*)::int from world_character_fields
 			 where world_id = $1 and not archived),
-			(select count(*)::int from entity_profile_field_values value
+			(select count(*)::int from entity_profile_values value
 			 join world_character_fields field on field.id = value.field_id and field.world_id = value.world_id
 			 where value.world_id = $1 and value.entity_id = $2 and not field.archived and btrim(value.body) <> '')`,
 		worldID, entityID,

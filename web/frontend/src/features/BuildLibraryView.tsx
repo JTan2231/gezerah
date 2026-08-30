@@ -99,7 +99,7 @@ export function BuildLibraryView({
         {!model.loading && model.issue === null && model.worlds.length === 0 ? (
           <EmptyState
             title="No worlds"
-            description="Create a world to configure its mechanics and invite people."
+            description="Create a world to configure its Mechanics and issue membership invitations."
             action={
               <button
                 className="button button-primary"

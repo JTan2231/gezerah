@@ -3,15 +3,15 @@
 This directory is the canonical guide to dnd. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
-status layers, generated entity sheets, participant-controlled characters with
-world-authored onboarding fields, and a multiplayer table with exactly one
-designated Dungeon Master: a human facilitator, Terra, or an external page
-agent such as ChatGPT.
+Status-instance layers, generated Entity sheets, membership-controlled Characters with
+world-authored onboarding fields, and Play with exactly one
+designated Dungeon Master: a human facilitator, Terra, or an agent such as
+ChatGPT.
 
 The application intentionally has no built-in entity classes, privileged
 configured keys, seed vocabulary, or canonical JSON document model. World
-authors supply mechanic vocabulary through world configuration, while
-facilitators name problem-specific statuses in live Consequences. The server
+authors supply Mechanic vocabulary through World configuration, while
+facilitators name Inline statuses in live Consequences. The server
 stores both in relational, world-scoped structures and enforces their declared
 constraints.
 
@@ -19,13 +19,14 @@ constraints.
 
 | Document                        | Use it to understand                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| [Glossary](glossary.md)         | The authoritative product and architecture vocabulary and the boundaries of authored vocabulary.     |
 | [Architecture](architecture.md) | System boundaries, runtime topology, layers, data flow, and repository layout.                        |
 | [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, and interactions.                           |
 | [Workflows](workflows.md)       | World creation, configuration, invitations, sheets, and the ad-hoc Play lifecycle.                    |
 | [API reference](api.md)         | HTTP conventions, sessions/CSRF, payloads, errors, concurrency guards, SSE, and every route.           |
 | [Backend](backend.md)           | Go server construction, application packages, rules engine, persistence adapters, and transactions.   |
 | [Frontend](frontend.md)         | React application structure, screens, state management, API integration, and styling.                 |
-| [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, receipts, and immutability.            |
+| [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, Resolution receipts, and immutability. |
 | [Development](development.md)   | Prerequisites, local setup, managed services, change workflows, and troubleshooting.                  |
 | [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |
 | [Operations](operations.md)     | Production build, configuration, scripted Railway deployment and verification, health, backups, and recovery. |
@@ -57,75 +58,59 @@ route. During development, Vite serves the frontend on port `5173` and proxies
 ## Product path
 
 A world author defines input and derived capacities/capabilities, generates
-sheets for stateful subjects, admits participants by invite link, and runs
-improvised interactions at the table. Durable world access stays separate from
-the current play role, so a participant can hand the DM responsibility to
-another non-spectator, Terra, or an external page agent, normally between
-problems. A human DM authors one prose Consequence and may preview Luna's
-compiled effects. Terra instead creates and resolves its own interactions
+sheets for stateful subjects, admits user accounts by invite link, and runs
+improvised Problems during Play. The membership role stays separate from
+the current play role, so an authorized membership can hand the DM responsibility to
+another non-spectator, Terra, or an agent, normally between
+Problems. A human DM authors one prose Consequence and may preview Luna's
+compiled Effects. Terra instead creates and resolves its own Interactions
 autonomously. In agent mode, ChatGPT authors the
-problem and ruling through the signed-in Play page while the person remains a
-player. Base-state changes, status lifecycle changes, effective-value receipts,
-and the world event commit in one transaction.
+Problem and Consequence through the signed-in Play page while the person's current
+play role remains `player`. Logical-state changes, Status-instance lifecycle changes,
+effective changes, and the World event commit in the Resolution transaction.
 
 ## Core invariants
 
-- Configuration is user-authored and scoped to exactly one world.
+- Configuration is user-authored and scoped to exactly one World.
 - Durable identities are UUIDs at the HTTP and database boundaries.
-- A character is an ordinary world entity with one or more active player-control
+- A Character is an ordinary Entity with one or more active non-spectator Controller
   relationships, never an engine class or privileged configured key.
-- Every active character field is authored by the world owner/editor and is
-  required for every controlled character; there is no built-in field list.
+- Every active Character field is authored by the World owner/editor and is
+  required for every controlled Character; there is no built-in field list.
 - Character-field values are relational presentation data and are never loaded
   by the rules engine or exposed as mechanical state.
 - Player admission to live play is derived from control and character-field
   completion rather than persisted as a second membership lifecycle.
 - Exactly one facilitator assignment exists per world: either one active human
-  membership, Terra, or an external agent. It determines the current play role
+  membership, Terra, or an agent. It determines the current play role
   without rewriting the durable membership role.
 - Typed state is stored relationally; the database does not use a canonical
   JSON document as its source of truth.
 - Numbers use exact PostgreSQL `numeric` and exact Go decimal arithmetic.
-- Missing stored input state materializes from the mechanic's authored default.
+- A missing stored override materializes from the Mechanic's authored default.
 - Derived expressions are type-checked as a complete world graph; unknown,
   cross-world, archived, mismatched, or cyclic dependencies reject publication.
-- Effective values evaluate each mechanic's intrinsic value and then its
-  deterministic active-status modifiers; derived references consume dependency
+- Effective values evaluate each Mechanic's intrinsic value and then its
+  deterministic Status modifiers from active instances; derived references consume dependency
   effective values.
-- Scalar effects execute in authored order over logical base inputs and observe
-  earlier scalar mutations. Status effects create inline-authored instances or
-  remove exact active instances. Active modifiers are never baked into scalar
+- Scalar Effects execute in authored order over logical input values and observe
+  earlier scalar mutations. Apply-status Effects create instances from Inline statuses;
+  remove-status Effects remove exact active instances. Status modifiers are never baked into scalar
   storage.
 - Failed transitions do not partially mutate state.
-- State, status sets, the world mechanic graph, memberships, the world table,
-  interactions, and action submissions use revision guards or transaction
+- Logical state, status sets, the world mechanic graph, memberships, the World
+  roster, Interactions, and Actions use revision guards or transaction
   locks where concurrent commands could overwrite one another.
-- A committed live resolution, its applied-effect receipt, and its world event
+- A committed live Resolution, its resolution receipt, and its World event
   are immutable audit history.
 
-## Terminology
+## Vocabulary
 
-| Term               | Meaning                                                                                                |
-| ------------------ | ------------------------------------------------------------------------------------------------------ |
-| World              | Membership, configuration, entity, live-play, receipt, and event boundary.                             |
-| Capacity           | User-authored numeric score or pool that appears on generated sheets.                                  |
-| Capability         | User-authored Boolean skill or numeric rating that appears on generated sheets.                        |
-| World membership   | Link between a real user and a world with owner, editor, player, or spectator role.                    |
-| Current play role  | Momentary facilitator, player, or spectator responsibility derived from the facilitator assignment.   |
-| Facilitator        | The designated Dungeon Master: one human non-spectator membership, Terra, or an external agent.          |
-| Invite             | Revocable, expiring bearer link that grants a configured non-owner world role.                         |
-| Entity             | Durable state owner represented to authors as a person or other world subject.                         |
-| Character          | Product view of a world entity controlled by one or more active non-spectator memberships.             |
-| Character field    | Ordered, world-authored required text prompt shared by every controlled character.                     |
-| Entity profile     | One entity's values for the world's active character fields, separate from typed mechanical state.     |
-| State definition   | World-scoped numeric or Boolean input/derived mechanic underlying a capacity or capability.           |
-| Logical state      | Stored input overrides combined with input defaults; derived mechanics do not own logical storage.    |
-| Intrinsic value    | An input's logical value or a derived expression's result before modifiers on that mechanic.           |
-| Effective value    | A mechanic's intrinsic value after active status modifiers, and the value consumed by dependents.      |
-| Status instance    | Durable condition created by one problem effect, with source provenance and immutable modifier snapshots. |
-| Interaction        | An ad-hoc DM-authored problem with its audience, responders, actions, and Consequence.                   |
-| Consequence        | One prose account of what transpires, plus Luna-compiled targeted effects accepted by the normal resolve path. |
-| Resolution receipt | Immutable record of a committed Consequence, requested effects, applications, and effective changes.     |
+[The product glossary](glossary.md) is the single authority for product and
+architecture terms. In brief: a **World** is the sole scope; its **world
+mechanic graph** is versioned by a **rules revision**; a user-facing **Problem**
+is carried by the technical **Interaction** aggregate; and a **Consequence** is
+committed as a **Resolution** with an immutable **resolution receipt**.
 
 ## Sources of truth
 

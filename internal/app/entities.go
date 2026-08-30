@@ -116,7 +116,7 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	if _, err := tx.Exec(r.Context(), `insert into state_records (entity_id, world_id) values ($1, $2)`, entityID, member.WorldID); err != nil {
+	if _, err := tx.Exec(r.Context(), `insert into entity_logical_states (entity_id, world_id) values ($1, $2)`, entityID, member.WorldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -128,7 +128,7 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	if _, err := tx.Exec(r.Context(), `update worlds set table_revision = table_revision + 1 where id = $1`, member.WorldID); err != nil {
+	if _, err := tx.Exec(r.Context(), `update worlds set roster_revision = roster_revision + 1 where id = $1`, member.WorldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -160,7 +160,7 @@ func (s *Server) handleGetWorldEntity(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "entity ID is malformed", nil)
 		return
 	}
-	if err := requireEntityStateReadAccess(r.Context(), s.db, member, entityID); err != nil {
+	if err := requireEntitySheetReadAccess(r.Context(), s.db, member, entityID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -269,7 +269,7 @@ func (s *Server) handleArchiveWorldEntity(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (s *Server) handleGetWorldEntityState(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetWorldEntitySheet(w http.ResponseWriter, r *http.Request) {
 	member, err := requireActiveWorldMember(r.Context(), s.db, r, r.PathValue("world_id"))
 	if err != nil {
 		handleAppError(w, err)
@@ -280,11 +280,11 @@ func (s *Server) handleGetWorldEntityState(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_id", "entity ID is malformed", nil)
 		return
 	}
-	if err := requireEntityStateReadAccess(r.Context(), s.db, member, entityID); err != nil {
+	if err := requireEntitySheetReadAccess(r.Context(), s.db, member, entityID); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	item, err := loadLogicalStateResponse(r.Context(), s.db, member.WorldID, entityID)
+	item, err := loadEntitySheetResponse(r.Context(), s.db, member.WorldID, entityID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -292,7 +292,7 @@ func (s *Server) handleGetWorldEntityState(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, item)
 }
 
-func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePutWorldEntityLogicalState(w http.ResponseWriter, r *http.Request) {
 	member, err := requireWorldEditor(r.Context(), s.db, r, r.PathValue("world_id"))
 	if err != nil {
 		handleAppError(w, err)
@@ -303,20 +303,20 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "invalid_id", "entity ID is malformed", nil)
 		return
 	}
-	var request replaceStateRequest
+	var request replaceEntityLogicalStateRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
 	required := map[string]string{}
-	if request.ExpectedRevision == nil {
-		required["expected_revision"] = "is required"
+	if request.ExpectedLogicalStateRevision == nil {
+		required["expected_logical_state_revision"] = "is required"
 	}
 	if request.ExpectedRulesRevision == nil {
 		required["expected_rules_revision"] = "is required"
 	}
 	if len(required) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", required)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "logical state is invalid", required)
 		return
 	}
 
@@ -336,71 +336,74 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	definitions := mechanicDefinitions(mechanics)
-	values := make(map[rules.ID]rules.StateValue, len(request.Values))
+	logicalInputValues := make(map[rules.ID]rules.MechanicValue, len(request.LogicalInputValues))
 	fields := map[string]string{}
-	for mechanicID, value := range request.Values {
+	for mechanicID, value := range request.LogicalInputValues {
 		definition, exists := definitions[rules.ID(mechanicID)]
 		if !exists {
-			fields["values["+mechanicID+"]"] = "mechanic does not exist in this world"
+			fields["logical_input_values["+mechanicID+"]"] = "mechanic does not exist in this world"
 			continue
 		}
 		if definition.SourceKind != rules.SourceInput {
-			fields["values["+mechanicID+"]"] = "derived mechanics are calculated and cannot be stored"
+			fields["logical_input_values["+mechanicID+"]"] = "derived mechanics are expression-evaluated and cannot own stored overrides"
 			continue
 		}
-		converted, err := stateValueDTOToDomain(value)
+		converted, err := mechanicValueDTOToDomain(value)
 		if err != nil {
-			fields["values["+mechanicID+"]"] = err.Error()
+			fields["logical_input_values["+mechanicID+"]"] = err.Error()
 			continue
 		}
-		for _, item := range rules.ValidateStateValue(definition, converted) {
-			fields["values["+mechanicID+"]."+item.Path] = item.Message
+		for _, item := range rules.ValidateMechanicValue(definition, converted) {
+			fields["logical_input_values["+mechanicID+"]."+item.Path] = item.Message
 		}
-		values[rules.ID(mechanicID)] = converted
+		logicalInputValues[rules.ID(mechanicID)] = converted
 	}
 	if len(fields) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", fields)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "logical state is invalid", fields)
 		return
 	}
-	proposed := rules.NormalizeStateRecord(rules.StateRecord{EntityID: rules.ID(entityID), Revision: *request.ExpectedRevision, Values: values}, definitions)
+	proposed := rules.NormalizeInputOverrideRecord(rules.InputOverrideRecord{
+		EntityID: rules.ID(entityID), Revision: *request.ExpectedLogicalStateRevision,
+		Overrides: logicalInputValues,
+	}, definitions)
 	entity, err := loadEntityForRules(r.Context(), tx, member.WorldID, entityID)
 	if err != nil {
 		handleAppError(w, err)
 		return
 	}
-	if validation := rules.ValidateStateRecord(proposed, entity, definitions); len(validation) > 0 {
+	if validation := rules.ValidateInputOverrideRecord(proposed, entity, definitions); len(validation) > 0 {
 		for _, item := range validation {
 			fields[item.Path] = item.Message
 		}
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "state is invalid", fields)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "logical state is invalid", fields)
 		return
 	}
 	var actual int64
 	if err := tx.QueryRow(r.Context(), `
-		select revision from state_records where world_id = $1 and entity_id = $2 for update`, member.WorldID, entityID).Scan(&actual); err != nil {
+		select revision from entity_logical_states where world_id = $1 and entity_id = $2 for update`, member.WorldID, entityID).Scan(&actual); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	if actual != *request.ExpectedRevision {
-		handleAppError(w, revisionConflict("entity state", *request.ExpectedRevision, actual))
+	if actual != *request.ExpectedLogicalStateRevision {
+		handleAppError(w, revisionConflict("entity logical state", *request.ExpectedLogicalStateRevision, actual))
 		return
 	}
-	if _, err := tx.Exec(r.Context(), `delete from state_values where world_id = $1 and entity_id = $2`, member.WorldID, entityID); err != nil {
+	if _, err := tx.Exec(r.Context(), `delete from entity_input_value_overrides where world_id = $1 and entity_id = $2`, member.WorldID, entityID); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	mechanicIDs := make([]rules.ID, 0, len(proposed.Values))
-	for id := range proposed.Values {
+	mechanicIDs := make([]rules.ID, 0, len(proposed.Overrides))
+	for id := range proposed.Overrides {
 		mechanicIDs = append(mechanicIDs, id)
 	}
 	sort.Slice(mechanicIDs, func(i, j int) bool { return mechanicIDs[i] < mechanicIDs[j] })
 	for _, mechanicID := range mechanicIDs {
-		if err := insertStateValue(r.Context(), tx, member.WorldID, entityID, mechanicID, proposed.Values[mechanicID]); err != nil {
+		if err := insertInputValueOverride(r.Context(), tx, member.WorldID, entityID, mechanicID, proposed.Overrides[mechanicID]); err != nil {
 			handleAppError(w, err)
 			return
 		}
 	}
-	if _, err := tx.Exec(r.Context(), `update state_records set revision = revision + 1 where world_id = $1 and entity_id = $2`, member.WorldID, entityID); err != nil {
+	if _, err := tx.Exec(r.Context(), `update entity_logical_states set revision = revision + 1 where world_id = $1 and entity_id = $2`, member.WorldID, entityID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -408,7 +411,7 @@ func (s *Server) handlePutWorldEntityState(w http.ResponseWriter, r *http.Reques
 		handleAppError(w, err)
 		return
 	}
-	item, err := loadLogicalStateResponse(r.Context(), s.db, member.WorldID, entityID)
+	item, err := loadEntitySheetResponse(r.Context(), s.db, member.WorldID, entityID)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -432,8 +435,8 @@ func (s *Server) handleReplaceWorldEntityControllers(w http.ResponseWriter, r *h
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
 	}
-	if request.ExpectedTableRevision == nil {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "expected_table_revision is required", map[string]string{"expected_table_revision": "is required"})
+	if request.ExpectedRosterRevision == nil {
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "expected_roster_revision is required", map[string]string{"expected_roster_revision": "is required"})
 		return
 	}
 	ids := uniqueSorted(request.ControllerWorldMembershipIDs)
@@ -444,12 +447,12 @@ func (s *Server) handleReplaceWorldEntityControllers(w http.ResponseWriter, r *h
 	}
 	defer rollbackTx(r.Context(), tx)
 	var actual int64
-	if err := tx.QueryRow(r.Context(), `select table_revision from worlds where id = $1 for update`, member.WorldID).Scan(&actual); err != nil {
+	if err := tx.QueryRow(r.Context(), `select roster_revision from worlds where id = $1 for update`, member.WorldID).Scan(&actual); err != nil {
 		handleAppError(w, err)
 		return
 	}
-	if actual != *request.ExpectedTableRevision {
-		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "revision_conflict", Message: "world table changed since it was loaded", Fields: map[string]string{"expected_table_revision": stringInt(*request.ExpectedTableRevision), "actual_table_revision": stringInt(actual)}})
+	if actual != *request.ExpectedRosterRevision {
+		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "revision_conflict", Message: "world roster changed since it was loaded", Fields: map[string]string{"expected_roster_revision": stringInt(*request.ExpectedRosterRevision), "actual_roster_revision": stringInt(actual)}})
 		return
 	}
 	var exists bool
@@ -475,7 +478,7 @@ func (s *Server) handleReplaceWorldEntityControllers(w http.ResponseWriter, r *h
 			return
 		}
 	}
-	if _, err := tx.Exec(r.Context(), `update worlds set table_revision = table_revision + 1 where id = $1`, member.WorldID); err != nil {
+	if _, err := tx.Exec(r.Context(), `update worlds set roster_revision = roster_revision + 1 where id = $1`, member.WorldID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -487,7 +490,7 @@ func (s *Server) handleReplaceWorldEntityControllers(w http.ResponseWriter, r *h
 		handleAppError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, worldEntityControllersResponse{EntityID: entityID, ControllerWorldMembershipIDs: ids, TableRevision: actual + 1})
+	writeJSON(w, http.StatusOK, worldEntityControllersResponse{EntityID: entityID, ControllerWorldMembershipIDs: ids, RosterRevision: actual + 1})
 }
 
 func validateControllerMembershipIDs(ctx context.Context, db queryer, worldID string, ids []string) error {
@@ -508,7 +511,7 @@ func validateControllerMembershipIDs(ctx context.Context, db queryer, worldID st
 	return nil
 }
 
-func requireEntityStateReadAccess(ctx context.Context, db queryer, member authorizedWorldMember, entityID string) error {
+func requireEntitySheetReadAccess(ctx context.Context, db queryer, member authorizedWorldMember, entityID string) error {
 	var exists bool
 	if err := db.QueryRow(ctx, `select exists(select 1 from entities where world_id = $1 and id = $2)`, member.WorldID, entityID).Scan(&exists); err != nil {
 		return err
@@ -534,7 +537,7 @@ func requireEntityStateReadAccess(ctx context.Context, db queryer, member author
 		return err
 	}
 	if !controlled {
-		return &statusError{Status: http.StatusForbidden, Code: "character_setup_required", Message: "complete a controlled character before reading the full world state"}
+		return &statusError{Status: http.StatusForbidden, Code: "character_setup_required", Message: "complete a controlled character before reading the full Entity sheet"}
 	}
 	return nil
 }
@@ -542,17 +545,15 @@ func requireEntityStateReadAccess(ctx context.Context, db queryer, member author
 func loadWorldEntityResponse(ctx context.Context, db queryer, worldID, entityID string) (worldEntityResponse, error) {
 	var item worldEntityResponse
 	err := db.QueryRow(ctx, `
-			select entity.id::text, entity.display_name, entity.archived, state.revision, statuses.revision,
+			select entity.id::text, entity.display_name, entity.archived,
 				entity.created_at, entity.updated_at
 			from entities entity
-			join state_records state on state.entity_id = entity.id and state.world_id = entity.world_id
-			join entity_status_sets statuses on statuses.entity_id = entity.id and statuses.world_id = entity.world_id
 			where entity.world_id = $1 and entity.id = $2`, worldID, entityID,
-	).Scan(&item.ID, &item.DisplayName, &item.Archived, &item.StateRevision, &item.StatusRevision, &item.CreatedAt, &item.UpdatedAt)
+	).Scan(&item.ID, &item.DisplayName, &item.Archived, &item.CreatedAt, &item.UpdatedAt)
 	if err != nil {
 		return item, err
 	}
-	item.State, err = loadLogicalStateResponse(ctx, db, worldID, entityID)
+	item.Sheet, err = loadEntitySheetResponse(ctx, db, worldID, entityID)
 	if err != nil {
 		return item, err
 	}
@@ -560,18 +561,18 @@ func loadWorldEntityResponse(ctx context.Context, db queryer, worldID, entityID 
 	return item, err
 }
 
-func loadLogicalStateResponse(ctx context.Context, db queryer, worldID, entityID string) (stateRecordResponse, error) {
-	return loadEvaluatedStateResponse(ctx, db, worldID, entityID)
+func loadEntitySheetResponse(ctx context.Context, db queryer, worldID, entityID string) (entitySheetResponse, error) {
+	return loadGeneratedEntitySheet(ctx, db, worldID, entityID)
 }
 
-func loadStoredStateRecord(ctx context.Context, db queryer, worldID, entityID string) (rules.StateRecord, error) {
-	result := rules.StateRecord{EntityID: rules.ID(entityID), Values: make(map[rules.ID]rules.StateValue)}
-	if err := db.QueryRow(ctx, `select revision, updated_at from state_records where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&result.Revision, &result.UpdatedAt); err != nil {
+func loadInputOverrideRecord(ctx context.Context, db queryer, worldID, entityID string) (rules.InputOverrideRecord, error) {
+	result := rules.InputOverrideRecord{EntityID: rules.ID(entityID), Overrides: make(map[rules.ID]rules.MechanicValue)}
+	if err := db.QueryRow(ctx, `select revision from entity_logical_states where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&result.Revision); err != nil {
 		return result, err
 	}
 	rows, err := db.Query(ctx, `
 		select mechanic_id::text, value_kind, number_value::text, boolean_value
-		from state_values where world_id = $1 and entity_id = $2 order by mechanic_id`, worldID, entityID)
+		from entity_input_value_overrides where world_id = $1 and entity_id = $2 order by mechanic_id`, worldID, entityID)
 	if err != nil {
 		return result, err
 	}
@@ -588,48 +589,48 @@ func loadStoredStateRecord(ctx context.Context, db queryer, worldID, entityID st
 			if err != nil {
 				return result, err
 			}
-			result.Values[rules.ID(mechanicID)] = rules.NewNumberValue(value)
+			result.Overrides[rules.ID(mechanicID)] = rules.NewNumberMechanicValue(value)
 		} else if kind == "boolean" && boolean != nil {
-			result.Values[rules.ID(mechanicID)] = rules.NewBooleanValue(*boolean)
+			result.Overrides[rules.ID(mechanicID)] = rules.NewBooleanMechanicValue(*boolean)
 		}
 	}
 	return result, rows.Err()
 }
 
-func stateValueDTOToDomain(value stateValueDTO) (rules.StateValue, error) {
+func mechanicValueDTOToDomain(value mechanicValueDTO) (rules.MechanicValue, error) {
 	switch value.Kind {
 	case "number":
 		if value.Number == nil {
-			return rules.StateValue{}, errors.New("number value is required")
+			return rules.MechanicValue{}, errors.New("number value is required")
 		}
 		parsed, err := value.Number.Decimal()
 		if err != nil {
-			return rules.StateValue{}, errors.New("number must be a finite exact decimal")
+			return rules.MechanicValue{}, errors.New("number must be a finite exact decimal")
 		}
-		return rules.NewNumberValue(parsed), nil
+		return rules.NewNumberMechanicValue(parsed), nil
 	case "boolean":
 		if value.Boolean == nil {
-			return rules.StateValue{}, errors.New("boolean value is required")
+			return rules.MechanicValue{}, errors.New("boolean value is required")
 		}
-		return rules.NewBooleanValue(*value.Boolean), nil
+		return rules.NewBooleanMechanicValue(*value.Boolean), nil
 	default:
-		return rules.StateValue{}, errors.New("value must be number or boolean")
+		return rules.MechanicValue{}, errors.New("value must be number or boolean")
 	}
 }
 
-func stateValueDomainToDTO(value rules.StateValue) stateValueDTO {
+func mechanicValueDomainToDTO(value rules.MechanicValue) mechanicValueDTO {
 	if value.Kind == rules.ValueNumber && value.Number != nil {
 		number := decimalTextFromDomain(*value.Number)
-		return stateValueDTO{Kind: "number", Number: &number}
+		return mechanicValueDTO{Kind: "number", Number: &number}
 	}
 	if value.Kind == rules.ValueBoolean && value.Boolean != nil {
 		boolean := *value.Boolean
-		return stateValueDTO{Kind: "boolean", Boolean: &boolean}
+		return mechanicValueDTO{Kind: "boolean", Boolean: &boolean}
 	}
-	return stateValueDTO{}
+	return mechanicValueDTO{}
 }
 
-func insertStateValue(ctx context.Context, tx pgx.Tx, worldID, entityID string, mechanicID rules.ID, value rules.StateValue) error {
+func insertInputValueOverride(ctx context.Context, tx pgx.Tx, worldID, entityID string, mechanicID rules.ID, value rules.MechanicValue) error {
 	var number, boolean any
 	if value.Kind == rules.ValueNumber && value.Number != nil {
 		number = value.Number.String()
@@ -637,7 +638,7 @@ func insertStateValue(ctx context.Context, tx pgx.Tx, worldID, entityID string, 
 		boolean = *value.Boolean
 	}
 	_, err := tx.Exec(ctx, `
-		insert into state_values (entity_id, world_id, mechanic_id, value_kind, number_value, boolean_value)
+		insert into entity_input_value_overrides (entity_id, world_id, mechanic_id, value_kind, number_value, boolean_value)
 		values ($1, $2, $3, $4, $5, $6)`, entityID, worldID, mechanicID, value.Kind, number, boolean)
 	return err
 }

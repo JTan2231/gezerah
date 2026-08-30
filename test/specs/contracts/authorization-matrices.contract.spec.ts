@@ -28,7 +28,7 @@ test.afterEach(async () => disposeAuthenticatedActors());
 interface WorldResponse extends IdentifiedResource {
   membership_id: string;
   revision: number;
-  table_revision: number;
+  roster_revision: number;
   rules_revision: number;
   role: "owner" | "editor" | "player" | "spectator";
   status: "active" | "archived";
@@ -62,21 +62,25 @@ interface MechanicCollectionResponse {
   mechanics: MechanicResponse[];
 }
 
-interface ActiveStatusResponse extends IdentifiedResource {
+interface StatusInstance extends IdentifiedResource {
   name: string;
 }
 
-interface StateResponse {
-  revision: number;
-  status_revision: number;
-  values: Record<string, unknown>;
+interface EntitySheetResponse {
+  entity_id: string;
+  logical_state_revision: number;
+  status_set_revision: number;
+  rules_revision: number;
+  logical_input_values: Record<string, unknown>;
   effective_values: Record<string, unknown>;
-  active_statuses: ActiveStatusResponse[];
+  evaluations: Record<string, unknown>;
+  active_status_instances: StatusInstance[];
+  authored_default_input_mechanic_ids: string[];
 }
 
 interface EntityResponse extends IdentifiedResource {
   display_name: string;
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
 interface InteractionActionResponse extends IdentifiedResource {
@@ -90,15 +94,25 @@ interface InteractionResponse extends IdentifiedResource {
   actions: InteractionActionResponse[];
 }
 
-interface ResolutionResult {
+interface EffectApplication {
+  type: "set" | "adjust-number" | "apply-status" | "remove-status";
+  effect_id: string;
+  entity_id: string;
+  mechanic_id?: string;
+  status_instance_id?: string;
+  status_name?: string;
+  active_before?: boolean;
+  active_after?: boolean;
+  before?: unknown;
+  after?: unknown;
+  changed: boolean;
+}
+
+interface InteractionResolutionResult {
   interaction_id: string;
   interaction_revision: number;
-  applied_effects: Array<{
-    type: string;
-    entity_id: string;
-    status_instance_id?: string;
-  }>;
-  state: { records: Record<string, StateResponse> };
+  applications: EffectApplication[];
+  entity_sheets: Record<string, EntitySheetResponse>;
 }
 
 interface APIErrorPayload {
@@ -121,7 +135,7 @@ const INV_V01_CASES = [
   { scenario: "INV-V01", case: "expired", evidence: "runtime" },
 ] as const satisfies readonly InviteClosureCase[];
 
-type RoleDenialCase = {
+type AuthorityDenialCase = {
   scenario: "AUT-V02";
   case:
     | "player-configure"
@@ -182,7 +196,7 @@ const AUT_V02_CASES = [
     command: "archive",
     code: "world_owner_required",
   },
-] as const satisfies readonly RoleDenialCase[];
+] as const satisfies readonly AuthorityDenialCase[];
 
 type CrossWorldCase = {
   scenario: "AUT-V05";
@@ -319,7 +333,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     owner.id,
   );
   const foreignStatusName = `Foreign status ${unique}`;
-  await postJSON<ResolutionResult>(
+  await postJSON<InteractionResolutionResult>(
     request,
     `${baseURL}/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/resolve`,
     {
@@ -327,7 +341,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
       expected_rules_revision: foreignMechanic.revision,
       idempotency_key: randomUUID(),
       selected_action_id: foreignAction.id,
-      narrative: `Foreign ruling ${unique}`,
+      narrative: `Foreign consequence ${unique}`,
       effects: [
         {
           id: randomUUID(),
@@ -349,14 +363,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     },
     owner.id,
   );
-  const foreignState = await getJSON<StateResponse>(
+  const foreignSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${foreignWorld.id}/entities/${foreignEntity.id}/state`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/entities/${foreignEntity.id}/sheet`,
     owner.id,
   );
   const foreignStatus = required(
-    foreignState.active_statuses[0],
-    "foreign active status",
+    foreignSheet.active_status_instances[0],
+    "foreign active Status instance",
   );
 
   const primaryOpen = await createOpenInteraction(
@@ -592,7 +606,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
                 data: {
                   prompt: `Denied facilitation ${item.case} ${unique}`,
                   eligible_responder_membership_ids: [],
-                  entity_ids: [],
+                  context_entity_ids: [],
                 },
               },
             ),
@@ -678,14 +692,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
         primaryAdjudicating.id,
         owner.id,
       );
-      const primaryStateBefore = await stateFor(
+      const primarySheetBefore = await sheetFor(
         request,
         baseURL,
         primaryWorld.id,
         primaryEntity.id,
         owner.id,
       );
-      const foreignStateBefore = await stateFor(
+      const foreignSheetBefore = await sheetFor(
         request,
         baseURL,
         foreignWorld.id,
@@ -767,7 +781,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
               `${baseURL}/api/worlds/${primaryWorld.id}/entities/${primaryEntity.id}/controllers`,
               {
                 data: {
-                  expected_table_revision: primaryWorldBefore.table_revision,
+                  expected_roster_revision: primaryWorldBefore.roster_revision,
                   controller_world_membership_ids: [
                     foreignPlayer.membership_id,
                   ],
@@ -865,23 +879,23 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           ),
         ).toEqual(primaryInteractionBefore);
         expect(
-          await stateFor(
+          await sheetFor(
             request,
             baseURL,
             primaryWorld.id,
             primaryEntity.id,
             owner.id,
           ),
-        ).toEqual(primaryStateBefore);
+        ).toEqual(primarySheetBefore);
         expect(
-          await stateFor(
+          await sheetFor(
             request,
             baseURL,
             foreignWorld.id,
             foreignEntity.id,
             owner.id,
           ),
-        ).toEqual(foreignStateBefore);
+        ).toEqual(foreignSheetBefore);
       });
     });
   }
@@ -1005,7 +1019,7 @@ async function createOpenInteraction(
   worldID: string,
   ownerID: string,
   responderMembershipID: string,
-  entityID: string,
+  contextEntityID: string,
   prompt: string,
 ): Promise<InteractionResponse> {
   const interaction = await postJSON<InteractionResponse>(
@@ -1015,7 +1029,7 @@ async function createOpenInteraction(
       present: true,
       prompt,
       eligible_responder_membership_ids: [responderMembershipID],
-      entity_ids: [entityID],
+      context_entity_ids: [contextEntityID],
     },
     ownerID,
   );
@@ -1133,16 +1147,16 @@ async function interactionFor(
   );
 }
 
-async function stateFor(
+async function sheetFor(
   request: APIRequestContext,
   baseURL: string,
   worldID: string,
   entityID: string,
   userID: string,
-): Promise<StateResponse> {
-  return getJSON<StateResponse>(
+): Promise<EntitySheetResponse> {
+  return getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/state`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }

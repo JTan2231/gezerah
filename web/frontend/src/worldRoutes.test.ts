@@ -24,19 +24,24 @@ describe("application routes", () => {
   });
 
   test("round-trips a selected builder mechanic", () => {
-    const path = buildWorldURL("world/1", "capabilities", "skill 1");
-    expect(path).toBe("/build/world%2F1/capabilities/skill%201");
+    const path = buildWorldURL("world/1", "capabilities", "mechanic 1");
+    expect(path).toBe("/build/world%2F1/capabilities/mechanic%201");
     expect(readLocation(path)).toEqual({
       type: "build-world",
       worldId: "world/1",
       section: "capabilities",
-      resourceId: "skill 1",
+      resourceId: "mechanic 1",
     });
   });
 
-  test("rejects the removed global status catalog route", () => {
-    expect(readLocation("/build/world-1/statuses")).toEqual({
-      type: "not-found",
+  test("uses members as the only membership section route", () => {
+    const path = buildWorldURL("world/1", "members");
+    expect(path).toBe("/build/world%2F1/members");
+    expect(readLocation(path)).toEqual({
+      type: "build-world",
+      worldId: "world/1",
+      section: "members",
+      resourceId: undefined,
     });
   });
 

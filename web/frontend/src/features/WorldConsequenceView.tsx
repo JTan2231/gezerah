@@ -1,36 +1,36 @@
 import { Avatar, ErrorMessage, Field } from "../components/StudioUI";
 import type {
-  RulingPreviewViewModel,
-  RulingViewActions,
-  RulingViewModel,
+  ConsequencePreviewViewModel,
+  ConsequenceViewActions,
+  ConsequenceViewModel,
 } from "./WorldPlayViewModel";
 
-export function RulingView({
+export function ConsequenceView({
   model,
   actions,
 }: {
-  model: RulingViewModel;
-  actions: RulingViewActions;
+  model: ConsequenceViewModel;
+  actions: ConsequenceViewActions;
 }) {
   return (
-    <section className="ruling-editor">
+    <section className="consequence-editor">
       <header>
         <h3>What transpires?</h3>
         <p>
-          Describe the outcome in plain language. Luna will translate it into
-          the world’s mechanics.
+          Describe the consequence in plain language. Luna will translate it
+          into the world’s mechanics.
         </p>
       </header>
-      {model.submissions.length > 0 ? (
+      {model.actions.length > 0 ? (
         <section className="consequence-actions" aria-label="Submitted actions">
           <h4>Actions to consider</h4>
           <div className="action-list">
-            {model.submissions.map((submission) => (
-              <blockquote key={submission.id}>
-                <Avatar name={submission.actorName} size="small" />
+            {model.actions.map((action) => (
+              <blockquote key={action.id}>
+                <Avatar name={action.actorName} size="small" />
                 <div>
-                  <strong>{submission.actorName}</strong>
-                  <p>{submission.text}</p>
+                  <strong>{action.actorName}</strong>
+                  <p>{action.text}</p>
                 </div>
               </blockquote>
             ))}
@@ -39,7 +39,7 @@ export function RulingView({
       ) : null}
       <Field
         label="What transpires"
-        hint="Include the fictional outcome and any lasting or mechanical consequences."
+        hint="Include the public fiction and any lasting or mechanical consequences."
         error={model.issue?.fields["narrative"]}
       >
         <textarea
@@ -60,22 +60,22 @@ export function RulingView({
               {model.selectedAction.text}
             </p>
           )}
-          <RulingPreviewView model={model.preview} />
+          <ConsequencePreviewView model={model.preview} />
         </>
       )}
       {!model.rulesReady ? (
-        <p className="ruling-sync-notice" role="status">
-          Refreshing the current rules and entity state before this consequence
+        <p className="consequence-sync-notice" role="status">
+          Refreshing the current rules and entity sheets before this consequence
           can be interpreted or resolved.
         </p>
       ) : model.previewStale ? (
-        <p className="ruling-sync-notice" role="status">
-          The outcome or table changed after this preview was prepared. Prepare
-          it again before resolving.
+        <p className="consequence-sync-notice" role="status">
+          The consequence or world changed after this preview was prepared.
+          Prepare it again before resolving.
         </p>
       ) : null}
       {model.issue === null ? null : <ErrorMessage error={model.issue} />}
-      <footer className="ruling-actions">
+      <footer className="consequence-actions-footer">
         <button
           className="button button-quiet"
           type="button"
@@ -107,9 +107,13 @@ export function RulingView({
   );
 }
 
-function RulingPreviewView({ model }: { model: RulingPreviewViewModel }) {
+function ConsequencePreviewView({
+  model,
+}: {
+  model: ConsequencePreviewViewModel;
+}) {
   return (
-    <div className="ruling-preview" role="status" aria-live="polite">
+    <div className="consequence-preview" role="status" aria-live="polite">
       <header>
         <div>
           <strong>Preview is valid</strong>
@@ -122,18 +126,18 @@ function RulingPreviewView({ model }: { model: RulingPreviewViewModel }) {
             <p key={application.id}>
               <strong>{application.entityName}</strong>
               <span>{application.effectLabel}</span>
-              <em>{application.outcomeLabel}</em>
+              <em>{application.resultLabel}</em>
             </p>
           ))}
         </div>
       ) : null}
       {model.effectiveChanges.length > 0 ? (
         <div className="effective-change-list">
-          <strong>Final calculated changes</strong>
+          <strong>Effective changes</strong>
           {model.effectiveChanges.map((change) => (
             <p key={change.id}>
               <span>{change.label}</span>
-              <em>{change.outcomeLabel}</em>
+              <em>{change.resultLabel}</em>
             </p>
           ))}
         </div>

@@ -14,30 +14,30 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-type statusEffectSnapshot struct {
+type inlineStatusDetails struct {
 	Name        string
 	Description *string
 	Modifiers   []statusModifierResponse
 }
 
-type resolutionStatusConfiguration struct {
-	Snapshots map[rules.ID]rules.StatusSnapshot
-	Responses map[rules.ID]statusEffectSnapshot
+type consequenceInlineStatuses struct {
+	InlineStatuses map[rules.ID]rules.InlineStatus
+	Details        map[rules.ID]inlineStatusDetails
 }
 
-type resolutionRuntimeInput struct {
-	InteractionID string
-	Plan          rules.TransitionPlan
-	Entities      map[rules.ID]rules.Entity
-	Mechanics     map[rules.ID]rules.MechanicDefinition
-	Statuses      resolutionStatusConfiguration
-	Snapshot      rules.RuntimeSnapshot
-	StatusSets    map[rules.ID]loadedStatusSet
-	TargetIDs     []rules.ID
-	RulesRevision int64
+type consequenceRuntimeInput struct {
+	InteractionID  string
+	Plan           rules.TransitionPlan
+	Entities       map[rules.ID]rules.Entity
+	Mechanics      map[rules.ID]rules.MechanicDefinition
+	InlineStatuses consequenceInlineStatuses
+	Snapshot       rules.RuntimeSnapshot
+	StatusSets     map[rules.ID]loadedStatusInstanceSet
+	TargetIDs      []rules.ID
+	RulesRevision  int64
 }
 
-type statusApplicationReceipt struct {
+type statusApplicationResult struct {
 	EffectID         rules.ID
 	EntityID         rules.ID
 	StatusInstanceID rules.ID
@@ -66,23 +66,23 @@ func effectTargetIDs(items []concreteEffectDTO) []rules.ID {
 	return result
 }
 
-func loadResolutionRuntimeInput(
+func loadConsequenceRuntimeInput(
 	ctx context.Context,
 	db queryer,
 	worldID, interactionID string,
 	rulesRevision int64,
 	items []concreteEffectDTO,
-) (resolutionRuntimeInput, error) {
-	var result resolutionRuntimeInput
+) (consequenceRuntimeInput, error) {
+	var result consequenceRuntimeInput
 	mechanics, err := loadWorldMechanics(ctx, db, worldID, "")
 	if err != nil {
 		return result, err
 	}
 	result.InteractionID = interactionID
 	result.Mechanics = mechanicDefinitions(mechanics)
-	result.Statuses = resolutionStatusConfiguration{
-		Snapshots: make(map[rules.ID]rules.StatusSnapshot),
-		Responses: make(map[rules.ID]statusEffectSnapshot),
+	result.InlineStatuses = consequenceInlineStatuses{
+		InlineStatuses: make(map[rules.ID]rules.InlineStatus),
+		Details:        make(map[rules.ID]inlineStatusDetails),
 	}
 	result.RulesRevision = rulesRevision
 	result.Plan = rules.TransitionPlan{Effects: make([]rules.ConcreteEffect, len(items))}
@@ -112,7 +112,7 @@ func loadResolutionRuntimeInput(
 			}
 		}
 		if item.Value != nil {
-			value, conversionErr := stateValueDTOToDomain(*item.Value)
+			value, conversionErr := mechanicValueDTOToDomain(*item.Value)
 			if conversionErr != nil {
 				return result, &statusError{Status: http.StatusUnprocessableEntity, Code: "validation_failed", Message: "effect value is invalid", Fields: map[string]string{fmt.Sprintf("effects[%d].value", index): conversionErr.Error()}}
 			}
@@ -127,18 +127,18 @@ func loadResolutionRuntimeInput(
 		}
 		switch effect.Operation {
 		case rules.EffectApplyStatus:
-			if item.Status == nil {
-				return result, errors.New("validated apply-status effect is missing its status")
+			if item.InlineStatus == nil {
+				return result, errors.New("validated apply-status Effect is missing its Inline status")
 			}
-			snapshot := rules.StatusSnapshot{
+			inlineStatus := rules.InlineStatus{
 				ID: rules.ID(effectID), WorldID: rules.ID(worldID),
-				Modifiers: make([]rules.StatusModifier, len(item.Status.Modifiers)),
+				Modifiers: make([]rules.StatusModifier, len(item.InlineStatus.Modifiers)),
 			}
-			response := statusEffectSnapshot{
-				Name: strings.TrimSpace(item.Status.Name), Description: cleanOptional(item.Status.Description),
-				Modifiers: make([]statusModifierResponse, len(item.Status.Modifiers)),
+			details := inlineStatusDetails{
+				Name: strings.TrimSpace(item.InlineStatus.Name), Description: cleanOptional(item.InlineStatus.Description),
+				Modifiers: make([]statusModifierResponse, len(item.InlineStatus.Modifiers)),
 			}
-			for modifierIndex, itemModifier := range item.Status.Modifiers {
+			for modifierIndex, itemModifier := range item.InlineStatus.Modifiers {
 				modifierID := itemModifier.ID
 				if modifierID == "" {
 					modifierID, err = newID()
@@ -146,42 +146,42 @@ func loadResolutionRuntimeInput(
 						return result, err
 					}
 				}
-				value, conversionErr := stateValueDTOToDomain(itemModifier.Value)
+				value, conversionErr := mechanicValueDTOToDomain(itemModifier.Value)
 				if conversionErr != nil {
 					return result, &statusError{Status: http.StatusUnprocessableEntity, Code: "validation_failed", Message: "status modifier is invalid", Fields: map[string]string{fmt.Sprintf("effects[%d].status.modifiers[%d].value", index, modifierIndex): conversionErr.Error()}}
 				}
-				snapshot.Modifiers[modifierIndex] = rules.StatusModifier{
+				inlineStatus.Modifiers[modifierIndex] = rules.StatusModifier{
 					ID: rules.ID(modifierID), Position: modifierIndex, Priority: itemModifier.Priority,
 					MechanicID: rules.ID(itemModifier.MechanicID),
 					Operation:  rules.ModifierOperation(itemModifier.Operation), Value: value,
 				}
-				response.Modifiers[modifierIndex] = statusModifierResponse{
+				details.Modifiers[modifierIndex] = statusModifierResponse{
 					ID: modifierID, MechanicID: itemModifier.MechanicID,
-					Operation: itemModifier.Operation, Value: stateValueDomainToDTO(value),
+					Operation: itemModifier.Operation, Value: mechanicValueDomainToDTO(value),
 					Priority: itemModifier.Priority, Position: modifierIndex,
 				}
 			}
-			effect.Status = &snapshot
-			effect.StatusInstances = make(map[rules.ID]rules.ActiveStatus, len(effect.EntityIDs))
+			effect.InlineStatus = &inlineStatus
+			effect.StatusInstances = make(map[rules.ID]rules.StatusInstance, len(effect.EntityIDs))
 			for _, entityID := range effect.EntityIDs {
 				instanceID, idErr := newID()
 				if idErr != nil {
 					return result, idErr
 				}
-				effect.StatusInstances[entityID] = rules.ActiveStatus{
+				effect.StatusInstances[entityID] = rules.StatusInstance{
 					ID: rules.ID(instanceID), WorldID: rules.ID(worldID), EntityID: entityID,
 					SourceEffectID: effect.ID,
 				}
 			}
-			result.Statuses.Snapshots[effect.ID] = snapshot
-			result.Statuses.Responses[effect.ID] = response
+			result.InlineStatuses.InlineStatuses[effect.ID] = inlineStatus
+			result.InlineStatuses.Details[effect.ID] = details
 		case rules.EffectRemoveStatus:
 			effect.StatusInstanceIDs = make(map[rules.ID]rules.ID, len(item.Targets))
 			for _, target := range item.Targets {
 				effect.StatusInstanceIDs[rules.ID(target.EntityID)] = rules.ID(target.StatusInstanceID)
 			}
 		case rules.EffectSet, rules.EffectAdjustNumber:
-			// Scalar operands were converted above; no status configuration is needed.
+			// Scalar operands were converted above; no Inline status is needed.
 		default:
 			return result, fmt.Errorf("unsupported effect operation %q", effect.Operation)
 		}
@@ -194,10 +194,10 @@ func loadResolutionRuntimeInput(
 	sort.Slice(result.TargetIDs, func(i, j int) bool { return result.TargetIDs[i] < result.TargetIDs[j] })
 	result.Entities = make(map[rules.ID]rules.Entity, len(result.TargetIDs))
 	characterStatuses := make(map[rules.ID]string, len(result.TargetIDs))
-	result.StatusSets = make(map[rules.ID]loadedStatusSet, len(result.TargetIDs))
+	result.StatusSets = make(map[rules.ID]loadedStatusInstanceSet, len(result.TargetIDs))
 	result.Snapshot = rules.RuntimeSnapshot{
-		State:          rules.StateSnapshot{Records: make(map[rules.ID]rules.StateRecord, len(result.TargetIDs))},
-		ActiveStatuses: []rules.ActiveStatus{},
+		InputOverrides:  rules.InputOverrideSnapshot{ByEntity: make(map[rules.ID]rules.InputOverrideRecord, len(result.TargetIDs))},
+		StatusInstances: []rules.StatusInstance{},
 	}
 	for _, entityID := range result.TargetIDs {
 		entity, entityErr := loadEntityForRules(ctx, db, worldID, string(entityID))
@@ -215,28 +215,28 @@ func loadResolutionRuntimeInput(
 			}
 			characterStatuses[entityID] = status
 		}
-		record, recordErr := loadStoredStateRecord(ctx, db, worldID, string(entityID))
+		record, recordErr := loadInputOverrideRecord(ctx, db, worldID, string(entityID))
 		if recordErr != nil {
 			return result, recordErr
 		}
-		result.Snapshot.State.Records[entityID] = record
-		statusSet, statusErr := loadActiveStatusSet(ctx, db, worldID, string(entityID))
+		result.Snapshot.InputOverrides.ByEntity[entityID] = record
+		statusSet, statusErr := loadStatusInstanceSet(ctx, db, worldID, string(entityID))
 		if statusErr != nil {
 			return result, statusErr
 		}
 		result.StatusSets[entityID] = statusSet
-		result.Snapshot.ActiveStatuses = append(result.Snapshot.ActiveStatuses, statusSet.Active...)
-		for sourceEffectID, snapshot := range statusSet.Snapshots {
-			result.Statuses.Snapshots[sourceEffectID] = snapshot
+		result.Snapshot.StatusInstances = append(result.Snapshot.StatusInstances, statusSet.Instances...)
+		for sourceEffectID, inlineStatus := range statusSet.InlineStatuses {
+			result.InlineStatuses.InlineStatuses[sourceEffectID] = inlineStatus
 		}
 	}
-	if err := resolutionTargetEligibilityError(result.Plan, characterStatuses); err != nil {
+	if err := consequenceTargetEligibilityError(result.Plan, characterStatuses); err != nil {
 		return result, err
 	}
 	return result, nil
 }
 
-func resolutionTargetEligibilityError(plan rules.TransitionPlan, characterStatuses map[rules.ID]string) error {
+func consequenceTargetEligibilityError(plan rules.TransitionPlan, characterStatuses map[rules.ID]string) error {
 	errs := make(rules.ValidationErrors, 0)
 	for effectIndex, effect := range plan.Effects {
 		for entityIndex, entityID := range effect.EntityIDs {
@@ -256,120 +256,120 @@ func resolutionTargetEligibilityError(plan rules.TransitionPlan, characterStatus
 	return domainTransitionError(&rules.DomainError{Kind: rules.ErrInvalidTransition, Errors: errs})
 }
 
-func statusReceipts(
-	commands []rules.AppliedStatusCommand,
-	initial map[rules.ID]loadedStatusSet,
-	configuration resolutionStatusConfiguration,
-) ([]statusApplicationReceipt, error) {
+func statusApplicationResults(
+	applications []rules.StatusApplication,
+	initial map[rules.ID]loadedStatusInstanceSet,
+	inlineStatuses consequenceInlineStatuses,
+) ([]statusApplicationResult, error) {
 	activeNames := make(map[rules.ID]string)
 	for _, set := range initial {
 		for _, status := range set.Responses {
 			activeNames[rules.ID(status.ID)] = status.Name
 		}
 	}
-	receipts := make([]statusApplicationReceipt, 0, len(commands))
-	for _, command := range commands {
+	results := make([]statusApplicationResult, 0, len(applications))
+	for _, application := range applications {
 		var name string
-		switch command.Operation {
+		switch application.Operation {
 		case rules.EffectApplyStatus:
-			configured, exists := configuration.Responses[command.SourceEffectID]
+			details, exists := inlineStatuses.Details[application.SourceEffectID]
 			if !exists {
-				return nil, fmt.Errorf("inline status snapshot %s is missing", command.SourceEffectID)
+				return nil, fmt.Errorf("inline status %s is missing", application.SourceEffectID)
 			}
-			name = configured.Name
-			activeNames[command.StatusInstanceID] = name
+			name = details.Name
+			activeNames[application.StatusInstanceID] = name
 		case rules.EffectRemoveStatus:
 			var exists bool
-			name, exists = activeNames[command.StatusInstanceID]
+			name, exists = activeNames[application.StatusInstanceID]
 			if !exists {
-				return nil, fmt.Errorf("active status instance %s is missing", command.StatusInstanceID)
+				return nil, fmt.Errorf("status instance %s is missing", application.StatusInstanceID)
 			}
-			delete(activeNames, command.StatusInstanceID)
+			delete(activeNames, application.StatusInstanceID)
 		case rules.EffectSet, rules.EffectAdjustNumber:
-			return nil, fmt.Errorf("scalar operation %s is not a status command", command.Operation)
+			return nil, fmt.Errorf("scalar operation %s is not a Status Application", application.Operation)
 		default:
-			return nil, fmt.Errorf("unsupported status command %s", command.Operation)
+			return nil, fmt.Errorf("unsupported Status Application %s", application.Operation)
 		}
-		receipts = append(receipts, statusApplicationReceipt{
-			EffectID: command.EffectID, EntityID: command.EntityID,
-			StatusInstanceID: command.StatusInstanceID, StatusName: name,
-			Operation: command.Operation, Changed: true,
-			BeforeActive: command.Operation == rules.EffectRemoveStatus,
-			AfterActive:  command.Operation == rules.EffectApplyStatus,
+		results = append(results, statusApplicationResult{
+			EffectID: application.EffectID, EntityID: application.EntityID,
+			StatusInstanceID: application.StatusInstanceID, StatusName: name,
+			Operation: application.Operation, Changed: true,
+			BeforeActive: application.Operation == rules.EffectRemoveStatus,
+			AfterActive:  application.Operation == rules.EffectApplyStatus,
 		})
 	}
-	return receipts, nil
+	return results, nil
 }
 
-func previewStatusSets(input resolutionRuntimeInput, transition rules.RuntimeTransitionResult) map[rules.ID]loadedStatusSet {
+func previewStatusSets(input consequenceRuntimeInput, transition rules.RuntimeTransitionResult) map[rules.ID]loadedStatusInstanceSet {
 	changed := make(map[rules.ID]struct{})
-	for _, command := range transition.AppliedStatusCommands {
-		changed[command.EntityID] = struct{}{}
+	for _, application := range transition.StatusApplications {
+		changed[application.EntityID] = struct{}{}
 	}
-	existingResponses := make(map[rules.ID]activeStatusResponse)
-	existingSnapshots := make(map[rules.ID]rules.StatusSnapshot)
+	existingResponses := make(map[rules.ID]statusInstanceResponse)
+	existingInlineStatuses := make(map[rules.ID]rules.InlineStatus)
 	for _, set := range input.StatusSets {
 		for _, response := range set.Responses {
 			existingResponses[rules.ID(response.ID)] = response
 		}
-		for sourceEffectID, snapshot := range set.Snapshots {
-			existingSnapshots[sourceEffectID] = snapshot
+		for sourceEffectID, inlineStatus := range set.InlineStatuses {
+			existingInlineStatuses[sourceEffectID] = inlineStatus
 		}
 	}
 	now := time.Now().UTC()
-	result := make(map[rules.ID]loadedStatusSet, len(input.TargetIDs))
+	result := make(map[rules.ID]loadedStatusInstanceSet, len(input.TargetIDs))
 	for _, entityID := range input.TargetIDs {
 		initial := input.StatusSets[entityID]
-		set := loadedStatusSet{
-			Revision: initial.Revision, Active: []rules.ActiveStatus{},
-			Snapshots: make(map[rules.ID]rules.StatusSnapshot),
-			Responses: []activeStatusResponse{}, Names: make(map[rules.ID]string),
+		set := loadedStatusInstanceSet{
+			Revision: initial.Revision, Instances: []rules.StatusInstance{},
+			InlineStatuses: make(map[rules.ID]rules.InlineStatus),
+			Responses:      []statusInstanceResponse{}, Names: make(map[rules.ID]string),
 		}
 		if _, exists := changed[entityID]; exists {
 			set.Revision++
 		}
-		for _, status := range transition.ActiveStatuses {
+		for _, status := range transition.StatusInstances {
 			if status.EntityID != entityID {
 				continue
 			}
-			set.Active = append(set.Active, status)
+			set.Instances = append(set.Instances, status)
 			if response, exists := existingResponses[status.ID]; exists {
 				set.Responses = append(set.Responses, response)
-				set.Snapshots[status.SourceEffectID] = existingSnapshots[status.SourceEffectID]
+				set.InlineStatuses[status.SourceEffectID] = existingInlineStatuses[status.SourceEffectID]
 				set.Names[status.SourceEffectID] = response.Name
 				continue
 			}
-			configured := input.Statuses.Responses[status.SourceEffectID]
-			set.Responses = append(set.Responses, activeStatusResponse{
-				ID: string(status.ID), Name: configured.Name, Description: configured.Description,
+			details := input.InlineStatuses.Details[status.SourceEffectID]
+			set.Responses = append(set.Responses, statusInstanceResponse{
+				ID: string(status.ID), Name: details.Name, Description: details.Description,
 				SourceInteractionID: input.InteractionID, SourceEffectID: string(status.SourceEffectID),
-				AppliedOrder: status.AppliedOrder, AppliedAt: now, Modifiers: configured.Modifiers,
+				AppliedOrder: status.AppliedOrder, AppliedAt: now, Modifiers: details.Modifiers,
 			})
-			set.Snapshots[status.SourceEffectID] = input.Statuses.Snapshots[status.SourceEffectID]
-			set.Names[status.SourceEffectID] = configured.Name
+			set.InlineStatuses[status.SourceEffectID] = input.InlineStatuses.InlineStatuses[status.SourceEffectID]
+			set.Names[status.SourceEffectID] = details.Name
 		}
 		result[entityID] = set
 	}
 	return result
 }
 
-func evaluateResolutionStates(
-	input resolutionRuntimeInput,
-	state rules.StateSnapshot,
-	statusSets map[rules.ID]loadedStatusSet,
-) (map[rules.ID]rules.EvaluatedState, error) {
-	result := make(map[rules.ID]rules.EvaluatedState, len(input.TargetIDs))
+func evaluateConsequenceEntities(
+	input consequenceRuntimeInput,
+	inputOverrides rules.InputOverrideSnapshot,
+	statusSets map[rules.ID]loadedStatusInstanceSet,
+) (map[rules.ID]rules.EntityEvaluation, error) {
+	result := make(map[rules.ID]rules.EntityEvaluation, len(input.TargetIDs))
 	for _, entityID := range input.TargetIDs {
 		entity, exists := input.Entities[entityID]
 		if !exists {
 			continue
 		}
-		record, exists := state.Records[entityID]
+		record, exists := inputOverrides.ByEntity[entityID]
 		if !exists {
 			continue
 		}
 		set := statusSets[entityID]
-		evaluated, err := rules.EvaluateEntityState(entity, record, input.Mechanics, set.Snapshots, set.Active)
+		evaluated, err := rules.EvaluateEntity(entity, record, input.Mechanics, set.InlineStatuses, set.Instances)
 		if err != nil {
 			return nil, err
 		}
@@ -378,10 +378,10 @@ func evaluateResolutionStates(
 	return result, nil
 }
 
-func resolutionEffectiveChanges(
-	input resolutionRuntimeInput,
-	before map[rules.ID]rules.EvaluatedState,
-	after map[rules.ID]rules.EvaluatedState,
+func consequenceEffectiveChanges(
+	input consequenceRuntimeInput,
+	before map[rules.ID]rules.EntityEvaluation,
+	after map[rules.ID]rules.EntityEvaluation,
 ) []effectiveChangeResponse {
 	result := make([]effectiveChangeResponse, 0)
 	for _, entityID := range input.TargetIDs {
@@ -395,24 +395,24 @@ func resolutionEffectiveChanges(
 	return result
 }
 
-func runtimeAppliedEffectsToResponse(
+func runtimeEffectApplicationsToResponse(
 	plan rules.TransitionPlan,
 	transition rules.RuntimeTransitionResult,
-	statusApplications []statusApplicationReceipt,
-) []concreteAppliedEffectResponse {
-	scalarByEffect := make(map[rules.ID][]rules.AppliedEffect)
-	for _, application := range transition.AppliedEffects {
+	statusApplications []statusApplicationResult,
+) []effectApplicationResponse {
+	scalarByEffect := make(map[rules.ID][]rules.ScalarApplication)
+	for _, application := range transition.ScalarApplications {
 		scalarByEffect[application.EffectID] = append(scalarByEffect[application.EffectID], application)
 	}
-	statusByEffect := make(map[rules.ID][]statusApplicationReceipt)
+	statusByEffect := make(map[rules.ID][]statusApplicationResult)
 	for _, application := range statusApplications {
 		statusByEffect[application.EffectID] = append(statusByEffect[application.EffectID], application)
 	}
-	result := make([]concreteAppliedEffectResponse, 0, len(transition.AppliedEffects)+len(statusApplications))
+	result := make([]effectApplicationResponse, 0, len(transition.ScalarApplications)+len(statusApplications))
 	for _, effect := range plan.Effects {
 		for _, application := range scalarByEffect[effect.ID] {
-			before, after := stateValueDomainToDTO(application.Before), stateValueDomainToDTO(application.After)
-			result = append(result, concreteAppliedEffectResponse{
+			before, after := mechanicValueDomainToDTO(application.Before), mechanicValueDomainToDTO(application.After)
+			result = append(result, effectApplicationResponse{
 				Type: string(effect.Operation), EffectID: string(effect.ID),
 				EntityID: string(application.EntityID), MechanicID: string(application.MechanicID),
 				Before: &before, After: &after, Changed: application.Changed,
@@ -420,7 +420,7 @@ func runtimeAppliedEffectsToResponse(
 		}
 		for _, application := range statusByEffect[effect.ID] {
 			before, after := application.BeforeActive, application.AfterActive
-			result = append(result, concreteAppliedEffectResponse{
+			result = append(result, effectApplicationResponse{
 				Type: string(application.Operation), EffectID: string(effect.ID),
 				EntityID: string(application.EntityID), StatusInstanceID: string(application.StatusInstanceID),
 				StatusName: application.StatusName, ActiveBefore: &before, ActiveAfter: &after,
@@ -431,79 +431,79 @@ func runtimeAppliedEffectsToResponse(
 	return result
 }
 
-func previewRuntimeResult(
+func buildConsequencePreviewResult(
 	interactionID string,
 	interactionRevision int64,
 	narrative string,
-	input resolutionRuntimeInput,
+	input consequenceRuntimeInput,
 	transition rules.RuntimeTransitionResult,
-	statusApplications []statusApplicationReceipt,
+	statusApplications []statusApplicationResult,
 	changes []effectiveChangeResponse,
-	statusSets map[rules.ID]loadedStatusSet,
-) (interactionResolutionResultResponse, error) {
-	result := interactionResolutionResultResponse{
+	statusSets map[rules.ID]loadedStatusInstanceSet,
+) (consequenceApplicationResultResponse, error) {
+	result := consequenceApplicationResultResponse{
 		Preview: true, InteractionID: interactionID, InteractionRevision: interactionRevision,
 		RulesRevision: input.RulesRevision, Narrative: narrative,
-		AppliedEffects:   runtimeAppliedEffectsToResponse(input.Plan, transition, statusApplications),
+		Applications:     runtimeEffectApplicationsToResponse(input.Plan, transition, statusApplications),
 		EffectiveChanges: changes,
-		State:            transitionStateResponse{Records: make(map[string]stateRecordResponse, len(input.TargetIDs))},
+		EntitySheets:     make(map[string]entitySheetResponse, len(input.TargetIDs)),
 	}
-	changedRecords := make(map[rules.ID]struct{}, len(transition.ChangedRecordIDs))
-	for _, entityID := range transition.ChangedRecordIDs {
-		changedRecords[entityID] = struct{}{}
+	changedEntities := make(map[rules.ID]struct{}, len(transition.ChangedEntityIDs))
+	for _, entityID := range transition.ChangedEntityIDs {
+		changedEntities[entityID] = struct{}{}
 	}
 	for _, entityID := range input.TargetIDs {
 		entity, exists := input.Entities[entityID]
 		if !exists {
 			continue
 		}
-		record := transition.State.Records[entityID]
-		if _, changed := changedRecords[entityID]; changed {
+		record := transition.InputOverrides.ByEntity[entityID]
+		if _, changed := changedEntities[entityID]; changed {
 			record.Revision++
 		}
-		response, err := evaluatedStateResponse(entity, record, input.Mechanics, input.RulesRevision, statusSets[entityID])
+		response, err := buildEntitySheetResponse(entity, record, input.Mechanics, input.RulesRevision, statusSets[entityID])
 		if err != nil {
-			return interactionResolutionResultResponse{}, err
+			return consequenceApplicationResultResponse{}, err
 		}
-		result.State.Records[string(entityID)] = response
+		result.EntitySheets[string(entityID)] = response
 	}
 	return result, nil
 }
 
-func persistStatusCommands(
+func persistStatusApplications(
 	ctx context.Context,
 	tx pgx.Tx,
 	worldID, resolutionID string,
-	commands []rules.AppliedStatusCommand,
-	configuration resolutionStatusConfiguration,
+	applications []rules.StatusApplication,
+	inlineStatuses consequenceInlineStatuses,
 ) error {
 	changedEntities := make(map[rules.ID]struct{})
-	for _, command := range commands {
-		switch command.Operation {
+	for _, application := range applications {
+		switch application.Operation {
 		case rules.EffectApplyStatus:
-			configured, exists := configuration.Responses[command.SourceEffectID]
+			details, exists := inlineStatuses.Details[application.SourceEffectID]
 			if !exists {
-				return fmt.Errorf("inline status snapshot %s is missing", command.SourceEffectID)
+				return fmt.Errorf("inline status %s is missing", application.SourceEffectID)
 			}
 			if _, err := tx.Exec(ctx, `
 				insert into entity_status_instances
 					(id, world_id, entity_id, source_resolution_id, source_effect_id,
 					 status_name, status_description)
 				values ($1, $2, $3, $4, $5, $6, $7)`,
-				command.StatusInstanceID, worldID, command.EntityID, resolutionID,
-				command.SourceEffectID, configured.Name, configured.Description); err != nil {
+				application.StatusInstanceID, worldID, application.EntityID, resolutionID,
+				application.SourceEffectID, details.Name, details.Description); err != nil {
 				return err
 			}
-			for _, modifier := range configured.Modifiers {
-				number, boolean := stateValueDTOColumns(modifier.Value)
+			for _, modifier := range details.Modifiers {
+				number, boolean := mechanicValueDTOColumns(modifier.Value)
 				if _, err := tx.Exec(ctx, `
 					insert into entity_status_instance_modifiers
 						(status_instance_id, world_id, entity_id, source_resolution_id,
 						 source_effect_id, source_modifier_id, position, priority, operation,
 						 mechanic_id, value_kind, number_value, boolean_value)
 					values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-					command.StatusInstanceID, worldID, command.EntityID, resolutionID,
-					command.SourceEffectID, modifier.ID, modifier.Position, modifier.Priority,
+					application.StatusInstanceID, worldID, application.EntityID, resolutionID,
+					application.SourceEffectID, modifier.ID, modifier.Position, modifier.Priority,
 					modifier.Operation, modifier.MechanicID, modifier.Value.Kind, number, boolean); err != nil {
 					return err
 				}
@@ -513,19 +513,19 @@ func persistStatusCommands(
 				update entity_status_instances
 				set status = 'removed', removed_at = now()
 				where world_id = $1 and entity_id = $2 and id = $3 and status = 'active'`,
-				worldID, command.EntityID, command.StatusInstanceID)
+				worldID, application.EntityID, application.StatusInstanceID)
 			if err != nil {
 				return err
 			}
 			if commandTag.RowsAffected() != 1 {
-				return errors.New("active status changed while resolution was being applied")
+				return errors.New("status instance changed while the resolution was being committed")
 			}
 		case rules.EffectSet, rules.EffectAdjustNumber:
-			return fmt.Errorf("scalar operation %s is not a status command", command.Operation)
+			return fmt.Errorf("scalar operation %s is not a Status Application", application.Operation)
 		default:
-			return fmt.Errorf("unsupported status command %s", command.Operation)
+			return fmt.Errorf("unsupported Status Application %s", application.Operation)
 		}
-		changedEntities[command.EntityID] = struct{}{}
+		changedEntities[application.EntityID] = struct{}{}
 	}
 	entityIDs := make([]rules.ID, 0, len(changedEntities))
 	for entityID := range changedEntities {
@@ -548,14 +548,14 @@ func insertRuntimeResolutionEffects(
 	worldID, resolutionID string,
 	plan rules.TransitionPlan,
 	transition rules.RuntimeTransitionResult,
-	statusApplications []statusApplicationReceipt,
-	configuration resolutionStatusConfiguration,
+	statusApplications []statusApplicationResult,
+	inlineStatuses consequenceInlineStatuses,
 ) error {
-	scalarByEffect := make(map[rules.ID][]rules.AppliedEffect)
-	for _, application := range transition.AppliedEffects {
+	scalarByEffect := make(map[rules.ID][]rules.ScalarApplication)
+	for _, application := range transition.ScalarApplications {
 		scalarByEffect[application.EffectID] = append(scalarByEffect[application.EffectID], application)
 	}
-	statusByEffect := make(map[rules.ID][]statusApplicationReceipt)
+	statusByEffect := make(map[rules.ID][]statusApplicationResult)
 	for _, application := range statusApplications {
 		statusByEffect[application.EffectID] = append(statusByEffect[application.EffectID], application)
 	}
@@ -576,8 +576,8 @@ func insertRuntimeResolutionEffects(
 			valueKind = rules.ValueNumber
 			adjustment = effect.AdjustmentAmount.String()
 		case rules.EffectApplyStatus:
-			configured := configuration.Responses[effect.ID]
-			statusName, statusDescription = configured.Name, configured.Description
+			details := inlineStatuses.Details[effect.ID]
+			statusName, statusDescription = details.Name, details.Description
 		case rules.EffectRemoveStatus:
 			// Removal effects carry their status instance on each target row.
 		default:
@@ -593,10 +593,10 @@ func insertRuntimeResolutionEffects(
 			return err
 		}
 		if effect.Operation == rules.EffectApplyStatus {
-			for _, modifier := range configuration.Responses[effect.ID].Modifiers {
-				number, boolean := stateValueDTOColumns(modifier.Value)
+			for _, modifier := range inlineStatuses.Details[effect.ID].Modifiers {
+				number, boolean := mechanicValueDTOColumns(modifier.Value)
 				if _, err := tx.Exec(ctx, `
-					insert into interaction_resolution_status_effect_modifiers
+					insert into interaction_resolution_inline_status_modifiers
 						(id, effect_id, resolution_id, world_id, position, priority, operation,
 						 mechanic_id, value_kind, number_value, boolean_value)
 					values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
@@ -624,10 +624,10 @@ func insertRuntimeResolutionEffects(
 			if err != nil {
 				return err
 			}
-			beforeNumber, beforeBoolean := stateValueDatabaseColumns(application.Before)
-			afterNumber, afterBoolean := stateValueDatabaseColumns(application.After)
+			beforeNumber, beforeBoolean := mechanicValueDatabaseColumns(application.Before)
+			afterNumber, afterBoolean := mechanicValueDatabaseColumns(application.After)
 			if _, err := tx.Exec(ctx, `
-				insert into interaction_resolution_effect_applications
+				insert into interaction_resolution_scalar_applications
 					(id, resolution_id, effect_id, world_id, mechanic_id, value_kind,
 					 entity_id, position, changed, before_number, before_boolean,
 					 after_number, after_boolean)
@@ -666,23 +666,23 @@ func insertRuntimeResolutionEffects(
 	return nil
 }
 
-func insertEffectiveChangeReceipts(
+func insertEffectiveChanges(
 	ctx context.Context,
 	tx pgx.Tx,
 	worldID, resolutionID string,
 	changes []effectiveChangeResponse,
 ) error {
 	for position, change := range changes {
-		before, err := stateValueDTOToDomain(change.Before)
+		before, err := mechanicValueDTOToDomain(change.Before)
 		if err != nil {
 			return err
 		}
-		after, err := stateValueDTOToDomain(change.After)
+		after, err := mechanicValueDTOToDomain(change.After)
 		if err != nil {
 			return err
 		}
-		beforeNumber, beforeBoolean := stateValueDatabaseColumns(before)
-		afterNumber, afterBoolean := stateValueDatabaseColumns(after)
+		beforeNumber, beforeBoolean := mechanicValueDatabaseColumns(before)
+		afterNumber, afterBoolean := mechanicValueDatabaseColumns(after)
 		if _, err := tx.Exec(ctx, `
 			insert into interaction_resolution_effective_changes
 				(resolution_id, world_id, entity_id, mechanic_id, value_kind, position,
@@ -696,7 +696,7 @@ func insertEffectiveChangeReceipts(
 	return nil
 }
 
-func stateValueDTOColumns(value stateValueDTO) (any, any) {
+func mechanicValueDTOColumns(value mechanicValueDTO) (any, any) {
 	if value.Kind == string(rules.ValueNumber) && value.Number != nil {
 		return value.Number.String(), nil
 	}

@@ -32,6 +32,7 @@ describe("workspace presentation", () => {
 
     expect(html).toContain("The Glass March");
     expect(html).toContain("Character fields");
+    expect(html).toContain("Members &amp; invites");
     expect(html).toContain("Character field editor");
     expect(html).toContain('class="active"');
   });
@@ -40,18 +41,18 @@ describe("workspace presentation", () => {
     const html = renderToStaticMarkup(
       <PlayWorkspaceView
         worldName="The Glass March"
-        roleLabel="player"
+        currentPlayRoleLabel="player"
         user={{ displayName: "River", username: "river.song" }}
         accountControls={<button type="button">Account</button>}
         onHome={() => undefined}
         onWorldLibrary={() => undefined}
       >
-        <p>Live table fixture</p>
+        <p>Play surface fixture</p>
       </PlayWorkspaceView>,
     );
 
     expect(html).toContain("All worlds");
     expect(html).toContain("The Glass March");
-    expect(html).toContain("Live table fixture");
+    expect(html).toContain("Play surface fixture");
   });
 });

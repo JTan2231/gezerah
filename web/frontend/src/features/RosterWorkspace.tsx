@@ -71,7 +71,7 @@ export function RosterWorkspace({
       mechanicsLoading ||
       entitiesLoading ||
       !entityItems.some(
-        (entity) => entity.state.rules_revision !== rulesRevision,
+        (entity) => entity.sheet.rules_revision !== rulesRevision,
       )
     )
       return;
@@ -118,7 +118,7 @@ export function RosterWorkspace({
       detail={
         selectedEntity === undefined ? null : (
           <EntityDetail
-            key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
+            key={`${selectedEntity.id}:${selectedEntity.sheet.logical_state_revision}:${selectedEntity.sheet.status_set_revision}:${selectedEntity.sheet.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
             entity={selectedEntity}
             mechanics={mechanicItems}
             rulesRevision={mechanicCollection?.revision ?? world.rules_revision}
@@ -182,7 +182,7 @@ function rosterSubtitle(
       membership.controlled_entity_ids.includes(entity.id),
   );
   if (controllers.length === 0) return "Uncontrolled entity";
-  const readiness =
+  const characterStatusLabel =
     entity.character_status === "ready"
       ? "Ready"
       : `Setup ${entity.completed_field_count}/${entity.required_field_count}`;
@@ -191,5 +191,5 @@ function rosterSubtitle(
       membership.id === currentMembershipID ? "You" : membership.display_name,
     )
     .join(", ");
-  return `${readiness} · ${names}`;
+  return `${characterStatusLabel} · ${names}`;
 }

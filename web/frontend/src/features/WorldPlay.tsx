@@ -8,13 +8,14 @@ import {
   worldPath,
 } from "../api/client";
 import type {
-  AvailableCharacters,
-  CharacterClaimResult,
+  AvailableEntities,
   ConsequenceCompilation,
+  ConsequencePreviewResult,
+  EntityClaimResult,
   Interaction,
   InteractionAction,
   InteractionResolutionResult,
-  StateValue,
+  MechanicValue,
   User,
   World,
   WorldEntity,
@@ -45,7 +46,7 @@ import type {
   AgentModeViewModel,
   HistoryCardViewModel,
   PlayViewIssue,
-  RulingPreviewViewModel,
+  ConsequencePreviewViewModel,
   SubmittedActionViewModel,
 } from "./WorldPlayViewModel";
 import {
@@ -54,7 +55,7 @@ import {
   OpenProblemView,
   TerraDecisionPendingView,
 } from "./WorldProblemView";
-import { RulingView } from "./WorldRulingView";
+import { ConsequenceView } from "./WorldConsequenceView";
 
 export function WorldPlay({
   world,
@@ -77,12 +78,12 @@ export function WorldPlay({
   const interactions = useCollection<Interaction>(
     playReady ? worldPath(world.id, "interactions") : null,
   );
-  const availableCharacters = useResource<AvailableCharacters>(
+  const availableEntities = useResource<AvailableEntities>(
     world.status === "active" &&
       world.facilitator.source === "agent" &&
       world.current_play_role === "player" &&
       world.play_status === "waiting-for-character"
-      ? worldPath(world.id, "available-characters")
+      ? worldPath(world.id, "available-entities")
       : null,
   );
   const [creatingProblem, setCreatingProblem] = useState(false);
@@ -109,7 +110,7 @@ export function WorldPlay({
   const reloadMembers = members.reload;
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
-  const reloadAvailableCharacters = availableCharacters.reload;
+  const reloadAvailableEntities = availableEntities.reload;
 
   const reloadMechanics = mechanics.reload;
   const refresh = useCallback(
@@ -117,7 +118,7 @@ export function WorldPlay({
       reloadMembers();
       reloadEntities();
       reloadInteractions();
-      reloadAvailableCharacters();
+      reloadAvailableEntities();
       if (event === undefined || event.type === "rules-updated") {
         reloadMechanics();
       }
@@ -130,7 +131,7 @@ export function WorldPlay({
       reloadInteractions,
       reloadMechanics,
       reloadMembers,
-      reloadAvailableCharacters,
+      reloadAvailableEntities,
     ],
   );
   useAgentPlayTools({
@@ -174,17 +175,17 @@ export function WorldPlay({
     const returningToSeat =
       world.current_play_role === "facilitator"
         ? currentMember?.play_status === "ready"
-          ? " Your player seat is ready when the handoff completes."
+          ? " Your Play status is ready when the handoff completes."
           : " You’ll enter character setup when the handoff completes."
         : "";
     const confirmation =
       emergencyTakeover || possibleAutomatedTakeover
-        ? `Take over from ${world.facilitator.source === "agent" ? "ChatGPT" : "Terra"}? If a problem is active, your submitted action will be withdrawn and you will decide the outcome as Dungeon Master.`
+        ? `Take over from ${world.facilitator.source === "agent" ? "ChatGPT" : "Terra"}? If a problem is active, your submitted action will be withdrawn and you will resolve the problem as Dungeon Master.`
         : terra
-          ? `Hand the table to Terra Auto DM? Terra will author and resolve the next problem.${returningToSeat}`
+          ? `Hand facilitation to Terra? Terra will author and resolve the next Problem.${returningToSeat}`
           : agent
-            ? `Hand the table to ChatGPT? ChatGPT will use this signed-in Play page to author and resolve problems.${returningToSeat}`
-            : `${targetMember?.display_name ?? "This member"} will become the Dungeon Master and their player seat will pause.${returningToSeat}`;
+            ? `Hand facilitation to ChatGPT? ChatGPT will use this signed-in Play page to author and resolve Problems.${returningToSeat}`
+            : `${targetMember?.display_name ?? "This member"} will become the Dungeon Master and their current play role will become facilitator.${returningToSeat}`;
     if (!window.confirm(confirmation)) return;
     setChangingFacilitator(true);
     setFacilitatorError(null);
@@ -205,7 +206,7 @@ export function WorldPlay({
       setFacilitatorError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not hand off the table."),
+          : new ApiError(0, "unknown", "Could not hand off facilitation."),
       );
     } finally {
       setChangingFacilitator(false);
@@ -216,7 +217,7 @@ export function WorldPlay({
     setContinuingWithTerra(true);
     setTerraContinueError(null);
     try {
-      await api<Interaction>(worldPath(world.id, "auto-dm/continue"), {
+      await api<Interaction>(worldPath(world.id, "terra/continue"), {
         method: "POST",
       });
       refresh();
@@ -245,7 +246,7 @@ export function WorldPlay({
     )
       return;
     const mismatched = entities.items.some(
-      (entity) => entity.state.rules_revision !== mechanicsRevision,
+      (entity) => entity.sheet.rules_revision !== mechanicsRevision,
     );
     if (!mismatched) return;
     reloadMechanics();
@@ -282,22 +283,22 @@ export function WorldPlay({
         }
         loading={entities.loading || members.loading}
         error={entities.error ?? members.error}
-        availableCharacters={availableCharacters.value}
-        availableCharactersLoading={availableCharacters.loading}
-        availableCharactersError={availableCharacters.error}
+        availableEntities={availableEntities.value}
+        availableEntitiesLoading={availableEntities.loading}
+        availableEntitiesError={availableEntities.error}
         onRetry={() => {
           entities.reload();
           members.reload();
-          availableCharacters.reload();
+          availableEntities.reload();
         }}
         refreshToken={profileRefreshToken}
         dungeonMasterName={
           world.facilitator.display_name ??
           (world.facilitator.source === "terra"
-            ? "Terra Auto DM"
+            ? "Terra"
             : world.facilitator.source === "agent"
               ? "ChatGPT"
-              : "Human facilitator")
+              : "Dungeon Master")
         }
         canBecomeFacilitator={
           world.status === "active" &&
@@ -348,7 +349,7 @@ export function WorldPlay({
     !entities.loading &&
     entities.error === null &&
     entities.items.every(
-      (entity) => entity.state.rules_revision === rulesRevision,
+      (entity) => entity.sheet.rules_revision === rulesRevision,
     );
 
   const membership = members.items.find(
@@ -385,12 +386,12 @@ export function WorldPlay({
   const facilitatorName =
     world.facilitator.display_name ??
     (world.facilitator.source === "terra"
-      ? "Terra Auto DM"
+      ? "Terra"
       : world.facilitator.source === "agent"
         ? "ChatGPT"
         : (members.items.find(
             (item) => item.id === world.facilitator.membership_id,
-          )?.display_name ?? "Facilitator"));
+          )?.display_name ?? "Dungeon Master"));
   const facilitatorValue =
     world.facilitator.source !== "human"
       ? world.facilitator.source
@@ -406,7 +407,7 @@ export function WorldPlay({
     (active?.status === "open" || active?.status === "adjudicating");
   const facilitatorChoices = [
     ...(world.facilitator.source !== "agent"
-      ? [{ value: "terra", name: "Terra Auto DM" }]
+      ? [{ value: "terra", name: "Terra" }]
       : []),
     { value: "agent", name: "ChatGPT" },
     ...members.items
@@ -425,8 +426,11 @@ export function WorldPlay({
       model={{
         worldName: world.name,
         currentUserName: user.display_name,
-        roleLabel: humanize(world.current_play_role),
-        accessLabel: humanize(world.role),
+        currentPlayRoleLabel:
+          world.current_play_role === "facilitator"
+            ? "Dungeon Master"
+            : humanize(world.current_play_role),
+        membershipRoleLabel: humanize(world.role),
         facilitator,
         canCreateProblem: facilitator && world.status === "active",
         hasActiveProblem: active !== undefined,
@@ -469,7 +473,7 @@ export function WorldPlay({
               controlled: controlledEntityIDs.includes(entity.id),
               setupRequired: entity.character_status === "setup-required",
             })),
-          readyMembers: members.items
+          playReadyMembers: members.items
             .filter(
               (item) =>
                 item.status === "active" && item.play_status === "ready",
@@ -527,7 +531,7 @@ export function WorldPlay({
         selectedEntity:
           selectedEntity === undefined ? null : (
             <EntityDetail
-              key={`${selectedEntity.id}:${selectedEntity.state.revision}:${selectedEntity.state.status_revision}:${selectedEntity.state.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
+              key={`${selectedEntity.id}:${selectedEntity.sheet.logical_state_revision}:${selectedEntity.sheet.status_set_revision}:${selectedEntity.sheet.rules_revision}:${mechanicItems.map((mechanic) => `${mechanic.id}:${mechanic.updated_at}`).join(":")}`}
               entity={selectedEntity}
               mechanics={mechanicItems}
               rulesRevision={rulesRevision}
@@ -567,9 +571,9 @@ function CharacterOnboarding({
   controlledEntityIDs,
   loading,
   error,
-  availableCharacters,
-  availableCharactersLoading,
-  availableCharactersError,
+  availableEntities,
+  availableEntitiesLoading,
+  availableEntitiesError,
   onRetry,
   refreshToken,
   dungeonMasterName,
@@ -587,9 +591,9 @@ function CharacterOnboarding({
   controlledEntityIDs: string[];
   loading: boolean;
   error: ApiError | null;
-  availableCharacters: AvailableCharacters | null;
-  availableCharactersLoading: boolean;
-  availableCharactersError: ApiError | null;
+  availableEntities: AvailableEntities | null;
+  availableEntitiesLoading: boolean;
+  availableEntitiesError: ApiError | null;
   onRetry: () => void;
   refreshToken: number;
   dungeonMasterName: string;
@@ -605,24 +609,24 @@ function CharacterOnboarding({
     (entity) => !entity.archived && controlledEntityIDs.includes(entity.id),
   );
   const [selectedID, setSelectedID] = useState<string | undefined>();
-  const [claimingCharacterID, setClaimingCharacterID] = useState<
+  const [claimingEntityID, setClaimingEntityID] = useState<
     string | undefined
   >();
   const [claimError, setClaimError] = useState<ApiError | null>(null);
   const selected =
     available.find((entity) => entity.id === selectedID) ?? available[0];
 
-  async function claimCharacter(entityID: string) {
-    if (availableCharacters === null) return;
-    setClaimingCharacterID(entityID);
+  async function claimEntity(entityID: string) {
+    if (availableEntities === null) return;
+    setClaimingEntityID(entityID);
     setClaimError(null);
     try {
-      await api<CharacterClaimResult>(
+      await api<EntityClaimResult>(
         worldPath(world.id, `entities/${entityID}/claim`),
         {
           method: "POST",
           ...jsonBody({
-            expected_table_revision: availableCharacters.table_revision,
+            expected_roster_revision: availableEntities.roster_revision,
           }),
         },
       );
@@ -634,7 +638,7 @@ function CharacterOnboarding({
           : new ApiError(0, "unknown", "Could not claim that character."),
       );
     } finally {
-      setClaimingCharacterID(undefined);
+      setClaimingEntityID(undefined);
     }
   }
 
@@ -657,8 +661,8 @@ function CharacterOnboarding({
         canBecomeFacilitator,
         changingFacilitator,
         facilitatorIssue: toPlayViewIssue(facilitatorError),
-        loading: loading || availableCharactersLoading,
-        issue: toPlayViewIssue(error ?? availableCharactersError),
+        loading: loading || availableEntitiesLoading,
+        issue: toPlayViewIssue(error ?? availableEntitiesError),
         characters: available.map((entity) => ({
           id: entity.id,
           name: entity.display_name,
@@ -666,16 +670,16 @@ function CharacterOnboarding({
           requiredFieldCount: entity.required_field_count,
           selected: selected?.id === entity.id,
         })),
-        claimableCharacters: (availableCharacters?.characters ?? []).map(
-          (character) => ({
-            id: character.id,
-            name: character.display_name,
-            ...(character.profile_summary === undefined
+        availableEntities: (availableEntities?.entities ?? []).map(
+          (entity) => ({
+            id: entity.id,
+            name: entity.display_name,
+            ...(entity.profile_summary === undefined
               ? {}
-              : { summary: character.profile_summary }),
+              : { summary: entity.profile_summary }),
           }),
         ),
-        claimingCharacterId: claimingCharacterID,
+        claimingEntityId: claimingEntityID,
         claimIssue: toPlayViewIssue(claimError),
         agentMode,
       }}
@@ -683,7 +687,7 @@ function CharacterOnboarding({
         retry: onRetry,
         selectCharacter: setSelectedID,
         becomeFacilitator: onBecomeFacilitator,
-        claimCharacter: (entityID) => void claimCharacter(entityID),
+        claimEntity: (entityID) => void claimEntity(entityID),
         copyAgentPrompt: onCopyAgentPrompt,
       }}
       profile={
@@ -728,7 +732,7 @@ function NewProblemController({
   );
   const [title, setTitle] = useState("");
   const [prompt, setPrompt] = useState("");
-  const [entityIds, setEntityIds] = useState<string[]>([]);
+  const [contextEntityIDs, setContextEntityIDs] = useState<string[]>([]);
   const [responderIds, setResponderIds] = useState(
     responders.map((member) => member.id),
   );
@@ -774,7 +778,7 @@ function NewProblemController({
           prompt: prompt.trim(),
           audience_membership_ids: activeMembers.map((member) => member.id),
           eligible_responder_membership_ids: responderIds,
-          entity_ids: entityIds,
+          context_entity_ids: contextEntityIDs,
         }),
       });
       onCreated();
@@ -794,7 +798,7 @@ function NewProblemController({
         draft: {
           title,
           description: prompt,
-          selectedEntityIds: entityIds,
+          selectedContextEntityIDs: contextEntityIDs,
           selectedResponderIds: responderIds,
         },
         contextEntities: entities
@@ -814,7 +818,8 @@ function NewProblemController({
       actions={{
         changeTitle: setTitle,
         changeDescription: setPrompt,
-        toggleContextEntity: (id) => toggle(entityIds, id, setEntityIds),
+        toggleContextEntity: (id) =>
+          toggle(contextEntityIDs, id, setContextEntityIDs),
         toggleResponder: (id) => toggle(responderIds, id, setResponderIds),
         submit: () => void submit(),
         close: onClose,
@@ -859,7 +864,7 @@ function LiveInteraction({
     (interaction.status === "open" || interaction.status === "adjudicating") &&
     world.current_play_role === "player" &&
     world.play_status === "ready";
-  const context = interaction.entity_ids
+  const contextEntities = interaction.context_entity_ids
     .map((id) => entities.find((entity) => entity.id === id))
     .filter((item): item is WorldEntity => item !== undefined);
 
@@ -895,7 +900,7 @@ function LiveInteraction({
     setError(null);
     try {
       await api<InteractionResolutionResult>(
-        worldPath(world.id, `interactions/${interaction.id}/auto-dm/decide`),
+        worldPath(world.id, `interactions/${interaction.id}/terra/decide`),
         {
           method: "POST",
           ...jsonBody({
@@ -910,7 +915,7 @@ function LiveInteraction({
       setError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Terra could not decide the outcome."),
+          : new ApiError(0, "unknown", "Terra could not resolve the problem."),
       );
       onChanged();
     } finally {
@@ -965,7 +970,9 @@ function LiveInteraction({
         ),
         title: interaction.title ?? "Problem",
         prompt: interaction.prompt,
-        contextEntityNames: context.map((entity) => entity.display_name),
+        contextEntityNames: contextEntities.map(
+          (entity) => entity.display_name,
+        ),
         facilitator,
         canSkip,
         working,
@@ -994,7 +1001,7 @@ function LiveInteraction({
             />
           ) : null}
           {interaction.status === "adjudicating" && facilitator ? (
-            <RulingEditor
+            <ConsequenceEditor
               interaction={interaction}
               world={world}
               entities={entities}
@@ -1049,9 +1056,9 @@ function OpenProblem({
   onRequestDecision: () => void;
   onChanged: () => void;
 }) {
-  const player = world.current_play_role === "player";
+  const currentPlayer = world.current_play_role === "player";
   const eligible =
-    player &&
+    currentPlayer &&
     interaction.eligible_responder_membership_ids.includes(membership.id);
   const currentAction = interaction.actions.find(
     (action) =>
@@ -1133,18 +1140,18 @@ function OpenProblem({
   const submitted = interaction.actions.filter(
     (action) => action.status === "submitted",
   );
-  const respondedMembershipIDs = new Set(
+  const actedMembershipIDs = new Set(
     submitted.map((action) => action.submitted_by_membership_id),
   );
-  const respondedCount = interaction.eligible_responder_membership_ids.filter(
-    (membershipID) => respondedMembershipIDs.has(membershipID),
+  const actedCount = interaction.eligible_responder_membership_ids.filter(
+    (membershipID) => actedMembershipIDs.has(membershipID),
   ).length;
   const responderCount = interaction.eligible_responder_membership_ids.length;
-  const allRespondersReady = respondedCount === responderCount;
+  const allRespondersActed = actedCount === responderCount;
   return (
     <OpenProblemView
       model={{
-        submissions: submitted.map(toSubmittedActionViewModel),
+        actions: submitted.map(toSubmittedActionViewModel),
         facilitator,
         eligibleResponder: eligible,
         actionSubmitted: currentAction !== undefined,
@@ -1158,14 +1165,14 @@ function OpenProblem({
         closing: working,
         terraFacilitated,
         agentFacilitated,
-        canRequestDecision: terraFacilitated && player,
-        allRespondersReady,
+        canRequestDecision: terraFacilitated && currentPlayer,
+        allRespondersActed,
         decisionEnabled: rulesReady,
-        responseProgressLabel: !rulesReady
-          ? "Refreshing the current rules and entity state."
+        actionProgressLabel: !rulesReady
+          ? "Refreshing the current rules and entity sheets."
           : responderCount === 0
-            ? "No player responses are required."
-            : `${respondedCount} of ${responderCount} responders have acted or passed.`,
+            ? "No responder Actions are required."
+            : `${actedCount} of ${responderCount} Responders have acted or passed.`,
         deciding: working,
         issue: toPlayViewIssue(error),
       }}
@@ -1182,7 +1189,7 @@ function OpenProblem({
   );
 }
 
-function RulingEditor({
+function ConsequenceEditor({
   interaction,
   world,
   entities,
@@ -1218,9 +1225,9 @@ function RulingEditor({
       entity.id,
       entity.archived,
       entity.character_status,
-      entity.state.revision,
-      entity.state.status_revision,
-      entity.state.rules_revision,
+      entity.sheet.logical_state_revision,
+      entity.sheet.status_set_revision,
+      entity.sheet.rules_revision,
     ]),
   });
   const compiled =
@@ -1304,9 +1311,9 @@ function RulingEditor({
   }
 
   return (
-    <RulingView
+    <ConsequenceView
       model={{
-        submissions: submitted.map(toSubmittedActionViewModel),
+        actions: submitted.map(toSubmittedActionViewModel),
         narrative,
         selectedAction:
           selectedAction === undefined
@@ -1321,7 +1328,11 @@ function RulingEditor({
         preview:
           compiled === null
             ? null
-            : toRulingPreviewViewModel(compiled.preview, entities, mechanics),
+            : toConsequencePreviewViewModel(
+                compiled.preview,
+                entities,
+                mechanics,
+              ),
         rulesReady,
         previewStale: compilation !== null && compiled === null,
         saving,
@@ -1370,34 +1381,36 @@ function toSubmittedActionViewModel(
   };
 }
 
-function toRulingPreviewViewModel(
-  result: InteractionResolutionResult,
+function toConsequencePreviewViewModel(
+  result: ConsequencePreviewResult,
   entities: WorldEntity[],
   mechanics: WorldMechanic[],
-): RulingPreviewViewModel {
+): ConsequencePreviewViewModel {
   return {
     applicationSummary:
-      result.applied_effects.length === 0
+      result.applications.length === 0
         ? "Narrative only"
-        : `${result.applied_effects.length} state ${result.applied_effects.length === 1 ? "application" : "applications"}`,
-    applications: result.applied_effects.map((effect, index) => ({
-      id: `${effect.effect_id}:${effect.entity_id}:${index}`,
+        : `${result.applications.length} ${result.applications.length === 1 ? "Application" : "Applications"}`,
+    applications: result.applications.map((application, index) => ({
+      id: `${application.effect_id}:${application.entity_id}:${index}`,
       entityName:
-        entities.find((entity) => entity.id === effect.entity_id)
+        entities.find((entity) => entity.id === application.entity_id)
           ?.display_name ?? "Entity",
       effectLabel:
-        effect.type === "apply-status"
-          ? `Applied ${effect.status_name ?? "status"}`
-          : effect.type === "remove-status"
-            ? `Removed ${effect.status_name ?? "status"}`
-            : (mechanics.find((mechanic) => mechanic.id === effect.mechanic_id)
-                ?.name ?? "Mechanic"),
-      outcomeLabel:
-        effect.type === "apply-status" || effect.type === "remove-status"
-          ? effect.changed
+        application.type === "apply-status"
+          ? `Applied ${application.status_name ?? "Status instance"}`
+          : application.type === "remove-status"
+            ? `Removed ${application.status_name ?? "Status instance"}`
+            : (mechanics.find(
+                (mechanic) => mechanic.id === application.mechanic_id,
+              )?.name ?? "Mechanic"),
+      resultLabel:
+        application.type === "apply-status" ||
+        application.type === "remove-status"
+          ? application.changed
             ? "changed"
             : "already current"
-          : `${displayValue(effect.before)} → ${displayValue(effect.after)}`,
+          : `${displayValue(application.before)} → ${displayValue(application.after)}`,
     })),
     effectiveChanges: result.effective_changes.map((change) => ({
       id: `${change.entity_id}:${change.mechanic_id}`,
@@ -1408,7 +1421,7 @@ function toRulingPreviewViewModel(
         mechanics.find((mechanic) => mechanic.id === change.mechanic_id)
           ?.name ?? "Mechanic"
       }`,
-      outcomeLabel: `${displayValue(change.before)} → ${displayValue(change.after)}`,
+      resultLabel: `${displayValue(change.before)} → ${displayValue(change.after)}`,
     })),
   };
 }
@@ -1427,49 +1440,49 @@ function toHistoryCardViewModel(
     interaction.created_by_membership_id;
   const facilitatorLabel =
     facilitatorSource === "terra"
-      ? "Terra Auto DM"
+      ? "Terra"
       : facilitatorSource === "agent"
         ? "ChatGPT"
         : (memberships.find(
             (membership) => membership.id === facilitatorMembershipID,
-          )?.display_name ?? "Human facilitator");
+          )?.display_name ?? "Dungeon Master");
   if (interaction.status === "cancelled")
     return {
       id: interaction.id,
-      outcome: "cancelled",
+      resolutionStatus: "cancelled",
       cancellationLabel:
         facilitatorSource === "human" ? "Cancelled" : "Skipped",
       occurredLabel: formatRelativeDate(interaction.cancelled_at),
       facilitatorLabel,
       title: interaction.title ?? "Untitled problem",
       prompt: interaction.prompt,
-      effects: [],
+      applications: [],
       effectiveChanges: [],
     };
   const resolution = interaction.resolution;
   return {
     id: interaction.id,
-    outcome: "resolved",
+    resolutionStatus: "resolved",
     occurredLabel: formatRelativeDate(interaction.resolved_at),
     facilitatorLabel,
     title: interaction.title ?? "Untitled problem",
     prompt: interaction.prompt,
     ...(resolution === undefined ? {} : { narrative: resolution.narrative }),
-    effects:
-      resolution?.applied_effects.map((effect, index) => ({
-        id: `${effect.effect_id}:${effect.entity_id}:${index}`,
+    applications:
+      resolution?.applications.map((application, index) => ({
+        id: `${application.effect_id}:${application.entity_id}:${index}`,
         label: `${
-          entities.find((entity) => entity.id === effect.entity_id)
+          entities.find((entity) => entity.id === application.entity_id)
             ?.display_name ?? "Entity"
         }: ${
-          effect.type === "apply-status"
-            ? `applied ${effect.status_name ?? "status"}`
-            : effect.type === "remove-status"
-              ? `removed ${effect.status_name ?? "status"}`
+          application.type === "apply-status"
+            ? `applied ${application.status_name ?? "Status instance"}`
+            : application.type === "remove-status"
+              ? `removed ${application.status_name ?? "Status instance"}`
               : `${
-                  mechanics.find((item) => item.id === effect.mechanic_id)
-                    ?.name ?? "mechanic"
-                } ${displayValue(effect.before)} → ${displayValue(effect.after)}`
+                  mechanics.find((item) => item.id === application.mechanic_id)
+                    ?.name ?? "Mechanic"
+                } ${displayValue(application.before)} → ${displayValue(application.after)}`
         }`,
       })) ?? [],
     effectiveChanges:
@@ -1486,7 +1499,7 @@ function toHistoryCardViewModel(
   };
 }
 
-function displayValue(value?: StateValue): string {
+function displayValue(value?: MechanicValue): string {
   if (value === undefined) return "unknown";
   return value.kind === "number" ? value.value : value.value ? "yes" : "no";
 }
@@ -1525,7 +1538,7 @@ function entitySubtitle(
   );
   if (capacity === undefined) return "Sheet ready";
   return `${capacity.name} ${displayValue(
-    entity.state.effective_values[capacity.id] ??
-      entity.state.values[capacity.id],
+    entity.sheet.effective_values[capacity.id] ??
+      entity.sheet.logical_input_values[capacity.id],
   )}`;
 }

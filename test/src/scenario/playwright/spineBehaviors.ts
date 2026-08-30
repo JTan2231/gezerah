@@ -53,7 +53,7 @@ const SPECS = [
     ["editor", "player", "spectator"],
     ["PLY-001", "PLY-002", "PLY-003"],
   ),
-  spec("spectator.project-table", ["spectator"], ["AUT-006"]),
+  spec("spectator.project-world-visible", ["spectator"], ["AUT-006"]),
   spec("action.offer", ["player", "editor"], ["PLY-004", "AUT-005"]),
   spec(
     "problem.adjudicate",

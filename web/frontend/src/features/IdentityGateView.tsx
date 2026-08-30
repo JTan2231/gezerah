@@ -116,7 +116,7 @@ export function IdentityGateView({
             {signingUp ? (
               <Field
                 label="Display name"
-                hint="The name other people will see at the table."
+                hint="The name shown to other World members in Play."
                 error={model.fieldIssues.displayName}
               >
                 <input

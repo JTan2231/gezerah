@@ -81,7 +81,7 @@ const JOURNEY_CHECKPOINT_GROUPS = [
     ],
   },
   {
-    checkpointId: "JRN-005/spectator-public-table-safe",
+    checkpointId: "JRN-005/spectator-world-visible-safe",
     scenarioIds: ["JRN-005", "AUT-003", "AUT-004", "AUT-005", "AUT-006"],
   },
   {
@@ -298,7 +298,7 @@ const LIFECYCLE_OWNER = Object.freeze({
   executionId: "journey.complete-world-lifecycle",
   ownerFile: "test/specs/scenarios/lifecycle-spine.spec.ts",
   executionMarker:
-    "one rendered lifecycle carries the table from authoring through archive",
+    "one rendered lifecycle carries the World from authoring through archive",
   evidenceAvailability: "executable",
 } as const satisfies OwnerAssignment);
 
@@ -375,9 +375,9 @@ const DIRECT_OWNERS = Object.freeze({
   },
   concurrency: {
     primaryTier: "direct-contract",
-    executionId: "contract.concurrency-and-status-matrices",
+    executionId: "contract.concurrency-and-status-instance-matrices",
     ownerFile:
-      "test/specs/contracts/concurrency-and-status-matrices.contract.spec.ts",
+      "test/specs/contracts/concurrency-and-status-instance-matrices.contract.spec.ts",
     executionMarker:
       "direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once resolution",
     evidenceAvailability: "executable",
@@ -400,10 +400,11 @@ const DIRECT_OWNERS = Object.freeze({
   },
   rules: {
     primaryTier: "direct-contract",
-    executionId: "contract.rules-and-status",
-    ownerFile: "test/specs/contracts/rules-and-status.contract.spec.ts",
+    executionId: "contract.mechanic-graph-and-status-instances",
+    ownerFile:
+      "test/specs/contracts/mechanic-graph-and-status-instances.contract.spec.ts",
     executionMarker:
-      "contract: typed rules publish atomically and statuses change effective state with receipts",
+      "world mechanic graph publishes atomically and Status instances change effective values with Resolution receipts",
     evidenceAvailability: "executable",
   },
   gapClosures: {
@@ -411,7 +412,7 @@ const DIRECT_OWNERS = Object.freeze({
     executionId: "contract.direct-gap-closures",
     ownerFile: "test/specs/contracts/direct-gap-closures.contract.spec.ts",
     executionMarker:
-      "contract: direct scenario gap closures preserve state, privacy, and authority",
+      "contract: direct scenario gap closures preserve logical input values, privacy, and authority",
     evidenceAvailability: "executable",
   },
 } as const satisfies Readonly<Record<string, OwnerAssignment>>);
@@ -549,10 +550,10 @@ const LOWER_TRACES = [
   trace("MEC-V05", {
     primaryTier: "lower-layer",
     executionId:
-      "go.TestMECV05DerivedMechanicIsAbsentFromWritableStateAndRejectedByEffects",
+      "go.TestMECV05DerivedMechanicHasNoStoredOverrideAndIsRejectedByEffects",
     ownerFile: "internal/rules/runtime_transition_test.go",
     executionMarker:
-      "func TestMECV05DerivedMechanicIsAbsentFromWritableStateAndRejectedByEffects",
+      "func TestMECV05DerivedMechanicHasNoStoredOverrideAndIsRejectedByEffects",
     evidenceAvailability: "executable",
   }),
   trace("CON-V02", {
@@ -626,9 +627,9 @@ const HARNESS_TRACES = [
   }),
   trace("GLO-008", {
     primaryTier: "harness-policy",
-    executionId: "go.TestRulesGraphStatusesMigrationContract",
+    executionId: "go.TestMechanicGraphStatusInstancesMigrationContract",
     ownerFile: "internal/migrations/migrations_test.go",
-    executionMarker: "func TestRulesGraphStatusesMigrationContract",
+    executionMarker: "func TestMechanicGraphStatusInstancesMigrationContract",
     evidenceAvailability: "executable",
   }),
   trace("GLO-009", {

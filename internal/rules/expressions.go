@@ -156,7 +156,7 @@ func inferExpressionType(
 			item.Path = pathForNestedValidation(path+".literal", item.Path)
 			errs = append(errs, item)
 		}
-		if validStateValueShape(*expression.Literal) {
+		if validMechanicValueShape(*expression.Literal) {
 			return expression.Literal.Kind, errs
 		}
 		return "", errs
@@ -285,8 +285,8 @@ func inferExpressionType(
 	}
 }
 
-func validateExpressionLiteral(value StateValue) ValidationErrors {
-	if !validValueKind(value.Kind) || !validStateValueShape(value) {
+func validateExpressionLiteral(value MechanicValue) ValidationErrors {
+	if !validValueKind(value.Kind) || !validMechanicValueShape(value) {
 		return ValidationErrors{validation("invalid_typed_value", "", "literal must contain exactly one number or boolean value")}
 	}
 	return nil
@@ -397,7 +397,7 @@ func sortedIDSet(set map[ID]struct{}) []ID {
 
 func cloneMechanicDefinition(definition MechanicDefinition) MechanicDefinition {
 	result := definition
-	result.DefaultValue = CloneStateValue(definition.DefaultValue)
+	result.DefaultValue = CloneMechanicValue(definition.DefaultValue)
 	if definition.Minimum != nil {
 		result.Minimum = decimalPointer(*definition.Minimum)
 	}
@@ -417,7 +417,7 @@ func cloneMechanicDefinition(definition MechanicDefinition) MechanicDefinition {
 func cloneExpression(expression Expression) Expression {
 	result := expression
 	if expression.Literal != nil {
-		literal := CloneStateValue(*expression.Literal)
+		literal := CloneMechanicValue(*expression.Literal)
 		result.Literal = &literal
 	}
 	result.Operands = make([]Expression, len(expression.Operands))

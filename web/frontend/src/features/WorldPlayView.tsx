@@ -74,7 +74,7 @@ export function WorldPlayView({
               ) : null}
             </label>
           ) : (
-            <div className="table-role dungeon-master-role">
+            <div className="play-role dungeon-master-role">
               <Avatar name={model.dungeonMaster.name} size="small" />
               <span>
                 <small>Dungeon Master</small>
@@ -92,12 +92,12 @@ export function WorldPlayView({
               {model.dungeonMaster.changing ? "Taking over…" : "Take over"}
             </button>
           ) : null}
-          <div className="table-role">
+          <div className="play-role">
             <Avatar name={model.currentUserName} size="small" />
             <span>
-              <small>Your role</small>
-              <strong>{model.roleLabel}</strong>
-              <small>World access: {model.accessLabel}</small>
+              <small>Your current play role</small>
+              <strong>{model.currentPlayRoleLabel}</strong>
+              <small>Membership role: {model.membershipRoleLabel}</small>
             </span>
           </div>
           {model.canCreateProblem ? (
@@ -172,17 +172,22 @@ export function WorldPlayView({
               <p>Create entities and generated sheets in Build.</p>
             </div>
           ) : null}
-          <div className="table-members">
-            <p>{model.roster.readyMembers.length} active members</p>
+          <div className="roster-members">
+            <p>
+              {model.roster.playReadyMembers.length} play-ready{" "}
+              {model.roster.playReadyMembers.length === 1
+                ? "member"
+                : "members"}
+            </p>
             <div>
-              {model.roster.readyMembers.slice(0, 6).map((member) => (
+              {model.roster.playReadyMembers.slice(0, 6).map((member) => (
                 <Avatar key={member.id} name={member.name} size="small" />
               ))}
             </div>
           </div>
         </aside>
 
-        <main className="table-stage">
+        <main className="play-stage">
           {model.problems.loading && !model.hasActiveProblem ? (
             <LoadingState label="Loading problems" />
           ) : null}
@@ -195,7 +200,7 @@ export function WorldPlayView({
           {model.hasActiveProblem ? (
             slots.activeProblem
           ) : (
-            <IdleTableView
+            <IdlePlayView
               facilitator={model.facilitator}
               canCreate={model.canCreateProblem}
               terraFacilitated={model.idle.terraFacilitated}
@@ -272,56 +277,57 @@ export function CharacterOnboardingView({
       )}
 
       {model.loading && model.characters.length === 0 ? (
-        <LoadingState label="Loading characters" />
+        <LoadingState label="Loading character setup" />
       ) : null}
       {model.issue === null ? null : (
         <ErrorMessage error={model.issue} onRetry={actions.retry} />
       )}
       {!model.loading && model.characters.length === 0 ? (
-        model.claimableCharacters.length === 0 ? (
+        model.availableEntities.length === 0 ? (
           <div className="onboarding-waiting panel">
             <EmptyState
               title={
                 model.agentMode === null
                   ? "No character assigned"
-                  : "No character available"
+                  : "No entity available"
               }
               description={
                 model.agentMode === null
                   ? "An owner or editor must create an entity and assign you as a controller."
-                  : "There are no unclaimed characters at this table yet."
+                  : "There are no uncontrolled entities available in this world."
               }
             />
           </div>
         ) : (
-          <section className="panel claimable-characters">
+          <section className="panel available-entities">
             <header>
-              <h2>Choose your character</h2>
+              <h2>Choose an entity</h2>
               <p>
-                Claim one available character to take your seat at the table.
+                Choose an available entity. Once claimed, it becomes your
+                character.
               </p>
             </header>
-            <div className="claimable-character-list">
-              {model.claimableCharacters.map((character) => (
-                <article key={character.id}>
+            <div className="available-entity-list">
+              {model.availableEntities.map((entity) => (
+                <article key={entity.id}>
                   <span className="entity-token" aria-hidden="true">
-                    {character.name.slice(0, 1).toUpperCase()}
+                    {entity.name.slice(0, 1).toUpperCase()}
                   </span>
                   <div>
-                    <strong>{character.name}</strong>
-                    {character.summary === undefined ? null : (
-                      <p>{character.summary}</p>
+                    <strong>{entity.name}</strong>
+                    {entity.summary === undefined ? null : (
+                      <p>{entity.summary}</p>
                     )}
                   </div>
                   <button
                     className="button button-play"
                     type="button"
-                    disabled={model.claimingCharacterId !== undefined}
-                    onClick={() => actions.claimCharacter(character.id)}
+                    disabled={model.claimingEntityId !== undefined}
+                    onClick={() => actions.claimEntity(entity.id)}
                   >
-                    {model.claimingCharacterId === character.id
+                    {model.claimingEntityId === entity.id
                       ? "Claiming…"
-                      : "Choose character"}
+                      : "Choose entity"}
                   </button>
                 </article>
               ))}
@@ -374,7 +380,7 @@ export function CharacterOnboardingView({
   );
 }
 
-function IdleTableView({
+function IdlePlayView({
   facilitator,
   canCreate,
   terraFacilitated,
@@ -396,20 +402,20 @@ function IdleTableView({
   onContinue: () => void;
 }) {
   return (
-    <section className="idle-table">
-      <h2>No active problem</h2>
+    <section className="idle-play">
+      <h2>No active Problem</h2>
       <p>
         {agentFacilitated
-          ? "ChatGPT is running the table. Continue the adventure in your ChatGPT conversation."
+          ? "ChatGPT is facilitating Play. Continue Play in your ChatGPT conversation."
           : terraFacilitated && continuing
-            ? "Terra is preparing the next problem from the current world and table history."
+            ? "Terra is preparing the next Problem from the current World and recent history."
             : terraFacilitated
-              ? "Terra Auto DM is running the table. A ready player can ask Terra to continue."
+              ? "Terra is facilitating Play. A ready current player can ask Terra to present the next Problem."
               : facilitator && !canCreate
                 ? "This world is archived."
                 : facilitator
-                  ? "Create a problem to begin."
-                  : "A facilitator can create the next problem."}
+                  ? "Create a Problem to begin Play."
+                  : "The Dungeon Master can create the next Problem."}
       </p>
       {issue === null ? null : <ErrorMessage error={issue} />}
       {terraFacilitated && canContinue ? (
@@ -422,7 +428,7 @@ function IdleTableView({
           {continuing
             ? "Terra is preparing…"
             : issue === null
-              ? "Ask Terra to continue"
+              ? "Ask Terra for the next Problem"
               : "Try Terra again"}
         </button>
       ) : canCreate ? (
@@ -542,7 +548,7 @@ function HistoryFeedView({ items }: { items: HistoryCardViewModel[] }) {
 }
 
 function HistoryCardView({ item }: { item: HistoryCardViewModel }) {
-  if (item.outcome === "cancelled")
+  if (item.resolutionStatus === "cancelled")
     return (
       <article className="history-card history-cancelled">
         <header>
@@ -567,16 +573,16 @@ function HistoryCardView({ item }: { item: HistoryCardViewModel }) {
       {item.narrative === undefined ? null : (
         <>
           <blockquote>{item.narrative}</blockquote>
-          {item.effects.length > 0 ? (
-            <div className="history-effects">
-              {item.effects.map((effect) => (
-                <span key={effect.id}>{effect.label}</span>
+          {item.applications.length > 0 ? (
+            <div className="history-applications">
+              {item.applications.map((application) => (
+                <span key={application.id}>{application.label}</span>
               ))}
             </div>
           ) : null}
           {item.effectiveChanges.length > 0 ? (
             <div className="history-effective-changes">
-              <strong>Final values</strong>
+              <strong>Effective changes</strong>
               {item.effectiveChanges.map((change) => (
                 <span key={change.id}>{change.label}</span>
               ))}

@@ -3,8 +3,8 @@
 ## Overview
 
 PostgreSQL is authoritative. The schema persists worlds, memberships,
-user-authored input/derived mechanic graphs, problem-sourced status instances,
-sparse input state, character profiles, interactions, expanded receipts, event
+user-authored input/derived mechanic graphs, Problem-sourced Status instances,
+sparse stored overrides, Entity profiles, Interactions, expanded Resolution receipts, event
 cursors, password credentials, and revocable sessions as normalized relations.
 There is no canonical JSON aggregate column and no seeded vocabulary.
 
@@ -15,7 +15,7 @@ The schema uses:
 - `timestamptz` for timestamps;
 - explicit `position` columns for authored order;
 - composite foreign keys carrying `world_id` to enforce scope;
-- checks for scalar/expression/modifier shapes, bounds metadata, roles,
+- checks for scalar/expression/modifier shapes, bounds metadata, membership roles,
   statuses, and lifecycles;
 - partial unique indexes for selected and idempotent records;
 - triggers for `updated_at` and immutable history.
@@ -46,58 +46,47 @@ disposable database and terminate sessions connected to it.
    migration search path fixed to `public`;
 7. releases the advisory lock.
 
-The current application has one clean baseline followed by forward upgrades:
+The current schema is installed by this ordered chain:
 
 | Migration                                    | Purpose                                                                                                |
 | -------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `001_worldwright.sql`                        | Complete world-native schema: users, worlds, mechanics, state, profiles, controls, live play.          |
-| `002_rules_graph_statuses.sql`               | Mechanic rules revisions, typed derived expressions, problem-sourced statuses, and effective receipts. |
+| `001_world_baseline.sql`                     | Complete World-native schema: users, Worlds, Mechanics, logical state, profiles, controls, and Play.   |
+| `002_mechanic_graph_status_instances.sql`   | Mechanic graph revisions, derived expressions, Status instances/modifier snapshots, and expanded Resolution receipts. |
 | `003_interaction_audience_invalidations.sql` | Audience invalidation and related live-event integrity.                                                |
 | `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
-| `005_auto_dm.sql`                            | World-level human/Terra DM source selection.                                                           |
-| `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live interactions, receipts, and events. |
+| `005_terra.sql`                              | World-level human/Terra facilitator source selection.                                                  |
+| `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live Interactions, Resolution receipts, and World events. |
 | `007_agent_facilitator.sql`                  | Non-membership agent attribution for WebMCP-driven interactions, resolutions, and events.             |
 
-This baseline is intentionally a clean break. Databases created by the removed
-schema are unsupported and must not be upgraded in place. Create a fresh empty
-database and let the application install `001_worldwright.sql`.
 For a local database that already has a dnd migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
 backend start.
-Any one-time data salvage belongs outside the runtime repository and must be
-deleted after the new database is verified.
 
-`002` upgrades existing `001` databases in place. It backfills one
-mechanic-rules root per world and one status-set root per entity, while existing
-mechanics remain `input`. Triggers create those roots for later worlds/entities.
-The migration adds no authored vocabulary.
+The chain creates one world mechanic graph root per World and one status-set
+root per Entity. Triggers create those roots for later Worlds and Entities. It
+adds no authored vocabulary.
 
-`004` is an intentional account-model cutover and aborts if `users` already
-contains a row. This is acceptable for the current pre-user deployment and
-prevents silently inventing credentials or leaving claimable legacy accounts.
-Install it against an empty application database. It stores no email address,
-raw password, raw session token, recovery secret, or seeded account.
+The account model stores no email address, raw password, raw session token,
+recovery secret, or seeded account.
 
-`005` adds `worlds.dm_source`, backfilled/defaulted to `human` and constrained
+`005` adds `worlds.facilitator_source`, defaulted to `human` and constrained
 to `human` or `terra`. It stores only the world setting; model context and
 compiled output are request-scoped and are not canonical JSON persistence.
 
-`006` adds `worlds.facilitator_membership_id`, backfills the owner for human
-worlds, and requires exactly one shape: human plus a same-world membership, or
+`worlds.facilitator_membership_id` requires exactly one shape: human plus a same-world membership, or
 Terra plus no membership. The composite foreign key is deferred so world and
 initial owner can be created in one transaction. It also adds source columns
-and nullable human actor columns to interactions, applied resolutions, and
+and nullable human actor columns to Interactions, committed Resolutions, and
 events. Database checks require human sources to carry the applicable human
 membership and Terra sources to omit it.
 
-`007` extends the same assignment and attribution shapes to `agent`. Agent
+The same assignment and attribution shapes include `agent`. Agent
 worlds have no facilitator membership, and agent-authored interactions,
 resolutions, and events have no human actor column; the player session remains
 the authorization context rather than becoming the persisted author.
 
-The baseline and upgrade contain no alternate configuration container,
-secondary live container, reusable simulation aggregate, or superseded profile
-storage.
+The schema contains no alternate configuration container, secondary live
+container, reusable simulation aggregate, or alternate profile storage.
 
 ## Logical schema
 
@@ -107,16 +96,16 @@ storage.
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
 | `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
-| `worlds`                   | Name/description, human/Terra/agent facilitator assignment, lifecycle, settings revision, and table revision. |
+| `worlds`                   | Name/description, human/Terra/agent facilitator assignment, lifecycle, settings revision, and roster revision. |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
-| `world_invites`            | Expiring/revocable role offer with SHA-256 token digest and use count.                   |
+| `world_invites`            | Expiring/revocable membership-role offer with SHA-256 token digest and use count.        |
 | `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |
 
 `worlds.revision` guards settings, facilitator assignment, and archive
-commands. `table_revision`
-guards controller-set changes and table authority independently.
+commands. `roster_revision`
+guards Controller-set and roster composition changes independently.
 
-`dm_source` is the assignment discriminator. `human` requires a
+`facilitator_source` is the assignment discriminator. `human` requires a
 `facilitator_membership_id` from the same world; `terra` and `agent` require it to be
 null. Membership role remains owner/editor/player/spectator and is not changed
 by assignment. Active/non-spectator eligibility and the narrow owner takeover
@@ -136,16 +125,16 @@ change, and stream revalidation use one source of truth. The next session
 creation removes expired/revoked rows and prunes least-recently-seen active rows
 so an account retains at most 20 live sessions.
 
-### Rules, mechanics, entities, and state
+### Mechanics, Entities, and logical state
 
 | Table                             | Purpose                                                                        |
 | --------------------------------- | ------------------------------------------------------------------------------ |
-| `world_rule_sets`                 | One mechanic dependency-graph revision root per world.                         |
+| `world_mechanic_graphs`           | One mechanic dependency-graph revision root per world.                         |
 | `world_mechanics`                 | Capacity/capability kind, mode, scalar/source kind, input metadata, lifecycle. |
 | `world_mechanic_expression_nodes` | Normalized typed expression tree and dependency-reference rows.                |
 | `entities`                        | World-owned fictional state owners with display name and archive flag.         |
-| `state_records`                   | One optimistic base-state revision/timestamp root per entity.                  |
-| `state_values`                    | Numeric or Boolean stored input override per entity/mechanic pair.             |
+| `entity_logical_states`           | One optimistic logical-state revision root per Entity.                         |
+| `entity_input_value_overrides`    | Numeric or Boolean stored override per Entity/input-Mechanic pair.             |
 
 `world_mechanics` permits only:
 
@@ -169,8 +158,9 @@ compatibility. Recursive arity/type inference and dependency-cycle rejection
 are performed before publication by the rules/application layer; arbitrary
 graph cycles are not expressible as a simple SQL check.
 
-Every entity receives one `state_records` row at creation. `state_values` holds
-only input overrides; its foreign key fixes `mechanic_source_kind='input'`, so
+Every Entity receives one `entity_logical_states` row at creation.
+`entity_input_value_overrides` holds only stored overrides; its foreign key
+fixes `mechanic_source_kind='input'`, so
 derived values cannot be stored even through direct SQL. Absence means the
 input mechanic's authored default. Its primary key allows one scalar per
 entity/mechanic. A tagged-shape check requires exactly one of `number_value` or
@@ -180,23 +170,23 @@ entity/mechanic. A tagged-shape check requires exactly one of `number_value` or
 
 | Table                              | Purpose                                                                                 |
 | ---------------------------------- | --------------------------------------------------------------------------------------- |
-| `entity_status_sets`               | One independent runtime status revision root per entity.                                |
+| `entity_status_sets`               | One independent status-set revision root per Entity.                                    |
 | `entity_status_instances`          | Applied/removed lifecycle, snapshotted prose, source Consequence IDs, and stable order. |
 | `entity_status_instance_modifiers` | Immutable literal modifier snapshots copied from the source apply effect.               |
 
-An apply-status effect in an immutable resolution supplies the status name,
+An apply-status Effect in an immutable Resolution supplies the Inline status name,
 optional description, and modifiers directly. Each target produces an
 independently identified entity instance carrying `source_resolution_id` and
 `source_effect_id`; the required resolution relationship supplies its source
-interaction. State responses expose all three as `source_interaction_id`,
+Interaction. Entity-sheet responses expose all three as `source_interaction_id`,
 `source_resolution_id`, and `source_effect_id`. Status names are not unique;
 same-name instances from separate problem effects may coexist.
 
 Modifier shape constraints require kind-compatible `set` values and numeric
 operands for `add-number`/`multiply-number`. Application validation additionally
-checks the referenced mechanic against the matched world rules revision. The
+checks the referenced mechanic against the matched rules revision. The
 generated `applied_order` identity gives stable cross-instance ordering, and
-status rows retain `removed_at` rather than disappearing. Snapshot modifiers
+Status-instance rows retain `removed_at` rather than disappearing. Snapshot modifiers
 keep source modifier identity, position, priority, operation, target mechanic,
 and literal value. Their update/delete trigger keeps an active or removed
 instance's meaning independent of later changes.
@@ -205,15 +195,15 @@ instance's meaning independent of later changes.
 
 | Table                              | Purpose                                                            |
 | ---------------------------------- | ------------------------------------------------------------------ |
-| `world_character_field_sets`       | One optimistic revision root for ordered active requirements.      |
+| `world_character_field_sets`       | One optimistic revision root for the ordered active character-field set. |
 | `world_character_fields`           | Durable label/guidance/visibility/position rows with soft archive. |
 | `entity_profiles`                  | Optional independently revisioned profile root per entity.         |
-| `entity_profile_field_values`      | Non-empty text value per entity/field with author provenance.      |
+| `entity_profile_values`            | Non-empty Entity-profile value per Character field with author provenance. |
 | `world_membership_entity_controls` | Many-to-many membership/entity control edge; active non-spectator enforced by the app. |
 
 Every world has one character-field-set root. All active fields are required
-for controlled entities. Field visibility is `table` or
-`controllers-and-facilitators`. Profile values are relational text with
+for controlled Entities. Field visibility is `world` or
+`restricted`. Profile values are relational text with
 composite foreign keys proving entity, field, and profile share a world.
 
 Control rows reference a world membership and entity through `(id, world_id)`
@@ -228,7 +218,7 @@ multiple entities per membership and multiple controllers per entity.
 | `interaction_audience_members`    | Memberships allowed to see a presented interaction.              |
 | `interaction_eligible_responders` | Audience current-player memberships allowed to submit.           |
 | `interaction_context_entities`    | Ordered world entity context and visibility.                     |
-| `interaction_action_submissions`  | Free-form actions, acting-entity snapshot, status, and revision. |
+| `interaction_actions`              | Free-form Actions, acting-Entity snapshot, status, and revision.               |
 
 Lifecycle checks constrain timestamp/status combinations for draft, open,
 adjudicating, resolved, and cancelled interactions. A partial unique index
@@ -242,38 +232,38 @@ later human resolution concludes it.
 
 Action attribution stores a nullable `(acting_entity_id, acting_entity_name)`
 pair. The entity must share the world; the display name is captured at
-submission for stable history. Current control is checked by the application
+the moment the Action is submitted for stable history. Current control is checked by the application
 rather than retained as a historical foreign key.
 
 ### Resolution receipts
 
 | Table                                            | Purpose                                                                             |
 | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| `interaction_resolutions`                        | One problem Consequence, facilitator source/actor, idempotency key, prose summary, and rules revision. |
-| `interaction_resolution_effects`                 | Ordered scalar/status requests; apply rows snapshot inline status name/description. |
-| `interaction_resolution_status_effect_modifiers` | Ordered literal modifiers authored on an apply-status effect.                       |
+| `interaction_resolutions`                        | One Problem Consequence, facilitator source/actor, idempotency key, public narrative, and rules revision. |
+| `interaction_resolution_effects`                 | Ordered scalar and status-lifecycle Effects; apply rows snapshot Inline-status name/description. |
+| `interaction_resolution_inline_status_modifiers` | Ordered literal modifiers authored on an apply-status Effect's Inline status.       |
 | `interaction_resolution_effect_targets`          | Ordered entity targets; remove rows also carry the exact status-instance target.    |
-| `interaction_resolution_effect_applications`     | Ordered per-target changed/before/after scalar receipt.                             |
-| `interaction_resolution_status_applications`     | Ordered status lifecycle applications and snapshotted names/instance IDs.           |
-| `interaction_resolution_effective_changes`       | Ordered before/after values for every calculated mechanic that actually moved.      |
+| `interaction_resolution_scalar_applications`     | Ordered per-target changed/before/after scalar Applications.                        |
+| `interaction_resolution_status_applications`     | Ordered Status Applications and snapshotted names/instance IDs.                      |
+| `interaction_resolution_effective_changes`       | Ordered before/after values for every Mechanic whose effective value moved.          |
 
 Effects and applications use dedicated numeric/Boolean columns with shape
 checks; there are no polymorphic scalar sets or unknown-value wrappers.
-Scalar applications require concrete before and after input values because
-every input has a logical default. An apply target omits an instance ID and
+Scalar Applications require concrete before and after logical input values because
+every input Mechanic has an authored default. An apply target omits an instance ID and
 creates one; a remove target stores the exact active instance expected on that
-entity. Unknown, removed, or mismatched removals fail rather than falling back
-to a name. Status application receipts record before/after active flags.
+Entity. Unknown, removed, or mismatched removals fail rather than falling back
+to a name. Status Applications record before/after active flags.
 Effective-change rows cover both direct and transitive changes—such as a
-derived mechanic moving because a referenced input gained a status—and
+derived Mechanic moving because a new Status modifier changed a referenced input's effective value—and
 therefore remain distinct from the direct application tables.
 
 `interaction_resolutions` is unique per interaction. A partial unique index on
 `(world_id, idempotency_key)` supports safe retry. Application rows are unique
 by effect/entity, and explicit positions preserve execution order.
 
-Human applied resolutions require creator/resolver memberships; Terra and agent applied
-resolutions leave both human columns null. Resolution source can differ from
+Human committed Resolutions require creator/resolver memberships; Terra and agent
+Resolutions leave both human columns null. Resolution source can differ from
 interaction source only when a human owner takes over an automated
 adjudication, preserving both facts rather than rewriting provenance.
 
@@ -288,7 +278,7 @@ payload is not a state snapshot. Event types cover world/membership changes,
 entity control/profile changes, character-field changes, interaction/action
 lifecycle, mechanic `rules-updated` publication, facilitator handoff, and
 resolution application. `actor_source` is `human` with a required human
-membership; `terra` and `agent` have a null membership. A pacing player's membership is
+membership; `terra` and `agent` have a null membership. A pacing current player's membership is
 therefore not stored as the actor on automated lifecycle events.
 
 `invalidates_interaction_audience` marks ordinary lifecycle events that can
@@ -318,43 +308,43 @@ Composite foreign keys carry `world_id`, for example:
 
 These constraints make cross-world references invalid even if application code
 is bypassed. Application validation still provides clearer errors and enforces
-rules that depend on current roles, readiness, or lifecycle.
+rules that depend on current membership roles, current play roles, Play status, or lifecycle.
 
 ## Revisions and timestamps
 
 `set_updated_at()` updates mutable roots carrying `updated_at`. Explicit
-non-negative revisions exist on worlds, world rule sets, world memberships,
-character-field sets, entity profiles, state records, entity status sets,
-interactions, and action submissions.
+non-negative revisions exist on worlds, world mechanic graphs, world memberships,
+character-field sets, Entity profiles, Entity logical states, Entity status sets,
+Interactions, and Actions.
 
 Revisions advance only for meaningful mutations where implemented. A direct
 SQL writer must not assume the timestamp trigger also increments a revision.
-`worlds.table_revision` is separate from `worlds.revision` so controller changes
+`worlds.roster_revision` is separate from `worlds.revision` so controller changes
 do not conflict with unrelated settings or facilitator assignment drafts.
 `worlds.revision` also serializes handoff and owner takeover.
-`world_rule_sets.revision` is separate from both and versions the published
+`world_mechanic_graphs.revision` is separate from both and versions the published
 mechanic-expression graph.
-Problem-authored status effects do not publish configuration or advance it.
+Problem-authored Inline statuses do not publish configuration or advance it.
 `entity_status_sets.revision` advances once per transaction that actually
-changes that entity's active status lifecycle.
+changes that Entity's active Status-instance lifecycle.
 
 ## Immutability
 
 The migration chain adds triggers that:
 
 - reject updates/deletes of an interaction once resolved or cancelled;
-- reject updates/deletes of an applied resolution;
-- reject updates/deletes of effects, targets, and applications under an applied
-  resolution;
-- reject updates/deletes of inline status-effect modifiers under an applied
-  resolution;
+- reject updates/deletes of a committed Resolution;
+- reject updates/deletes of Effects, targets, and Applications under a committed
+  Resolution;
+- reject updates/deletes of Status modifiers authored within Inline statuses under a committed
+  Resolution;
 - reject updates/deletes of snapshotted status-instance modifiers;
-- reject updates/deletes of status applications and effective changes under an
-  applied resolution;
+- reject updates/deletes of Status Applications and effective changes under a
+  committed Resolution;
 - reject updates/deletes of every `world_events` row.
 
 Audience, responder, context, and action rows are not all protected as a
-complete final audit tree. The applied receipt is the strong immutable record.
+complete final audit tree. The committed Resolution receipt is the strong immutable record.
 Corrections should be represented by a later domain action, not rewriting it.
 
 These are DML protections while triggers remain installed, not tamper evidence
@@ -365,10 +355,11 @@ against a holder of the DDL-capable database credentials.
 Owned children generally cascade from their world or aggregate root. Historical
 cross-references generally restrict deletion. Public APIs use archive/final
 statuses and expose no hard-delete workflow. Archiving current mechanic
-configuration does not remove stored input, receipt references, or historical
-status snapshots. An active mechanic cannot be archived while an active
-derived mechanic depends on it or an active status modifier references it; the
-dependent must be archived or the status removed first. Mechanic and entity
+configuration does not remove stored overrides, Resolution-receipt references, or historical
+Status instances and modifier snapshots. An active Mechanic cannot be archived while an active
+derived Mechanic depends on it or a modifier from an active Status instance
+references it; the dependent must be archived or the Status instance removed
+first. Mechanic and Entity
 archive transitions have no product restore operation.
 
 Deleting a world directly would cascade authored data and can interact with
@@ -403,14 +394,14 @@ from schema_migrations
 order by version;
 ```
 
-Find state revisions in a world:
+Find logical-state revisions in a World:
 
 ```sql
-select entity.display_name, record.entity_id, record.revision, record.updated_at
-from state_records record
-join entities entity on entity.id = record.entity_id
-where record.world_id = $1
-order by lower(entity.display_name), record.entity_id;
+select entity.display_name, logical_state.entity_id, logical_state.revision
+from entity_logical_states logical_state
+join entities entity on entity.id = logical_state.entity_id
+where logical_state.world_id = $1
+order by lower(entity.display_name), logical_state.entity_id;
 ```
 
 Find unfinished interactions that prevent archive:
@@ -427,7 +418,7 @@ Inspect recent event cursors:
 
 ```sql
 select id, event_type, actor_source, actor_membership_id,
-       interaction_id, submission_id, resolution_id, created_at
+       interaction_id, action_id, resolution_id, created_at
 from world_events
 where world_id = $1
 order by id desc
@@ -435,9 +426,9 @@ limit 100;
 ```
 
 Use read-only accounts and transactions for production inspection. Do not
-manually update receipt or event rows.
+manually update Resolution-receipt or World-event rows.
 
-## Backup, restore, and cutover
+## Backup and restore
 
 The repository supplies no backup automation. Deployment owners should create
 and test PostgreSQL-native backups before relying on the application for
@@ -454,13 +445,8 @@ pg_dump --format=custom --no-owner --file=dnd.dump "$database_url"
 
 Restore into an empty access-controlled database using the same major
 PostgreSQL toolchain, then verify migrations, `/api/health`, representative
-mechanic rules, status snapshots and source provenance, base/effective state,
-receipts, revisions, and event cursors.
-
-For the clean-break release, do not point the new binary at a non-current
-database. Provision a new empty database. If old data must be preserved, export
-and transform it with disposable out-of-tree tooling, verify the result, then
-retire that tooling. The application intentionally contains no in-place path.
+Mechanic graph, Status instances and modifier-snapshot provenance, logical state and effective values,
+Resolution receipts, revisions, and World-event cursors.
 
 ## Current operational gaps
 

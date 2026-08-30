@@ -40,7 +40,7 @@ interface InviteResponse extends IdentifiedResource {
   join_path?: string;
 }
 
-interface ActiveStatus {
+interface StatusInstance {
   id: string;
   name: string;
   source_interaction_id: string;
@@ -48,17 +48,20 @@ interface ActiveStatus {
   source_effect_id: string;
 }
 
-interface StateResponse {
-  revision: number;
-  status_revision: number;
+interface EntitySheetResponse {
+  entity_id: string;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, unknown>;
+  logical_input_values: Record<string, unknown>;
   effective_values: Record<string, unknown>;
-  active_statuses: ActiveStatus[];
+  evaluations: Record<string, unknown>;
+  active_status_instances: StatusInstance[];
+  authored_default_input_mechanic_ids: string[];
 }
 
 interface EntityResponse extends IdentifiedResource {
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
 interface InteractionAction extends IdentifiedResource {
@@ -72,8 +75,9 @@ interface InteractionAction extends IdentifiedResource {
 interface ResolutionReceipt extends IdentifiedResource {
   narrative: string;
   rules_revision: number;
-  applied_effects: AppliedEffect[];
+  applications: EffectApplication[];
   effective_changes: unknown[];
+  resolved_at: string;
 }
 
 interface InteractionResponse extends IdentifiedResource {
@@ -83,33 +87,43 @@ interface InteractionResponse extends IdentifiedResource {
   resolution?: ResolutionReceipt;
 }
 
-interface AppliedEffect {
+interface EffectApplication {
   type: "set" | "adjust-number" | "apply-status" | "remove-status";
   effect_id: string;
   entity_id: string;
+  mechanic_id?: string;
   status_instance_id?: string;
   status_name?: string;
   active_before?: boolean;
   active_after?: boolean;
+  before?: unknown;
+  after?: unknown;
   changed: boolean;
 }
 
-interface ResolutionResult {
-  replayed?: boolean;
+interface ConsequenceApplicationResult {
   interaction_id: string;
   interaction_revision: number;
   rules_revision: number;
   narrative: string;
-  applied_effects: AppliedEffect[];
+  applications: EffectApplication[];
   effective_changes: unknown[];
-  state: { records: Record<string, StateResponse> };
+  entity_sheets: Record<string, EntitySheetResponse>;
+}
+
+interface ConsequencePreviewResult extends ConsequenceApplicationResult {
+  preview?: boolean;
+}
+
+interface InteractionResolutionResult extends ConsequenceApplicationResult {
+  replayed?: boolean;
 }
 
 interface WorldEvent {
   id: number;
   type: string;
   interaction_id?: string;
-  submission_id?: string;
+  action_id?: string;
   resolution_id?: string;
 }
 
@@ -161,7 +175,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
             interactionURL(fixture, interaction.id, "actions"),
             {
               data: {
-                text: "This submission was composed against the open revision.",
+                text: "This Action was composed against the open revision.",
                 expected_revision: interaction.revision,
               },
             },
@@ -202,12 +216,12 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         );
         expect(action).toMatchObject({ status: "submitted", revision: 0 });
 
-        const afterSubmission = await readInteraction(
+        const afterAction = await readInteraction(
           request,
           fixture,
           interaction.id,
         );
-        expect(afterSubmission).toMatchObject({
+        expect(afterAction).toMatchObject({
           status: "open",
           revision: interaction.revision + 1,
           actions: [{ id: action.id, status: "submitted", revision: 0 }],
@@ -215,7 +229,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         const adjudicated = await postJSON<InteractionResponse>(
           request,
           interactionURL(fixture, interaction.id, "adjudicate"),
-          { expected_revision: afterSubmission.revision },
+          { expected_revision: afterAction.revision },
           fixture.owner.id,
         );
 
@@ -300,7 +314,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
   ]);
 
   const statusSetup =
-    await test.step("CCY-V07 equivalent resolve creates one durable receipt and event", async () => {
+    await test.step("CCY-V07 equivalent resolve creates one durable Resolution receipt and event", async () => {
       const interaction = await createAdjudicatingInteraction(
         request,
         fixture,
@@ -316,8 +330,16 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         narrative:
           "Two separately authored marks share a name but not identity.",
         effects: [
-          applyStatusEffect(firstEffectID, fixture.primaryEntity.id, "Marked"),
-          applyStatusEffect(secondEffectID, fixture.primaryEntity.id, "Marked"),
+          applyStatusEffectRequest(
+            firstEffectID,
+            fixture.primaryEntity.id,
+            "Marked",
+          ),
+          applyStatusEffectRequest(
+            secondEffectID,
+            fixture.primaryEntity.id,
+            "Marked",
+          ),
         ],
       };
       const cursorBeforeResolve = await latestEventCursor(
@@ -325,7 +347,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         fixture.world.id,
       );
 
-      const applied = await postJSON<ResolutionResult>(
+      const applied = await postJSON<InteractionResolutionResult>(
         request,
         interactionURL(fixture, interaction.id, "resolve"),
         payload,
@@ -334,7 +356,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       expect(applied).toMatchObject({
         interaction_id: interaction.id,
         interaction_revision: interaction.revision + 1,
-        applied_effects: [
+        applications: [
           {
             type: "apply-status",
             effect_id: firstEffectID,
@@ -356,20 +378,21 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         ],
       });
       expect(applied.replayed).toBeUndefined();
-      const stateAfterApply = await readState(
+      const sheetAfterApply = await readSheet(
         request,
         fixture,
         fixture.world.id,
         fixture.primaryEntity.id,
       );
-      expect(stateAfterApply.status_revision).toBe(1);
-      expect(stateAfterApply.active_statuses).toHaveLength(2);
+      expect(sheetAfterApply.status_set_revision).toBe(1);
+      expect(sheetAfterApply.active_status_instances).toHaveLength(2);
       expect(
-        new Set(stateAfterApply.active_statuses.map((status) => status.id))
-          .size,
+        new Set(
+          sheetAfterApply.active_status_instances.map((status) => status.id),
+        ).size,
       ).toBe(2);
       expect(
-        stateAfterApply.active_statuses.map((status) => status.name),
+        sheetAfterApply.active_status_instances.map((status) => status.name),
       ).toEqual(["Marked", "Marked"]);
 
       const durableAfterApply = await readInteraction(
@@ -382,7 +405,8 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         revision: applied.interaction_revision,
         resolution: {
           narrative: payload.narrative,
-          applied_effects: applied.applied_effects,
+          applications: applied.applications,
+          resolved_at: expect.any(String),
         },
       });
       const resolutionID = required(
@@ -397,7 +421,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         )
       ).filter(
         (event) =>
-          event.type === "resolution-applied" &&
+          event.type === "resolution-committed" &&
           event.interaction_id === interaction.id,
       );
       expect(resolveEvents).toEqual([
@@ -408,7 +432,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         "resolution event cursor",
       );
 
-      const replay = await postJSON<ResolutionResult>(
+      const replay = await postJSON<InteractionResolutionResult>(
         request,
         interactionURL(fixture, interaction.id, "resolve"),
         payload,
@@ -416,13 +440,13 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       );
       expect(replay).toEqual({ ...applied, replayed: true });
       expect(
-        await readState(
+        await readSheet(
           request,
           fixture,
           fixture.world.id,
           fixture.primaryEntity.id,
         ),
-      ).toEqual(stateAfterApply);
+      ).toEqual(sheetAfterApply);
       expect(await readInteraction(request, fixture, interaction.id)).toEqual(
         durableAfterApply,
       );
@@ -439,14 +463,16 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       return {
         interaction,
         payload,
-        stateAfterApply,
+        sheetAfterApply,
         durableAfterApply,
         resolveEventCursor,
-        statusIDs: stateAfterApply.active_statuses.map((status) => status.id),
+        statusInstanceIDs: sheetAfterApply.active_status_instances.map(
+          (status) => status.id,
+        ),
       };
     });
 
-  await test.step("CCY-V08 changed-content idempotency reuse preserves the original receipt", async () => {
+  await test.step("CCY-V08 changed-content idempotency reuse preserves the original Resolution receipt", async () => {
     await expectAPIError(
       await actorRequest(fixture.owner.id).post(
         interactionURL(fixture, statusSetup.interaction.id, "resolve"),
@@ -461,13 +487,13 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       "idempotency_conflict",
     );
     expect(
-      await readState(
+      await readSheet(
         request,
         fixture,
         fixture.world.id,
         fixture.primaryEntity.id,
       ),
-    ).toEqual(statusSetup.stateAfterApply);
+    ).toEqual(statusSetup.sheetAfterApply);
     expect(
       await readInteraction(request, fixture, statusSetup.interaction.id),
     ).toEqual(statusSetup.durableAfterApply);
@@ -482,7 +508,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
     ).toEqual([]);
   });
 
-  const foreignStatusID = await applyOneStatus(
+  const foreignStatusInstanceID = await createOneStatusInstance(
     request,
     fixture,
     fixture.foreignWorld,
@@ -490,10 +516,14 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
     fixture.foreignOwner.id,
     "Foreign mark",
   );
-  const [firstStatusID, secondStatusID] = statusSetup.statusIDs;
-  expect(firstStatusID).toBeDefined();
-  expect(secondStatusID).toBeDefined();
-  if (firstStatusID === undefined || secondStatusID === undefined) {
+  const [firstStatusInstanceID, secondStatusInstanceID] =
+    statusSetup.statusInstanceIDs;
+  expect(firstStatusInstanceID).toBeDefined();
+  expect(secondStatusInstanceID).toBeDefined();
+  if (
+    firstStatusInstanceID === undefined ||
+    secondStatusInstanceID === undefined
+  ) {
     throw new Error("status setup did not create two exact instances");
   }
 
@@ -511,20 +541,20 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture,
           staleInteraction,
           fixture.primaryEntity.id,
-          firstStatusID,
+          firstStatusInstanceID,
           "The stale removal should not select another Marked instance.",
         );
-        const validPreview = await postJSON<ResolutionResult>(
+        const validPreview = await postJSON<ConsequencePreviewResult>(
           request,
           interactionURL(fixture, staleInteraction.id, "preview"),
           withoutIdempotency(stalePayload),
           fixture.owner.id,
         );
-        expect(validPreview.applied_effects).toMatchObject([
+        expect(validPreview.applications).toMatchObject([
           {
             type: "remove-status",
             entity_id: fixture.primaryEntity.id,
-            status_instance_id: firstStatusID,
+            status_instance_id: firstStatusInstanceID,
             active_before: true,
             active_after: false,
             changed: true,
@@ -536,27 +566,30 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture,
           "Winning exact removal",
         );
-        await postJSON<ResolutionResult>(
+        await postJSON<InteractionResolutionResult>(
           request,
           interactionURL(fixture, winner.id, "resolve"),
           removeStatusPayload(
             fixture,
             winner,
             fixture.primaryEntity.id,
-            firstStatusID,
-            "A different ruling removes the exact target first.",
+            firstStatusInstanceID,
+            "A different consequence removes the exact target first.",
           ),
           fixture.owner.id,
         );
-        const stateAfterWinner = await readState(
+        const sheetAfterWinner = await readSheet(
           request,
           fixture,
           fixture.world.id,
           fixture.primaryEntity.id,
         );
-        expect(stateAfterWinner).toMatchObject({
-          status_revision: statusSetup.stateAfterApply.status_revision + 1,
-          active_statuses: [{ id: secondStatusID, name: "Marked" }],
+        expect(sheetAfterWinner).toMatchObject({
+          status_set_revision:
+            statusSetup.sheetAfterApply.status_set_revision + 1,
+          active_status_instances: [
+            { id: secondStatusInstanceID, name: "Marked" },
+          ],
         });
 
         const error = await expectAPIError(
@@ -576,7 +609,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           request,
           fixture,
           staleInteraction,
-          stateAfterWinner,
+          sheetAfterWinner,
         );
       },
     },
@@ -590,7 +623,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture,
           "Already removed exact target",
         );
-        const before = await readState(
+        const before = await readSheet(
           request,
           fixture,
           fixture.world.id,
@@ -604,7 +637,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
                 fixture,
                 interaction,
                 fixture.primaryEntity.id,
-                firstStatusID,
+                firstStatusInstanceID,
                 "A removed exact ID remains removed.",
               ),
             },
@@ -618,8 +651,8 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           interaction,
           before,
         );
-        expect(before.active_statuses).toMatchObject([
-          { id: secondStatusID, name: "Marked" },
+        expect(before.active_status_instances).toMatchObject([
+          { id: secondStatusInstanceID, name: "Marked" },
         ]);
       },
     },
@@ -633,13 +666,13 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture,
           "Entity-mismatched exact target",
         );
-        const primaryBefore = await readState(
+        const primaryBefore = await readSheet(
           request,
           fixture,
           fixture.world.id,
           fixture.primaryEntity.id,
         );
-        const otherBefore = await readState(
+        const otherBefore = await readSheet(
           request,
           fixture,
           fixture.world.id,
@@ -653,7 +686,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
                 fixture,
                 interaction,
                 fixture.otherEntity.id,
-                secondStatusID,
+                secondStatusInstanceID,
                 "An exact instance cannot be moved between entities.",
               ),
             },
@@ -662,7 +695,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           "transition_failed",
         );
         expect(
-          await readState(
+          await readSheet(
             request,
             fixture,
             fixture.world.id,
@@ -670,7 +703,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           ),
         ).toEqual(primaryBefore);
         expect(
-          await readState(
+          await readSheet(
             request,
             fixture,
             fixture.world.id,
@@ -690,13 +723,13 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           fixture,
           "Foreign exact target",
         );
-        const primaryBefore = await readState(
+        const primaryBefore = await readSheet(
           request,
           fixture,
           fixture.world.id,
           fixture.primaryEntity.id,
         );
-        const foreignBefore = await readState(
+        const foreignBefore = await readSheet(
           request,
           fixture,
           fixture.foreignWorld.id,
@@ -711,7 +744,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
                 fixture,
                 interaction,
                 fixture.primaryEntity.id,
-                foreignStatusID,
+                foreignStatusInstanceID,
                 "A foreign exact ID must be indistinguishable from an unavailable ID.",
               ),
             },
@@ -722,9 +755,9 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
         const serializedError = JSON.stringify(error);
         expect(serializedError).not.toContain(fixture.foreignWorld.id);
         expect(serializedError).not.toContain(fixture.foreignEntity.id);
-        expect(serializedError).not.toContain(foreignStatusID);
+        expect(serializedError).not.toContain(foreignStatusInstanceID);
         expect(
-          await readState(
+          await readSheet(
             request,
             fixture,
             fixture.world.id,
@@ -732,7 +765,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
           ),
         ).toEqual(primaryBefore);
         expect(
-          await readState(
+          await readSheet(
             request,
             fixture,
             fixture.foreignWorld.id,
@@ -745,7 +778,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
     },
   ]);
 
-  await test.step("CCY-V09 CON-002 competing resolves commit one receipt and one event", async () => {
+  await test.step("CCY-V09 CON-002 competing resolves commit one Resolution receipt and one event", async () => {
     const interaction = await createAdjudicatingInteraction(
       request,
       fixture,
@@ -755,13 +788,14 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       fixture,
       fixture.world.id,
     );
-    const stateBeforeResolve = await readState(
+    const sheetBeforeResolve = await readSheet(
       request,
       fixture,
       fixture.world.id,
       fixture.primaryEntity.id,
     );
-    const narrative = "Only one of these concurrent rulings becomes history.";
+    const narrative =
+      "Only one of these concurrent consequences becomes history.";
     const basePayload = {
       expected_revision: interaction.revision,
       expected_rules_revision: fixture.world.rules_revision,
@@ -793,7 +827,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       responses.find((response) => response.status() === 409),
       "resolution loser",
     );
-    const winningResult = await expectJSON<ResolutionResult>(
+    const winningResult = await expectJSON<InteractionResolutionResult>(
       winner,
       "competing resolution winner",
     );
@@ -805,24 +839,24 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       revision: interaction.revision + 1,
       resolution: {
         narrative,
-        applied_effects: [],
+        applications: [],
         effective_changes: [],
       },
     });
     expect(winningResult).toMatchObject({
       interaction_id: interaction.id,
       interaction_revision: durable.revision,
-      applied_effects: [],
+      applications: [],
       effective_changes: [],
     });
     expect(
-      await readState(
+      await readSheet(
         request,
         fixture,
         fixture.world.id,
         fixture.primaryEntity.id,
       ),
-    ).toEqual(stateBeforeResolve);
+    ).toEqual(sheetBeforeResolve);
     const resolutionID = required(
       durable.resolution?.id,
       "winning resolution ID",
@@ -831,7 +865,7 @@ test("direct contracts: CON-V04 and CCY-V06 named matrices plus exactly-once res
       await readAvailableEvents(fixture, fixture.world.id, cursorBeforeResolve)
     ).filter(
       (event) =>
-        event.type === "resolution-applied" &&
+        event.type === "resolution-committed" &&
         event.interaction_id === interaction.id,
     );
     expect(resolutionEvents).toEqual([
@@ -981,7 +1015,7 @@ async function createOpenInteraction(
       present: true,
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
       eligible_responder_membership_ids: [fixture.playerMembershipID],
-      entity_ids: [fixture.primaryEntity.id],
+      context_entity_ids: [fixture.primaryEntity.id],
     },
     fixture.owner.id,
   );
@@ -1005,7 +1039,7 @@ async function createAdjudicatingInteraction(
   return adjudicating;
 }
 
-async function applyOneStatus(
+async function createOneStatusInstance(
   request: APIRequestContext,
   fixture: ContractFixture,
   world: WorldResponse,
@@ -1020,7 +1054,7 @@ async function applyOneStatus(
       present: true,
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
       eligible_responder_membership_ids: [],
-      entity_ids: [entity.id],
+      context_entity_ids: [entity.id],
     },
     actorID,
   );
@@ -1032,7 +1066,7 @@ async function applyOneStatus(
   );
   expect(interaction).toMatchObject({ status: "adjudicating", revision: 2 });
   const effectID = randomUUID();
-  const result = await postJSON<ResolutionResult>(
+  const result = await postJSON<InteractionResolutionResult>(
     request,
     `${fixture.baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/resolve`,
     {
@@ -1040,17 +1074,23 @@ async function applyOneStatus(
       expected_rules_revision: world.rules_revision,
       idempotency_key: randomUUID(),
       narrative: `${label} becomes durable.`,
-      effects: [applyStatusEffect(effectID, entity.id, "Foreign Marked")],
+      effects: [
+        applyStatusEffectRequest(effectID, entity.id, "Foreign Marked"),
+      ],
     },
     actorID,
   );
   return required(
-    result.applied_effects[0]?.status_instance_id,
+    result.applications[0]?.status_instance_id,
     `${label} status instance`,
   );
 }
 
-function applyStatusEffect(effectID: string, entityID: string, name: string) {
+function applyStatusEffectRequest(
+  effectID: string,
+  entityID: string,
+  name: string,
+) {
   return {
     id: effectID,
     type: "apply-status",
@@ -1097,16 +1137,16 @@ async function expectFailedRemovalUnchanged(
   request: APIRequestContext,
   fixture: ContractFixture,
   interaction: InteractionResponse,
-  stateBefore: StateResponse,
+  sheetBefore: EntitySheetResponse,
 ): Promise<void> {
   expect(
-    await readState(
+    await readSheet(
       request,
       fixture,
       fixture.world.id,
       fixture.primaryEntity.id,
     ),
-  ).toEqual(stateBefore);
+  ).toEqual(sheetBefore);
   await expectInteractionStillAdjudicating(request, fixture, interaction);
 }
 
@@ -1135,16 +1175,16 @@ async function readInteraction(
   );
 }
 
-async function readState(
+async function readSheet(
   request: APIRequestContext,
   fixture: ContractFixture,
   worldID: string,
   entityID: string,
   userID = fixture.owner.id,
-): Promise<StateResponse> {
-  return getJSON<StateResponse>(
+): Promise<EntitySheetResponse> {
+  return getJSON<EntitySheetResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${worldID}/entities/${entityID}/state`,
+    `${fixture.baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }

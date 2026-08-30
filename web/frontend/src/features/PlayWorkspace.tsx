@@ -1,5 +1,6 @@
 import { toErrorNotice, worldPath } from "../api/client";
 import type { AuthenticatedSession, User, World } from "../api/types";
+import { humanize } from "../domain/display";
 import { useResource } from "../hooks/useResource";
 import type { Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
@@ -42,7 +43,11 @@ export function PlayWorkspace({
   return (
     <PlayWorkspaceView
       worldName={world.name}
-      roleLabel={world.current_play_role}
+      currentPlayRoleLabel={
+        world.current_play_role === "facilitator"
+          ? "Dungeon Master"
+          : humanize(world.current_play_role)
+      }
       user={{ displayName: user.display_name, username: user.username }}
       accountControls={
         <AccountControls

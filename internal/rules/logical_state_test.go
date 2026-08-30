@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-func TestValidateMechanicDefinitionAndValues(t *testing.T) {
+func TestValidateMechanicDefinitionAndMechanicValues(t *testing.T) {
 	t.Parallel()
 	definition := testNumberDefinition()
-	definition.DefaultValue = NewNumberValue(MustDecimal("1.25"))
+	definition.DefaultValue = NewNumberMechanicValue(MustDecimal("1.25"))
 	definition.Minimum = decimalPointer(MustDecimal("1"))
 	definition.Maximum = decimalPointer(MustDecimal("2"))
 	definition.Step = decimalPointer(MustDecimal("0.25"))
@@ -16,20 +16,20 @@ func TestValidateMechanicDefinitionAndValues(t *testing.T) {
 	if errs := ValidateMechanicDefinition(definition); len(errs) != 0 {
 		t.Fatalf("valid definition rejected: %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("1.5"))); len(errs) != 0 {
+	if errs := ValidateMechanicValue(definition, NewNumberMechanicValue(MustDecimal("1.5"))); len(errs) != 0 {
 		t.Fatalf("valid number rejected: %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("1.6"))); !hasValidationCode(errs, "step_mismatch") {
+	if errs := ValidateMechanicValue(definition, NewNumberMechanicValue(MustDecimal("1.6"))); !hasValidationCode(errs, "step_mismatch") {
 		t.Fatalf("expected step_mismatch, got %v", errs)
 	}
-	if errs := ValidateStateValue(definition, NewNumberValue(MustDecimal("2.25"))); !hasValidationCode(errs, "above_maximum") {
+	if errs := ValidateMechanicValue(definition, NewNumberMechanicValue(MustDecimal("2.25"))); !hasValidationCode(errs, "above_maximum") {
 		t.Fatalf("expected above_maximum, got %v", errs)
 	}
 
-	invalidUnion := NewNumberValue(MustDecimal("1.5"))
+	invalidUnion := NewNumberMechanicValue(MustDecimal("1.5"))
 	unexpected := true
 	invalidUnion.Boolean = &unexpected
-	if errs := ValidateStateValue(definition, invalidUnion); !hasValidationCode(errs, "invalid_typed_value") {
+	if errs := ValidateMechanicValue(definition, invalidUnion); !hasValidationCode(errs, "invalid_typed_value") {
 		t.Fatalf("expected invalid_typed_value, got %v", errs)
 	}
 }
@@ -47,7 +47,7 @@ func TestMechanicDefinitionsRequireScalarDefaultsAndMatchingMetadata(t *testing.
 	}
 
 	missingDefault := testNumberDefinition()
-	missingDefault.DefaultValue = StateValue{}
+	missingDefault.DefaultValue = MechanicValue{}
 	if errs := ValidateMechanicDefinition(missingDefault); !hasValidationCode(errs, "value_kind_mismatch") {
 		t.Fatalf("expected invalid default, got %v", errs)
 	}
@@ -59,70 +59,70 @@ func TestMechanicDefinitionsRequireScalarDefaultsAndMatchingMetadata(t *testing.
 	}
 }
 
-func TestNumberAndBooleanTaggedValues(t *testing.T) {
+func TestNumberAndBooleanMechanicValues(t *testing.T) {
 	t.Parallel()
-	number := NewNumberValue(MustDecimal("9007199254740993.25"))
-	if errs := ValidateStateValue(testNumberDefinition(), number); len(errs) != 0 {
+	number := NewNumberMechanicValue(MustDecimal("9007199254740993.25"))
+	if errs := ValidateMechanicValue(testNumberDefinition(), number); len(errs) != 0 {
 		t.Fatalf("number rejected: %v", errs)
 	}
-	boolean := NewBooleanValue(false)
-	if errs := ValidateStateValue(testBooleanDefinition(), boolean); len(errs) != 0 {
+	boolean := NewBooleanMechanicValue(false)
+	if errs := ValidateMechanicValue(testBooleanDefinition(), boolean); len(errs) != 0 {
 		t.Fatalf("Boolean rejected: %v", errs)
 	}
-	if StateValuesEqual(number, boolean) {
+	if MechanicValuesEqual(number, boolean) {
 		t.Fatal("different value kinds compared equal")
 	}
-	if !StateValuesEqual(number, CloneStateValue(number)) || !StateValuesEqual(boolean, CloneStateValue(boolean)) {
+	if !MechanicValuesEqual(number, CloneMechanicValue(number)) || !MechanicValuesEqual(boolean, CloneMechanicValue(boolean)) {
 		t.Fatal("cloned scalar did not preserve equality")
 	}
 }
 
-func TestLogicalDefaultsAndSparseNormalization(t *testing.T) {
+func TestLogicalInputsAndSparseOverrideNormalization(t *testing.T) {
 	t.Parallel()
 	number := testNumberDefinition()
-	number.DefaultValue = NewNumberValue(MustDecimal("3"))
+	number.DefaultValue = NewNumberMechanicValue(MustDecimal("3"))
 	boolean := testBooleanDefinition()
 	definitions := map[ID]MechanicDefinition{number.ID: number, boolean.ID: boolean}
-	record := StateRecord{EntityID: "e1", Revision: 2, Values: map[ID]StateValue{}}
+	record := InputOverrideRecord{EntityID: "e1", Revision: 2, Overrides: map[ID]MechanicValue{}}
 	logical := MaterializeLogicalState(testEntities()["e1"], record, definitions)
-	if got := logical.Values[number.ID].Number.String(); got != "3" {
+	if got := logical.InputValues[number.ID].Number.String(); got != "3" {
 		t.Fatalf("number default = %s", got)
 	}
-	if got := *logical.Values[boolean.ID].Boolean; got {
+	if got := *logical.InputValues[boolean.ID].Boolean; got {
 		t.Fatal("Boolean default = true, want false")
 	}
-	if len(logical.DefaultedMechanicIDs) != 2 || logical.DefaultedMechanicIDs[0] != boolean.ID || logical.DefaultedMechanicIDs[1] != number.ID {
-		t.Fatalf("defaulted IDs = %v", logical.DefaultedMechanicIDs)
+	if len(logical.AuthoredDefaultInputMechanicIDs) != 2 || logical.AuthoredDefaultInputMechanicIDs[0] != boolean.ID || logical.AuthoredDefaultInputMechanicIDs[1] != number.ID {
+		t.Fatalf("authored-default input mechanic IDs = %v", logical.AuthoredDefaultInputMechanicIDs)
 	}
 
-	record.Values[number.ID] = CloneStateValue(number.DefaultValue)
-	if errs := ValidateStateRecord(record, testEntities()["e1"], definitions); !hasValidationCode(errs, "unnormalized_default") {
-		t.Fatalf("expected unnormalized_default, got %v", errs)
+	record.Overrides[number.ID] = CloneMechanicValue(number.DefaultValue)
+	if errs := ValidateInputOverrideRecord(record, testEntities()["e1"], definitions); !hasValidationCode(errs, "redundant_input_override") {
+		t.Fatalf("expected redundant_input_override, got %v", errs)
 	}
-	normalized := NormalizeStateRecord(record, definitions)
-	if _, exists := normalized.Values[number.ID]; exists {
+	normalized := NormalizeInputOverrideRecord(record, definitions)
+	if _, exists := normalized.Overrides[number.ID]; exists {
 		t.Fatal("default remained persisted")
 	}
-	if _, exists := record.Values[number.ID]; !exists {
+	if _, exists := record.Overrides[number.ID]; !exists {
 		t.Fatal("normalization mutated the caller-owned record")
 	}
 }
 
-func TestStateValidationEnforcesWorldAndRecordIdentity(t *testing.T) {
+func TestInputOverrideValidationEnforcesWorldAndRecordIdentity(t *testing.T) {
 	t.Parallel()
 	definition := testNumberDefinition()
 	otherWorld := definition
 	otherWorld.ID = "other-mechanic"
 	otherWorld.WorldID = "other-world"
-	record := StateRecord{
+	record := InputOverrideRecord{
 		EntityID: "wrong-entity",
 		Revision: -1,
-		Values: map[ID]StateValue{
-			otherWorld.ID: NewNumberValue(MustDecimal("1")),
-			"missing":     NewNumberValue(MustDecimal("1")),
+		Overrides: map[ID]MechanicValue{
+			otherWorld.ID: NewNumberMechanicValue(MustDecimal("1")),
+			"missing":     NewNumberMechanicValue(MustDecimal("1")),
 		},
 	}
-	errs := ValidateStateRecord(record, testEntities()["e1"], map[ID]MechanicDefinition{otherWorld.ID: otherWorld})
+	errs := ValidateInputOverrideRecord(record, testEntities()["e1"], map[ID]MechanicDefinition{otherWorld.ID: otherWorld})
 	for _, code := range []string{"entity_mismatch", "invalid_revision", "cross_world_reference", "unknown_mechanic"} {
 		if !hasValidationCode(errs, code) {
 			t.Errorf("expected %s, got %v", code, errs)
@@ -130,10 +130,10 @@ func TestStateValidationEnforcesWorldAndRecordIdentity(t *testing.T) {
 	}
 }
 
-func TestDerivedMechanicsCannotOwnDefaultsBoundsOrStoredState(t *testing.T) {
+func TestDerivedMechanicsCannotOwnDefaultsBoundsOrStoredOverrides(t *testing.T) {
 	t.Parallel()
-	derived := namedDerived("calculated", ValueNumber, numberLiteral("2"))
-	derived.DefaultValue = NewNumberValue(MustDecimal("1"))
+	derived := namedDerived("derived", ValueNumber, numberLiteral("2"))
+	derived.DefaultValue = NewNumberMechanicValue(MustDecimal("1"))
 	derived.Minimum = decimalPointer(MustDecimal("0"))
 	derived.Mutable = true
 	errs := ValidateMechanicDefinition(derived)
@@ -143,27 +143,27 @@ func TestDerivedMechanicsCannotOwnDefaultsBoundsOrStoredState(t *testing.T) {
 		t.Fatalf("derived source errors = %v", errs)
 	}
 
-	derived.DefaultValue = StateValue{}
+	derived.DefaultValue = MechanicValue{}
 	derived.Minimum = nil
 	derived.Mutable = false
-	record := StateRecord{EntityID: "e1", Values: map[ID]StateValue{
-		derived.ID: NewNumberValue(MustDecimal("2")),
+	record := InputOverrideRecord{EntityID: "e1", Overrides: map[ID]MechanicValue{
+		derived.ID: NewNumberMechanicValue(MustDecimal("2")),
 	}}
-	errs = ValidateStateRecord(record, testEntities()["e1"], definitionMap(derived))
-	if !hasValidationAt(errs, "derived_state_value", "values[calculated]") {
+	errs = ValidateInputOverrideRecord(record, testEntities()["e1"], definitionMap(derived))
+	if !hasValidationAt(errs, "derived_mechanic_override", "overrides[derived]") {
 		t.Fatalf("derived storage errors = %v", errs)
 	}
-	logical := MaterializeLogicalState(testEntities()["e1"], StateRecord{EntityID: "e1"}, definitionMap(derived))
-	if len(logical.Values) != 0 || len(logical.DefaultedMechanicIDs) != 0 {
-		t.Fatalf("derived mechanic leaked into writable logical state: %+v", logical)
+	logical := MaterializeLogicalState(testEntities()["e1"], InputOverrideRecord{EntityID: "e1"}, definitionMap(derived))
+	if len(logical.InputValues) != 0 || len(logical.AuthoredDefaultInputMechanicIDs) != 0 {
+		t.Fatalf("derived mechanic leaked into logical input values: %+v", logical)
 	}
 }
 
 func TestDomainErrorSupportsErrorsIs(t *testing.T) {
 	t.Parallel()
-	err := domainError(ErrInvalidState, ValidationErrors{{Code: "bad", Message: "bad state"}})
-	if !errors.Is(err, ErrInvalidState) {
-		t.Fatalf("errors.Is(%v, ErrInvalidState) = false", err)
+	err := domainError(ErrInvalidRuntimeSnapshot, ValidationErrors{{Code: "bad", Message: "bad runtime snapshot"}})
+	if !errors.Is(err, ErrInvalidRuntimeSnapshot) {
+		t.Fatalf("errors.Is(%v, ErrInvalidRuntimeSnapshot) = false", err)
 	}
 }
 
@@ -182,7 +182,7 @@ func testNumberDefinition() MechanicDefinition {
 		WorldID:      "world",
 		SourceKind:   SourceInput,
 		ValueKind:    ValueNumber,
-		DefaultValue: NewNumberValue(MustDecimal("0")),
+		DefaultValue: NewNumberMechanicValue(MustDecimal("0")),
 		Mutable:      true,
 	}
 }
@@ -193,16 +193,16 @@ func testBooleanDefinition() MechanicDefinition {
 		WorldID:      "world",
 		SourceKind:   SourceInput,
 		ValueKind:    ValueBoolean,
-		DefaultValue: NewBooleanValue(false),
+		DefaultValue: NewBooleanMechanicValue(false),
 		Mutable:      true,
 	}
 }
 
-func numberRecord(entityID, mechanicID ID, value string) StateRecord {
-	return StateRecord{
+func numberOverrideRecord(entityID, mechanicID ID, value string) InputOverrideRecord {
+	return InputOverrideRecord{
 		EntityID: entityID,
-		Values: map[ID]StateValue{
-			mechanicID: NewNumberValue(MustDecimal(value)),
+		Overrides: map[ID]MechanicValue{
+			mechanicID: NewNumberMechanicValue(MustDecimal(value)),
 		},
 	}
 }

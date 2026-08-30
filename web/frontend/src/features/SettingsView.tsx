@@ -77,7 +77,7 @@ export function SettingsView({
           </Field>
           <Field
             label="Description"
-            hint="Keep it short enough to orient a newly invited player."
+            hint="Orient newly invited players and give Terra a campaign brief."
           >
             <textarea
               value={model.draft.description}
@@ -92,7 +92,7 @@ export function SettingsView({
             <span>Dungeon Master</span>
             <strong>{model.access.dungeonMaster}</strong>
             <small>
-              Hand off the Dungeon Master role from Play between problems.
+              Hand off Dungeon Master responsibility from Play between Problems.
             </small>
           </div>
           {model.issue === null ? null : <ErrorMessage error={model.issue} />}
@@ -134,7 +134,7 @@ export function SettingsView({
               <dd>{model.access.dungeonMaster}</dd>
             </div>
             <div>
-              <dt>Status</dt>
+              <dt>World status</dt>
               <dd>{model.access.status}</dd>
             </div>
           </dl>
@@ -146,8 +146,8 @@ export function SettingsView({
           <div>
             <h2>Archive world</h2>
             <p>
-              Archiving keeps every entity, resolved problem, and resolution
-              record readable. Active problems must be resolved or cancelled
+              Archiving keeps every Entity, resolved Problem, and Resolution
+              receipt readable. Active Problems must be resolved or cancelled
               first.
             </p>
           </div>

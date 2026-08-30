@@ -3,7 +3,7 @@ import { describe, expect, test } from "bun:test";
 import { formatRelativeDate, humanize } from "./display";
 
 describe("display helpers", () => {
-  test("turns API vocabulary into table copy", () => {
+  test("turns API vocabulary into display copy", () => {
     expect(humanize("weapons-handling")).toBe("Weapons Handling");
   });
 

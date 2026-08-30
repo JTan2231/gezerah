@@ -7,9 +7,9 @@ import type { AddressInfo } from "node:net";
 
 const TERRA_MODEL = "gpt-5.6-terra";
 const LUNA_MODEL = "gpt-5.6-luna";
-export const TERRA_FORCED_FAILURE_MARKER = "[[E2E_TERRA_FAILURE]]";
+export const TERRA_MODEL_FAILURE_MARKER = "[[E2E_TERRA_MODEL_FAILURE]]";
 
-export interface TestAutoDMServer {
+export interface TestOpenAIStubServer {
   baseURL: string;
   stop: () => Promise<void>;
 }
@@ -27,16 +27,16 @@ interface CompilerContext {
     source_kind: string;
     value_kind: string;
   }[];
-  character_sheets: {
+  entities: {
     ref: string;
     profile: { label: string; value: string }[];
-    active_statuses: { ref: string; description?: string }[];
+    active_status_instances: { ref: string; description?: string }[];
   }[];
-  current_situation?: { actions: { ref: string }[] };
-  recent_history: { situation: string; consequence: string }[];
+  current_problem?: { actions: { ref: string }[] };
+  recent_history: { problem: string; consequence: string }[];
 }
 
-export async function startTestAutoDMServer(): Promise<TestAutoDMServer> {
+export async function startTestOpenAIStubServer(): Promise<TestOpenAIStubServer> {
   let responseNumber = 0;
   const server = createServer((request, response) => {
     void handleResponsesRequest(request, response, ++responseNumber).catch(
@@ -45,8 +45,8 @@ export async function startTestAutoDMServer(): Promise<TestAutoDMServer> {
         response.end(
           JSON.stringify({
             error: {
-              type: "e2e_auto_dm_error",
-              code: "e2e_auto_dm_error",
+              type: "e2e_model_error",
+              code: "e2e_model_error",
               message: error instanceof Error ? error.message : String(error),
             },
           }),
@@ -88,12 +88,12 @@ async function handleResponsesRequest(
     text = JSON.stringify(compileConsequence(body.input));
   } else if (body.model === TERRA_MODEL) {
     if (
-      !body.instructions?.includes("next situation") &&
-      body.input.includes(TERRA_FORCED_FAILURE_MARKER)
+      !body.instructions?.includes("next problem") &&
+      body.input.includes(TERRA_MODEL_FAILURE_MARKER)
     ) {
       throw new Error("forced Terra consequence failure");
     }
-    text = body.instructions?.includes("next situation")
+    text = body.instructions?.includes("next problem")
       ? "The tide rises around the next crossing."
       : "The party reaches safety, though the crossing leaves its mark.";
   } else {
@@ -122,7 +122,7 @@ function compileConsequence(input: string) {
   };
   const context = envelope.authoritative_context;
   const narrative = envelope.consequence_narrative;
-  const entity = context.character_sheets[0];
+  const entity = context.entities[0];
   const mechanic = context.mechanics.find(
     (candidate) =>
       candidate.source_kind === "input" && candidate.value_kind === "number",
@@ -131,7 +131,7 @@ function compileConsequence(input: string) {
     throw new Error("e2e consequence context has no numeric entity target");
   if (context.world.campaign_brief === undefined || entity.profile.length < 2)
     throw new Error(
-      "e2e consequence context is missing its world or sheet prose",
+      "e2e consequence context is missing its World or Entity profile",
     );
 
   const run = context.world.name.split(" ").at(-1);
@@ -142,7 +142,7 @@ function compileConsequence(input: string) {
   } else if (narrative.includes("tears at every footing")) {
     effects.push(adjustEffect(entity.ref, mechanic.ref, "-2"));
     effects.push(
-      applyStatusEffect(
+      applyStatusEffectRequest(
         entity.ref,
         mechanic.ref,
         `Off Balance ${run}`,
@@ -154,7 +154,7 @@ function compileConsequence(input: string) {
     if (context.recent_history.length !== 1)
       throw new Error("second consequence did not receive one history pair");
     effects.push(
-      applyStatusEffect(
+      applyStatusEffectRequest(
         entity.ref,
         mechanic.ref,
         `Off Balance ${run}`,
@@ -165,16 +165,16 @@ function compileConsequence(input: string) {
   } else if (narrative.includes("first stagger ends")) {
     if (context.recent_history.length !== 2)
       throw new Error("third consequence did not receive two history pairs");
-    const target = entity.active_statuses.find((status) =>
+    const target = entity.active_status_instances.find((status) =>
       status.description?.includes("first crossing"),
     );
     if (target === undefined)
       throw new Error("e2e consequence context has no first status instance");
-    effects.push(removeStatusEffect(entity.ref, target.ref));
+    effects.push(removeStatusEffectRequest(entity.ref, target.ref));
   }
 
   return {
-    selected_action_ref: context.current_situation?.actions[0]?.ref ?? null,
+    selected_action_ref: context.current_problem?.actions[0]?.ref ?? null,
     action_summary: null,
     effects,
   };
@@ -185,7 +185,7 @@ function emptyEffect(type: string, entityRef: string) {
     type,
     entity_ref: entityRef,
     mechanic_ref: null,
-    status_ref: null,
+    status_instance_ref: null,
     value_kind: null,
     number_value: null,
     boolean_value: null,
@@ -204,7 +204,7 @@ function adjustEffect(entityRef: string, mechanicRef: string, amount: string) {
   };
 }
 
-function applyStatusEffect(
+function applyStatusEffectRequest(
   entityRef: string,
   mechanicRef: string,
   name: string,
@@ -227,10 +227,13 @@ function applyStatusEffect(
   };
 }
 
-function removeStatusEffect(entityRef: string, statusRef: string) {
+function removeStatusEffectRequest(
+  entityRef: string,
+  statusInstanceRef: string,
+) {
   return {
     ...emptyEffect("remove-status", entityRef),
-    status_ref: statusRef,
+    status_instance_ref: statusInstanceRef,
   };
 }
 

@@ -66,12 +66,11 @@ type worldResponse struct {
 	ID                  string              `json:"id"`
 	Name                string              `json:"name"`
 	Description         *string             `json:"description,omitempty"`
-	DMSource            string              `json:"dm_source"`
 	Facilitator         facilitatorResponse `json:"facilitator"`
 	CurrentPlayRole     string              `json:"current_play_role"`
 	Status              string              `json:"status"`
 	Revision            int64               `json:"revision"`
-	TableRevision       int64               `json:"table_revision"`
+	RosterRevision      int64               `json:"roster_revision"`
 	Role                string              `json:"role"`
 	MembershipID        string              `json:"membership_id"`
 	MemberCount         int                 `json:"member_count"`
@@ -100,7 +99,6 @@ type createWorldRequest struct {
 type updateWorldRequest struct {
 	Name             *string                `json:"name,omitempty"`
 	Description      optionalNullableString `json:"description"`
-	DMSource         *string                `json:"dm_source,omitempty"`
 	ExpectedRevision *int64                 `json:"expected_revision"`
 }
 
@@ -210,7 +208,7 @@ type saveWorldMechanicRequest struct {
 	ExpectedRulesRevision *int64         `json:"expected_rules_revision"`
 }
 
-type archiveWorldRuleResourceRequest struct {
+type archiveWorldMechanicRequest struct {
 	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
 }
 
@@ -224,13 +222,13 @@ type worldMechanicMutationResponse struct {
 	Mechanic worldMechanicResponse `json:"mechanic"`
 }
 
-type stateValueDTO struct {
+type mechanicValueDTO struct {
 	Kind    string
 	Number  *decimalText
 	Boolean *bool
 }
 
-func (value stateValueDTO) MarshalJSON() ([]byte, error) {
+func (value mechanicValueDTO) MarshalJSON() ([]byte, error) {
 	switch value.Kind {
 	case "number":
 		if value.Number == nil {
@@ -253,7 +251,7 @@ func (value stateValueDTO) MarshalJSON() ([]byte, error) {
 	}
 }
 
-func (value *stateValueDTO) UnmarshalJSON(data []byte) error {
+func (value *mechanicValueDTO) UnmarshalJSON(data []byte) error {
 	var tagged struct {
 		Kind string `json:"kind"`
 	}
@@ -272,7 +270,7 @@ func (value *stateValueDTO) UnmarshalJSON(data []byte) error {
 		if decoded.Value == nil {
 			return errors.New("number value is required")
 		}
-		*value = stateValueDTO{Kind: tagged.Kind, Number: decoded.Value}
+		*value = mechanicValueDTO{Kind: tagged.Kind, Number: decoded.Value}
 	case "boolean":
 		var decoded struct {
 			Kind  string `json:"kind"`
@@ -284,7 +282,7 @@ func (value *stateValueDTO) UnmarshalJSON(data []byte) error {
 		if decoded.Value == nil {
 			return errors.New("boolean value is required")
 		}
-		*value = stateValueDTO{Kind: tagged.Kind, Boolean: decoded.Value}
+		*value = mechanicValueDTO{Kind: tagged.Kind, Boolean: decoded.Value}
 	default:
 		return fmt.Errorf("unsupported value kind %q", tagged.Kind)
 	}
@@ -308,23 +306,22 @@ func decodeStrictBytes(data []byte, target any) error {
 	return nil
 }
 
-type stateRecordResponse struct {
-	EntityID             string                               `json:"entity_id"`
-	Revision             int64                                `json:"revision"`
-	StatusRevision       int64                                `json:"status_revision"`
-	RulesRevision        int64                                `json:"rules_revision"`
-	Values               map[string]stateValueDTO             `json:"values"`
-	EffectiveValues      map[string]stateValueDTO             `json:"effective_values"`
-	Evaluations          map[string]evaluatedMechanicResponse `json:"evaluations"`
-	ActiveStatuses       []activeStatusResponse               `json:"active_statuses"`
-	DefaultedMechanicIDs []string                             `json:"defaulted_mechanic_ids"`
-	UpdatedAt            time.Time                            `json:"updated_at"`
+type entitySheetResponse struct {
+	EntityID                        string                               `json:"entity_id"`
+	LogicalStateRevision            int64                                `json:"logical_state_revision"`
+	StatusSetRevision               int64                                `json:"status_set_revision"`
+	RulesRevision                   int64                                `json:"rules_revision"`
+	LogicalInputValues              map[string]mechanicValueDTO          `json:"logical_input_values"`
+	EffectiveValues                 map[string]mechanicValueDTO          `json:"effective_values"`
+	Evaluations                     map[string]evaluatedMechanicResponse `json:"evaluations"`
+	ActiveStatusInstances           []statusInstanceResponse             `json:"active_status_instances"`
+	AuthoredDefaultInputMechanicIDs []string                             `json:"authored_default_input_mechanic_ids"`
 }
 
-type replaceStateRequest struct {
-	ExpectedRevision      *int64                   `json:"expected_revision"`
-	ExpectedRulesRevision *int64                   `json:"expected_rules_revision"`
-	Values                map[string]stateValueDTO `json:"values"`
+type replaceEntityLogicalStateRequest struct {
+	ExpectedLogicalStateRevision *int64                      `json:"expected_logical_state_revision"`
+	ExpectedRulesRevision        *int64                      `json:"expected_rules_revision"`
+	LogicalInputValues           map[string]mechanicValueDTO `json:"logical_input_values"`
 }
 
 type createWorldEntityRequest struct {
@@ -343,9 +340,7 @@ type worldEntityResponse struct {
 	ID                  string              `json:"id"`
 	DisplayName         string              `json:"display_name"`
 	Archived            bool                `json:"archived"`
-	StateRevision       int64               `json:"state_revision"`
-	StatusRevision      int64               `json:"status_revision"`
-	State               stateRecordResponse `json:"state"`
+	Sheet               entitySheetResponse `json:"sheet"`
 	CharacterStatus     string              `json:"character_status"`
 	RequiredFieldCount  int                 `json:"required_field_count"`
 	CompletedFieldCount int                 `json:"completed_field_count"`
@@ -354,35 +349,35 @@ type worldEntityResponse struct {
 }
 
 type replaceWorldEntityControllersRequest struct {
-	ExpectedTableRevision        *int64   `json:"expected_table_revision"`
+	ExpectedRosterRevision       *int64   `json:"expected_roster_revision"`
 	ControllerWorldMembershipIDs []string `json:"controller_world_membership_ids"`
 }
 
 type worldEntityControllersResponse struct {
 	EntityID                     string   `json:"entity_id"`
 	ControllerWorldMembershipIDs []string `json:"controller_world_membership_ids"`
-	TableRevision                int64    `json:"table_revision"`
+	RosterRevision               int64    `json:"roster_revision"`
 }
 
 type claimWorldEntityRequest struct {
-	ExpectedTableRevision *int64 `json:"expected_table_revision"`
+	ExpectedRosterRevision *int64 `json:"expected_roster_revision"`
 }
 
-type availableAgentCharacterResponse struct {
+type availableEntityResponse struct {
 	ID             string  `json:"id"`
 	DisplayName    string  `json:"display_name"`
 	ProfileSummary *string `json:"profile_summary,omitempty"`
 }
 
-type availableAgentCharactersResponse struct {
-	TableRevision int64                             `json:"table_revision"`
-	Characters    []availableAgentCharacterResponse `json:"characters"`
+type availableEntitiesResponse struct {
+	RosterRevision int64                     `json:"roster_revision"`
+	Entities       []availableEntityResponse `json:"entities"`
 }
 
 type claimedWorldEntityResponse struct {
 	EntityID                     string   `json:"entity_id"`
 	ControllerWorldMembershipIDs []string `json:"controller_world_membership_ids"`
-	TableRevision                int64    `json:"table_revision"`
+	RosterRevision               int64    `json:"roster_revision"`
 	PlayStatus                   string   `json:"play_status"`
 }
 
@@ -416,33 +411,33 @@ type worldCharacterFieldSetResponse struct {
 	UpdatedAt time.Time                     `json:"updated_at"`
 }
 
-type saveEntityProfileFieldValueRequest struct {
+type saveEntityProfileValueRequest struct {
 	FieldID string `json:"field_id"`
 	Value   string `json:"value"`
 }
 
 type replaceEntityProfileRequest struct {
-	ExpectedRevision                *int64                               `json:"expected_revision"`
-	ExpectedCharacterFieldsRevision *int64                               `json:"expected_character_fields_revision"`
-	Values                          []saveEntityProfileFieldValueRequest `json:"values"`
+	ExpectedRevision                  *int64                          `json:"expected_revision"`
+	ExpectedCharacterFieldSetRevision *int64                          `json:"expected_character_field_set_revision"`
+	Values                            []saveEntityProfileValueRequest `json:"values"`
 }
 
 type entityProfileResponse struct {
-	EntityID                string                       `json:"entity_id"`
-	Revision                int64                        `json:"revision"`
-	CharacterFieldsRevision int64                        `json:"character_fields_revision"`
-	CharacterStatus         string                       `json:"character_status"`
-	RequiredFieldCount      int                          `json:"required_field_count"`
-	CompletedFieldCount     int                          `json:"completed_field_count"`
-	MissingFieldIDs         []string                     `json:"missing_field_ids,omitempty"`
-	CanEdit                 bool                         `json:"can_edit"`
-	Fields                  []entityProfileFieldResponse `json:"fields"`
-	UpdatedByUserID         *string                      `json:"updated_by_user_id,omitempty"`
-	CreatedAt               *time.Time                   `json:"created_at,omitempty"`
-	UpdatedAt               *time.Time                   `json:"updated_at,omitempty"`
+	EntityID                  string                                `json:"entity_id"`
+	Revision                  int64                                 `json:"revision"`
+	CharacterFieldSetRevision int64                                 `json:"character_field_set_revision"`
+	CharacterStatus           string                                `json:"character_status"`
+	RequiredFieldCount        int                                   `json:"required_field_count"`
+	CompletedFieldCount       int                                   `json:"completed_field_count"`
+	MissingFieldIDs           []string                              `json:"missing_field_ids,omitempty"`
+	CanEdit                   bool                                  `json:"can_edit"`
+	Fields                    []entityProfileCharacterFieldResponse `json:"fields"`
+	UpdatedByUserID           *string                               `json:"updated_by_user_id,omitempty"`
+	CreatedAt                 *time.Time                            `json:"created_at,omitempty"`
+	UpdatedAt                 *time.Time                            `json:"updated_at,omitempty"`
 }
 
-type entityProfileFieldResponse struct {
+type entityProfileCharacterFieldResponse struct {
 	ID              string     `json:"id"`
 	Label           string     `json:"label"`
 	HelpText        *string    `json:"help_text,omitempty"`
@@ -461,7 +456,7 @@ type saveInteractionRequest struct {
 	PrivateNotes                   *string  `json:"private_notes,omitempty"`
 	AudienceMembershipIDs          []string `json:"audience_membership_ids,omitempty"`
 	EligibleResponderMembershipIDs []string `json:"eligible_responder_membership_ids"`
-	EntityIDs                      []string `json:"entity_ids"`
+	ContextEntityIDs               []string `json:"context_entity_ids"`
 }
 
 type interactionLifecycleRequest struct {
@@ -479,14 +474,14 @@ type withdrawInteractionActionRequest struct {
 }
 
 type concreteEffectDTO struct {
-	ID         string                  `json:"id,omitempty"`
-	Type       string                  `json:"type"`
-	EntityIDs  []string                `json:"entity_ids,omitempty"`
-	Targets    []statusEffectTargetDTO `json:"targets,omitempty"`
-	MechanicID string                  `json:"mechanic_id,omitempty"`
-	Status     *statusEffectSpecDTO    `json:"status,omitempty"`
-	Value      *stateValueDTO          `json:"value,omitempty"`
-	Amount     *decimalText            `json:"amount,omitempty"`
+	ID           string                           `json:"id,omitempty"`
+	Type         string                           `json:"type"`
+	EntityIDs    []string                         `json:"entity_ids,omitempty"`
+	Targets      []statusLifecycleEffectTargetDTO `json:"targets,omitempty"`
+	MechanicID   string                           `json:"mechanic_id,omitempty"`
+	InlineStatus *inlineStatusDTO                 `json:"status,omitempty"`
+	Value        *mechanicValueDTO                `json:"value,omitempty"`
+	Amount       *decimalText                     `json:"amount,omitempty"`
 }
 
 type adjudicateInteractionRequest struct {
@@ -500,18 +495,18 @@ type adjudicateInteractionRequest struct {
 	Effects               []concreteEffectDTO `json:"effects"`
 }
 
-type autoDMDecideRequest struct {
+type terraDecideRequest struct {
 	ExpectedRevision      *int64 `json:"expected_revision"`
 	ExpectedRulesRevision *int64 `json:"expected_rules_revision"`
 	IdempotencyKey        string `json:"idempotency_key"`
 }
 
-type agentDMContinueRequest struct {
+type agentContinueRequest struct {
 	Title  *string `json:"title,omitempty"`
 	Prompt string  `json:"prompt"`
 }
 
-type agentDMResolveRequest struct {
+type agentResolveRequest struct {
 	ExpectedRevision      *int64              `json:"expected_revision"`
 	ExpectedRulesRevision *int64              `json:"expected_rules_revision"`
 	IdempotencyKey        string              `json:"idempotency_key"`
@@ -528,11 +523,11 @@ type compileConsequenceRequest struct {
 }
 
 type consequenceCompilationResponse struct {
-	Narrative        string                              `json:"narrative"`
-	SelectedActionID *string                             `json:"selected_action_id,omitempty"`
-	ActionSummary    *string                             `json:"action_summary,omitempty"`
-	Effects          []concreteEffectDTO                 `json:"effects"`
-	Preview          interactionResolutionResultResponse `json:"preview"`
+	Narrative        string                               `json:"narrative"`
+	SelectedActionID *string                              `json:"selected_action_id,omitempty"`
+	ActionSummary    *string                              `json:"action_summary,omitempty"`
+	Effects          []concreteEffectDTO                  `json:"effects"`
+	Preview          consequenceApplicationResultResponse `json:"preview"`
 }
 
 type interactionActionResponse struct {
@@ -550,33 +545,33 @@ type interactionActionResponse struct {
 	UpdatedAt               time.Time `json:"updated_at"`
 }
 
-type concreteAppliedEffectResponse struct {
-	Type             string         `json:"type"`
-	EffectID         string         `json:"effect_id"`
-	EntityID         string         `json:"entity_id"`
-	MechanicID       string         `json:"mechanic_id,omitempty"`
-	StatusInstanceID string         `json:"status_instance_id,omitempty"`
-	StatusName       string         `json:"status_name,omitempty"`
-	ActiveBefore     *bool          `json:"active_before,omitempty"`
-	ActiveAfter      *bool          `json:"active_after,omitempty"`
-	Before           *stateValueDTO `json:"before,omitempty"`
-	After            *stateValueDTO `json:"after,omitempty"`
-	Changed          bool           `json:"changed"`
+type effectApplicationResponse struct {
+	Type             string            `json:"type"`
+	EffectID         string            `json:"effect_id"`
+	EntityID         string            `json:"entity_id"`
+	MechanicID       string            `json:"mechanic_id,omitempty"`
+	StatusInstanceID string            `json:"status_instance_id,omitempty"`
+	StatusName       string            `json:"status_name,omitempty"`
+	ActiveBefore     *bool             `json:"active_before,omitempty"`
+	ActiveAfter      *bool             `json:"active_after,omitempty"`
+	Before           *mechanicValueDTO `json:"before,omitempty"`
+	After            *mechanicValueDTO `json:"after,omitempty"`
+	Changed          bool              `json:"changed"`
 }
 
 type interactionResolutionResponse struct {
-	ID                     string                          `json:"id"`
-	SelectedActionID       *string                         `json:"selected_action_id,omitempty"`
-	ActionSummary          *string                         `json:"action_summary,omitempty"`
-	Narrative              string                          `json:"narrative"`
-	PrivateNotes           *string                         `json:"private_notes,omitempty"`
-	FacilitatorSource      string                          `json:"facilitator_source"`
-	ResolvedByMembershipID *string                         `json:"resolved_by_membership_id,omitempty"`
-	RulesRevision          int64                           `json:"rules_revision"`
-	Effects                []concreteEffectDTO             `json:"effects"`
-	AppliedEffects         []concreteAppliedEffectResponse `json:"applied_effects"`
-	EffectiveChanges       []effectiveChangeResponse       `json:"effective_changes"`
-	ResolvedAt             time.Time                       `json:"resolved_at"`
+	ID                     string                      `json:"id"`
+	SelectedActionID       *string                     `json:"selected_action_id,omitempty"`
+	ActionSummary          *string                     `json:"action_summary,omitempty"`
+	Narrative              string                      `json:"narrative"`
+	PrivateNotes           *string                     `json:"private_notes,omitempty"`
+	FacilitatorSource      string                      `json:"facilitator_source"`
+	ResolvedByMembershipID *string                     `json:"resolved_by_membership_id,omitempty"`
+	RulesRevision          int64                       `json:"rules_revision"`
+	Effects                []concreteEffectDTO         `json:"effects"`
+	Applications           []effectApplicationResponse `json:"applications"`
+	EffectiveChanges       []effectiveChangeResponse   `json:"effective_changes"`
+	ResolvedAt             time.Time                   `json:"resolved_at"`
 }
 
 type interactionResponse struct {
@@ -591,7 +586,7 @@ type interactionResponse struct {
 	CreatedByMembershipID          *string                        `json:"created_by_membership_id,omitempty"`
 	AudienceMembershipIDs          []string                       `json:"audience_membership_ids"`
 	EligibleResponderMembershipIDs []string                       `json:"eligible_responder_membership_ids"`
-	EntityIDs                      []string                       `json:"entity_ids"`
+	ContextEntityIDs               []string                       `json:"context_entity_ids"`
 	Actions                        []interactionActionResponse    `json:"actions"`
 	Resolution                     *interactionResolutionResponse `json:"resolution,omitempty"`
 	PresentedAt                    *time.Time                     `json:"presented_at,omitempty"`
@@ -601,27 +596,23 @@ type interactionResponse struct {
 	UpdatedAt                      time.Time                      `json:"updated_at"`
 }
 
-type interactionResolutionResultResponse struct {
-	Preview             bool                            `json:"preview,omitempty"`
-	Replayed            bool                            `json:"replayed,omitempty"`
-	InteractionID       string                          `json:"interaction_id"`
-	InteractionRevision int64                           `json:"interaction_revision"`
-	RulesRevision       int64                           `json:"rules_revision"`
-	Narrative           string                          `json:"narrative"`
-	AppliedEffects      []concreteAppliedEffectResponse `json:"applied_effects"`
-	EffectiveChanges    []effectiveChangeResponse       `json:"effective_changes"`
-	State               transitionStateResponse         `json:"state"`
-}
-
-type transitionStateResponse struct {
-	Records map[string]stateRecordResponse `json:"records"`
+type consequenceApplicationResultResponse struct {
+	Preview             bool                           `json:"preview,omitempty"`
+	Replayed            bool                           `json:"replayed,omitempty"`
+	InteractionID       string                         `json:"interaction_id"`
+	InteractionRevision int64                          `json:"interaction_revision"`
+	RulesRevision       int64                          `json:"rules_revision"`
+	Narrative           string                         `json:"narrative"`
+	Applications        []effectApplicationResponse    `json:"applications"`
+	EffectiveChanges    []effectiveChangeResponse      `json:"effective_changes"`
+	EntitySheets        map[string]entitySheetResponse `json:"entity_sheets"`
 }
 
 type worldEventResponse struct {
 	ID                int64     `json:"id"`
 	Type              string    `json:"type"`
 	InteractionID     *string   `json:"interaction_id,omitempty"`
-	SubmissionID      *string   `json:"submission_id,omitempty"`
+	ActionID          *string   `json:"action_id,omitempty"`
 	ResolutionID      *string   `json:"resolution_id,omitempty"`
 	ActorMembershipID *string   `json:"actor_membership_id,omitempty"`
 	ActorSource       string    `json:"actor_source"`

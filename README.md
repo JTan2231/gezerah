@@ -1,28 +1,31 @@
 # dnd
 
-dnd is a collaborative world editor and live play table. Authors define
-the capacities and capabilities that matter in a world, create people and other
-stateful subjects from that vocabulary, and invite the table with expiring
-links. During play, exactly one designated Dungeon Master presents problems in
-the moment, players offer free-form actions, and the Dungeon Master commits a
-Consequence with one prose summary plus optional ordered typed effects. The DM
-may be a human participant or Terra. Problems are never required as advance
-configuration.
+dnd is a collaborative world editor and live play surface. Authors define
+the capacities and capabilities that matter in a world, create fictional
+Entities from that vocabulary, and invite World members with expiring links.
+During Play, exactly one designated Dungeon Master presents Problems in
+the moment, current players offer free-form Actions, and the Dungeon Master
+commits a Consequence containing public narrative, optional selected-Action
+metadata, and zero or more ordered Effects. The DM may be a human World
+membership, Terra, or an agent such as ChatGPT.
+Problems are never required as advance configuration.
 
 The implementation is backed by a configurable typed state-transition engine.
-World authors define writable input mechanics and derived mechanics connected
-in a validated dependency graph; facilitators define persistent statuses
-inside problem Consequences during play. Status modifiers are snapshotted onto
-entity instances and layer over calculated state. The engine has no built-in
+World authors define input and derived Mechanics connected in the world
+mechanic graph; facilitators author persistent Status instances inside Problem
+Consequences during Play. Status modifiers are snapshotted onto Entity-specific
+instances and transform intrinsic values into effective values. The engine has no built-in
 world ontology, entity classes, privileged configured keys, or seed vocabulary.
-Real users and world memberships are separate from the fictional subjects they
-control. Durable owner/editor/player/spectator access and the current
-facilitator/player/spectator play role are separate: handing the table to Terra
-or another participant changes play responsibility without changing access.
+User accounts and World memberships are separate from the fictional subjects they
+control. Durable owner/editor/player/spectator membership roles and derived
+facilitator/player/spectator current play roles are separate: handing the DM
+assignment to Terra, an agent, or another World member changes play
+responsibility without changing access.
 
 ## Documentation
 
-The comprehensive system documentation starts at
+The authoritative vocabulary is in [`docs/glossary.md`](docs/glossary.md), and
+the comprehensive system documentation starts at
 [`docs/README.md`](docs/README.md). It covers architecture, domain semantics,
 workflows, the complete HTTP API, backend and frontend internals, the database,
 development, testing, operations, and security.
@@ -51,14 +54,15 @@ Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 The root page asks whether to enter **Play** or **Build**. Each area then asks
 the user to sign up or sign in when needed. Accounts use a username and
 password; no email address is required. **Build** defines input and
-derived capacities/capabilities, character requirements, roster setup, people,
-invitations, and world settings. **Play** is the separate live table: complete
-player onboarding, designate a human or Terra as Dungeon Master between
-problems, present an ad-hoc problem, collect player actions, and commit an
-immutable Consequence receipt. A human DM authors the prose and may preview
-Luna-compiled effects. When Terra is DM, ready players only pace the table;
-Terra creates and resolves the interaction without a human edit or approval
-step.
+derived capacities/capabilities, character fields, roster setup, memberships,
+invitations, and World settings. **Play** is the separate live surface: complete
+player onboarding, designate a human, Terra, or an agent as Dungeon Master
+between Problems, present an ad-hoc Problem, collect responder Actions, and commit
+an immutable Resolution with a resolution receipt. A human DM authors the
+Consequence and may preview Luna-compiled Effects. When Terra is DM, ready
+current players only pace Play; Terra creates and resolves the Interaction without a
+human edit or approval step. In agent mode, ChatGPT authors Problems and
+Consequences through the signed-in Play page.
 
 Useful process commands:
 
@@ -100,16 +104,16 @@ concurrent starts serialize schema upgrades.
 | `DND_LOG_LEVEL`     | `info`                                          | `debug`, `info`, `warn`, or `error`.                                            |
 | `DND_PUBLIC_ORIGIN` | request origin                                  | Exact browser origin for authenticated writes; HTTP is loopback-only.            |
 
-World roles, lifecycle states, visibility, and mutation permissions are
+World membership roles, lifecycle states, visibility, and mutation permissions are
 enforced by the server. Username/password authentication creates an opaque,
 revocable server session in an HttpOnly SameSite cookie. Passwords are stored
 only as Argon2id hashes, authenticated writes require a session-bound CSRF
 token and a same-origin request, and command bodies never choose their acting
 user or membership. The server derives the actor from the session.
 
-Player-safe live responses omit facilitator private notes and reject entities,
+Non-facilitator live responses omit facilitator private notes and reject Entities,
 actions, or effects outside the requested world. World configuration endpoints
-continue to enforce membership and roles after authentication.
+continue to enforce membership roles after authentication.
 
 ## Validation
 

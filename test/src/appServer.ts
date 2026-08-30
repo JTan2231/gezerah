@@ -5,7 +5,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 
-import { startTestAutoDMServer, type TestAutoDMServer } from "./autoDMServer";
+import {
+  startTestOpenAIStubServer,
+  type TestOpenAIStubServer,
+} from "./openAIStubServer";
 import { runCommand } from "./command";
 import { createDisposableDatabase, type DisposableDatabase } from "./database";
 
@@ -28,9 +31,9 @@ export async function startAppServer(options: {
   let database: DisposableDatabase | undefined;
   let child: ChildProcess | undefined;
   let logStream: WriteStream | undefined;
-  let autoDMServer: TestAutoDMServer | undefined;
+  let openAIStubServer: TestOpenAIStubServer | undefined;
   try {
-    autoDMServer = await startTestAutoDMServer();
+    openAIStubServer = await startTestOpenAIStubServer();
     process.stdout.write("\n==> E2E: creating disposable database\n");
     database = await createDisposableDatabase();
     const port = await freePort();
@@ -46,8 +49,8 @@ export async function startAppServer(options: {
         DND_DATABASE_URL: database.url,
         DND_LOG_LEVEL: "debug",
         DND_PUBLIC_ORIGIN: baseURL,
-        OPENAI_API_KEY: "e2e-auto-dm-key",
-        DND_OPENAI_BASE_URL: autoDMServer.baseURL,
+        OPENAI_API_KEY: "e2e-model-key",
+        DND_OPENAI_BASE_URL: openAIStubServer.baseURL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -59,7 +62,7 @@ export async function startAppServer(options: {
     const runningChild = child;
     const runningLog = logStream;
     const runningDatabase = database;
-    const runningAutoDMServer = autoDMServer;
+    const runningOpenAIStubServer = openAIStubServer;
     let stopped = false;
     return {
       baseURL,
@@ -78,7 +81,7 @@ export async function startAppServer(options: {
           }
         } finally {
           try {
-            await runningAutoDMServer.stop();
+            await runningOpenAIStubServer.stop();
           } finally {
             await preparedBinary.cleanup();
           }
@@ -91,8 +94,8 @@ export async function startAppServer(options: {
     if (logStream !== undefined)
       await endStream(logStream).catch(() => undefined);
     if (database !== undefined) await database.drop().catch(() => undefined);
-    if (autoDMServer !== undefined)
-      await autoDMServer.stop().catch(() => undefined);
+    if (openAIStubServer !== undefined)
+      await openAIStubServer.stop().catch(() => undefined);
     await preparedBinary.cleanup().catch(() => undefined);
     throw error;
   }

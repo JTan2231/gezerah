@@ -94,7 +94,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       [
         {
           label: labels.originalField,
-          visibility: "table",
+          visibility: "world",
         },
       ],
     );
@@ -147,12 +147,10 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await expectNoHorizontalPageOverflow(ownerPage);
     });
 
-    await test.step("CHF-001/zero-field-schema", async () => {
+    await test.step("CHF-001/zero-character-field-set", async () => {
       await ownerPage.getByRole("button", { name: "Remove" }).click();
       acceptNextDialog(ownerPage);
-      await ownerPage
-        .getByRole("button", { name: "Publish requirements" })
-        .click();
+      await ownerPage.getByRole("button", { name: "Publish fields" }).click();
       await expect(ownerPage.getByText("0 required fields")).toBeVisible();
       await expect(
         ownerPage.getByText("Controlled entities are immediately ready"),
@@ -176,10 +174,10 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       owner.id,
       emptyFields.revision,
       [
-        { label: labels.firstField, visibility: "table" },
+        { label: labels.firstField, visibility: "world" },
         {
           label: labels.secondField,
-          visibility: "controllers-and-facilitators",
+          visibility: "restricted",
         },
       ],
     );
@@ -212,9 +210,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await ownerPage
         .getByRole("button", { name: "Move character field 2 up" })
         .click();
-      await ownerPage
-        .getByRole("button", { name: "Publish requirements" })
-        .click();
+      await ownerPage.getByRole("button", { name: "Publish fields" }).click();
       await expect(
         ownerPage.getByText("Published", { exact: true }),
       ).toBeVisible();
@@ -231,15 +227,13 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       ).toHaveValue(firstValue);
     });
 
-    await test.step("CHF-004/add-requirement-regresses-readiness", async () => {
+    await test.step("CHF-004/add-character-field-regresses-readiness", async () => {
       await ownerPage
         .getByRole("button", { name: "Add required field" })
         .click();
       await ownerPage.getByLabel("Field label").last().fill(labels.newField);
       acceptNextDialog(ownerPage);
-      await ownerPage
-        .getByRole("button", { name: "Publish requirements" })
-        .click();
+      await ownerPage.getByRole("button", { name: "Publish fields" }).click();
       await expect(
         playerOnePage.getByText("Setup required").first(),
       ).toBeVisible({ timeout: 4_000 });
@@ -252,9 +246,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await playerOnePage
         .getByLabel(labels.newField)
         .fill(`New value ${unique}`);
-      await playerOnePage
-        .getByRole("button", { name: "Save character" })
-        .click();
+      await playerOnePage.getByRole("button", { name: "Save profile" }).click();
       await expect(
         playerOnePage.getByRole("heading", {
           name: "No active problem",
@@ -337,7 +329,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       world.id,
       shared.id,
       owner.id,
-      currentWorld.table_revision,
+      currentWorld.roster_revision,
       [playerTwoMembership.membership_id],
     );
     const solo = await createEntity(
@@ -380,9 +372,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       ]) {
         await playerOnePage.getByLabel(label).fill(`${label} solo value`);
       }
-      await playerOnePage
-        .getByRole("button", { name: "Save character" })
-        .click();
+      await playerOnePage.getByRole("button", { name: "Save profile" }).click();
       await expect(
         playerOnePage.getByRole("heading", {
           name: "No active problem",
@@ -393,13 +383,11 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await playerTwoPage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
-      await playerTwoPage.getByRole("tab", { name: "Character" }).click();
+      await playerTwoPage.getByRole("tab", { name: "Profile" }).click();
       await playerTwoPage
         .getByLabel(labels.revisedFirstField)
         .fill(`Player two preserved value ${unique}`);
-      await playerTwoPage
-        .getByRole("button", { name: "Save character" })
-        .click();
+      await playerTwoPage.getByRole("button", { name: "Save profile" }).click();
 
       await selectBuildSection(ownerPage, "roster");
       await ownerPage.getByRole("button", { name: "Create entity" }).focus();
@@ -424,12 +412,12 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await playerOnePage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
-      await playerOnePage.getByRole("tab", { name: "Character" }).click();
+      await playerOnePage.getByRole("tab", { name: "Profile" }).click();
       await expect(
         playerOnePage.getByText(`Player two preserved value ${unique}`),
       ).toBeVisible();
       await expect(
-        playerOnePage.getByRole("button", { name: "Save character" }),
+        playerOnePage.getByRole("button", { name: "Save profile" }),
       ).toHaveCount(0);
     });
 

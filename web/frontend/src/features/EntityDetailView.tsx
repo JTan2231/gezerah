@@ -2,14 +2,14 @@ import { useId, type KeyboardEvent, type ReactNode } from "react";
 
 import { ErrorMessage } from "../components/StudioUI";
 
-type EntityDetailTab = "story" | "sheet";
+type EntityDetailTab = "profile" | "sheet";
 
 export interface EntitySheetIssue {
   kind: "connection" | "request";
   message: string;
 }
 
-interface EntityStatusViewModel {
+interface StatusInstanceViewModel {
   id: string;
   name: string;
   details: string;
@@ -37,27 +37,27 @@ interface EntitySheetMechanicViewModel {
 export function EntityDetailView({
   tab,
   showControllers,
-  characterPanel,
+  profilePanel,
   sheetPanel,
   onSelectTab,
   onManageControllers,
 }: {
   tab: EntityDetailTab;
   showControllers: boolean;
-  characterPanel: ReactNode;
+  profilePanel: ReactNode;
   sheetPanel: ReactNode;
   onSelectTab: (tab: EntityDetailTab) => void;
   onManageControllers: () => void;
 }) {
   const tabsID = useId();
-  const storyTabID = `${tabsID}-story-tab`;
-  const storyPanelID = `${tabsID}-story-panel`;
+  const profileTabID = `${tabsID}-profile-tab`;
+  const profilePanelID = `${tabsID}-profile-panel`;
   const sheetTabID = `${tabsID}-sheet-tab`;
   const sheetPanelID = `${tabsID}-sheet-panel`;
 
   function handleTabKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
     let nextTab: EntityDetailTab | undefined;
-    if (event.key === "ArrowLeft" || event.key === "Home") nextTab = "story";
+    if (event.key === "ArrowLeft" || event.key === "Home") nextTab = "profile";
     if (event.key === "ArrowRight" || event.key === "End") nextTab = "sheet";
     if (nextTab === undefined) return;
     event.preventDefault();
@@ -80,16 +80,16 @@ export function EntityDetailView({
         >
           <button
             type="button"
-            id={storyTabID}
+            id={profileTabID}
             role="tab"
-            aria-selected={tab === "story"}
-            aria-controls={storyPanelID}
-            tabIndex={tab === "story" ? 0 : -1}
-            className={tab === "story" ? "active" : ""}
-            onClick={() => onSelectTab("story")}
+            aria-selected={tab === "profile"}
+            aria-controls={profilePanelID}
+            tabIndex={tab === "profile" ? 0 : -1}
+            className={tab === "profile" ? "active" : ""}
+            onClick={() => onSelectTab("profile")}
             onKeyDown={handleTabKeyDown}
           >
-            Character
+            Profile
           </button>
           <button
             type="button"
@@ -116,11 +116,11 @@ export function EntityDetailView({
         ) : null}
       </div>
       <div
-        id={tab === "story" ? storyPanelID : sheetPanelID}
+        id={tab === "profile" ? profilePanelID : sheetPanelID}
         role="tabpanel"
-        aria-labelledby={tab === "story" ? storyTabID : sheetTabID}
+        aria-labelledby={tab === "profile" ? profileTabID : sheetTabID}
       >
-        {tab === "story" ? characterPanel : sheetPanel}
+        {tab === "profile" ? profilePanel : sheetPanel}
       </div>
     </div>
   );
@@ -129,10 +129,10 @@ export function EntityDetailView({
 export function EntitySheetView({
   displayName,
   metadata,
-  statuses,
+  statusInstances,
   mechanics,
   editable,
-  values,
+  logicalInputValues,
   saving,
   issue,
   onValueChange,
@@ -140,10 +140,10 @@ export function EntitySheetView({
 }: {
   displayName: string;
   metadata: string;
-  statuses: EntityStatusViewModel[];
+  statusInstances: StatusInstanceViewModel[];
   mechanics: EntitySheetMechanicViewModel[];
   editable: boolean;
-  values: Record<string, string | boolean>;
+  logicalInputValues: Record<string, string | boolean>;
   saving: boolean;
   issue: EntitySheetIssue | null;
   onValueChange: (mechanicId: string, value: string | boolean) => void;
@@ -167,13 +167,16 @@ export function EntitySheetView({
           <span>{metadata}</span>
         </div>
       </header>
-      {statuses.length > 0 ? (
-        <section className="active-statuses" aria-label="Active statuses">
-          <h3>Active statuses</h3>
+      {statusInstances.length > 0 ? (
+        <section
+          className="status-instances"
+          aria-label="Active status instances"
+        >
+          <h3>Active status instances</h3>
           <div>
-            {statuses.map((status) => (
+            {statusInstances.map((status) => (
               <span
-                className="active-status-chip"
+                className="status-instance-chip"
                 key={status.id}
                 title={status.details}
                 aria-label={`${status.name}. ${status.details}`}
@@ -207,9 +210,7 @@ export function EntitySheetView({
                   <strong>
                     {mechanic.name}
                     <small className="mechanic-source-pill">
-                      {mechanic.sourceKind === "derived"
-                        ? "Calculated"
-                        : "Input"}
+                      {mechanic.sourceKind === "derived" ? "Derived" : "Input"}
                     </small>
                   </strong>
                   {mechanic.description === undefined ? null : (
@@ -222,7 +223,7 @@ export function EntitySheetView({
                   <input
                     aria-label={mechanic.name}
                     type="checkbox"
-                    checked={Boolean(values[mechanic.id])}
+                    checked={Boolean(logicalInputValues[mechanic.id])}
                     onChange={(event) =>
                       onValueChange(mechanic.id, event.currentTarget.checked)
                     }
@@ -233,7 +234,7 @@ export function EntitySheetView({
                       aria-label={mechanic.name}
                       type="text"
                       inputMode="decimal"
-                      value={decimalInputValue(values[mechanic.id])}
+                      value={decimalInputValue(logicalInputValues[mechanic.id])}
                       required
                       onChange={(event) =>
                         onValueChange(mechanic.id, event.currentTarget.value)
@@ -277,9 +278,9 @@ export function EntitySheetView({
       {issue === null ? null : <ErrorMessage error={issue} />}
       {editable && hasEditableInputs ? (
         <footer>
-          <span>Direct setup edit</span>
+          <span>Logical input values</span>
           <button className="button button-ink" type="submit" disabled={saving}>
-            {saving ? "Saving…" : "Save sheet"}
+            {saving ? "Saving…" : "Save logical state"}
           </button>
         </footer>
       ) : null}

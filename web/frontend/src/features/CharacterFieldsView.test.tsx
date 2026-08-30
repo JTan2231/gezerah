@@ -41,7 +41,7 @@ describe("CharacterFieldsView", () => {
     const html = renderToStaticMarkup(
       <CharacterFieldsView
         model={{
-          schemaLabel: "schema r3",
+          revisionLabel: "Character fields r3",
           fields: [],
           dirty: false,
           valid: true,
@@ -53,7 +53,7 @@ describe("CharacterFieldsView", () => {
     );
 
     expect(html).toContain("No character fields yet");
-    expect(html).toContain("schema r3");
+    expect(html).toContain("Character fields r3");
     expect(html).toContain("Published");
   });
 
@@ -61,13 +61,13 @@ describe("CharacterFieldsView", () => {
     const html = renderToStaticMarkup(
       <CharacterFieldsView
         model={{
-          schemaLabel: "schema r4",
+          revisionLabel: "Character fields r4",
           fields: [
             {
               clientKey: "field-1",
               label: "Origin",
               helpText: "",
-              visibility: "controllers-and-facilitators",
+              visibility: "restricted",
               labelIssue: "Field label is required.",
               helpTextIssue: "Guidance is too long.",
             },
@@ -75,7 +75,7 @@ describe("CharacterFieldsView", () => {
               clientKey: "field-2",
               label: "Bond",
               helpText: "Who would you risk everything for?",
-              visibility: "table",
+              visibility: "world",
             },
           ],
           dirty: true,
@@ -93,7 +93,9 @@ describe("CharacterFieldsView", () => {
     expect(html).toContain("2 required fields");
     expect(html).toContain("Field label is required.");
     expect(html).toContain("Guidance is too long.");
-    expect(html).toContain("Character controllers and facilitators");
+    expect(html).toContain("Who can read this value?");
+    expect(html).toContain("World-visible");
+    expect(html).toContain("Restricted");
     expect(html).toContain("Check the highlighted fields.");
     expect(html).toContain("Publishing…");
     expect(html).toContain("Unpublished changes");

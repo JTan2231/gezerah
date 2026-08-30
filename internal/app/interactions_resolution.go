@@ -13,15 +13,15 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-func (s *Server) handlePreviewInteractionResolution(w http.ResponseWriter, r *http.Request) {
-	s.handleInteractionResolution(w, r, true)
+func (s *Server) handlePreviewInteractionConsequence(w http.ResponseWriter, r *http.Request) {
+	s.handleInteractionConsequenceApplication(w, r, true)
 }
 
 func (s *Server) handleResolveInteraction(w http.ResponseWriter, r *http.Request) {
-	s.handleInteractionResolution(w, r, false)
+	s.handleInteractionConsequenceApplication(w, r, false)
 }
 
-func (s *Server) handleInteractionResolution(w http.ResponseWriter, r *http.Request, preview bool) {
+func (s *Server) handleInteractionConsequenceApplication(w http.ResponseWriter, r *http.Request, preview bool) {
 	worldID, interactionID := r.PathValue("world_id"), r.PathValue("interaction_id")
 	if !validID(interactionID) {
 		writeError(w, http.StatusBadRequest, "invalid_id", "interaction ID is malformed", nil)
@@ -38,11 +38,11 @@ func (s *Server) handleInteractionResolution(w http.ResponseWriter, r *http.Requ
 	}
 	fields := validateAdjudicationRequest(&request, !preview)
 	if len(fields) > 0 {
-		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "ruling is invalid", fields)
+		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "consequence is invalid", fields)
 		return
 	}
 	if preview {
-		result, err := s.previewInteractionResolution(r.Context(), r, worldID, interactionID, request)
+		result, err := s.previewInteractionConsequence(r.Context(), r, worldID, interactionID, request)
 		if err != nil {
 			handleAppError(w, err)
 			return
@@ -58,18 +58,18 @@ func (s *Server) handleInteractionResolution(w http.ResponseWriter, r *http.Requ
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (s *Server) previewInteractionResolution(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (interactionResolutionResultResponse, error) {
-	return s.previewInteractionResolutionAs(ctx, r, worldID, interactionID, request, "human")
+func (s *Server) previewInteractionConsequence(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (consequenceApplicationResultResponse, error) {
+	return s.previewInteractionConsequenceAs(ctx, r, worldID, interactionID, request, "human")
 }
 
-func (s *Server) previewInteractionResolutionAs(
+func (s *Server) previewInteractionConsequenceAs(
 	ctx context.Context,
 	r *http.Request,
 	worldID, interactionID string,
 	request adjudicateInteractionRequest,
 	facilitatorSource string,
-) (interactionResolutionResultResponse, error) {
-	var zero interactionResolutionResultResponse
+) (consequenceApplicationResultResponse, error) {
+	var zero consequenceApplicationResultResponse
 	tx, err := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return zero, err
@@ -89,7 +89,7 @@ func (s *Server) previewInteractionResolutionAs(
 		return zero, err
 	}
 	if status != "adjudicating" {
-		return zero, interactionLifecycleConflict("interaction must be adjudicating before it can be resolved")
+		return zero, interactionLifecycleConflict("interaction must be adjudicating before its Consequence can be previewed")
 	}
 	if revision != *request.ExpectedRevision {
 		return zero, revisionConflict("interaction", *request.ExpectedRevision, revision)
@@ -97,31 +97,31 @@ func (s *Server) previewInteractionResolutionAs(
 	if err := validateSelectedAction(ctx, tx, worldID, interactionID, request.SelectedActionID); err != nil {
 		return zero, err
 	}
-	input, err := loadResolutionRuntimeInput(ctx, tx, worldID, interactionID, rulesRevision, request.Effects)
+	input, err := loadConsequenceRuntimeInput(ctx, tx, worldID, interactionID, rulesRevision, request.Effects)
 	if err != nil {
 		return zero, err
 	}
-	before, err := evaluateResolutionStates(input, input.Snapshot.State, input.StatusSets)
+	before, err := evaluateConsequenceEntities(input, input.Snapshot.InputOverrides, input.StatusSets)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
 	transition, err := rules.ApplyRuntimeTransition(
-		input.Plan, input.Entities, input.Mechanics, input.Statuses.Snapshots, input.Snapshot,
+		input.Plan, input.Entities, input.Mechanics, input.InlineStatuses.InlineStatuses, input.Snapshot,
 	)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
-	applications, err := statusReceipts(transition.AppliedStatusCommands, input.StatusSets, input.Statuses)
+	applications, err := statusApplicationResults(transition.StatusApplications, input.StatusSets, input.InlineStatuses)
 	if err != nil {
 		return zero, err
 	}
 	statusSets := previewStatusSets(input, transition)
-	after, err := evaluateResolutionStates(input, transition.State, statusSets)
+	after, err := evaluateConsequenceEntities(input, transition.InputOverrides, statusSets)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
-	changes := resolutionEffectiveChanges(input, before, after)
-	result, err := previewRuntimeResult(
+	changes := consequenceEffectiveChanges(input, before, after)
+	result, err := buildConsequencePreviewResult(
 		interactionID, revision, strings.TrimSpace(request.Narrative), input,
 		transition, applications, changes, statusSets,
 	)
@@ -134,7 +134,7 @@ func (s *Server) previewInteractionResolutionAs(
 	return result, nil
 }
 
-func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (interactionResolutionResultResponse, error) {
+func (s *Server) resolveInteraction(ctx context.Context, r *http.Request, worldID, interactionID string, request adjudicateInteractionRequest) (consequenceApplicationResultResponse, error) {
 	return s.resolveInteractionAs(ctx, r, worldID, interactionID, request, "human")
 }
 
@@ -144,8 +144,8 @@ func (s *Server) resolveInteractionAs(
 	worldID, interactionID string,
 	request adjudicateInteractionRequest,
 	facilitatorSource string,
-) (interactionResolutionResultResponse, error) {
-	var zero interactionResolutionResultResponse
+) (consequenceApplicationResultResponse, error) {
+	var zero consequenceApplicationResultResponse
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return zero, err
@@ -159,11 +159,11 @@ func (s *Server) resolveInteractionAs(
 	var replayInteractionID, replaySource string
 	err = tx.QueryRow(ctx, `
 		select interaction_id::text, facilitator_source from interaction_resolutions
-		where world_id = $1 and idempotency_key = $2 and status = 'applied'`, worldID, strings.TrimSpace(request.IdempotencyKey),
+		where world_id = $1 and idempotency_key = $2 and status = 'committed'`, worldID, strings.TrimSpace(request.IdempotencyKey),
 	).Scan(&replayInteractionID, &replaySource)
 	if err == nil {
 		if replayInteractionID != interactionID || replaySource != facilitatorSource {
-			return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was already used for another ruling"}
+			return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was already used for another resolution"}
 		}
 		if facilitatorSource != terraFacilitatorSource {
 			matches, err := resolutionRequestMatches(ctx, tx, worldID, interactionID, request)
@@ -171,10 +171,10 @@ func (s *Server) resolveInteractionAs(
 				return zero, err
 			}
 			if !matches {
-				return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different ruling"}
+				return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different consequence"}
 			}
 		}
-		result, err := loadAppliedResolutionResult(ctx, tx, worldID, interactionID)
+		result, err := loadCommittedResolutionResult(ctx, tx, worldID, interactionID)
 		if err != nil {
 			return zero, err
 		}
@@ -203,7 +203,7 @@ func (s *Server) resolveInteractionAs(
 			replayErr := tx.QueryRow(ctx, `
 				select interaction_id::text, facilitator_source
 				from interaction_resolutions
-				where world_id = $1 and idempotency_key = $2 and status = 'applied'`,
+				where world_id = $1 and idempotency_key = $2 and status = 'committed'`,
 				worldID, strings.TrimSpace(request.IdempotencyKey),
 			).Scan(&committedInteractionID, &committedSource)
 			if replayErr == nil && committedInteractionID == interactionID && committedSource == facilitatorSource {
@@ -213,10 +213,10 @@ func (s *Server) resolveInteractionAs(
 						return zero, err
 					}
 					if !matches {
-						return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different ruling"}
+						return zero, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "idempotency key was reused with a different consequence"}
 					}
 				}
-				result, err := loadAppliedResolutionResult(ctx, tx, worldID, interactionID)
+				result, err := loadCommittedResolutionResult(ctx, tx, worldID, interactionID)
 				if err != nil {
 					return zero, err
 				}
@@ -230,7 +230,7 @@ func (s *Server) resolveInteractionAs(
 		return zero, interactionLifecycleConflict("interaction must be adjudicating before it can be resolved")
 	}
 	if facilitatorSource != "human" && interactionFacilitatorSource != facilitatorSource {
-		return zero, interactionLifecycleConflict("interaction facilitator source does not match this ruling")
+		return zero, interactionLifecycleConflict("interaction facilitator source does not match this consequence")
 	}
 	if revision != *request.ExpectedRevision {
 		return zero, revisionConflict("interaction", *request.ExpectedRevision, revision)
@@ -239,24 +239,24 @@ func (s *Server) resolveInteractionAs(
 		return zero, err
 	}
 	targetIDs := effectTargetIDs(request.Effects)
-	if err := lockTransitionState(ctx, tx, worldID, targetIDs); err != nil {
+	if err := lockTransitionInputs(ctx, tx, worldID, targetIDs); err != nil {
 		return zero, err
 	}
-	input, err := loadResolutionRuntimeInput(ctx, tx, worldID, interactionID, rulesRevision, request.Effects)
+	input, err := loadConsequenceRuntimeInput(ctx, tx, worldID, interactionID, rulesRevision, request.Effects)
 	if err != nil {
 		return zero, err
 	}
-	before, err := evaluateResolutionStates(input, input.Snapshot.State, input.StatusSets)
+	before, err := evaluateConsequenceEntities(input, input.Snapshot.InputOverrides, input.StatusSets)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
 	transition, err := rules.ApplyRuntimeTransition(
-		input.Plan, input.Entities, input.Mechanics, input.Statuses.Snapshots, input.Snapshot,
+		input.Plan, input.Entities, input.Mechanics, input.InlineStatuses.InlineStatuses, input.Snapshot,
 	)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
-	statusApplications, err := statusReceipts(transition.AppliedStatusCommands, input.StatusSets, input.Statuses)
+	statusApplications, err := statusApplicationResults(transition.StatusApplications, input.StatusSets, input.InlineStatuses)
 	if err != nil {
 		return zero, err
 	}
@@ -273,58 +273,58 @@ func (s *Server) resolveInteractionAs(
 	}
 	if _, err := tx.Exec(ctx, `
 		insert into interaction_resolutions
-			(id, interaction_id, world_id, selected_submission_id, action_summary, public_narrative,
+			(id, interaction_id, world_id, selected_action_id, action_summary, public_narrative,
 			 private_notes, status, facilitator_source, created_by_membership_id, rules_revision)
-		values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10)`,
+		values ($1, $2, $3, $4, $5, $6, $7, 'building', $8, $9, $10)`,
 		resolutionID, interactionID, worldID, request.SelectedActionID, request.ActionSummary,
 		strings.TrimSpace(request.Narrative), request.PrivateNotes, facilitatorSource,
 		actorMembershipID, rulesRevision); err != nil {
 		return zero, err
 	}
-	if err := persistTransitionState(ctx, tx, worldID, rules.TransitionResult{
-		State: transition.State, ChangedRecordIDs: transition.ChangedRecordIDs,
-	}, input.Mechanics); err != nil {
-		return zero, err
-	}
-	if err := persistStatusCommands(ctx, tx, worldID, resolutionID, transition.AppliedStatusCommands, input.Statuses); err != nil {
-		return zero, err
-	}
-	if err := insertRuntimeResolutionEffects(
-		ctx, tx, worldID, resolutionID, input.Plan, transition, statusApplications, input.Statuses,
+	if err := persistTransitionInputOverrides(
+		ctx, tx, worldID, transition.InputOverrides, transition.ChangedEntityIDs, input.Mechanics,
 	); err != nil {
 		return zero, err
 	}
-	afterStatusSets := make(map[rules.ID]loadedStatusSet, len(input.TargetIDs))
+	if err := persistStatusApplications(ctx, tx, worldID, resolutionID, transition.StatusApplications, input.InlineStatuses); err != nil {
+		return zero, err
+	}
+	if err := insertRuntimeResolutionEffects(
+		ctx, tx, worldID, resolutionID, input.Plan, transition, statusApplications, input.InlineStatuses,
+	); err != nil {
+		return zero, err
+	}
+	afterStatusSets := make(map[rules.ID]loadedStatusInstanceSet, len(input.TargetIDs))
 	for _, entityID := range input.TargetIDs {
-		set, err := loadActiveStatusSet(ctx, tx, worldID, string(entityID))
+		set, err := loadStatusInstanceSet(ctx, tx, worldID, string(entityID))
 		if err != nil {
 			return zero, err
 		}
 		afterStatusSets[entityID] = set
 	}
-	after, err := evaluateResolutionStates(input, transition.State, afterStatusSets)
+	after, err := evaluateConsequenceEntities(input, transition.InputOverrides, afterStatusSets)
 	if err != nil {
 		return zero, domainTransitionError(err)
 	}
-	changes := resolutionEffectiveChanges(input, before, after)
-	if err := insertEffectiveChangeReceipts(ctx, tx, worldID, resolutionID, changes); err != nil {
+	changes := consequenceEffectiveChanges(input, before, after)
+	if err := insertEffectiveChanges(ctx, tx, worldID, resolutionID, changes); err != nil {
 		return zero, err
 	}
 	if request.SelectedActionID != nil {
 		if _, err := tx.Exec(ctx, `
-			update interaction_action_submissions set status = case when id = $3 then 'selected' else 'declined' end,
+			update interaction_actions set status = case when id = $3 then 'selected' else 'declined' end,
 				revision = revision + 1
 			where world_id = $1 and interaction_id = $2 and status = 'submitted'`, worldID, interactionID, *request.SelectedActionID); err != nil {
 			return zero, err
 		}
 	} else if _, err := tx.Exec(ctx, `
-		update interaction_action_submissions set status = 'declined', revision = revision + 1
+		update interaction_actions set status = 'declined', revision = revision + 1
 		where world_id = $1 and interaction_id = $2 and status = 'submitted'`, worldID, interactionID); err != nil {
 		return zero, err
 	}
 	if _, err := tx.Exec(ctx, `
-		update interaction_resolutions set status = 'applied', resolved_by_membership_id = $3,
-			idempotency_key = $4, applied_at = now()
+		update interaction_resolutions set status = 'committed', resolved_by_membership_id = $3,
+			idempotency_key = $4, resolved_at = now()
 		where world_id = $1 and id = $2`, worldID, resolutionID, actorMembershipID, strings.TrimSpace(request.IdempotencyKey)); err != nil {
 		return zero, err
 	}
@@ -337,13 +337,13 @@ func (s *Server) resolveInteractionAs(
 		if err := appendAutomatedResolutionEvent(ctx, tx, worldID, interactionID, resolutionID, facilitatorSource); err != nil {
 			return zero, err
 		}
-	} else if err := appendWorldEvent(ctx, tx, worldID, "resolution-applied", member.ID, &interactionID, nil, &resolutionID); err != nil {
+	} else if err := appendWorldEvent(ctx, tx, worldID, "resolution-committed", member.ID, &interactionID, nil, &resolutionID); err != nil {
 		return zero, err
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return zero, err
 	}
-	result, err := loadAppliedResolutionResult(ctx, s.db, worldID, interactionID)
+	result, err := loadCommittedResolutionResult(ctx, s.db, worldID, interactionID)
 	if err != nil {
 		return zero, err
 	}
@@ -379,15 +379,15 @@ func requireResolutionActor(
 	}
 	label := "Terra"
 	if facilitatorSource == agentFacilitatorSource {
-		label = "the external agent"
+		label = "the agent"
 	}
 	if err := requireFacilitatorSource(ctx, db, worldID, facilitatorSource, label); err != nil {
 		return member, err
 	}
 	if member.Role == "spectator" || member.Facilitator {
-		return member, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready player may pace " + label}
+		return member, &statusError{Status: http.StatusForbidden, Code: "player_required", Message: "only a ready current player may pace " + label}
 	}
-	if err := requireInteractionMemberReadiness(ctx, db, member); err != nil {
+	if err := requireInteractionPlayAccess(ctx, db, member); err != nil {
 		return member, err
 	}
 	return member, nil
@@ -399,7 +399,7 @@ func appendAutomatedResolutionEvent(
 	worldID, interactionID, resolutionID, facilitatorSource string,
 ) error {
 	return appendWorldEventForSource(
-		ctx, tx, worldID, "resolution-applied", facilitatorSource, nil,
+		ctx, tx, worldID, "resolution-committed", facilitatorSource, nil,
 		&interactionID, nil, &resolutionID, false,
 	)
 }
@@ -435,7 +435,7 @@ func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireI
 			if !validID(effect.MechanicID) {
 				fields[path+".mechanic_id"] = "must be a UUID"
 			}
-			if effect.Value == nil || effect.Amount != nil || effect.Status != nil {
+			if effect.Value == nil || effect.Amount != nil || effect.InlineStatus != nil {
 				fields[path] = "set requires value and no amount"
 			}
 			validateScalarEffectTargets(fields, path, effect)
@@ -443,7 +443,7 @@ func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireI
 			if !validID(effect.MechanicID) {
 				fields[path+".mechanic_id"] = "must be a UUID"
 			}
-			if effect.Amount == nil || effect.Value != nil || effect.Status != nil {
+			if effect.Amount == nil || effect.Value != nil || effect.InlineStatus != nil {
 				fields[path] = "adjust-number requires amount and no value"
 			}
 			if effect.Amount != nil {
@@ -454,20 +454,20 @@ func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireI
 			validateScalarEffectTargets(fields, path, effect)
 		case "apply-status":
 			if effect.MechanicID != "" {
-				fields[path+".mechanic_id"] = "must be omitted for status effects"
+				fields[path+".mechanic_id"] = "must be omitted for an apply-status Effect"
 			}
 			if effect.Value != nil || effect.Amount != nil {
-				fields[path] = "status effects cannot declare scalar operands"
+				fields[path] = "apply-status Effects cannot declare scalar operands"
 			}
-			validateStatusEffectTargets(fields, path, effect, false)
-			if effect.Status == nil {
+			validateStatusLifecycleEffectTargets(fields, path, effect, false)
+			if effect.InlineStatus == nil {
 				fields[path+".status"] = "is required"
 			} else {
-				validateRequired(fields, path+".status.name", effect.Status.Name, 200)
-				if effect.Status.Description != nil && len([]rune(strings.TrimSpace(*effect.Status.Description))) > 2000 {
+				validateRequired(fields, path+".status.name", effect.InlineStatus.Name, 200)
+				if effect.InlineStatus.Description != nil && len([]rune(strings.TrimSpace(*effect.InlineStatus.Description))) > 2000 {
 					fields[path+".status.description"] = "must be at most 2000 characters"
 				}
-				for modifierIndex, modifier := range effect.Status.Modifiers {
+				for modifierIndex, modifier := range effect.InlineStatus.Modifiers {
 					modifierPath := fmt.Sprintf("%s.status.modifiers[%d]", path, modifierIndex)
 					if modifier.ID != "" && !validID(modifier.ID) {
 						fields[modifierPath+".id"] = "must be a UUID"
@@ -478,19 +478,19 @@ func validateAdjudicationRequest(request *adjudicateInteractionRequest, requireI
 					if modifier.Operation != "set" && modifier.Operation != "add-number" && modifier.Operation != "multiply-number" {
 						fields[modifierPath+".operation"] = "must be set, add-number, or multiply-number"
 					}
-					if _, err := stateValueDTOToDomain(modifier.Value); err != nil {
+					if _, err := mechanicValueDTOToDomain(modifier.Value); err != nil {
 						fields[modifierPath+".value"] = err.Error()
 					}
 				}
 			}
 		case "remove-status":
 			if effect.MechanicID != "" {
-				fields[path+".mechanic_id"] = "must be omitted for status effects"
+				fields[path+".mechanic_id"] = "must be omitted for a remove-status Effect"
 			}
-			if effect.Value != nil || effect.Amount != nil || effect.Status != nil {
-				fields[path] = "remove-status can declare only exact status targets"
+			if effect.Value != nil || effect.Amount != nil || effect.InlineStatus != nil {
+				fields[path] = "remove-status Effect can declare only Status-lifecycle Effect targets"
 			}
-			validateStatusEffectTargets(fields, path, effect, true)
+			validateStatusLifecycleEffectTargets(fields, path, effect, true)
 		default:
 			fields[path+".type"] = "must be set, adjust-number, apply-status, or remove-status"
 		}
@@ -518,9 +518,9 @@ func validateScalarEffectTargets(fields map[string]string, path string, effect c
 	}
 }
 
-func validateStatusEffectTargets(fields map[string]string, path string, effect concreteEffectDTO, requireInstance bool) {
+func validateStatusLifecycleEffectTargets(fields map[string]string, path string, effect concreteEffectDTO, requireInstance bool) {
 	if len(effect.EntityIDs) > 0 {
-		fields[path+".entity_ids"] = "must be omitted for status effects"
+		fields[path+".entity_ids"] = "must be omitted when using Status-lifecycle Effect targets"
 	}
 	if len(effect.Targets) == 0 {
 		fields[path+".targets"] = "must contain at least one target"
@@ -550,13 +550,13 @@ func validateStatusEffectTargets(fields map[string]string, path string, effect c
 	}
 }
 
-func lockTransitionState(ctx context.Context, tx pgx.Tx, worldID string, entityIDs []rules.ID) error {
+func lockTransitionInputs(ctx context.Context, tx pgx.Tx, worldID string, entityIDs []rules.ID) error {
 	for _, entityID := range entityIDs {
 		var id string
 		if err := tx.QueryRow(ctx, `select id::text from entities where world_id = $1 and id = $2 for update`, worldID, entityID).Scan(&id); err != nil {
 			return err
 		}
-		if err := tx.QueryRow(ctx, `select entity_id::text from state_records where world_id = $1 and entity_id = $2 for update`, worldID, entityID).Scan(&id); err != nil {
+		if err := tx.QueryRow(ctx, `select entity_id::text from entity_logical_states where world_id = $1 and entity_id = $2 for update`, worldID, entityID).Scan(&id); err != nil {
 			return err
 		}
 		if err := tx.QueryRow(ctx, `select entity_id::text from entity_status_sets where world_id = $1 and entity_id = $2 for update`, worldID, entityID).Scan(&id); err != nil {
@@ -566,30 +566,37 @@ func lockTransitionState(ctx context.Context, tx pgx.Tx, worldID string, entityI
 	return nil
 }
 
-func persistTransitionState(ctx context.Context, tx pgx.Tx, worldID string, transition rules.TransitionResult, definitions map[rules.ID]rules.MechanicDefinition) error {
-	for _, entityID := range transition.ChangedRecordIDs {
-		record := rules.NormalizeStateRecord(transition.State.Records[entityID], definitions)
-		if _, err := tx.Exec(ctx, `delete from state_values where world_id = $1 and entity_id = $2`, worldID, entityID); err != nil {
+func persistTransitionInputOverrides(
+	ctx context.Context,
+	tx pgx.Tx,
+	worldID string,
+	inputOverrides rules.InputOverrideSnapshot,
+	changedEntityIDs []rules.ID,
+	definitions map[rules.ID]rules.MechanicDefinition,
+) error {
+	for _, entityID := range changedEntityIDs {
+		record := rules.NormalizeInputOverrideRecord(inputOverrides.ByEntity[entityID], definitions)
+		if _, err := tx.Exec(ctx, `delete from entity_input_value_overrides where world_id = $1 and entity_id = $2`, worldID, entityID); err != nil {
 			return err
 		}
-		mechanicIDs := make([]rules.ID, 0, len(record.Values))
-		for mechanicID := range record.Values {
+		mechanicIDs := make([]rules.ID, 0, len(record.Overrides))
+		for mechanicID := range record.Overrides {
 			mechanicIDs = append(mechanicIDs, mechanicID)
 		}
 		sort.Slice(mechanicIDs, func(i, j int) bool { return mechanicIDs[i] < mechanicIDs[j] })
 		for _, mechanicID := range mechanicIDs {
-			if err := insertStateValue(ctx, tx, worldID, string(entityID), mechanicID, record.Values[mechanicID]); err != nil {
+			if err := insertInputValueOverride(ctx, tx, worldID, string(entityID), mechanicID, record.Overrides[mechanicID]); err != nil {
 				return err
 			}
 		}
-		if _, err := tx.Exec(ctx, `update state_records set revision = revision + 1 where world_id = $1 and entity_id = $2`, worldID, entityID); err != nil {
+		if _, err := tx.Exec(ctx, `update entity_logical_states set revision = revision + 1 where world_id = $1 and entity_id = $2`, worldID, entityID); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func stateValueDatabaseColumns(value rules.StateValue) (any, any) {
+func mechanicValueDatabaseColumns(value rules.MechanicValue) (any, any) {
 	if value.Kind == rules.ValueNumber && value.Number != nil {
 		return value.Number.String(), nil
 	}
@@ -617,13 +624,13 @@ func validateSelectedAction(ctx context.Context, db queryer, worldID, interactio
 	}
 	var valid bool
 	if err := db.QueryRow(ctx, `
-		select exists(select 1 from interaction_action_submissions
+		select exists(select 1 from interaction_actions
 		where world_id = $1 and interaction_id = $2 and id = $3 and status = 'submitted')`,
 		worldID, interactionID, *actionID).Scan(&valid); err != nil {
 		return err
 	}
 	if !valid {
-		return &statusError{Status: http.StatusUnprocessableEntity, Code: "invalid_reference", Message: "selected action is not an active submission for this interaction"}
+		return &statusError{Status: http.StatusUnprocessableEntity, Code: "invalid_reference", Message: "selected action is not submitted for this interaction"}
 	}
 	return nil
 }
@@ -636,11 +643,11 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 	var item interactionResolutionResponse
 	var privateNotes *string
 	err := db.QueryRow(ctx, `
-		select id::text, selected_submission_id::text, action_summary, public_narrative,
+		select id::text, selected_action_id::text, action_summary, public_narrative,
 			private_notes, facilitator_source, resolved_by_membership_id::text,
-			rules_revision, applied_at
+			rules_revision, resolved_at
 		from interaction_resolutions
-		where world_id = $1 and interaction_id = $2 and status = 'applied'`, worldID, interactionID,
+		where world_id = $1 and interaction_id = $2 and status = 'committed'`, worldID, interactionID,
 	).Scan(
 		&item.ID, &item.SelectedActionID, &item.ActionSummary, &item.Narrative,
 		&privateNotes, &item.FacilitatorSource, &item.ResolvedByMembershipID,
@@ -686,7 +693,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			stored.Effect.MechanicID = *mechanicID
 		}
 		if statusName != nil {
-			stored.Effect.Status = &statusEffectSpecDTO{
+			stored.Effect.InlineStatus = &inlineStatusDTO{
 				Name: *statusName, Description: statusDescription, Modifiers: []saveStatusModifierRequest{},
 			}
 		}
@@ -708,7 +715,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			return nil, err
 		}
 		effect.EntityIDs = []string{}
-		effect.Targets = []statusEffectTargetDTO{}
+		effect.Targets = []statusLifecycleEffectTargetDTO{}
 		for targetRows.Next() {
 			var id string
 			var statusInstanceID *string
@@ -719,7 +726,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			if effect.Type == "set" || effect.Type == "adjust-number" {
 				effect.EntityIDs = append(effect.EntityIDs, id)
 			} else {
-				target := statusEffectTargetDTO{EntityID: id}
+				target := statusLifecycleEffectTargetDTO{EntityID: id}
 				if statusInstanceID != nil {
 					target.StatusInstanceID = *statusInstanceID
 				}
@@ -735,7 +742,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			modifierRows, err := db.Query(ctx, `
 				select id::text, mechanic_id::text, operation, value_kind,
 					number_value::text, boolean_value, priority
-				from interaction_resolution_status_effect_modifiers
+				from interaction_resolution_inline_status_modifiers
 				where world_id = $1 and effect_id = $2 order by position`, worldID, effect.ID)
 			if err != nil {
 				return nil, err
@@ -752,13 +759,13 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 					modifierRows.Close()
 					return nil, err
 				}
-				value, err := databaseStateValue(kind, number, boolean)
+				value, err := databaseMechanicValue(kind, number, boolean)
 				if err != nil {
 					modifierRows.Close()
 					return nil, err
 				}
-				modifier.Value = stateValueDomainToDTO(value)
-				effect.Status.Modifiers = append(effect.Status.Modifiers, modifier)
+				modifier.Value = mechanicValueDomainToDTO(value)
+				effect.InlineStatus.Modifiers = append(effect.InlineStatus.Modifiers, modifier)
 			}
 			if err := modifierRows.Err(); err != nil {
 				modifierRows.Close()
@@ -767,11 +774,11 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			modifierRows.Close()
 		}
 		if effect.Type == "set" && stored.Kind != nil {
-			value, err := databaseStateValue(*stored.Kind, stored.SetNumber, stored.SetBoolean)
+			value, err := databaseMechanicValue(*stored.Kind, stored.SetNumber, stored.SetBoolean)
 			if err != nil {
 				return nil, err
 			}
-			dto := stateValueDomainToDTO(value)
+			dto := mechanicValueDomainToDTO(value)
 			effect.Value = &dto
 		} else if stored.Adjustment != nil {
 			amount, err := rules.ParseDecimal(*stored.Adjustment)
@@ -784,45 +791,45 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 		item.Effects = append(item.Effects, effect)
 	}
 
-	applicationRows, err := db.Query(ctx, `
-		select application.effect_id::text, application.entity_id::text,
-			application.mechanic_id::text, effect.operation, application.value_kind, application.changed,
+	scalarApplicationRows, err := db.Query(ctx, `
+		select scalar_application.effect_id::text, scalar_application.entity_id::text,
+			scalar_application.mechanic_id::text, effect.operation, scalar_application.value_kind, scalar_application.changed,
 			before_number::text, before_boolean, after_number::text, after_boolean
-		from interaction_resolution_effect_applications application
+		from interaction_resolution_scalar_applications scalar_application
 		join interaction_resolution_effects effect
-			on effect.id = application.effect_id and effect.resolution_id = application.resolution_id
-		where application.world_id = $1 and application.resolution_id = $2
-		order by application.position`, worldID, item.ID)
+			on effect.id = scalar_application.effect_id and effect.resolution_id = scalar_application.resolution_id
+		where scalar_application.world_id = $1 and scalar_application.resolution_id = $2
+		order by scalar_application.position`, worldID, item.ID)
 	if err != nil {
 		return nil, err
 	}
-	item.AppliedEffects = make([]concreteAppliedEffectResponse, 0)
-	for applicationRows.Next() {
-		var application concreteAppliedEffectResponse
+	item.Applications = make([]effectApplicationResponse, 0)
+	for scalarApplicationRows.Next() {
+		var scalarApplication effectApplicationResponse
 		var kind string
 		var beforeNumber, afterNumber *string
 		var beforeBoolean, afterBoolean *bool
-		if err := applicationRows.Scan(&application.EffectID, &application.EntityID, &application.MechanicID, &application.Type, &kind, &application.Changed, &beforeNumber, &beforeBoolean, &afterNumber, &afterBoolean); err != nil {
-			applicationRows.Close()
+		if err := scalarApplicationRows.Scan(&scalarApplication.EffectID, &scalarApplication.EntityID, &scalarApplication.MechanicID, &scalarApplication.Type, &kind, &scalarApplication.Changed, &beforeNumber, &beforeBoolean, &afterNumber, &afterBoolean); err != nil {
+			scalarApplicationRows.Close()
 			return nil, err
 		}
-		before, err := databaseStateValue(kind, beforeNumber, beforeBoolean)
+		before, err := databaseMechanicValue(kind, beforeNumber, beforeBoolean)
 		if err != nil {
 			return nil, err
 		}
-		after, err := databaseStateValue(kind, afterNumber, afterBoolean)
+		after, err := databaseMechanicValue(kind, afterNumber, afterBoolean)
 		if err != nil {
 			return nil, err
 		}
-		beforeDTO, afterDTO := stateValueDomainToDTO(before), stateValueDomainToDTO(after)
-		application.Before, application.After = &beforeDTO, &afterDTO
-		item.AppliedEffects = append(item.AppliedEffects, application)
+		beforeDTO, afterDTO := mechanicValueDomainToDTO(before), mechanicValueDomainToDTO(after)
+		scalarApplication.Before, scalarApplication.After = &beforeDTO, &afterDTO
+		item.Applications = append(item.Applications, scalarApplication)
 	}
-	if err := applicationRows.Err(); err != nil {
-		applicationRows.Close()
+	if err := scalarApplicationRows.Err(); err != nil {
+		scalarApplicationRows.Close()
 		return nil, err
 	}
-	applicationRows.Close()
+	scalarApplicationRows.Close()
 
 	statusRows, err := db.Query(ctx, `
 		select effect_id::text, entity_id::text, operation, status_name,
@@ -833,7 +840,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 		return nil, err
 	}
 	for statusRows.Next() {
-		var application concreteAppliedEffectResponse
+		var application effectApplicationResponse
 		var statusInstanceID *string
 		var beforeActive, afterActive bool
 		if err := statusRows.Scan(
@@ -848,7 +855,7 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			application.StatusInstanceID = *statusInstanceID
 		}
 		application.ActiveBefore, application.ActiveAfter = &beforeActive, &afterActive
-		item.AppliedEffects = append(item.AppliedEffects, application)
+		item.Applications = append(item.Applications, application)
 	}
 	if err := statusRows.Err(); err != nil {
 		statusRows.Close()
@@ -868,8 +875,8 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			targetPosition[effect.ID][target.EntityID] = index
 		}
 	}
-	sort.SliceStable(item.AppliedEffects, func(i, j int) bool {
-		left, right := item.AppliedEffects[i], item.AppliedEffects[j]
+	sort.SliceStable(item.Applications, func(i, j int) bool {
+		left, right := item.Applications[i], item.Applications[j]
 		if effectPosition[left.EffectID] != effectPosition[right.EffectID] {
 			return effectPosition[left.EffectID] < effectPosition[right.EffectID]
 		}
@@ -897,17 +904,17 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 			changeRows.Close()
 			return nil, err
 		}
-		before, err := databaseStateValue(kind, beforeNumber, beforeBoolean)
+		before, err := databaseMechanicValue(kind, beforeNumber, beforeBoolean)
 		if err != nil {
 			changeRows.Close()
 			return nil, err
 		}
-		after, err := databaseStateValue(kind, afterNumber, afterBoolean)
+		after, err := databaseMechanicValue(kind, afterNumber, afterBoolean)
 		if err != nil {
 			changeRows.Close()
 			return nil, err
 		}
-		change.Before, change.After = stateValueDomainToDTO(before), stateValueDomainToDTO(after)
+		change.Before, change.After = mechanicValueDomainToDTO(before), mechanicValueDomainToDTO(after)
 		item.EffectiveChanges = append(item.EffectiveChanges, change)
 	}
 	if err := changeRows.Err(); err != nil {
@@ -918,22 +925,22 @@ func loadInteractionResolutionResponse(ctx context.Context, db queryer, worldID,
 	return &item, nil
 }
 
-func databaseStateValue(kind string, number *string, boolean *bool) (rules.StateValue, error) {
+func databaseMechanicValue(kind string, number *string, boolean *bool) (rules.MechanicValue, error) {
 	if kind == "number" && number != nil {
 		value, err := rules.ParseDecimal(*number)
 		if err != nil {
-			return rules.StateValue{}, err
+			return rules.MechanicValue{}, err
 		}
-		return rules.NewNumberValue(value), nil
+		return rules.NewNumberMechanicValue(value), nil
 	}
 	if kind == "boolean" && boolean != nil {
-		return rules.NewBooleanValue(*boolean), nil
+		return rules.NewBooleanMechanicValue(*boolean), nil
 	}
-	return rules.StateValue{}, errors.New("invalid stored state value")
+	return rules.MechanicValue{}, errors.New("invalid stored override value")
 }
 
-func loadAppliedResolutionResult(ctx context.Context, db queryer, worldID, interactionID string) (interactionResolutionResultResponse, error) {
-	var result interactionResolutionResultResponse
+func loadCommittedResolutionResult(ctx context.Context, db queryer, worldID, interactionID string) (consequenceApplicationResultResponse, error) {
+	var result consequenceApplicationResultResponse
 	var revision int64
 	if err := db.QueryRow(ctx, `select revision from interactions where world_id = $1 and id = $2`, worldID, interactionID).Scan(&revision); err != nil {
 		return result, err
@@ -945,22 +952,22 @@ func loadAppliedResolutionResult(ctx context.Context, db queryer, worldID, inter
 	if receipt == nil {
 		return result, pgx.ErrNoRows
 	}
-	result = interactionResolutionResultResponse{
+	result = consequenceApplicationResultResponse{
 		InteractionID: interactionID, InteractionRevision: revision,
 		RulesRevision: receipt.RulesRevision, Narrative: receipt.Narrative,
-		AppliedEffects: receipt.AppliedEffects, EffectiveChanges: receipt.EffectiveChanges,
-		State: transitionStateResponse{Records: make(map[string]stateRecordResponse)},
+		Applications: receipt.Applications, EffectiveChanges: receipt.EffectiveChanges,
+		EntitySheets: make(map[string]entitySheetResponse),
 	}
 	entitySet := make(map[string]struct{})
-	for _, application := range receipt.AppliedEffects {
+	for _, application := range receipt.Applications {
 		entitySet[application.EntityID] = struct{}{}
 	}
 	for entityID := range entitySet {
-		state, err := loadLogicalStateResponse(ctx, db, worldID, entityID)
+		sheet, err := loadEntitySheetResponse(ctx, db, worldID, entityID)
 		if err != nil {
 			return result, err
 		}
-		result.State.Records[entityID] = state
+		result.EntitySheets[entityID] = sheet
 	}
 	return result, nil
 }
@@ -989,7 +996,7 @@ func resolutionRequestMatches(ctx context.Context, db queryer, worldID, interact
 			if !stringSlicesEqual(uniqueInOrder(left.EntityIDs), right.EntityIDs) {
 				return false, nil
 			}
-			if left.Value == nil || right.Value == nil || !stateDTOEqual(*left.Value, *right.Value) {
+			if left.Value == nil || right.Value == nil || !mechanicValueDTOsEqual(*left.Value, *right.Value) {
 				return false, nil
 			}
 		case "adjust-number":
@@ -1011,11 +1018,11 @@ func resolutionRequestMatches(ctx context.Context, db queryer, worldID, interact
 				return false, nil
 			}
 		case "apply-status":
-			if !statusTargetsEqual(left.Targets, right.Targets) || !statusSpecsEqual(left.Status, right.Status) {
+			if !statusLifecycleEffectTargetsEqual(left.Targets, right.Targets) || !inlineStatusDTOsEqual(left.InlineStatus, right.InlineStatus) {
 				return false, nil
 			}
 		case "remove-status":
-			if !statusTargetsEqual(left.Targets, right.Targets) || left.Status != nil || right.Status != nil {
+			if !statusLifecycleEffectTargetsEqual(left.Targets, right.Targets) || left.InlineStatus != nil || right.InlineStatus != nil {
 				return false, nil
 			}
 		default:
@@ -1025,7 +1032,7 @@ func resolutionRequestMatches(ctx context.Context, db queryer, worldID, interact
 	return true, nil
 }
 
-func statusTargetsEqual(left, right []statusEffectTargetDTO) bool {
+func statusLifecycleEffectTargetsEqual(left, right []statusLifecycleEffectTargetDTO) bool {
 	if len(left) != len(right) {
 		return false
 	}
@@ -1037,7 +1044,7 @@ func statusTargetsEqual(left, right []statusEffectTargetDTO) bool {
 	return true
 }
 
-func statusSpecsEqual(left, right *statusEffectSpecDTO) bool {
+func inlineStatusDTOsEqual(left, right *inlineStatusDTO) bool {
 	if left == nil || right == nil {
 		return left == nil && right == nil
 	}
@@ -1052,7 +1059,7 @@ func statusSpecsEqual(left, right *statusEffectSpecDTO) bool {
 			leftModifier.Operation != rightModifier.Operation ||
 			leftModifier.Priority != rightModifier.Priority ||
 			(leftModifier.ID != "" && leftModifier.ID != rightModifier.ID) ||
-			!stateDTOEqual(leftModifier.Value, rightModifier.Value) {
+			!mechanicValueDTOsEqual(leftModifier.Value, rightModifier.Value) {
 			return false
 		}
 	}
@@ -1079,8 +1086,8 @@ func stringSlicesEqual(left, right []string) bool {
 	return true
 }
 
-func stateDTOEqual(left, right stateValueDTO) bool {
-	leftValue, leftErr := stateValueDTOToDomain(left)
-	rightValue, rightErr := stateValueDTOToDomain(right)
-	return leftErr == nil && rightErr == nil && rules.StateValuesEqual(leftValue, rightValue)
+func mechanicValueDTOsEqual(left, right mechanicValueDTO) bool {
+	leftValue, leftErr := mechanicValueDTOToDomain(left)
+	rightValue, rightErr := mechanicValueDTOToDomain(right)
+	return leftErr == nil && rightErr == nil && rules.MechanicValuesEqual(leftValue, rightValue)
 }

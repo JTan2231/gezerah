@@ -11,19 +11,19 @@ import {
   OpenProblemView,
   TerraDecisionPendingView,
 } from "./WorldProblemView";
-import { RulingView } from "./WorldRulingView";
+import { ConsequenceView } from "./WorldConsequenceView";
 
 const noop = () => undefined;
 
 describe("WorldPlayView", () => {
-  test("renders the live table entirely from a backend-free fixture", () => {
+  test("renders the Play surface entirely from a backend-free fixture", () => {
     const html = renderToStaticMarkup(
       <WorldPlayView
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          roleLabel: "Facilitator",
-          accessLabel: "Owner",
+          currentPlayRoleLabel: "Dungeon Master",
+          membershipRoleLabel: "Owner",
           facilitator: true,
           canCreateProblem: true,
           hasActiveProblem: true,
@@ -36,7 +36,7 @@ describe("WorldPlayView", () => {
             changing: false,
             choices: [
               { value: "human:member-1", name: "Mara Vale (you)" },
-              { value: "terra", name: "Terra Auto DM" },
+              { value: "terra", name: "Terra" },
             ],
             issue: null,
           },
@@ -61,19 +61,19 @@ describe("WorldPlayView", () => {
                 setupRequired: false,
               },
             ],
-            readyMembers: [{ id: "member-1", name: "Mara Vale" }],
+            playReadyMembers: [{ id: "member-1", name: "Mara Vale" }],
           },
           problems: { loading: false, issue: null },
           history: [
             {
               id: "problem-1",
-              outcome: "resolved",
+              resolutionStatus: "resolved",
               occurredLabel: "2m ago",
               facilitatorLabel: "Mara Vale",
               title: "The flooded archive",
               prompt: "The lower stacks are filling with seawater.",
               narrative: "Ash seals the breach before the maps are lost.",
-              effects: [
+              applications: [
                 {
                   id: "effect-1",
                   label: "Ash: applied Exhausted",
@@ -83,24 +83,24 @@ describe("WorldPlayView", () => {
             },
             {
               id: "problem-2",
-              outcome: "cancelled",
+              resolutionStatus: "cancelled",
               cancellationLabel: "Skipped",
               occurredLabel: "1m ago",
-              facilitatorLabel: "Terra Auto DM",
+              facilitatorLabel: "Terra",
               title: "The silent causeway",
               prompt: "A causeway rises from the fog.",
-              effects: [],
+              applications: [],
               effectiveChanges: [],
             },
             {
               id: "problem-3",
-              outcome: "cancelled",
+              resolutionStatus: "cancelled",
               cancellationLabel: "Cancelled",
               occurredLabel: "just now",
               facilitatorLabel: "Mara Vale",
               title: "The sealed gate",
               prompt: "The gate refuses to open.",
-              effects: [],
+              applications: [],
               effectiveChanges: [],
             },
           ],
@@ -128,8 +128,9 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Your character");
     expect(html).toContain("Accepting actions");
     expect(html).toContain("Ash’s generated sheet");
+    expect(html).toContain("1 play-ready member");
     expect(html).toContain("Ash: applied Exhausted");
-    expect(html).toContain("Skipped · Terra Auto DM");
+    expect(html).toContain("Skipped · Terra");
     expect(html).toContain("Cancelled · Mara Vale");
   });
 
@@ -139,7 +140,7 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          dungeonMasterName: "Terra Auto DM",
+          dungeonMasterName: "Terra",
           statusLabel: "Setup required",
           facilitatorActionLabel: "Take over from Terra",
           canBecomeFacilitator: true,
@@ -163,7 +164,7 @@ describe("WorldPlayView", () => {
               selected: false,
             },
           ],
-          claimableCharacters: [],
+          availableEntities: [],
           claimIssue: null,
           agentMode: null,
         }}
@@ -171,15 +172,15 @@ describe("WorldPlayView", () => {
           retry: noop,
           selectCharacter: noop,
           becomeFacilitator: noop,
-          claimCharacter: noop,
+          claimEntity: noop,
           copyAgentPrompt: noop,
         }}
-        profile={<form aria-label="Character profile">Profile fixture</form>}
+        profile={<form aria-label="Entity profile">Profile fixture</form>}
       />,
     );
 
     expect(html).toContain("Your characters");
-    expect(html).toContain("Dungeon Master: Terra Auto DM");
+    expect(html).toContain("Dungeon Master: Terra");
     expect(html).toContain("Take over from Terra");
     expect(html).not.toContain("Skip problem");
     expect(html).toContain("2 of 3 complete");
@@ -187,7 +188,7 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Profile fixture");
   });
 
-  test("renders ChatGPT launch guidance and atomic character choices", () => {
+  test("renders ChatGPT launch guidance and atomic entity choices", () => {
     const html = renderToStaticMarkup(
       <CharacterOnboardingView
         model={{
@@ -202,7 +203,7 @@ describe("WorldPlayView", () => {
           loading: false,
           issue: null,
           characters: [],
-          claimableCharacters: [
+          availableEntities: [
             {
               id: "ash",
               name: "Ash",
@@ -213,7 +214,7 @@ describe("WorldPlayView", () => {
           agentMode: {
             siteToolsAvailable: true,
             starterPrompt:
-              "Use https://game.example/play/world-1 as the game table.",
+              "Use https://game.example/play/world-1 as the Play page.",
             launchURL:
               "codex://threads/new?prompt=fixture&browserUrl=https%3A%2F%2Fgame.example%2Fplay%2Fworld-1",
             promptCopied: false,
@@ -223,7 +224,7 @@ describe("WorldPlayView", () => {
           retry: noop,
           selectCharacter: noop,
           becomeFacilitator: noop,
-          claimCharacter: noop,
+          claimEntity: noop,
           copyAgentPrompt: noop,
         }}
         profile={null}
@@ -231,21 +232,22 @@ describe("WorldPlayView", () => {
     );
 
     expect(html).toContain("Dungeon Master: ChatGPT");
-    expect(html).toContain("Choose your character");
+    expect(html).toContain("Choose an entity");
+    expect(html).toContain("Once claimed, it becomes your character.");
     expect(html).toContain("A courier who knows the flooded roads.");
     expect(html).toContain("Open in ChatGPT");
     expect(html).toContain("codex://threads/new?");
     expect(html).toContain("https://game.example/play/world-1");
   });
 
-  test("renders problem creation and action submission states", () => {
+  test("renders Problem creation and Action entry states", () => {
     const problemHtml = renderToStaticMarkup(
       <NewProblemView
         model={{
           draft: {
             title: "Flooded archive",
             description: "",
-            selectedEntityIds: [],
+            selectedContextEntityIDs: [],
             selectedResponderIds: ["member-1"],
           },
           contextEntities: [{ id: "ash", name: "Ash" }],
@@ -271,7 +273,7 @@ describe("WorldPlayView", () => {
     const actionHtml = renderToStaticMarkup(
       <OpenProblemView
         model={{
-          submissions: [],
+          actions: [],
           facilitator: false,
           eligibleResponder: true,
           actionSubmitted: false,
@@ -283,9 +285,9 @@ describe("WorldPlayView", () => {
           terraFacilitated: false,
           agentFacilitated: false,
           canRequestDecision: false,
-          allRespondersReady: false,
+          allRespondersActed: false,
           decisionEnabled: true,
-          responseProgressLabel: "0 of 1 responders have acted or passed.",
+          actionProgressLabel: "0 of 1 Responders have acted or passed.",
           deciding: false,
           issue: null,
         }}
@@ -313,13 +315,13 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          roleLabel: "Player",
-          accessLabel: "Owner",
+          currentPlayRoleLabel: "Player",
+          membershipRoleLabel: "Owner",
           facilitator: false,
           canCreateProblem: false,
           hasActiveProblem: false,
           dungeonMaster: {
-            name: "Terra Auto DM",
+            name: "Terra",
             source: "terra",
             selectedValue: "terra",
             canChange: false,
@@ -340,7 +342,7 @@ describe("WorldPlayView", () => {
             showEmpty: true,
             issue: null,
             entities: [],
-            readyMembers: [],
+            playReadyMembers: [],
           },
           problems: { loading: false, issue: null },
           history: [],
@@ -366,7 +368,7 @@ describe("WorldPlayView", () => {
     const actionHtml = renderToStaticMarkup(
       <OpenProblemView
         model={{
-          submissions: [],
+          actions: [],
           facilitator: false,
           eligibleResponder: true,
           actionSubmitted: false,
@@ -378,9 +380,9 @@ describe("WorldPlayView", () => {
           terraFacilitated: true,
           agentFacilitated: false,
           canRequestDecision: true,
-          allRespondersReady: true,
+          allRespondersActed: true,
           decisionEnabled: true,
-          responseProgressLabel: "No player responses are required.",
+          actionProgressLabel: "No responder Actions are required.",
           deciding: false,
           issue: null,
         }}
@@ -396,14 +398,15 @@ describe("WorldPlayView", () => {
       />,
     );
 
-    expect(idleHtml).toContain("Dungeon Master: Terra Auto DM");
-    expect(idleHtml).toContain("Your role");
-    expect(idleHtml).toContain("Ask Terra to continue");
+    expect(idleHtml).toContain("Dungeon Master: Terra");
+    expect(idleHtml).toContain("Your current play role");
+    expect(idleHtml).toContain("Membership role");
+    expect(idleHtml).toContain("Ask Terra for the next Problem");
     expect(actionHtml).toContain("Pass");
     expect(actionHtml).toContain("Let Terra decide");
   });
 
-  test("renders live and ruling synchronization states", () => {
+  test("renders live and consequence synchronization states", () => {
     const liveHtml = renderToStaticMarkup(
       <LiveInteractionView
         model={{
@@ -419,7 +422,7 @@ describe("WorldPlayView", () => {
           skipping: false,
           issue: null,
         }}
-        content={<p>Ruling fixture</p>}
+        content={<p>Consequence fixture</p>}
         onCancel={noop}
         onSkip={noop}
       />,
@@ -484,10 +487,10 @@ describe("WorldPlayView", () => {
         onSkip={noop}
       />,
     );
-    const rulingHtml = renderToStaticMarkup(
-      <RulingView
+    const consequenceHtml = renderToStaticMarkup(
+      <ConsequenceView
         model={{
-          submissions: [],
+          actions: [],
           narrative: "Ash seals the breach.",
           selectedAction: null,
           preview: null,
@@ -504,7 +507,7 @@ describe("WorldPlayView", () => {
         retrying={false}
         issue={{
           kind: "request",
-          message: "Terra could not decide the outcome.",
+          message: "Terra could not resolve the problem.",
           fields: {},
         }}
         onRetry={noop}
@@ -512,7 +515,7 @@ describe("WorldPlayView", () => {
     );
 
     expect(liveHtml).toContain("Adjudicating");
-    expect(liveHtml).toContain("Ruling fixture");
+    expect(liveHtml).toContain("Consequence fixture");
     expect(liveHtml).toContain("Cancel problem");
     expect(terraLiveHtml).toContain("Skip problem");
     expect(terraLiveHtml).not.toContain("disabled");
@@ -520,8 +523,8 @@ describe("WorldPlayView", () => {
     expect(spectatorLiveHtml).not.toContain("Cancel problem");
     expect(skippingHtml).toContain("Skipping…");
     expect(skippingHtml).toContain("disabled");
-    expect(rulingHtml).toContain("Refreshing the current rules");
-    expect(rulingHtml).toContain("Interpreting…");
+    expect(consequenceHtml).toContain("Refreshing the current rules");
+    expect(consequenceHtml).toContain("Interpreting…");
     expect(terraRetryHtml).toContain("Retry Terra");
   });
 });

@@ -42,7 +42,7 @@ interface CharacterFieldSetResponse {
     id: string;
     label: string;
     help_text?: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
   }>;
 }
 
@@ -52,16 +52,23 @@ interface MechanicMutationResponse {
 }
 
 interface EntityResponse extends IdentifiedResource {
-  state: {
-    revision: number;
-    values: Record<string, unknown>;
+  sheet: {
+    entity_id: string;
+    logical_state_revision: number;
+    status_set_revision: number;
+    rules_revision: number;
+    logical_input_values: Record<string, unknown>;
+    effective_values: Record<string, unknown>;
+    evaluations: Record<string, unknown>;
+    active_status_instances: unknown[];
+    authored_default_input_mechanic_ids: string[];
   };
 }
 
 interface EntityProfileResponse {
   entity_id: string;
   revision: number;
-  character_fields_revision: number;
+  character_field_set_revision: number;
   character_status: "not-controlled" | "setup-required" | "ready";
   required_field_count: number;
   completed_field_count: number;
@@ -70,7 +77,7 @@ interface EntityProfileResponse {
     id: string;
     label: string;
     value?: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
   }>;
 }
 
@@ -114,21 +121,21 @@ test("contract: readiness and profile projections preserve authority and privacy
       expected_revision: emptyFields.revision,
       fields: [
         {
-          label: `Public story ${unique}`,
-          help_text: "What may the whole table know?",
-          visibility: "table",
+          label: `World-visible story ${unique}`,
+          help_text: "What may the whole World know?",
+          visibility: "world",
         },
         {
-          label: `Private oath ${unique}`,
-          help_text: "What is reserved for controllers and facilitators?",
-          visibility: "controllers-and-facilitators",
+          label: `Restricted oath ${unique}`,
+          help_text: "What is reserved for Controllers and the facilitator?",
+          visibility: "restricted",
         },
       ],
     },
     owner.id,
   );
-  const publicField = required(fields.fields[0], "public field");
-  const privateField = required(fields.fields[1], "private field");
+  const worldVisibleField = required(fields.fields[0], "world-visible field");
+  const restrictedField = required(fields.fields[1], "restricted field");
 
   const mechanic = await postJSON<MechanicMutationResponse>(
     request,
@@ -205,15 +212,15 @@ test("contract: readiness and profile projections preserve authority and privacy
     "character_setup_required",
   );
 
-  const publicStory = `Raised beside the salt lamps ${unique}.`;
-  const privateStory = `Carries the unbroken seal ${unique}.`;
+  const worldVisibleStory = `Raised beside the salt lamps ${unique}.`;
+  const restrictedStory = `Carries the unbroken seal ${unique}.`;
   const partial = await putJSON<EntityProfileResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     {
       expected_revision: beforeProfile.revision,
-      expected_character_fields_revision: fields.revision,
-      values: [{ field_id: publicField.id, value: publicStory }],
+      expected_character_field_set_revision: fields.revision,
+      values: [{ field_id: worldVisibleField.id, value: worldVisibleStory }],
     },
     player.id,
   );
@@ -234,7 +241,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   expect(
     (
       await actorRequest(player.id).get(
-        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/sheet`,
         {},
       )
     ).status(),
@@ -242,7 +249,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   expect(
     (
       await actorRequest(player.id).get(
-        `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/sheet`,
         {},
       )
     ).status(),
@@ -253,10 +260,10 @@ test("contract: readiness and profile projections preserve authority and privacy
     `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     {
       expected_revision: partial.revision,
-      expected_character_fields_revision: fields.revision,
+      expected_character_field_set_revision: fields.revision,
       values: [
-        { field_id: publicField.id, value: publicStory },
-        { field_id: privateField.id, value: privateStory },
+        { field_id: worldVisibleField.id, value: worldVisibleStory },
+        { field_id: restrictedField.id, value: restrictedStory },
       ],
     },
     player.id,
@@ -276,7 +283,7 @@ test("contract: readiness and profile projections preserve authority and privacy
     ).play_status,
   ).toBe("ready");
 
-  await test.step("AUT-V03 omits restricted profile definitions and values", async () => {
+  await test.step("AUT-V03 omits restricted Character-field definitions and Entity-profile values", async () => {
     const spectatorProjection = await getJSON<EntityProfileResponse>(
       request,
       `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
@@ -292,13 +299,15 @@ test("contract: readiness and profile projections preserve authority and privacy
     });
     expect(spectatorProjection.fields).toEqual([
       expect.objectContaining({
-        id: publicField.id,
-        value: publicStory,
-        visibility: "table",
+        id: worldVisibleField.id,
+        value: worldVisibleStory,
+        visibility: "world",
       }),
     ]);
-    expect(JSON.stringify(spectatorProjection)).not.toContain(privateStory);
-    expect(JSON.stringify(spectatorProjection)).not.toContain(privateField.id);
+    expect(JSON.stringify(spectatorProjection)).not.toContain(restrictedStory);
+    expect(JSON.stringify(spectatorProjection)).not.toContain(
+      restrictedField.id,
+    );
   });
 
   expect(
@@ -308,7 +317,7 @@ test("contract: readiness and profile projections preserve authority and privacy
         {
           data: {
             expected_revision: complete.revision,
-            expected_character_fields_revision: fields.revision,
+            expected_character_field_set_revision: fields.revision,
             values: [],
           },
         },
@@ -321,10 +330,10 @@ test("contract: readiness and profile projections preserve authority and privacy
       {
         data: {
           expected_revision: 0,
-          expected_character_fields_revision: fields.revision,
+          expected_character_field_set_revision: fields.revision,
           values: [
-            { field_id: publicField.id, value: publicStory },
-            { field_id: privateField.id, value: privateStory },
+            { field_id: worldVisibleField.id, value: worldVisibleStory },
+            { field_id: restrictedField.id, value: restrictedStory },
           ],
         },
       },
@@ -339,14 +348,20 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   expect(unchangedProfile).toMatchObject({
     revision: complete.revision,
-    character_fields_revision: fields.revision,
+    character_field_set_revision: fields.revision,
     character_status: "ready",
     completed_field_count: 2,
   });
   expect(unchangedProfile.fields).toEqual(
     expect.arrayContaining([
-      expect.objectContaining({ id: publicField.id, value: publicStory }),
-      expect.objectContaining({ id: privateField.id, value: privateStory }),
+      expect.objectContaining({
+        id: worldVisibleField.id,
+        value: worldVisibleStory,
+      }),
+      expect.objectContaining({
+        id: restrictedField.id,
+        value: restrictedStory,
+      }),
     ]),
   );
   expect(
@@ -356,7 +371,8 @@ test("contract: readiness and profile projections preserve authority and privacy
         `${baseURL}/api/worlds/${world.id}/entities`,
         player.id,
       )
-    ).find((entity) => entity.id === controlled.id)?.state.revision,
+    ).find((entity) => entity.id === controlled.id)?.sheet
+      .logical_state_revision,
   ).toBe(0);
 
   const openInteraction = await postJSON<InteractionResponse>(
@@ -366,7 +382,7 @@ test("contract: readiness and profile projections preserve authority and privacy
       present: true,
       prompt: `The profile contract remains in use ${unique}.`,
       eligible_responder_membership_ids: [joinedPlayer.membership_id],
-      entity_ids: [controlled.id],
+      context_entity_ids: [controlled.id],
     },
     owner.id,
   );
@@ -383,12 +399,12 @@ test("contract: readiness and profile projections preserve authority and privacy
       })),
       {
         label: `New bond ${unique}`,
-        help_text: "What now binds this character to the table?",
-        visibility: "table" as const,
+        help_text: "What now binds this Character to the World?",
+        visibility: "world" as const,
       },
     ],
   };
-  await test.step("CHF-V01 blocks requirement-set changes during unfinished play", async () => {
+  await test.step("CHF-V01 blocks character-field-set changes during unfinished play", async () => {
     await expectAPIError(
       await actorRequest(owner.id).put(
         `${baseURL}/api/worlds/${world.id}/character-fields`,

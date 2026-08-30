@@ -7,55 +7,57 @@ import (
 	"strings"
 )
 
-// EvaluateEntityState compiles the supplied mechanic definitions and evaluates
-// one entity against immutable consequence status snapshots. It returns no
-// partial result if graph, state, status, or arithmetic validation fails.
-func EvaluateEntityState(
+// EvaluateEntity compiles the supplied Mechanic definitions and evaluates one
+// Entity against Inline statuses reconstructed from immutable Status-instance
+// modifier snapshots. It returns no
+// partial result if mechanic-graph, input-override, status-instance, or
+// arithmetic validation fails.
+func EvaluateEntity(
 	entity Entity,
-	record StateRecord,
+	record InputOverrideRecord,
 	definitions map[ID]MechanicDefinition,
-	statusSnapshots map[ID]StatusSnapshot,
-	activeStatuses []ActiveStatus,
-) (EvaluatedState, error) {
+	inlineStatuses map[ID]InlineStatus,
+	statusInstances []StatusInstance,
+) (EntityEvaluation, error) {
 	graph, err := CompileMechanicGraph(definitions)
 	if err != nil {
-		return EvaluatedState{}, err
+		return EntityEvaluation{}, err
 	}
-	return EvaluateEntityStateWithGraph(entity, record, graph, statusSnapshots, activeStatuses)
+	return EvaluateEntityWithGraph(entity, record, graph, inlineStatuses, statusInstances)
 }
 
-// EvaluateEntityStateWithGraph evaluates against a previously compiled graph.
+// EvaluateEntityWithGraph evaluates against a previously compiled graph.
 // References recursively request dependency effective values, which both
 // propagates input modifiers and defensively detects runtime cycles.
-func EvaluateEntityStateWithGraph(
+func EvaluateEntityWithGraph(
 	entity Entity,
-	record StateRecord,
+	record InputOverrideRecord,
 	graph MechanicGraph,
-	statusSnapshots map[ID]StatusSnapshot,
-	activeStatuses []ActiveStatus,
-) (EvaluatedState, error) {
+	inlineStatuses map[ID]InlineStatus,
+	statusInstances []StatusInstance,
+) (EntityEvaluation, error) {
 	if !entity.ID.Valid() || !entity.WorldID.Valid() {
-		return EvaluatedState{}, evaluationError("entity", "evaluated entity requires non-empty entity and world IDs")
+		return EntityEvaluation{}, evaluationError("entity", "evaluated entity requires non-empty entity and world IDs")
 	}
 	if graph.definitions == nil {
-		return EvaluatedState{}, domainError(ErrInvalidDefinition, ValidationErrors{validation(
+		return EntityEvaluation{}, domainError(ErrInvalidDefinition, ValidationErrors{validation(
 			"uncompiled_graph", "graph", "mechanic graph must be created by CompileMechanicGraph",
 		)})
 	}
-	if errs := ValidateStateRecord(record, entity, graph.definitions); len(errs) > 0 {
-		return EvaluatedState{}, domainError(ErrInvalidState, errs)
+	if errs := ValidateInputOverrideRecord(record, entity, graph.definitions); len(errs) > 0 {
+		return EntityEvaluation{}, domainError(ErrInvalidRuntimeSnapshot, errs)
 	}
-	if errs := ValidateStatusSnapshots(statusSnapshots, graph.definitions); len(errs) > 0 {
-		return EvaluatedState{}, domainError(ErrInvalidDefinition, errs)
+	if errs := ValidateInlineStatuses(inlineStatuses, graph.definitions); len(errs) > 0 {
+		return EntityEvaluation{}, domainError(ErrInvalidDefinition, errs)
 	}
-	if errs := ValidateActiveStatuses(entity, statusSnapshots, activeStatuses); len(errs) > 0 {
-		return EvaluatedState{}, domainError(ErrInvalidState, errs)
+	if errs := ValidateStatusInstances(entity, inlineStatuses, statusInstances); len(errs) > 0 {
+		return EntityEvaluation{}, domainError(ErrInvalidRuntimeSnapshot, errs)
 	}
 
-	modifiersByMechanic := resolvedModifiersByMechanic(statusSnapshots, activeStatuses)
+	modifiersByMechanic := resolvedModifiersByMechanic(inlineStatuses, statusInstances)
 	evaluator := entityEvaluator{
 		entity:              entity,
-		record:              record,
+		inputOverrides:      record,
 		definitions:         graph.definitions,
 		modifiersByMechanic: modifiersByMechanic,
 		states:              make(map[ID]uint8, len(graph.definitions)),
@@ -74,7 +76,7 @@ func EvaluateEntityStateWithGraph(
 			continue
 		}
 		if _, err := evaluator.evaluateMechanic(mechanicID); err != nil {
-			return EvaluatedState{}, err
+			return EntityEvaluation{}, err
 		}
 		order = append(order, mechanicID)
 		includedInOrder[mechanicID] = struct{}{}
@@ -91,13 +93,13 @@ func EvaluateEntityStateWithGraph(
 			continue
 		}
 		if _, err := evaluator.evaluateMechanic(mechanicID); err != nil {
-			return EvaluatedState{}, err
+			return EntityEvaluation{}, err
 		}
 		order = append(order, mechanicID)
 		includedInOrder[mechanicID] = struct{}{}
 	}
 
-	return EvaluatedState{
+	return EntityEvaluation{
 		EntityID: entity.ID,
 		Revision: record.Revision,
 		Order:    order,
@@ -106,20 +108,20 @@ func EvaluateEntityStateWithGraph(
 }
 
 type resolvedModifier struct {
-	active   ActiveStatus
-	snapshot StatusSnapshot
-	modifier StatusModifier
+	instance     StatusInstance
+	inlineStatus InlineStatus
+	modifier     StatusModifier
 }
 
-func resolvedModifiersByMechanic(statusSnapshots map[ID]StatusSnapshot, active []ActiveStatus) map[ID][]resolvedModifier {
+func resolvedModifiersByMechanic(inlineStatuses map[ID]InlineStatus, instances []StatusInstance) map[ID][]resolvedModifier {
 	result := make(map[ID][]resolvedModifier)
-	for _, instance := range active {
-		snapshot := statusSnapshots[instance.SourceEffectID]
-		for _, modifier := range snapshot.Modifiers {
+	for _, instance := range instances {
+		inlineStatus := inlineStatuses[instance.SourceEffectID]
+		for _, modifier := range inlineStatus.Modifiers {
 			result[modifier.MechanicID] = append(result[modifier.MechanicID], resolvedModifier{
-				active:   instance,
-				snapshot: snapshot,
-				modifier: modifier,
+				instance:     instance,
+				inlineStatus: inlineStatus,
+				modifier:     modifier,
 			})
 		}
 	}
@@ -129,11 +131,11 @@ func resolvedModifiersByMechanic(statusSnapshots map[ID]StatusSnapshot, active [
 			if left.modifier.Priority != right.modifier.Priority {
 				return left.modifier.Priority < right.modifier.Priority
 			}
-			if left.active.AppliedOrder != right.active.AppliedOrder {
-				return left.active.AppliedOrder < right.active.AppliedOrder
+			if left.instance.AppliedOrder != right.instance.AppliedOrder {
+				return left.instance.AppliedOrder < right.instance.AppliedOrder
 			}
-			if left.active.ID != right.active.ID {
-				return left.active.ID < right.active.ID
+			if left.instance.ID != right.instance.ID {
+				return left.instance.ID < right.instance.ID
 			}
 			if left.modifier.Position != right.modifier.Position {
 				return left.modifier.Position < right.modifier.Position
@@ -146,7 +148,7 @@ func resolvedModifiersByMechanic(statusSnapshots map[ID]StatusSnapshot, active [
 
 type entityEvaluator struct {
 	entity              Entity
-	record              StateRecord
+	inputOverrides      InputOverrideRecord
 	definitions         map[ID]MechanicDefinition
 	modifiersByMechanic map[ID][]resolvedModifier
 	states              map[ID]uint8
@@ -192,10 +194,11 @@ func (e *entityEvaluator) evaluateMechanic(mechanicID ID) (EvaluatedMechanic, er
 	}
 	switch definition.SourceKind {
 	case SourceInput:
-		logical := LogicalStateValue(e.record, definition)
-		evaluated.InputPresence = logical.Presence
-		evaluated.Intrinsic = CloneStateValue(logical.Value)
+		logical := ResolveLogicalInputValue(e.inputOverrides, definition)
+		evaluated.Presence = logical.Presence
+		evaluated.Intrinsic = CloneMechanicValue(logical.Value)
 	case SourceDerived:
+		evaluated.Presence = EvaluationPresenceDerived
 		if definition.Expression == nil {
 			return EvaluatedMechanic{}, evaluationError("mechanics["+string(mechanicID)+"].expression", "derived mechanic has no expression")
 		}
@@ -211,80 +214,80 @@ func (e *entityEvaluator) evaluateMechanic(mechanicID ID) (EvaluatedMechanic, er
 	default:
 		return EvaluatedMechanic{}, evaluationError("mechanics["+string(mechanicID)+"].source_kind", "mechanic has an unsupported source kind")
 	}
-	if evaluated.Intrinsic.Kind != definition.ValueKind || !validStateValueShape(evaluated.Intrinsic) {
+	if evaluated.Intrinsic.Kind != definition.ValueKind || !validMechanicValueShape(evaluated.Intrinsic) {
 		return EvaluatedMechanic{}, evaluationError("mechanics["+string(mechanicID)+"]", "intrinsic value does not match the mechanic's scalar kind")
 	}
 
-	effective := CloneStateValue(evaluated.Intrinsic)
+	effective := CloneMechanicValue(evaluated.Intrinsic)
 	for _, resolved := range e.modifiersByMechanic[mechanicID] {
-		before := CloneStateValue(effective)
+		before := CloneMechanicValue(effective)
 		after, err := applyModifier(effective, resolved.modifier)
 		if err != nil {
 			return EvaluatedMechanic{}, evaluationError(
-				"active_statuses["+string(resolved.active.ID)+"].modifiers["+string(resolved.modifier.ID)+"]",
+				"active_status_instances["+string(resolved.instance.ID)+"].modifiers["+string(resolved.modifier.ID)+"]",
 				err.Error(),
 			)
 		}
 		effective = after
 		evaluated.Modifiers = append(evaluated.Modifiers, AppliedModifier{
-			StatusInstanceID: resolved.active.ID,
-			SourceEffectID:   resolved.snapshot.ID,
+			StatusInstanceID: resolved.instance.ID,
+			SourceEffectID:   resolved.inlineStatus.ID,
 			ModifierID:       resolved.modifier.ID,
 			Priority:         resolved.modifier.Priority,
 			Position:         resolved.modifier.Position,
 			Operation:        resolved.modifier.Operation,
-			Operand:          CloneStateValue(resolved.modifier.Value),
+			Operand:          CloneMechanicValue(resolved.modifier.Value),
 			Before:           before,
-			After:            CloneStateValue(after),
+			After:            CloneMechanicValue(after),
 		})
 	}
-	evaluated.Effective = CloneStateValue(effective)
+	evaluated.Effective = CloneMechanicValue(effective)
 	e.values[mechanicID] = evaluated
 	e.states[mechanicID] = 2
 	return evaluated, nil
 }
 
-func (e *entityEvaluator) evaluateExpression(expression Expression) (StateValue, ExpressionTrace, error) {
+func (e *entityEvaluator) evaluateExpression(expression Expression) (MechanicValue, ExpressionTrace, error) {
 	trace := ExpressionTrace{Operation: expression.Operation, MechanicID: expression.MechanicID, Operands: []ExpressionTrace{}}
 	if expression.Literal != nil {
-		literal := CloneStateValue(*expression.Literal)
+		literal := CloneMechanicValue(*expression.Literal)
 		trace.Literal = &literal
 	}
 
 	if expression.Operation == ExpressionLiteral {
 		if expression.Literal == nil {
-			return StateValue{}, ExpressionTrace{}, fmt.Errorf("literal expression has no value")
+			return MechanicValue{}, ExpressionTrace{}, fmt.Errorf("literal expression has no value")
 		}
-		trace.Value = CloneStateValue(*expression.Literal)
-		return CloneStateValue(trace.Value), trace, nil
+		trace.Value = CloneMechanicValue(*expression.Literal)
+		return CloneMechanicValue(trace.Value), trace, nil
 	}
 	if expression.Operation == ExpressionMechanicReference {
 		mechanic, err := e.evaluateMechanic(expression.MechanicID)
 		if err != nil {
-			return StateValue{}, ExpressionTrace{}, err
+			return MechanicValue{}, ExpressionTrace{}, err
 		}
-		trace.Value = CloneStateValue(mechanic.Effective)
-		return CloneStateValue(trace.Value), trace, nil
+		trace.Value = CloneMechanicValue(mechanic.Effective)
+		return CloneMechanicValue(trace.Value), trace, nil
 	}
 
-	values := make([]StateValue, len(expression.Operands))
+	values := make([]MechanicValue, len(expression.Operands))
 	for index, operand := range expression.Operands {
 		value, operandTrace, err := e.evaluateExpression(operand)
 		if err != nil {
-			return StateValue{}, ExpressionTrace{}, err
+			return MechanicValue{}, ExpressionTrace{}, err
 		}
 		values[index] = value
 		trace.Operands = append(trace.Operands, operandTrace)
 	}
 	value, err := evaluateExpressionOperation(expression.Operation, values)
 	if err != nil {
-		return StateValue{}, ExpressionTrace{}, err
+		return MechanicValue{}, ExpressionTrace{}, err
 	}
-	trace.Value = CloneStateValue(value)
-	return CloneStateValue(value), trace, nil
+	trace.Value = CloneMechanicValue(value)
+	return CloneMechanicValue(value), trace, nil
 }
 
-func evaluateExpressionOperation(operation ExpressionOperation, operands []StateValue) (StateValue, error) {
+func evaluateExpressionOperation(operation ExpressionOperation, operands []MechanicValue) (MechanicValue, error) {
 	numberAt := func(index int) (Decimal, error) {
 		if index >= len(operands) || operands[index].Kind != ValueNumber || operands[index].Number == nil {
 			return Decimal{}, fmt.Errorf("%s requires numeric operands", operation)
@@ -297,44 +300,44 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 		}
 		return *operands[index].Boolean, nil
 	}
-	foldNumbers := func(combine func(Decimal, Decimal) (Decimal, error)) (StateValue, error) {
+	foldNumbers := func(combine func(Decimal, Decimal) (Decimal, error)) (MechanicValue, error) {
 		if len(operands) < 2 {
-			return StateValue{}, fmt.Errorf("%s requires at least two operands", operation)
+			return MechanicValue{}, fmt.Errorf("%s requires at least two operands", operation)
 		}
 		result, err := numberAt(0)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
 		for index := 1; index < len(operands); index++ {
 			next, err := numberAt(index)
 			if err != nil {
-				return StateValue{}, err
+				return MechanicValue{}, err
 			}
 			result, err = combine(result, next)
 			if err != nil {
-				return StateValue{}, err
+				return MechanicValue{}, err
 			}
 		}
-		return NewNumberValue(result), nil
+		return NewNumberMechanicValue(result), nil
 	}
-	compareNumbers := func(matches func(int) bool) (StateValue, error) {
+	compareNumbers := func(matches func(int) bool) (MechanicValue, error) {
 		if len(operands) != 2 {
-			return StateValue{}, fmt.Errorf("%s requires exactly two operands", operation)
+			return MechanicValue{}, fmt.Errorf("%s requires exactly two operands", operation)
 		}
 		left, err := numberAt(0)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
 		right, err := numberAt(1)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewBooleanValue(matches(left.Cmp(right))), nil
+		return NewBooleanMechanicValue(matches(left.Cmp(right))), nil
 	}
 
 	switch operation {
 	case ExpressionLiteral, ExpressionMechanicReference:
-		return StateValue{}, fmt.Errorf("%s must be evaluated before operand dispatch", operation)
+		return MechanicValue{}, fmt.Errorf("%s must be evaluated before operand dispatch", operation)
 
 	case ExpressionAddNumber:
 		return foldNumbers(func(left, right Decimal) (Decimal, error) { return left.Add(right) })
@@ -360,45 +363,45 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 
 	case ExpressionSubtractNumber:
 		if len(operands) != 2 {
-			return StateValue{}, fmt.Errorf("subtract-number requires exactly two operands")
+			return MechanicValue{}, fmt.Errorf("subtract-number requires exactly two operands")
 		}
 		left, err := numberAt(0)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
 		right, err := numberAt(1)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
 		result, err := left.Subtract(right)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewNumberValue(result), nil
+		return NewNumberMechanicValue(result), nil
 
 	case ExpressionNegateNumber:
 		if len(operands) != 1 {
-			return StateValue{}, fmt.Errorf("negate-number requires exactly one operand")
+			return MechanicValue{}, fmt.Errorf("negate-number requires exactly one operand")
 		}
 		operand, err := numberAt(0)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
 		result, err := operand.Negate()
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewNumberValue(result), nil
+		return NewNumberMechanicValue(result), nil
 
 	case ExpressionAnd, ExpressionOr:
 		if len(operands) < 2 {
-			return StateValue{}, fmt.Errorf("%s requires at least two operands", operation)
+			return MechanicValue{}, fmt.Errorf("%s requires at least two operands", operation)
 		}
 		result := operation == ExpressionAnd
 		for index := range operands {
 			value, err := booleanAt(index)
 			if err != nil {
-				return StateValue{}, err
+				return MechanicValue{}, err
 			}
 			if operation == ExpressionAnd {
 				result = result && value
@@ -406,23 +409,23 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 				result = result || value
 			}
 		}
-		return NewBooleanValue(result), nil
+		return NewBooleanMechanicValue(result), nil
 
 	case ExpressionNot:
 		if len(operands) != 1 {
-			return StateValue{}, fmt.Errorf("not requires exactly one operand")
+			return MechanicValue{}, fmt.Errorf("not requires exactly one operand")
 		}
 		value, err := booleanAt(0)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewBooleanValue(!value), nil
+		return NewBooleanMechanicValue(!value), nil
 
 	case ExpressionEqual:
 		if len(operands) != 2 || operands[0].Kind != operands[1].Kind {
-			return StateValue{}, fmt.Errorf("equal requires two operands of the same scalar kind")
+			return MechanicValue{}, fmt.Errorf("equal requires two operands of the same scalar kind")
 		}
-		return NewBooleanValue(StateValuesEqual(operands[0], operands[1])), nil
+		return NewBooleanMechanicValue(MechanicValuesEqual(operands[0], operands[1])), nil
 
 	case ExpressionLessNumber:
 		return compareNumbers(func(comparison int) bool { return comparison < 0 })
@@ -438,44 +441,44 @@ func evaluateExpressionOperation(operation ExpressionOperation, operands []State
 
 	case ExpressionIf:
 		if len(operands) != 3 || operands[0].Kind != ValueBoolean || operands[0].Boolean == nil || operands[1].Kind != operands[2].Kind {
-			return StateValue{}, fmt.Errorf("if requires a boolean condition and two same-kind branches")
+			return MechanicValue{}, fmt.Errorf("if requires a boolean condition and two same-kind branches")
 		}
 		if *operands[0].Boolean {
-			return CloneStateValue(operands[1]), nil
+			return CloneMechanicValue(operands[1]), nil
 		}
-		return CloneStateValue(operands[2]), nil
+		return CloneMechanicValue(operands[2]), nil
 	default:
-		return StateValue{}, fmt.Errorf("unsupported expression operation %q", operation)
+		return MechanicValue{}, fmt.Errorf("unsupported expression operation %q", operation)
 	}
 }
 
-func applyModifier(value StateValue, modifier StatusModifier) (StateValue, error) {
+func applyModifier(value MechanicValue, modifier StatusModifier) (MechanicValue, error) {
 	switch modifier.Operation {
 	case ModifierSet:
 		if value.Kind != modifier.Value.Kind {
-			return StateValue{}, fmt.Errorf("set modifier kind does not match current value")
+			return MechanicValue{}, fmt.Errorf("set modifier kind does not match current value")
 		}
-		return CloneStateValue(modifier.Value), nil
+		return CloneMechanicValue(modifier.Value), nil
 	case ModifierAddNumber:
 		if value.Kind != ValueNumber || value.Number == nil || modifier.Value.Kind != ValueNumber || modifier.Value.Number == nil {
-			return StateValue{}, fmt.Errorf("add-number modifier requires numeric values")
+			return MechanicValue{}, fmt.Errorf("add-number modifier requires numeric values")
 		}
 		result, err := value.Number.Add(*modifier.Value.Number)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewNumberValue(result), nil
+		return NewNumberMechanicValue(result), nil
 	case ModifierMultiplyNumber:
 		if value.Kind != ValueNumber || value.Number == nil || modifier.Value.Kind != ValueNumber || modifier.Value.Number == nil {
-			return StateValue{}, fmt.Errorf("multiply-number modifier requires numeric values")
+			return MechanicValue{}, fmt.Errorf("multiply-number modifier requires numeric values")
 		}
 		result, err := value.Number.Multiply(*modifier.Value.Number)
 		if err != nil {
-			return StateValue{}, err
+			return MechanicValue{}, err
 		}
-		return NewNumberValue(result), nil
+		return NewNumberMechanicValue(result), nil
 	default:
-		return StateValue{}, fmt.Errorf("unsupported modifier operation %q", modifier.Operation)
+		return MechanicValue{}, fmt.Errorf("unsupported modifier operation %q", modifier.Operation)
 	}
 }
 

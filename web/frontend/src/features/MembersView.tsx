@@ -9,19 +9,19 @@ import {
 
 export type InviteRole = "player" | "spectator" | "editor";
 
-interface PeopleIssue {
+interface MembersIssue {
   kind: "connection" | "request";
   message: string;
 }
 
-interface PeopleMember {
+interface MemberViewModel {
   id: string;
   displayName: string;
   role: "owner" | "editor" | "player" | "spectator";
   details: string;
 }
 
-export interface PeopleInvite {
+export interface MemberInvite {
   id: string;
   roleLabel: string;
   creatorAndUses: string;
@@ -29,7 +29,7 @@ export interface PeopleInvite {
   closed: boolean;
 }
 
-interface PeopleViewModel {
+interface MembersViewModel {
   inviteDraft: {
     role: InviteRole;
     expiresInDays: number;
@@ -38,17 +38,17 @@ interface PeopleViewModel {
   createdLink: string;
   createdRoleLabel: string;
   copied: boolean;
-  issue: PeopleIssue | null;
-  members: readonly PeopleMember[];
+  issue: MembersIssue | null;
+  members: readonly MemberViewModel[];
   membersLoading: boolean;
-  membersIssue: PeopleIssue | null;
-  invites: readonly PeopleInvite[];
+  membersIssue: MembersIssue | null;
+  invites: readonly MemberInvite[];
   invitesLoading: boolean;
-  invitesIssue: PeopleIssue | null;
+  invitesIssue: MembersIssue | null;
   activeInviteCount: number;
 }
 
-interface PeopleViewActions {
+interface MembersViewActions {
   changeRole: (role: InviteRole) => void;
   changeExpiry: (days: number) => void;
   createInvite: () => void;
@@ -58,21 +58,21 @@ interface PeopleViewActions {
   retryInvites: () => void;
 }
 
-export function PeopleView({
+export function MembersView({
   model,
   actions,
 }: {
-  model: PeopleViewModel;
-  actions: PeopleViewActions;
+  model: MembersViewModel;
+  actions: MembersViewActions;
 }) {
   return (
-    <section className="people-page content-narrow">
+    <section className="members-page content-narrow">
       <PageIntro
-        title="People & invites"
-        description="Invite links add people to this world with a selected role."
+        title="Members & invites"
+        description="Invite links create World memberships with a selected membership role."
       />
 
-      <div className="people-layout">
+      <div className="members-layout">
         <section className="panel invite-builder">
           <header>
             <h2>Create invite</h2>
@@ -91,8 +91,8 @@ export function PeopleView({
                     actions.changeRole(event.currentTarget.value as InviteRole)
                   }
                 >
-                  <option value="player">Player — respond in play</option>
-                  <option value="spectator">Spectator — watch the table</option>
+                  <option value="player">Player — respond in Play</option>
+                  <option value="spectator">Spectator — observe Play</option>
                   <option value="editor">
                     Editor — configure and assign the DM
                   </option>

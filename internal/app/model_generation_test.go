@@ -14,53 +14,53 @@ import (
 )
 
 const (
-	autoDMTestEntityOne   = "10000000-0000-4000-8000-000000000001"
-	autoDMTestEntityTwo   = "10000000-0000-4000-8000-000000000002"
-	autoDMTestMechanicOne = "20000000-0000-4000-8000-000000000001"
-	autoDMTestMechanicTwo = "20000000-0000-4000-8000-000000000002"
-	autoDMTestStatus      = "30000000-0000-4000-8000-000000000001"
-	autoDMTestAction      = "40000000-0000-4000-8000-000000000001"
+	modelTestEntityOne   = "10000000-0000-4000-8000-000000000001"
+	modelTestEntityTwo   = "10000000-0000-4000-8000-000000000002"
+	modelTestMechanicOne = "20000000-0000-4000-8000-000000000001"
+	modelTestMechanicTwo = "20000000-0000-4000-8000-000000000002"
+	modelTestStatus      = "30000000-0000-4000-8000-000000000001"
+	modelTestAction      = "40000000-0000-4000-8000-000000000001"
 )
 
-func TestAutoDMConsequenceSchemaIsStrictAtEveryObjectLevel(t *testing.T) {
+func TestLunaConsequenceSchemaIsStrictAtEveryObjectLevel(t *testing.T) {
 	t.Parallel()
 
-	schema := autoDMConsequenceSchema()
-	if schema.Name != "auto_dm_consequence" {
+	schema := lunaConsequenceSchema()
+	if schema.Name != "luna_consequence" {
 		t.Fatalf("schema name = %q", schema.Name)
 	}
-	assertAutoDMSchemaObject(t, "root", schema.Schema, []string{
+	assertModelSchemaObject(t, "root", schema.Schema, []string{
 		"selected_action_ref", "action_summary", "effects",
 	})
 
-	rootProperties := autoDMSchemaMap(t, "root.properties", schema.Schema["properties"])
-	effects := autoDMSchemaMap(t, "root.properties.effects", rootProperties["effects"])
-	effect := autoDMSchemaMap(t, "root.properties.effects.items", effects["items"])
-	assertAutoDMSchemaObject(t, "effect", effect, []string{
-		"type", "entity_ref", "mechanic_ref", "status_ref", "value_kind",
+	rootProperties := modelSchemaMap(t, "root.properties", schema.Schema["properties"])
+	effects := modelSchemaMap(t, "root.properties.effects", rootProperties["effects"])
+	effect := modelSchemaMap(t, "root.properties.effects.items", effects["items"])
+	assertModelSchemaObject(t, "effect", effect, []string{
+		"type", "entity_ref", "mechanic_ref", "status_instance_ref", "value_kind",
 		"number_value", "boolean_value", "amount", "status_name",
 		"status_description", "modifiers",
 	})
 
-	effectProperties := autoDMSchemaMap(t, "effect.properties", effect["properties"])
-	modifiers := autoDMSchemaMap(t, "effect.properties.modifiers", effectProperties["modifiers"])
-	modifier := autoDMSchemaMap(t, "effect.properties.modifiers.items", modifiers["items"])
-	assertAutoDMSchemaObject(t, "modifier", modifier, []string{
+	effectProperties := modelSchemaMap(t, "effect.properties", effect["properties"])
+	modifiers := modelSchemaMap(t, "effect.properties.modifiers", effectProperties["modifiers"])
+	modifier := modelSchemaMap(t, "effect.properties.modifiers.items", modifiers["items"])
+	assertModelSchemaObject(t, "modifier", modifier, []string{
 		"mechanic_ref", "operation", "value_kind", "number_value", "boolean_value",
 	})
 }
 
-func TestAutoDMRequestBodyStrictness(t *testing.T) {
+func TestModelRequestBodyStrictness(t *testing.T) {
 	t.Parallel()
 
 	t.Run("required object", func(t *testing.T) {
 		t.Parallel()
 		request := httptest.NewRequestWithContext(
-			t.Context(), http.MethodPost, "/auto-dm",
+			t.Context(), http.MethodPost, "/terra",
 			strings.NewReader(`{"expected_revision":4,"expected_rules_revision":7}`),
 		)
-		var decoded autoDMDecideRequest
-		if err := decodeAutoDMRequest(request, &decoded); err != nil {
+		var decoded terraDecideRequest
+		if err := decodeModelRequest(request, &decoded); err != nil {
 			t.Fatalf("decode valid request: %v", err)
 		}
 		if decoded.ExpectedRevision == nil || *decoded.ExpectedRevision != 4 ||
@@ -80,17 +80,55 @@ func TestAutoDMRequestBodyStrictness(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			request := httptest.NewRequestWithContext(
-				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+				t.Context(), http.MethodPost, "/terra", strings.NewReader(body),
 			)
-			var decoded autoDMDecideRequest
-			if err := decodeAutoDMRequest(request, &decoded); err == nil {
-				t.Fatalf("decodeAutoDMRequest(%q) unexpectedly succeeded", body)
+			var decoded terraDecideRequest
+			if err := decodeModelRequest(request, &decoded); err == nil {
+				t.Fatalf("decodeModelRequest(%q) unexpectedly succeeded", body)
 			}
 		})
 	}
 }
 
-func TestAutoDMContinueRequiresEmptyRequestBody(t *testing.T) {
+func TestModelContextUsesCanonicalVocabulary(t *testing.T) {
+	t.Parallel()
+
+	snapshot := modelContext{
+		Entities: []modelEntityContext{{
+			Ref: "e1", AuthoredDefaultInputMechanicRefs: []string{"m1"},
+		}},
+		CurrentProblem: &modelProblemContext{Prompt: "The bridge gives way."},
+		Recent: []modelHistoryContext{{
+			Problem: "The gate is barred.", Consequence: "The party finds another path.",
+		}},
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		t.Fatalf("marshal model context: %v", err)
+	}
+	var decoded struct {
+		Entities       []modelEntityContext  `json:"entities"`
+		CurrentProblem *modelProblemContext  `json:"current_problem"`
+		Recent         []modelHistoryContext `json:"recent_history"`
+	}
+	if err := json.Unmarshal(payload, &decoded); err != nil {
+		t.Fatalf("unmarshal model context: %v", err)
+	}
+	if decoded.CurrentProblem == nil || decoded.CurrentProblem.Prompt != "The bridge gives way." {
+		t.Fatalf("current problem = %#v", decoded.CurrentProblem)
+	}
+	if len(decoded.Entities) != 1 || decoded.Entities[0].Ref != "e1" {
+		t.Fatalf("entities = %#v", decoded.Entities)
+	}
+	if !strings.Contains(string(payload), `"authored_default_input_mechanic_refs":["m1"]`) {
+		t.Fatalf("model context lacks authored-default input mechanic refs: %s", payload)
+	}
+	if len(decoded.Recent) != 1 || decoded.Recent[0].Problem != "The gate is barred." {
+		t.Fatalf("recent history = %#v", decoded.Recent)
+	}
+}
+
+func TestTerraContinueRequiresEmptyRequestBody(t *testing.T) {
 	t.Parallel()
 
 	for name, body := range map[string]string{
@@ -100,10 +138,10 @@ func TestAutoDMContinueRequiresEmptyRequestBody(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			request := httptest.NewRequestWithContext(
-				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+				t.Context(), http.MethodPost, "/terra", strings.NewReader(body),
 			)
-			if err := requireEmptyAutoDMRequest(request); err != nil {
-				t.Fatalf("requireEmptyAutoDMRequest(%q): %v", body, err)
+			if err := requireEmptyTerraRequest(request); err != nil {
+				t.Fatalf("requireEmptyTerraRequest(%q): %v", body, err)
 			}
 		})
 	}
@@ -116,20 +154,20 @@ func TestAutoDMContinueRequiresEmptyRequestBody(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			request := httptest.NewRequestWithContext(
-				t.Context(), http.MethodPost, "/auto-dm", strings.NewReader(body),
+				t.Context(), http.MethodPost, "/terra", strings.NewReader(body),
 			)
-			if err := requireEmptyAutoDMRequest(request); err == nil {
-				t.Fatalf("requireEmptyAutoDMRequest(%q) unexpectedly succeeded", body)
+			if err := requireEmptyTerraRequest(request); err == nil {
+				t.Fatalf("requireEmptyTerraRequest(%q) unexpectedly succeeded", body)
 			}
 		})
 	}
 }
 
-func TestValidateAutoDMDecideRequest(t *testing.T) {
+func TestValidateTerraDecideRequest(t *testing.T) {
 	t.Parallel()
 
 	revision, rulesRevision := int64(4), int64(7)
-	if fields := validateAutoDMDecideRequest(autoDMDecideRequest{
+	if fields := validateTerraDecideRequest(terraDecideRequest{
 		ExpectedRevision: &revision, ExpectedRulesRevision: &rulesRevision,
 		IdempotencyKey: " decision-1 ",
 	}); len(fields) != 0 {
@@ -137,26 +175,26 @@ func TestValidateAutoDMDecideRequest(t *testing.T) {
 	}
 	for _, test := range []struct {
 		name    string
-		request autoDMDecideRequest
+		request terraDecideRequest
 		field   string
 	}{
-		{name: "missing interaction revision", request: autoDMDecideRequest{ExpectedRulesRevision: &rulesRevision, IdempotencyKey: "key"}, field: "expected_revision"},
-		{name: "missing rules revision", request: autoDMDecideRequest{ExpectedRevision: &revision, IdempotencyKey: "key"}, field: "expected_rules_revision"},
-		{name: "missing idempotency key", request: autoDMDecideRequest{ExpectedRevision: &revision, ExpectedRulesRevision: &rulesRevision}, field: "idempotency_key"},
+		{name: "missing interaction revision", request: terraDecideRequest{ExpectedRulesRevision: &rulesRevision, IdempotencyKey: "key"}, field: "expected_revision"},
+		{name: "missing rules revision", request: terraDecideRequest{ExpectedRevision: &revision, IdempotencyKey: "key"}, field: "expected_rules_revision"},
+		{name: "missing idempotency key", request: terraDecideRequest{ExpectedRevision: &revision, ExpectedRulesRevision: &rulesRevision}, field: "idempotency_key"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if fields := validateAutoDMDecideRequest(test.request); fields[test.field] == "" {
+			if fields := validateTerraDecideRequest(test.request); fields[test.field] == "" {
 				t.Fatalf("validation fields = %#v, want %q", fields, test.field)
 			}
 		})
 	}
 }
 
-func TestAutoDMAdjudicationPlanSupportsRetryAfterGenerationFailure(t *testing.T) {
+func TestTerraAdjudicationPlanSupportsRetryAfterGenerationFailure(t *testing.T) {
 	t.Parallel()
 
-	first, err := planAutoDMAdjudication("open", terraFacilitatorSource, 9, 9, 0)
+	first, err := planTerraAdjudication("open", terraFacilitatorSource, 9, 9, 0)
 	if err != nil {
 		t.Fatalf("plan first decision: %v", err)
 	}
@@ -167,7 +205,7 @@ func TestAutoDMAdjudicationPlanSupportsRetryAfterGenerationFailure(t *testing.T)
 	// Terra/Luna run only after the first plan commits. If either call fails,
 	// the interaction remains adjudicating at the advanced revision and a
 	// retry must not advance it a second time.
-	retry, err := planAutoDMAdjudication(
+	retry, err := planTerraAdjudication(
 		"adjudicating", terraFacilitatorSource, first.Revision, first.Revision, 0,
 	)
 	if err != nil {
@@ -177,13 +215,13 @@ func TestAutoDMAdjudicationPlanSupportsRetryAfterGenerationFailure(t *testing.T)
 		t.Fatalf("retry plan = %#v, want unchanged adjudicating revision", retry)
 	}
 
-	_, err = planAutoDMAdjudication(
+	_, err = planTerraAdjudication(
 		"adjudicating", terraFacilitatorSource, first.Revision, 9, 0,
 	)
-	assertAutoDMStatusError(t, err, "revision_conflict")
+	assertAutomatedStatusError(t, err, "revision_conflict")
 }
 
-func TestAutoDMAdjudicationPlanEnforcesOwnershipLifecycleAndResponses(t *testing.T) {
+func TestTerraAdjudicationPlanEnforcesOwnershipLifecycleAndResponses(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
@@ -199,15 +237,15 @@ func TestAutoDMAdjudicationPlanEnforcesOwnershipLifecycleAndResponses(t *testing
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			_, err := planAutoDMAdjudication(
+			_, err := planTerraAdjudication(
 				test.status, test.facilitatorSource, 3, 3, test.missingResponders,
 			)
-			assertAutoDMStatusError(t, err, test.wantCode)
+			assertAutomatedStatusError(t, err, test.wantCode)
 		})
 	}
 }
 
-func TestAutoDMExactDecimalsRemainQuotedAndCanonical(t *testing.T) {
+func TestModelExactDecimalsRemainQuotedAndCanonical(t *testing.T) {
 	t.Parallel()
 
 	const (
@@ -215,77 +253,77 @@ func TestAutoDMExactDecimalsRemainQuotedAndCanonical(t *testing.T) {
 		canonical = "9007199254740993.0000000000000001"
 	)
 	kind := "number"
-	value, err := autoDMStateValue(&kind, autoDMTestString(raw), nil)
+	value, err := modelMechanicValue(&kind, modelTestString(raw), nil)
 	if err != nil {
-		t.Fatalf("autoDMStateValue: %v", err)
+		t.Fatalf("modelMechanicValue: %v", err)
 	}
-	snapshot := autoDMContext{
-		Mechanics: []autoDMMechanicContext{{Ref: "m1", Minimum: value.Number}},
-		Sheets: []autoDMSheetContext{{
+	snapshot := modelContext{
+		Mechanics: []modelMechanicContext{{Ref: "m1", Minimum: value.Number}},
+		Entities: []modelEntityContext{{
 			Ref: "e1",
-			Values: []autoDMSheetValue{{
-				MechanicRef: "m1", Intrinsic: value, Effective: value,
-			}},
+			Evaluations: map[string]modelEntitySheetEvaluation{
+				"m1": {Intrinsic: value, Effective: value},
+			},
 		}},
-		Recent: []autoDMHistoryContext{},
+		Recent: []modelHistoryContext{},
 	}
 	encoded, err := json.Marshal(snapshot)
 	if err != nil {
-		t.Fatalf("marshal Auto DM context: %v", err)
+		t.Fatalf("marshal model context: %v", err)
 	}
 	quoted := `"` + canonical + `"`
 	if occurrences := strings.Count(string(encoded), quoted); occurrences != 3 {
 		t.Fatalf("exact decimal occurred %d times in context, want 3: %s", occurrences, encoded)
 	}
 
-	zero, err := autoDMDecimal(autoDMTestString("-0.000"))
+	zero, err := modelDecimal(modelTestString("-0.000"))
 	if err != nil {
-		t.Fatalf("autoDMDecimal zero: %v", err)
+		t.Fatalf("modelDecimal zero: %v", err)
 	}
 	if zero.String() != "0" {
 		t.Fatalf("canonical zero = %q, want 0", zero.String())
 	}
 }
 
-func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
+func TestMaterializeLunaConsequenceMapsEveryEffectKind(t *testing.T) {
 	t.Parallel()
 	const exactSetValue = "9007199254740993.0000000000000001"
 
-	context := autoDMContext{
+	context := modelContext{
 		entityIDs: map[string]string{
-			"e1": autoDMTestEntityOne,
-			"e2": autoDMTestEntityTwo,
+			"e1": modelTestEntityOne,
+			"e2": modelTestEntityTwo,
 		},
 		mechanicIDs: map[string]string{
-			"m1": autoDMTestMechanicOne,
-			"m2": autoDMTestMechanicTwo,
+			"m1": modelTestMechanicOne,
+			"m2": modelTestMechanicTwo,
 		},
-		statusTargets: map[string]autoDMStatusTarget{
-			"s1": {ID: autoDMTestStatus, EntityID: autoDMTestEntityTwo},
+		statusInstancesByRef: map[string]modelStatusInstanceTarget{
+			"s1": {ID: modelTestStatus, EntityID: modelTestEntityTwo},
 		},
-		actionIDs: map[string]string{"a1": autoDMTestAction},
+		actionIDs: map[string]string{"a1": modelTestAction},
 	}
 	falseValue := false
-	structured := autoDMStructuredConsequence{
-		SelectedActionRef: autoDMTestString(" a1 "),
-		ActionSummary:     autoDMTestString("  The scout's plan succeeds.  "),
-		Effects: []autoDMStructuredEffect{
+	structured := lunaStructuredConsequence{
+		SelectedActionRef: modelTestString(" a1 "),
+		ActionSummary:     modelTestString("  The scout's plan succeeds.  "),
+		Effects: []lunaStructuredEffect{
 			{
-				Type: "set", EntityRef: "e1", MechanicRef: autoDMTestString("m1"),
-				ValueKind: autoDMTestString("number"), NumberValue: autoDMTestString(exactSetValue + "0"),
+				Type: "set", EntityRef: "e1", MechanicRef: modelTestString("m1"),
+				ValueKind: modelTestString("number"), NumberValue: modelTestString(exactSetValue + "0"),
 			},
 			{
-				Type: "adjust-number", EntityRef: "e2", MechanicRef: autoDMTestString("m1"),
-				Amount: autoDMTestString("-2.25"),
+				Type: "adjust-number", EntityRef: "e2", MechanicRef: modelTestString("m1"),
+				Amount: modelTestString("-2.25"),
 			},
 			{
 				Type: "apply-status", EntityRef: "e1",
-				StatusName:        autoDMTestString("  Inspired  "),
-				StatusDescription: autoDMTestString("  Bolstered by the rescue.  "),
-				Modifiers: []autoDMStructuredModifier{
+				StatusName:        modelTestString("  Inspired  "),
+				StatusDescription: modelTestString("  Bolstered by the rescue.  "),
+				Modifiers: []lunaStructuredModifier{
 					{
 						MechanicRef: "m1", Operation: "add-number", ValueKind: "number",
-						NumberValue: autoDMTestString("1.5"),
+						NumberValue: modelTestString("1.5"),
 					},
 					{
 						MechanicRef: "m2", Operation: "set", ValueKind: "boolean",
@@ -294,19 +332,19 @@ func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 				},
 			},
 			{
-				Type: "remove-status", EntityRef: "e2", StatusRef: autoDMTestString("s1"),
+				Type: "remove-status", EntityRef: "e2", StatusInstanceRef: modelTestString("s1"),
 			},
 		},
 	}
 
-	effects, selectedActionID, actionSummary, fields, err := materializeAutoDMConsequence(context, structured)
+	effects, selectedActionID, actionSummary, fields, err := materializeLunaConsequence(context, structured)
 	if err != nil {
-		t.Fatalf("materializeAutoDMConsequence: %v", err)
+		t.Fatalf("materializeLunaConsequence: %v", err)
 	}
 	if len(fields) != 0 {
 		t.Fatalf("validation fields = %#v", fields)
 	}
-	if selectedActionID == nil || *selectedActionID != autoDMTestAction {
+	if selectedActionID == nil || *selectedActionID != modelTestAction {
 		t.Fatalf("selected action = %#v", selectedActionID)
 	}
 	if actionSummary == nil || *actionSummary != "The scout's plan succeeds." {
@@ -328,36 +366,36 @@ func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 	}
 
 	set := effects[0]
-	if set.Type != "set" || set.MechanicID != autoDMTestMechanicOne ||
-		len(set.EntityIDs) != 1 || set.EntityIDs[0] != autoDMTestEntityOne ||
+	if set.Type != "set" || set.MechanicID != modelTestMechanicOne ||
+		len(set.EntityIDs) != 1 || set.EntityIDs[0] != modelTestEntityOne ||
 		set.Value == nil || set.Value.Kind != "number" || set.Value.Number == nil || set.Value.Number.String() != exactSetValue {
 		t.Fatalf("set effect = %#v", set)
 	}
 
 	adjust := effects[1]
-	if adjust.Type != "adjust-number" || adjust.MechanicID != autoDMTestMechanicOne ||
-		len(adjust.EntityIDs) != 1 || adjust.EntityIDs[0] != autoDMTestEntityTwo ||
+	if adjust.Type != "adjust-number" || adjust.MechanicID != modelTestMechanicOne ||
+		len(adjust.EntityIDs) != 1 || adjust.EntityIDs[0] != modelTestEntityTwo ||
 		adjust.Amount == nil || adjust.Amount.String() != "-2.25" {
 		t.Fatalf("adjust effect = %#v", adjust)
 	}
 
 	applyStatus := effects[2]
 	if applyStatus.Type != "apply-status" || len(applyStatus.Targets) != 1 ||
-		applyStatus.Targets[0].EntityID != autoDMTestEntityOne || applyStatus.Status == nil {
+		applyStatus.Targets[0].EntityID != modelTestEntityOne || applyStatus.InlineStatus == nil {
 		t.Fatalf("apply-status effect = %#v", applyStatus)
 	}
-	if applyStatus.Status.Name != "Inspired" || applyStatus.Status.Description == nil ||
-		*applyStatus.Status.Description != "Bolstered by the rescue." || len(applyStatus.Status.Modifiers) != 2 {
-		t.Fatalf("status specification = %#v", applyStatus.Status)
+	if applyStatus.InlineStatus.Name != "Inspired" || applyStatus.InlineStatus.Description == nil ||
+		*applyStatus.InlineStatus.Description != "Bolstered by the rescue." || len(applyStatus.InlineStatus.Modifiers) != 2 {
+		t.Fatalf("Inline status = %#v", applyStatus.InlineStatus)
 	}
-	numberModifier := applyStatus.Status.Modifiers[0]
-	if !validID(numberModifier.ID) || numberModifier.MechanicID != autoDMTestMechanicOne ||
+	numberModifier := applyStatus.InlineStatus.Modifiers[0]
+	if !validID(numberModifier.ID) || numberModifier.MechanicID != modelTestMechanicOne ||
 		numberModifier.Operation != "add-number" || numberModifier.Value.Kind != "number" ||
 		numberModifier.Value.Number == nil || numberModifier.Value.Number.String() != "1.5" {
 		t.Fatalf("number modifier = %#v", numberModifier)
 	}
-	booleanModifier := applyStatus.Status.Modifiers[1]
-	if !validID(booleanModifier.ID) || booleanModifier.MechanicID != autoDMTestMechanicTwo ||
+	booleanModifier := applyStatus.InlineStatus.Modifiers[1]
+	if !validID(booleanModifier.ID) || booleanModifier.MechanicID != modelTestMechanicTwo ||
 		booleanModifier.Operation != "set" || booleanModifier.Value.Kind != "boolean" ||
 		booleanModifier.Value.Boolean == nil || *booleanModifier.Value.Boolean {
 		t.Fatalf("boolean modifier = %#v", booleanModifier)
@@ -365,53 +403,53 @@ func TestMaterializeAutoDMConsequenceMapsEveryEffectKind(t *testing.T) {
 
 	removeStatus := effects[3]
 	if removeStatus.Type != "remove-status" || len(removeStatus.Targets) != 1 ||
-		removeStatus.Targets[0].EntityID != autoDMTestEntityTwo ||
-		removeStatus.Targets[0].StatusInstanceID != autoDMTestStatus {
+		removeStatus.Targets[0].EntityID != modelTestEntityTwo ||
+		removeStatus.Targets[0].StatusInstanceID != modelTestStatus {
 		t.Fatalf("remove-status effect = %#v", removeStatus)
 	}
 }
 
-func TestMaterializeAutoDMConsequenceAllowsNoMechanicalEffects(t *testing.T) {
+func TestMaterializeLunaConsequenceAllowsNoMechanicalEffects(t *testing.T) {
 	t.Parallel()
 
-	effects, selectedActionID, actionSummary, fields, err := materializeAutoDMConsequence(
-		autoDMContext{},
-		autoDMStructuredConsequence{Effects: []autoDMStructuredEffect{}},
+	effects, selectedActionID, actionSummary, fields, err := materializeLunaConsequence(
+		modelContext{},
+		lunaStructuredConsequence{Effects: []lunaStructuredEffect{}},
 	)
 	if err != nil {
-		t.Fatalf("materializeAutoDMConsequence: %v", err)
+		t.Fatalf("materializeLunaConsequence: %v", err)
 	}
 	if len(fields) != 0 || len(effects) != 0 || effects == nil || selectedActionID != nil || actionSummary != nil {
 		t.Fatalf("materialized narrative-only consequence = effects %#v, action %#v, summary %#v, fields %#v", effects, selectedActionID, actionSummary, fields)
 	}
 }
 
-func TestMaterializeAutoDMConsequenceRejectsUnknownAndCrossTypeReferences(t *testing.T) {
+func TestMaterializeLunaConsequenceRejectsUnknownAndCrossTypeReferences(t *testing.T) {
 	t.Parallel()
 
-	context := autoDMContext{
-		entityIDs:   map[string]string{"e1": autoDMTestEntityOne, "e2": autoDMTestEntityTwo},
-		mechanicIDs: map[string]string{"m1": autoDMTestMechanicOne},
-		statusTargets: map[string]autoDMStatusTarget{
-			"s1": {ID: autoDMTestStatus, EntityID: autoDMTestEntityTwo},
+	context := modelContext{
+		entityIDs:   map[string]string{"e1": modelTestEntityOne, "e2": modelTestEntityTwo},
+		mechanicIDs: map[string]string{"m1": modelTestMechanicOne},
+		statusInstancesByRef: map[string]modelStatusInstanceTarget{
+			"s1": {ID: modelTestStatus, EntityID: modelTestEntityTwo},
 		},
-		actionIDs: map[string]string{"a1": autoDMTestAction},
+		actionIDs: map[string]string{"a1": modelTestAction},
 	}
 	trueValue := true
-	structured := autoDMStructuredConsequence{
-		SelectedActionRef: autoDMTestString("a-missing"),
-		Effects: []autoDMStructuredEffect{
-			{Type: "set", EntityRef: "e-missing", MechanicRef: autoDMTestString("m1"), ValueKind: autoDMTestString("number"), NumberValue: autoDMTestString("1")},
-			{Type: "set", EntityRef: "e1", MechanicRef: autoDMTestString("m-missing"), ValueKind: autoDMTestString("boolean"), NumberValue: autoDMTestString("1")},
-			{Type: "adjust-number", EntityRef: "e1", MechanicRef: autoDMTestString("m1"), Amount: autoDMTestString("not-a-number"), BooleanValue: &trueValue},
-			{Type: "remove-status", EntityRef: "e1", StatusRef: autoDMTestString("s1")},
+	structured := lunaStructuredConsequence{
+		SelectedActionRef: modelTestString("a-missing"),
+		Effects: []lunaStructuredEffect{
+			{Type: "set", EntityRef: "e-missing", MechanicRef: modelTestString("m1"), ValueKind: modelTestString("number"), NumberValue: modelTestString("1")},
+			{Type: "set", EntityRef: "e1", MechanicRef: modelTestString("m-missing"), ValueKind: modelTestString("boolean"), NumberValue: modelTestString("1")},
+			{Type: "adjust-number", EntityRef: "e1", MechanicRef: modelTestString("m1"), Amount: modelTestString("not-a-number"), BooleanValue: &trueValue},
+			{Type: "remove-status", EntityRef: "e1", StatusInstanceRef: modelTestString("s1")},
 			{Type: "unknown", EntityRef: "e1"},
 		},
 	}
 
-	_, selectedActionID, _, fields, err := materializeAutoDMConsequence(context, structured)
+	_, selectedActionID, _, fields, err := materializeLunaConsequence(context, structured)
 	if err != nil {
-		t.Fatalf("materializeAutoDMConsequence: %v", err)
+		t.Fatalf("materializeLunaConsequence: %v", err)
 	}
 	if selectedActionID != nil {
 		t.Fatalf("selected action = %#v, want nil", selectedActionID)
@@ -423,7 +461,7 @@ func TestMaterializeAutoDMConsequenceRejectsUnknownAndCrossTypeReferences(t *tes
 		"effects[1].value",
 		"effects[2].amount",
 		"effects[2]",
-		"effects[3].status_ref",
+		"effects[3].status_instance_ref",
 		"effects[4].type",
 	} {
 		if fields[path] == "" {
@@ -432,7 +470,7 @@ func TestMaterializeAutoDMConsequenceRejectsUnknownAndCrossTypeReferences(t *tes
 	}
 }
 
-func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testing.T) {
+func TestOpenAIModelProviderUsesConfiguredModelsAndImmutableNarrative(t *testing.T) {
 	t.Parallel()
 
 	requests := make(chan map[string]any, 3)
@@ -482,7 +520,7 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
-	provider := &openAIAutoDMProvider{client: client}
+	provider := &openAIModelProvider{client: client}
 	contextJSON := []byte(`{"world":{"name":"Glass Sea"},"recent_history":[]}`)
 
 	problem, err := provider.GenerateProblem(context.Background(), contextJSON)
@@ -490,11 +528,11 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 		t.Fatalf("GenerateProblem = %q, %v", problem, err)
 	}
 	problemRequest := <-requests
-	assertAutoDMProviderRequest(t, problemRequest, openaiapi.TerraModel, 1200, false)
+	assertModelProviderRequest(t, problemRequest, openaiapi.TerraModel, 1200, false)
 	if problemRequest["input"] != string(contextJSON) {
 		t.Fatalf("problem input = %#v", problemRequest["input"])
 	}
-	if instructions := autoDMStringField(t, problemRequest, "instructions"); !strings.Contains(instructions, "plain public prose") || !strings.Contains(instructions, "untrusted game data") {
+	if instructions := modelStringField(t, problemRequest, "instructions"); !strings.Contains(instructions, "plain public prose") || !strings.Contains(instructions, "untrusted game data") {
 		t.Fatalf("problem instructions = %q", instructions)
 	}
 
@@ -503,8 +541,8 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 		t.Fatalf("GenerateConsequence = %q, %v", consequence, err)
 	}
 	consequenceRequest := <-requests
-	assertAutoDMProviderRequest(t, consequenceRequest, openaiapi.TerraModel, 1600, false)
-	if instructions := autoDMStringField(t, consequenceRequest, "instructions"); !strings.Contains(instructions, "public fictional consequence") || !strings.Contains(instructions, "separate compiler") {
+	assertModelProviderRequest(t, consequenceRequest, openaiapi.TerraModel, 1600, false)
+	if instructions := modelStringField(t, consequenceRequest, "instructions"); !strings.Contains(instructions, "public fictional consequence") || !strings.Contains(instructions, "separate Luna compiler") {
 		t.Fatalf("consequence instructions = %q", instructions)
 	}
 
@@ -517,8 +555,8 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 		t.Fatalf("compiled consequence = %#v", compiled)
 	}
 	compileRequest := <-requests
-	assertAutoDMProviderRequest(t, compileRequest, openaiapi.LunaModel, 2400, true)
-	if instructions := autoDMStringField(t, compileRequest, "instructions"); !strings.Contains(instructions, "narrative is immutable") || !strings.Contains(instructions, "untrusted game data") {
+	assertModelProviderRequest(t, compileRequest, openaiapi.LunaModel, 2400, true)
+	if instructions := modelStringField(t, compileRequest, "instructions"); !strings.Contains(instructions, "narrative is immutable") || !strings.Contains(instructions, "untrusted game data") {
 		t.Fatalf("compiler instructions = %q", instructions)
 	}
 	input, ok := compileRequest["input"].(string)
@@ -540,7 +578,7 @@ func TestOpenAIAutoDMProviderUsesConfiguredModelsAndImmutableNarrative(t *testin
 	}
 }
 
-func assertAutoDMSchemaObject(t *testing.T, path string, object map[string]any, required []string) {
+func assertModelSchemaObject(t *testing.T, path string, object map[string]any, required []string) {
 	t.Helper()
 	if object["type"] != "object" {
 		t.Fatalf("%s.type = %#v, want object", path, object["type"])
@@ -566,7 +604,7 @@ func assertAutoDMSchemaObject(t *testing.T, path string, object map[string]any, 
 	}
 }
 
-func autoDMSchemaMap(t *testing.T, path string, value any) map[string]any {
+func modelSchemaMap(t *testing.T, path string, value any) map[string]any {
 	t.Helper()
 	result, ok := value.(map[string]any)
 	if !ok {
@@ -575,7 +613,7 @@ func autoDMSchemaMap(t *testing.T, path string, value any) map[string]any {
 	return result
 }
 
-func autoDMStringField(t *testing.T, object map[string]any, key string) string {
+func modelStringField(t *testing.T, object map[string]any, key string) string {
 	t.Helper()
 	value, ok := object[key].(string)
 	if !ok {
@@ -584,7 +622,7 @@ func autoDMStringField(t *testing.T, object map[string]any, key string) string {
 	return value
 }
 
-func assertAutoDMProviderRequest(t *testing.T, request map[string]any, model string, maxTokens int, structured bool) {
+func assertModelProviderRequest(t *testing.T, request map[string]any, model string, maxTokens int, structured bool) {
 	t.Helper()
 	if request["model"] != model {
 		t.Fatalf("model = %#v, want %q", request["model"], model)
@@ -595,7 +633,7 @@ func assertAutoDMProviderRequest(t *testing.T, request map[string]any, model str
 	if request["max_output_tokens"] != float64(maxTokens) {
 		t.Fatalf("max_output_tokens = %#v, want %d", request["max_output_tokens"], maxTokens)
 	}
-	reasoning := autoDMSchemaMap(t, "reasoning", request["reasoning"])
+	reasoning := modelSchemaMap(t, "reasoning", request["reasoning"])
 	if reasoning["effort"] != "none" {
 		t.Fatalf("reasoning.effort = %#v, want none", reasoning["effort"])
 	}
@@ -606,16 +644,16 @@ func assertAutoDMProviderRequest(t *testing.T, request map[string]any, model str
 		}
 		return
 	}
-	textConfig := autoDMSchemaMap(t, "text", text)
-	format := autoDMSchemaMap(t, "text.format", textConfig["format"])
-	if format["type"] != "json_schema" || format["name"] != "auto_dm_consequence" || format["strict"] != true {
+	textConfig := modelSchemaMap(t, "text", text)
+	format := modelSchemaMap(t, "text.format", textConfig["format"])
+	if format["type"] != "json_schema" || format["name"] != "luna_consequence" || format["strict"] != true {
 		t.Fatalf("structured text format = %#v", format)
 	}
 }
 
-func autoDMTestString(value string) *string { return &value }
+func modelTestString(value string) *string { return &value }
 
-func assertAutoDMStatusError(t *testing.T, err error, code string) {
+func assertAutomatedStatusError(t *testing.T, err error, code string) {
 	t.Helper()
 	var status *statusError
 	if !errors.As(err, &status) {

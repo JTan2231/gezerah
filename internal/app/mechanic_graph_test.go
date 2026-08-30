@@ -14,7 +14,7 @@ func TestExpressionDTORoundTripPreservesTypedTreeAndExactNumbers(t *testing.T) {
 		Operation: string(rules.ExpressionAddNumber),
 		Operands: []expressionDTO{
 			{Operation: string(rules.ExpressionMechanicReference), MechanicID: "11111111-1111-4111-8111-111111111111"},
-			{Operation: string(rules.ExpressionLiteral), Value: &stateValueDTO{Kind: "number", Number: &number}},
+			{Operation: string(rules.ExpressionLiteral), Value: &mechanicValueDTO{Kind: "number", Number: &number}},
 		},
 	}
 
@@ -42,9 +42,9 @@ func TestValidateWorldMechanicRequestEnforcesDerivedShape(t *testing.T) {
 	defaultNumber := decimalText("2")
 	minimum := decimalText("0")
 	request := saveWorldMechanicRequest{
-		Kind: "capacity", Mode: "score", SourceKind: "derived", Name: "Calculated",
+		Kind: "capacity", Mode: "score", SourceKind: "derived", Name: "Derived",
 		DefaultNumber: &defaultNumber, Minimum: &minimum, MutableDuringPlay: true,
-		Expression: &expressionDTO{Operation: string(rules.ExpressionLiteral), Value: &stateValueDTO{Kind: "number", Number: &defaultNumber}},
+		Expression: &expressionDTO{Operation: string(rules.ExpressionLiteral), Value: &mechanicValueDTO{Kind: "number", Number: &defaultNumber}},
 	}
 	fields, _ := validateWorldMechanicRequest(
 		"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
@@ -58,7 +58,7 @@ func TestValidateWorldMechanicRequestEnforcesDerivedShape(t *testing.T) {
 	}
 }
 
-func TestValidateWorldRuleConfigurationReturnsCycleFields(t *testing.T) {
+func TestValidateWorldMechanicGraphReturnsCycleFields(t *testing.T) {
 	t.Parallel()
 	worldID := rules.ID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 	leftID := rules.ID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
@@ -69,7 +69,7 @@ func TestValidateWorldRuleConfigurationReturnsCycleFields(t *testing.T) {
 		leftID:  {ID: leftID, WorldID: worldID, SourceKind: rules.SourceDerived, ValueKind: rules.ValueNumber, Expression: &leftExpression},
 		rightID: {ID: rightID, WorldID: worldID, SourceKind: rules.SourceDerived, ValueKind: rules.ValueNumber, Expression: &rightExpression},
 	}
-	err := validateWorldRuleConfiguration(definitions)
+	err := validateWorldMechanicGraph(definitions)
 	var status *statusError
 	if !errors.As(err, &status) || status.Status != 422 {
 		t.Fatalf("error = %#v", err)

@@ -78,25 +78,29 @@ interface CharacterFieldSetResponse {
   fields: Array<{ id: string; label: string }>;
 }
 
-interface StateResponse {
-  revision: number;
-  status_revision: number;
+interface EntitySheetResponse {
+  entity_id: string;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, unknown>;
-  active_statuses: Array<unknown>;
+  logical_input_values: Record<string, unknown>;
+  effective_values: Record<string, unknown>;
+  evaluations: Record<string, unknown>;
+  active_status_instances: Array<unknown>;
+  authored_default_input_mechanic_ids: string[];
 }
 
 interface EntityResponse extends IdentifiedResource {
   display_name: string;
   archived: boolean;
   character_status: "not-controlled" | "setup-required" | "ready";
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
 interface EntityProfileResponse {
   entity_id: string;
   revision: number;
-  character_fields_revision: number;
+  character_field_set_revision: number;
   character_status: "not-controlled" | "setup-required" | "ready";
   fields: Array<{ id: string; value?: string }>;
 }
@@ -104,7 +108,7 @@ interface EntityProfileResponse {
 interface InteractionResponse extends IdentifiedResource {
   revision: number;
   status: "draft" | "open" | "adjudicating" | "resolved" | "cancelled";
-  entity_ids: string[];
+  context_entity_ids: string[];
   actions: Array<unknown>;
   resolution?: unknown;
 }
@@ -244,7 +248,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         {
           status: 422,
           code: "validation_failed",
-          message: "world rules are invalid",
+          message: "world mechanic graph is invalid",
           fields: {
             [`mechanics[${candidateID}].expression.mechanic_id`]:
               matrixCase.expectedMessage,
@@ -277,21 +281,24 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     `${baseURL}/api/worlds/${mainWorld.id}/character-fields`,
     owner.id,
   );
-  const characterFields = await putJSON<CharacterFieldSetResponse>(
+  const characterFieldSet = await putJSON<CharacterFieldSetResponse>(
     request,
     `${baseURL}/api/worlds/${mainWorld.id}/character-fields`,
     {
       expected_revision: initialFields.revision,
       fields: [
         {
-          label: `Table identity ${unique}`,
-          visibility: "table",
+          label: `World identity ${unique}`,
+          visibility: "world",
         },
       ],
     },
     owner.id,
   );
-  const requiredField = required(characterFields.fields[0], "character field");
+  const requiredField = required(
+    characterFieldSet.fields[0],
+    "character field",
+  );
 
   const readyPlayer = await createActor(
     request,
@@ -332,9 +339,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     mainWorld.id,
     readyEntity.id,
     owner.id,
-    characterFields.revision,
+    characterFieldSet.revision,
     requiredField.id,
-    `Known at the copper table ${unique}`,
+    `Known across the copper coast ${unique}`,
   );
 
   const incompleteEntity = await createEntity(
@@ -368,12 +375,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   const contextCases = [
     {
       key: "incomplete-context",
-      entityID: incompleteEntity.id,
+      contextEntityID: incompleteEntity.id,
       fieldMessage: "controlled character setup must be complete",
     },
     {
       key: "archived-context",
-      entityID: archivedEntity.id,
+      contextEntityID: archivedEntity.id,
       fieldMessage: "archived entity cannot be added to a new interaction",
     },
   ] as const;
@@ -390,7 +397,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
           data: {
             id: randomUUID(),
             prompt: `Rejected ${matrixCase.key} selection ${unique}`,
-            entity_ids: [matrixCase.entityID],
+            context_entity_ids: [matrixCase.contextEntityID],
             eligible_responder_membership_ids: [],
           },
         },
@@ -401,7 +408,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
           status: 422,
           code: "validation_failed",
           message: "interaction is invalid",
-          fields: { "entity_ids[0]": matrixCase.fieldMessage },
+          fields: { "context_entity_ids[0]": matrixCase.fieldMessage },
         },
         true,
       );
@@ -424,7 +431,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       present: true,
       prompt: `The lamps gutter above the crossing ${unique}.`,
       eligible_responder_membership_ids: [readyMembership.membership_id],
-      entity_ids: [readyEntity.id],
+      context_entity_ids: [readyEntity.id],
     },
     owner.id,
   );
@@ -480,7 +487,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     mainWorld.id,
     attributionIncompleteEntity.id,
     owner.id,
-    characterFields.revision,
+    characterFieldSet.revision,
     requiredField.id,
     `Chart completed beside the crossing ${unique}`,
   );
@@ -543,9 +550,9 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
         owner.id,
       );
-      const beforeState = await getJSON<StateResponse>(
+      const beforeSheet = await getJSON<EntitySheetResponse>(
         request,
-        `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/state`,
+        `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
         owner.id,
       );
       await expectAPIError(
@@ -589,13 +596,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         .toEqual(beforeInteraction);
       expect
         .soft(
-          await getJSON<StateResponse>(
+          await getJSON<EntitySheetResponse>(
             request,
-            `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/state`,
+            `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
             owner.id,
           ),
         )
-        .toEqual(beforeState);
+        .toEqual(beforeSheet);
     });
   }
 
@@ -621,7 +628,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       {
         status: 422,
         code: "validation_failed",
-        message: "world rules are invalid",
+        message: "world mechanic graph is invalid",
         fields: {
           [`mechanics[${candidateID}].expression.mechanic_id`]:
             "active derived mechanics cannot reference archived mechanics",
@@ -858,7 +865,7 @@ async function completeProfile(
   worldID: string,
   entityID: string,
   ownerID: string,
-  characterFieldsRevision: number,
+  characterFieldSetRevision: number,
   fieldID: string,
   value: string,
 ): Promise<EntityProfileResponse> {
@@ -872,7 +879,7 @@ async function completeProfile(
     `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: before.revision,
-      expected_character_fields_revision: characterFieldsRevision,
+      expected_character_field_set_revision: characterFieldSetRevision,
       values: [{ field_id: fieldID, value }],
     },
     ownerID,

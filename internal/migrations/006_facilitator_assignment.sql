@@ -11,12 +11,12 @@ set facilitator_membership_id = (
 		membership.joined_at, membership.id
 	limit 1
 )
-where world.dm_source = 'human';
+where world.facilitator_source = 'human';
 
 alter table worlds
 	add constraint worlds_facilitator_assignment_shape check (
-		(dm_source = 'human' and facilitator_membership_id is not null)
-		or (dm_source = 'terra' and facilitator_membership_id is null)
+		(facilitator_source = 'human' and facilitator_membership_id is not null)
+		or (facilitator_source = 'terra' and facilitator_membership_id is null)
 	),
 	add constraint worlds_facilitator_membership_fk
 		foreign key (facilitator_membership_id, id)
@@ -35,7 +35,7 @@ alter table interactions
 	);
 
 alter table interaction_resolutions
-	drop constraint interaction_resolutions_applied_shape,
+	drop constraint interaction_resolutions_committed_shape,
 	add column facilitator_source text not null default 'human',
 	alter column created_by_membership_id drop not null,
 	add constraint interaction_resolutions_facilitator_source_valid
@@ -44,10 +44,10 @@ alter table interaction_resolutions
 		(facilitator_source = 'human' and created_by_membership_id is not null)
 		or (facilitator_source = 'terra' and created_by_membership_id is null)
 	),
-	add constraint interaction_resolutions_applied_shape check (
-		(status = 'draft' and resolved_by_membership_id is null and applied_at is null and idempotency_key is null)
+	add constraint interaction_resolutions_committed_shape check (
+		(status = 'building' and resolved_by_membership_id is null and resolved_at is null and idempotency_key is null)
 		or (
-			status = 'applied' and applied_at is not null and idempotency_key is not null
+			status = 'committed' and resolved_at is not null and idempotency_key is not null
 			and (
 				(facilitator_source = 'human' and resolved_by_membership_id is not null)
 				or (facilitator_source = 'terra' and resolved_by_membership_id is null)
@@ -69,6 +69,6 @@ alter table world_events
 		'entity-created', 'entity-control-updated', 'entity-profile-updated',
 		'character-fields-updated', 'interaction-created', 'interaction-updated',
 		'interaction-presented', 'interaction-adjudicating', 'interaction-cancelled',
-		'submission-created', 'submission-withdrawn', 'resolution-updated',
-		'resolution-applied', 'rules-updated', 'facilitator-changed'
+		'action-submitted', 'action-withdrawn', 'resolution-committed',
+		'rules-updated', 'facilitator-changed'
 	));

@@ -59,20 +59,12 @@ Open `http://127.0.0.1:5173`. Vite serves the React application and proxies
 postgres://localhost:5432/dnd?sslmode=disable
 ```
 
-Migrations run automatically when the backend starts. The repository has no
-seed step; create all world vocabulary through the application/API. New
-databases install the `001` baseline, the `002` derived-graph/problem-status
-upgrade, the `003` audience-invalidation event upgrade, the `004` password-
-authentication cutover, and `005_auto_dm.sql`, which adds the world-level
-`human`/`terra` source discriminator, followed by
-`006_facilitator_assignment.sql`, which adds the designated human membership
-and live attribution, followed by `007_agent_facilitator.sql`, which adds the
-external page-agent source. Existing databases at a recorded migration
-prefix upgrade forward, but `004_password_auth.sql` deliberately refuses a
-nonempty `users` table because the repository has no safe way to invent
-credentials for UUID-only accounts. Use a fresh database for that cutover
-unless a separately reviewed data transition exists. Databases created by the
-removed pre-baseline schema remain unsupported.
+Migrations run automatically when the backend starts. The current chain is
+`001_world_baseline.sql`, `002_mechanic_graph_status_instances.sql`,
+`003_interaction_audience_invalidations.sql`, `004_password_auth.sql`,
+`005_terra.sql`, `006_facilitator_assignment.sql`, and
+`007_agent_facilitator.sql`. The repository has no seed step; create all
+world-authored vocabulary through the application or API.
 
 ## Resetting local data
 
@@ -117,7 +109,7 @@ shell/process manager that launches the application. Vite independently loads
 | `DATABASE_URL`        | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                            |
 | `DND_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
 | `DND_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
-| `OPENAI_API_KEY`      | Empty                              | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                |
+| `OPENAI_API_KEY`      | Empty                              | Enables Terra and Luna calls through the OpenAI Responses API.                                    |
 | `DND_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
 
 When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
@@ -129,7 +121,7 @@ without a path, query, or fragment.
 
 `OPENAI_API_KEY` is optional for startup but required for Terra's autonomous
 Continue/Decide lifecycle and for Luna compilation of human Consequences. When it is empty, those
-endpoints return `503 auto_dm_unavailable`; the key is never sent to the
+endpoints return `503 model_unavailable`; the key is never sent to the
 frontend. Leave `DND_OPENAI_BASE_URL` empty for the official API.
 
 ### Local process variables
@@ -297,16 +289,16 @@ Update together:
 
 ### Database change
 
-Add a new forward migration; do not rewrite applied migrations. Update domain,
-mapping, persistence, constraints, clean-database E2E coverage, and
-[Database](database.md). Exercise the chain against an explicitly disposable
-database.
+Before active users, rewrite the existing migration chain to express the one
+current schema directly; do not add compatibility or cutover migrations. Update
+domain, mapping, persistence, constraints, clean-database E2E coverage, and
+[Database](database.md). Exercise the chain against an explicitly disposable database.
 
 ### New Play command
 
-Define identity, active-membership, role, world scope, visibility, revision,
+Define identity, active membership, membership-role/current-play-role authority, world scope, visibility, revision,
 idempotency, history/event, and archive behavior before adding UI controls.
-Test with separate user/browser contexts and confirm private fields are absent
+Test with separate user/browser contexts and confirm restricted Character fields are absent
 from non-facilitator JSON.
 
 ## Generated and ignored files
@@ -387,7 +379,7 @@ failure.
 
 - Do not add built-in entity classes.
 - Do not make a configured name privileged.
-- Do not introduce canonical JSON storage for authored aggregates/state.
+- Do not introduce canonical JSON storage for authored aggregates or logical state.
 - Do not seed vocabulary; configuration remains user-authored and world-scoped.
 - Use `./ci.sh` as the handoff validator.
 - Preserve unrelated work in a dirty checkout and avoid destructive source-

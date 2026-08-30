@@ -12,19 +12,19 @@
 4. Define capabilities the same way, using binary or rating scalar shape.
 5. For each input, decide whether a facilitator may change it in a live
    Consequence.
-   Derived values are calculated and cannot be targeted directly.
+   Derived values are expression-evaluated and cannot be targeted directly.
 6. Open **Character fields** and publish the ordered text prompts that every
-   player-controlled entity must complete. Labels and guidance are authored for
+   controlled Entity must complete. Labels and guidance are authored for
    this world; zero fields is valid.
 7. Invite editors, players, or spectators through expiring links.
 8. Open **Roster & sheets** in Build. Create the roster and optionally assign
    active non-spectators as an entity's controllers; that entity is presented
    as their character. Sheets are generated from the active capacity/capability
    definitions.
-9. Return to `/`, choose **Play**, select the world, and enter the live table.
+9. Return to `/`, choose **Play**, select the World, and enter Play.
 
 Every mechanic publication validates the proposed complete graph and advances
-the world rules revision. A type mismatch, invalid reference, or dependency
+the rules revision. A type mismatch, invalid reference, or dependency
 cycle rejects the save atomically and reports the expression path.
 
 Names are world-scoped and user-authored. Do not introduce a canonical list of
@@ -35,7 +35,7 @@ attributes, skills, entity classes, or privileged names.
 1. Open `/play/invite/{token}` for a player/spectator invitation or
    `/build/invite/{token}` for an editor invitation.
 2. Sign up or sign in if needed; the invite URL remains intact throughout.
-3. Review the world, inviter, and offered role.
+3. Review the world, inviter, and offered membership role.
 4. Redeem the link.
 5. The world now appears in the corresponding Play or Build library and the
    user receives one world membership.
@@ -53,8 +53,8 @@ Problems are runtime moments, never authored configuration.
 
 First enter the world through `/play` and inspect the Dungeon Master shown in
 the header. Between problems, an owner/editor or the current human facilitator
-may assign any active non-spectator or Terra. The former human facilitator
-immediately returns to the current-player role; durable world access does not
+may assign any active non-spectator, Terra, or an agent. A replaced human facilitator
+immediately returns to current play role `player`; their membership role does not
 change, and their persistent `play_status` determines whether they return to a
 ready seat or character setup.
 
@@ -64,31 +64,31 @@ For a human facilitator:
    choose context and eligible ready current-player responders. The default
    audience is every active membership whose `play_status` is ready, including
    spectators.
-2. Present the problem. Eligible players offer one free-form action each,
+2. Present the problem. Responders offer one free-form Action each,
    optionally attribute it to a ready controlled character, and may withdraw
    while the problem is open.
 3. Begin private adjudication and describe **What transpires?**.
-4. Ask Luna to preserve that prose while compiling an optional selected
-   action/summary and effects. Review the advisory preview.
+4. Ask Luna to preserve that prose while compiling optional selected-Action
+   metadata and Effects. Review the advisory preview.
 5. Resolve with a fresh idempotency key. The normal path rechecks revisions and
-   commits base/status changes, provenance, receipt, action selection,
-   interaction lifecycle, and event together.
+   commits logical-state/Status-instance lifecycle changes, provenance, Resolution receipt,
+   selected-Action metadata, Interaction lifecycle, and World event together.
 
 For Terra:
 
 1. While no interaction is unfinished, any ready current player clicks **Ask
-   Terra to continue**. Terra uses the campaign brief, current table, and recent
+   Terra to continue**. Terra uses the campaign brief, current Entity sheets, and recent
    history to create and present the problem.
 2. Every ready active member is in the audience, every ready non-spectator is a
    responder, and ready controlled entities are context.
-3. Each responder submits an action or clicks **Pass**; pass is stored as the
-   ordinary action text `I pass.`.
+3. Each responder submits an Action or clicks **Pass**; pass is stored as the
+   ordinary Action text `I pass.`.
 4. While the problem is open or Terra is adjudicating it, any ready current
    player may confirm **Skip problem**. Skip uses the ordinary cancellation
-   command, ends the problem without a Consequence, and returns the table to
+   command, ends the Problem without a Consequence, and returns Play to
    idle with Terra still assigned. It does not generate a replacement; a ready
-   player must explicitly ask Terra to continue again.
-5. After all responders have acted or passed, any ready player asks Terra to
+   current player must explicitly ask Terra to continue again.
+5. After all responders have acted or passed, any ready current player asks Terra to
    decide. Terra writes the Consequence, Luna compiles it, and the server
    previews and resolves it without a human edit or approval stage.
 6. If the provider call fails after adjudication starts, reload and retry with
@@ -98,9 +98,9 @@ For recovery from a Terra problem stuck waiting on a responder or a failed
 adjudication, the world owner alone may choose **Take over**. This is allowed
 only when that Terra-authored open/adjudicating problem is the sole unfinished
 interaction and assigns the owner as human facilitator. The owner's own
-submitted action, if any, is withdrawn; other submissions remain. For an open
+Action, if any, is withdrawn; other Actions remain. For an open
 problem the owner closes and adjudicates manually; for an adjudicating problem
-the owner goes directly to the human ruling UI. No other handoff is allowed
+the owner goes directly to the human Consequence UI. No other handoff is allowed
 while an interaction is unfinished.
 
 Luna may compile a narrative-only Consequence with no effects. A human
@@ -112,24 +112,24 @@ interaction is draft, open, or adjudicating.
 
 ## Prepare and edit entity sheets
 
-Creating an entity creates an empty normalized state root and status-set root.
+Creating an Entity creates an empty normalized logical-state root and status-set root.
 Logical defaults make every active input appear immediately; derived mechanics
-evaluate from the graph and need no stored row.
+evaluate from the graph and need no stored override.
 
-Owners/editors use **Roster & sheets** in Build for **Save sheet** setup
-changes. The request supplies current state and rules revisions and replaces
+Owners/editors use **Roster & sheets** in Build for **Save logical state** setup
+changes. The request supplies current logical-state and rules revisions and replaces
 only the logical input map atomically. A derived ID is rejected. A stale
 revision returns `409 revision_conflict`; reload before retrying. Sheets are
 read-only in Play.
 
-The sheet shows effective values for every mechanic. For an input, intrinsic is
-stored/defaulted logical state; for a derived mechanic, intrinsic is its
-expression result. Active status modifiers then produce effective value in
+The sheet shows effective values for every Mechanic. For an input, intrinsic is
+its stored override or authored default; for a derived Mechanic, intrinsic is its
+expression result. Active Status-instance modifiers then produce effective value in
 deterministic order. Status chips and modifier trails explain the difference
-without baking it into base state.
+without baking it into logical state.
 
-During play, prefer effects in a resolved Consequence because they produce an
-immutable before/after receipt. Direct sheet changes are intended for setup and
+During Play, prefer Effects in a committed Resolution because they produce an
+immutable Resolution receipt with before/after facts. Direct sheet changes are intended for setup and
 correction and do not append a world event.
 
 ## Assign and author characters
@@ -140,26 +140,26 @@ correction and do not append a world event.
 2. An owner/editor creates or selects an ordinary entity in **Roster & sheets**
    in Build.
 3. Use **Controllers** to select any number of active non-spectator memberships. The
-   world table revision guards the complete replacement.
+   World roster revision guards the complete replacement.
 4. Until setup is complete, the controller sees only their controlled entities
-   and the configured profile form—not the live table.
-5. Fill any subset and choose **Save character**. The command checks both the
-   profile revision and the character-field schema revision.
-6. Complete every field for that entity. Its derived status becomes `ready`,
+   and the configured profile form—not Play.
+5. Fill any subset and choose **Save profile**. The command checks both the
+   profile revision and the character-field-set revision.
+6. Complete every field for that Entity. Its Character status becomes `ready`,
    and a current player with ready controlled-character setup enters live play.
 
 Control is many-to-many. Removing a controller revokes authoring and action
 attribution authority without deleting values. Adding a required field returns
 affected characters to setup; adding/removing fields is blocked during an
-unfinished problem. Players do not receive direct sheet-state mutation
+unfinished Problem. Players do not receive direct logical-state mutation
 permission. Archived worlds/entities preserve profiles as read-only material.
 
 ## Archive resources
 
 - Archive a capacity/capability when it should stop appearing on current
-  sheets. Active derived-mechanic dependents must be archived and active
-  statuses whose modifiers target it must be removed first; existing stored
-  values, removed status snapshots, and receipts remain.
+  sheets. Active derived-Mechanic dependents must be archived and active Status
+  instances whose modifiers target it must be removed first; existing stored
+  overrides, removed Status instances, modifier snapshots, and Resolution receipts remain.
 - Revoke an invite to prevent future redemption; existing members remain.
 - Archive a world only after all active problems are resolved/cancelled. This
   prevents further configuration and play mutations.

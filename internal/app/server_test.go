@@ -24,7 +24,7 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 		wantBody   string
 	}{
 		{path: "/assets/app.js", wantStatus: http.StatusOK, wantBody: "console.log('dnd')"},
-		{path: "/rules/one", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
+		{path: "/build/world-id/capacities", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
 		{path: "/assets/missing.js", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
 	}
 	for _, test := range tests {

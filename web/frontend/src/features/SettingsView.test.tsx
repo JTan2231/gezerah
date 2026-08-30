@@ -28,7 +28,7 @@ const ownerDraft: SettingsViewModel = {
     memberCount: 4,
     mechanicCount: 9,
     status: "active",
-    dungeonMaster: "Terra Auto DM",
+    dungeonMaster: "Terra",
   },
   canArchive: true,
 };
@@ -40,8 +40,13 @@ describe("SettingsView", () => {
     );
 
     expect(html).toContain("The Verdant Reach");
-    expect(html).toContain("Terra Auto DM");
-    expect(html).toContain("Hand off the Dungeon Master role from Play");
+    expect(html).toContain("Terra");
+    expect(html).toContain(
+      "Orient newly invited players and give Terra a campaign brief.",
+    );
+    expect(html).toContain(
+      "Hand off Dungeon Master responsibility from Play between Problems.",
+    );
     expect(html).not.toContain("DM source");
     expect(html).toContain("Unsaved changes");
     expect(html).toContain("Archive world");

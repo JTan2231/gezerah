@@ -7,8 +7,8 @@ client. There is no version prefix, so coordinated client/server changes land
 together. Every authored and live resource is scoped through a world URL.
 
 Except for health, signup, and signin, every API endpoint requires an active
-server session. World resources additionally apply server-side membership,
-role, readiness, scope, and visibility checks. See [Security](security.md) for
+server session. World resources additionally apply server-side membership-role,
+current-play-role, Play-status, scope, and visibility checks. See [Security](security.md) for
 the browser and session boundaries.
 
 ## Conventions
@@ -62,8 +62,8 @@ changes when the password is changed.
 
 The server stores only a SHA-256 digest of the random session token. Passwords
 are stored as Argon2id hashes. Command bodies and headers never select the
-acting user or membership; the server derives both from the session. Supplying
-the former `X-DND-User-ID` header has no effect.
+acting user or membership; the server derives both from the session. Caller-selected
+identity headers do not authenticate or override the session.
 
 Sessions have a seven-day sliding idle lifetime and a 30-day absolute lifetime.
 Issuing a session removes expired/revoked rows and keeps at most 20 active
@@ -89,15 +89,15 @@ sessions for the account, pruning least-recently-seen sessions first.
 | ------ | ------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
 | 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                  | Transport, path, or query syntax is malformed.                      |
 | 401    | `authentication_required`, `invalid_credentials`                                | Session is absent/expired/revoked, or signin credentials are wrong. |
-| 403    | `csrf_invalid`, origin/role/forbidden/readiness codes                           | Browser-integrity check or resource authority failed.               |
+| 403    | `csrf_invalid`, origin/authority/forbidden/readiness codes                      | Browser-integrity check or resource authority failed.               |
 | 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                           | Resource, invite, or endpoint is absent or hidden.                  |
 | 409    | `revision_conflict`, `conflict`, `world_archived`, `interactions_unfinished`, `responses_incomplete`, lifecycle/idempotency errors | Current state conflicts with the command. |
 | 422    | `validation_failed`, `invalid_reference`, `transition_failed`                   | Structurally readable JSON violates a domain/database rule.         |
 | 429    | `rate_limited`                                                                  | Authentication attempt/work limit was reached; honor `Retry-After`. |
 | 500    | `internal_error`, `database_error`                                               | Unexpected server or database failure.                              |
-| 502    | `auto_dm_failed`, `auto_dm_invalid_output`                                       | Provider call or returned model output failed.                       |
-| 503    | `database_unavailable`, `auto_dm_unavailable`                                    | Required database or Auto DM configuration is unavailable.          |
-| 504    | `auto_dm_timeout`                                                               | Auto DM generation exceeded its request deadline.                    |
+| 502    | `model_failed`, `model_invalid_output`                                           | Provider call or returned model output failed.                       |
+| 503    | `database_unavailable`, `model_unavailable`                                      | The database or required model configuration is unavailable.         |
+| 504    | `model_timeout`                                                                 | Model generation exceeded its request deadline.                      |
 
 Unknown API paths and unsupported methods on known paths reach the methodless
 API catchall and return `404 endpoint_not_found` in the JSON error envelope.
@@ -109,16 +109,16 @@ Overwrite-sensitive commands carry an expected revision. A mismatch returns
 
 | Request field                                               | Protects                                      |
 | ----------------------------------------------------------- | --------------------------------------------- |
-| `expected_revision` on world update/archive/facilitator assignment | World settings/lifecycle/DM assignment revision. |
-| `expected_table_revision` on controller replacement         | World table/control revision.                 |
-| `expected_revision` on state replacement                    | Entity state record.                          |
+| `expected_revision` on world update/archive/facilitator assignment | World settings/lifecycle/facilitator assignment revision. |
+| `expected_roster_revision` on controller replacement         | World roster revision.                        |
+| `expected_logical_state_revision` on logical-state replacement | Entity logical state.                       |
 | `expected_revision` on character-field replacement          | World character-field set.                    |
 | `expected_revision` on profile replacement                  | Entity profile values.                        |
-| `expected_character_fields_revision` on profile replacement | Field schema used to build the profile draft. |
+| `expected_character_field_set_revision` on profile replacement | Character-field set used to build the profile draft. |
 | `expected_revision` on interaction command/action creation  | Interaction.                                  |
-| `expected_revision` on action withdrawal                    | Action submission.                            |
-| `expected_rules_revision` on mechanic mutation              | World mechanic dependency graph.              |
-| `expected_rules_revision` on state replacement              | Rule schema used to construct the input map.  |
+| `expected_revision` on action withdrawal                    | Action.                                       |
+| `expected_rules_revision` on mechanic mutation              | World mechanic graph.                         |
+| `expected_rules_revision` on logical-state replacement      | World mechanic graph used to construct the logical input map. |
 | Both revisions on Consequence compilation or Terra decision | Interaction plus exact graph used to compile. |
 | `expected_rules_revision` on preview/resolve                | Exact graph used to evaluate the Consequence. |
 
@@ -129,7 +129,7 @@ before a consequential write.
 
 The optional mechanic `kind` filter is `capacity` or `capability`; collections
 include active and archived resources. Mechanic reads are wrapped with the
-world rules revision so clients never have to combine a catalog with a revision
+rules revision so clients never have to combine a catalog with a revision
 from a separate request:
 
 ```json
@@ -168,30 +168,30 @@ An incorrect current password on the change endpoint is a field-specific
 
 | Method and path                                | Authority                                      | Request/response                                                                 |
 | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/worlds`                              | Authenticated user                             | Active memberships only; role/count/activity and derived play fields.            |
-| `POST /api/worlds`                             | Authenticated user                             | Name/description; creates world, owner membership, field/rules roots, and event. |
+| `GET /api/worlds`                              | Authenticated user                             | Active memberships only; membership-role/count/activity and derived play fields. |
+| `POST /api/worlds`                             | Authenticated user                             | Name/description; creates World, owner membership, character-field/mechanic-graph roots, and event. |
 | `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
 | `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, and `expected_revision`.                             |
 | `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
 | `POST /api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
 | `GET /api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
 
-World creation is transactional and returns durable role `owner`; that owner
-is also the initial human facilitator. Durable `role` remains one of
+World creation is transactional and returns membership role `owner`; that owner
+is also the initial human facilitator. The contextual `role` field remains one of
 `owner`/`editor`/`player`/`spectator`. `current_play_role` is derived separately
 as `facilitator`, `player`, or `spectator`, so a handoff never rewrites access.
 `play_status` remains the non-spectator membership's player-seat readiness even
 while it is the facilitator; facilitators bypass that gate while assigned, and
 spectators return `ready` but stay read-only.
 
-`revision` protects world settings/archive. `table_revision` protects
+`revision` protects world settings/archive. `roster_revision` protects
 controller changes. `rules_revision` protects the world mechanic graph; all
 three are returned on every `World` response.
 
-Every World also returns legacy assignment discriminator `dm_source` and a
-`facilitator` object. For a human assignment it contains `source:"human"`,
+Every World returns one `facilitator` object. For a human assignment it
+contains `source:"human"`,
 `membership_id`, and `display_name`; Terra and agent assignments contain only
-their source. Ordinary world PATCH cannot change `dm_source`. The dedicated
+their source. Ordinary World PATCH cannot change the assignment. The dedicated
 assignment command accepts exactly one of:
 
 ```json
@@ -205,8 +205,8 @@ handoff advances the world revision and emits `facilitator-changed`; an
 unchanged assignment is idempotent. Any draft, open, or adjudicating
 interaction normally returns `409 interactions_unfinished`. The only exception
 is an owner assigning the facilitator to their own membership when exactly one
-unfinished interaction exists, it is authored by the currently assigned Terra
-or external-agent source, and it is open or adjudicating. That transaction
+unfinished Interaction exists, it is authored by the currently assigned Terra
+or agent source, and it is open or adjudicating. That transaction
 withdraws the owner's submitted action if present, advances the interaction
 revision for that withdrawal, and lets the owner close/adjudicate as needed and
 finish with human-DM commands.
@@ -220,43 +220,44 @@ The world description is the campaign brief when Terra is designated.
 | `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision.              |
 | `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                                       |
 | `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision.              |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency or active status reference remains. |
+| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency or active Status-instance reference remains. |
 
 Capacity `score`/`pool` and capability `rating` are numeric; capability
-`binary` is Boolean. Each is either a stored/defaulted `input` or a calculated
-`derived` mechanic. Every mechanic applies to every entity.
+`binary` is Boolean. Each is either an `input` with an authored default and
+optional stored override, or a `derived` Mechanic with an expression. Every
+Mechanic applies to every Entity.
 
 Archiving an active mechanic fails with `409 mechanic_has_dependents` while an
-active derived mechanic references it, or `409 mechanic_has_active_statuses`
-while any active status modifier references it. Remove those active statuses
+active derived Mechanic references it, or `409 mechanic_has_active_status_instances`
+while any active Status-instance modifier references it. Remove those Status instances
 before archiving. Archived mechanics remain readable but cannot be changed or
 restored through the product API.
 
-### Character fields, entities, profiles, and state
+### Character fields, Entities, profiles, and sheets
 
 | Method and path                                               | Authority                         | Notes                                                               |
 | ------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered requirements plus schema revision; visibility-filtered.     |
-| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces active requirements.                            |
-| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Roster with state and character completion.                         |
-| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates entity/state root; optional controller memberships.         |
+| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered character fields plus character-field-set revision; visibility-filtered. |
+| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces the active character-field set.                 |
+| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Roster with Entity sheets and Character completion.                 |
+| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates an Entity, logical-state root, and status-set root; optional Controller memberships. |
 | `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                   |
 | `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.  |
 | `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Terminally archives the entity; the record remains readable.        |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/state`       | Active world member               | Input, effective, evaluation, and active-status state.              |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/state`       | Owner/editor, active world        | Full input values plus state and rules revisions.                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_table_revision`. |
-| `GET /api/worlds/{world_id}/available-characters`             | Waiting player in agent world     | Narrow unclaimed preset projection plus current `table_revision`.       |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/claim`      | Waiting player in agent world     | Atomically claims one uncontrolled active entity using `expected_table_revision`. |
+| `GET /api/worlds/{world_id}/entities/{entity_id}/sheet`       | Active world member               | Generated logical, effective, evaluation, and active-Status-instance view. |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/logical-state` | Owner/editor, active world      | Complete logical input values plus logical-state and rules revisions. |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_roster_revision`. |
+| `GET /api/worlds/{world_id}/available-entities`             | Waiting player in agent world     | Narrow unclaimed preset projection plus current `roster_revision`.       |
+| `POST /api/worlds/{world_id}/entities/{entity_id}/claim`      | Waiting player in agent world     | Atomically claims one uncontrolled active entity using `expected_roster_revision`. |
 | `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and field-schema revisions. |
+| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and character-field-set revisions. |
 
-Until ready, a player's entity collection, entity-detail, and state reads are
+Until ready, a player's Entity collection, Entity-detail, and sheet reads are
 restricted to controlled entities. Profile reads are filtered separately: a
-different completed entity may expose only its table-visible values, while
+different completed Entity may expose only its world-visible values, while
 restricted values require current control, owner/editor authority, or the
 currently designated human facilitator. Profile editing remains owner/editor
-or controller authority. Direct state writes remain owner/editor setup
+or Controller authority. Direct logical-state writes remain owner/editor setup
 operations; players edit only authorized profile text. An archived entity
 remains readable, but its identity/display archive transition has no product
 restore operation.
@@ -266,14 +267,14 @@ restore operation.
 | Method and path                                          | Authority                  | Notes                                                                       |
 | -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
 | `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
-| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
+| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Membership role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
 | `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
 | `GET /api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.       |
 | `POST /api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.               |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only their
 SHA-256 digest is stored. Redemption counts once per invite/user. An already
-active non-owner membership keeps its current role; a different-role invite
+active non-owner membership keeps its membership role; a different-membership-role invite
 cannot silently escalate or downgrade it.
 
 ### Interactions and actions
@@ -290,12 +291,12 @@ cannot silently escalate or downgrade it.
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible current player      | Creates an action/pass; optional ready controlled acting entity.       |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning current player        | Withdraws submitted action using action revision.                      |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Current human facilitator    | Advisory Consequence; no idempotency key required.                     |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Current human facilitator    | Atomic state, immutable receipt, lifecycle, and world event.           |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Current human facilitator    | Atomic state, immutable Resolution receipt, lifecycle, and World event. |
 | `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Current human facilitator    | Luna compilation and advisory preview for the human's supplied prose. |
-| `POST /api/worlds/{world_id}/auto-dm/continue`                                           | Ready current player         | Terra creates and presents the next interaction; empty body.           |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide`               | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
-| `POST /api/worlds/{world_id}/agent-dm/continue`                                     | Ready current player         | Creates and presents an agent-supplied prompt; no server model call.   |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/agent-dm/resolve`        | Ready current player         | Applies an agent-supplied narrative/effect ruling through the ordinary receipt path. |
+| `POST /api/worlds/{world_id}/terra/continue`                                            | Ready current player         | Terra creates and presents the next Interaction; empty body.          |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`                | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
+| `POST /api/worlds/{world_id}/agent/continue`                                            | Ready current player         | Creates and presents an agent-supplied Problem; no server model call.  |
+| `POST /api/worlds/{world_id}/interactions/{interaction_id}/agent/resolve`               | Ready current player         | Applies an agent-supplied Consequence through the ordinary Resolution-receipt path. |
 
 ### World events (SSE)
 
@@ -308,7 +309,7 @@ The stream sends `retry: 1500`, keep-alive comments, and compact events:
 ```text
 id: 42
 event: world-event
-data: {"id":42,"type":"resolution-applied","interaction_id":"...","resolution_id":"...","actor_membership_id":"...","actor_source":"human","created_at":"..."}
+data: {"id":42,"type":"resolution-committed","interaction_id":"...","resolution_id":"...","actor_membership_id":"...","actor_source":"human","created_at":"..."}
 
 ```
 
@@ -328,7 +329,7 @@ are invalidation signals only.
 An ordinary human adjudication or cancellation may invalidate the audience's
 interaction projection. Non-facilitators receive such a marked cursor
 projected as `interaction-feed-invalidated`: `id` and `created_at` remain, while
-`interaction_id`, `submission_id`, `resolution_id`, and
+`interaction_id`, `action_id`, `resolution_id`, and
 `actor_membership_id` are omitted. Facilitators receive the original lifecycle
 event. Autonomous Terra adjudication is different: its full
 `interaction-adjudicating` event is not marked or redacted and the interaction
@@ -337,7 +338,7 @@ advance the cursor and reload authoritative visibility.
 
 Every event returns `actor_source`. Human events also return
 `actor_membership_id`; Terra events omit that field. Continue and Decide events
-are attributed to Terra rather than the player who paced them. A ready player's
+are attributed to Terra rather than the current player who paced them. A ready current player's
 Skip is a human-attributed cancellation event; the interaction itself remains
 Terra-authored.
 
@@ -345,7 +346,7 @@ Terra-authored.
 
 ### Mechanic
 
-An input mechanic request is a normal stored/defaulted definition:
+An input Mechanic request defines an authored default and optional stored override behavior:
 
 ```json
 {
@@ -408,13 +409,13 @@ dependency cycles without advancing the revision.
 
 List responses are `{revision,mechanics}`. Single-resource reads and every
 mutation return `{revision,mechanic}`. Archival accepts only
-`{"expected_rules_revision":6}`. It preserves stored input values and
-historical receipt/status references, but rejects active derived dependents and
-active status modifiers before making the mechanic terminally archived.
+`{"expected_rules_revision":6}`. It preserves stored overrides and
+historical Resolution-receipt/Status-instance references, but rejects active derived dependents and
+modifiers from active Status instances before making the Mechanic terminally archived.
 
-### State
+### Logical state and Entity sheets
 
-State values are tagged number or Boolean scalars:
+Mechanic values are tagged number or Boolean scalars:
 
 ```json
 { "kind": "number", "value": "6" }
@@ -425,9 +426,9 @@ Replacement:
 
 ```json
 {
-  "expected_revision": 3,
+  "expected_logical_state_revision": 3,
   "expected_rules_revision": 7,
-  "values": {
+  "logical_input_values": {
     "input mechanic UUID": { "kind": "number", "value": "6" }
   }
 }
@@ -438,10 +439,10 @@ Response:
 ```json
 {
   "entity_id": "entity UUID",
-  "revision": 4,
-  "status_revision": 2,
+  "logical_state_revision": 4,
+  "status_set_revision": 2,
   "rules_revision": 7,
-  "values": {
+  "logical_input_values": {
     "input mechanic UUID": { "kind": "number", "value": "6" }
   },
   "effective_values": {
@@ -451,7 +452,7 @@ Response:
   "evaluations": {
     "input mechanic UUID": {
       "source_kind": "input",
-      "presence": "stored",
+      "presence": "stored-override",
       "intrinsic": { "kind": "number", "value": "6" },
       "effective": { "kind": "number", "value": "8" },
       "modifiers": [
@@ -475,7 +476,7 @@ Response:
       "modifiers": []
     }
   },
-  "active_statuses": [
+  "active_status_instances": [
     {
       "id": "instance UUID",
       "name": "Inspired",
@@ -497,38 +498,37 @@ Response:
       ]
     }
   ],
-  "defaulted_mechanic_ids": [],
-  "updated_at": "2026-01-01T00:00:00Z"
+  "authored_default_input_mechanic_ids": []
 }
 ```
 
-`values` is the complete writable logical input map. Derived IDs are rejected
-on replacement. `effective_values` contains every calculated mechanic;
-`evaluations` explains intrinsic-to-effective calculation, and
-`active_statuses` exposes persistent snapshotted layers with the problem,
+`logical_input_values` is the complete writable logical input map. Derived IDs are rejected
+on replacement. `effective_values` contains every Mechanic's effective value;
+`evaluations` explains each intrinsic-to-effective transition, and
+`active_status_instances` exposes persistent snapshotted layers with the problem,
 resolution, and apply effect that created each one. Status names are
 presentation only; the instance UUID is the removal identity. Values equal to
-input defaults normalize out of `state_values` while remaining materialized in
+authored defaults normalize out of `entity_input_value_overrides` while remaining materialized in
 the response.
 
 ### Controller replacement
 
 ```json
 {
-  "expected_table_revision": 4,
+  "expected_roster_revision": 4,
   "controller_world_membership_ids": ["membership UUID"]
 }
 ```
 
 The response returns `entity_id`, the normalized controller membership IDs,
-and the new `table_revision`.
+and the new `roster_revision`.
 
-Agent-mode character selection is deliberately narrower than controller
-replacement. `GET .../available-characters` returns only `id`, `display_name`,
-an optional table-visible `profile_summary`, and the world `table_revision`.
-`POST .../entities/{entity_id}/claim` accepts only `expected_table_revision`.
-It requires the signed-in membership to be waiting for a character and the
-entity to have no active non-spectator controller; the world lock makes two
+Agent-mode available-Entity selection is deliberately narrower than Controller
+replacement. `GET .../available-entities` returns only `id`, `display_name`,
+an optional world-visible `profile_summary`, and the world `roster_revision`.
+`POST .../entities/{entity_id}/claim` accepts only `expected_roster_revision`.
+It requires the signed-in membership to be waiting for a Character and the
+Entity to have no active non-spectator Controller; the World lock makes two
 simultaneous claims produce one winner. Its response adds the resulting
 `play_status`.
 
@@ -542,23 +542,23 @@ simultaneous claims produce one winner. Its response adds the resulting
       "id": "existing field UUID; omit for new",
       "label": "Backstory",
       "help_text": "Where did this character come from?",
-      "visibility": "table"
+      "visibility": "world"
     },
     {
       "label": "Hidden oath",
-      "visibility": "controllers-and-facilitators"
+      "visibility": "restricted"
     }
   ]
 }
 ```
 
 Omitted active fields archive. An empty field list is valid. Adding/removing
-requirements is rejected while an interaction is unfinished.
+character fields is rejected while an Interaction is unfinished.
 
 ```json
 {
   "expected_revision": 2,
-  "expected_character_fields_revision": 3,
+  "expected_character_field_set_revision": 3,
   "values": [
     {
       "field_id": "Backstory field UUID",
@@ -570,7 +570,7 @@ requirements is rejected while an interaction is unfinished.
 
 A profile replacement may remain incomplete. Owners/editors and active
 controllers see all authorized fields; other members receive completed
-table-visible values only.
+world-visible values only.
 
 ### Interaction draft
 
@@ -581,7 +581,7 @@ table-visible values only.
   "private_notes": "Optional facilitator-only setup.",
   "audience_membership_ids": ["membership UUID"],
   "eligible_responder_membership_ids": ["current-player membership UUID"],
-  "entity_ids": ["entity UUID"],
+  "context_entity_ids": ["entity UUID"],
   "present": true
 }
 ```
@@ -589,7 +589,7 @@ table-visible values only.
 Draft replacement adds `expected_revision`. Audience/responders/entities must
 belong to the same world; responders must be active ready current players in the
 audience, and context entities must be active and eligible. Omitting
-`audience_membership_ids` applies the table-audience default: the designated
+`audience_membership_ids` applies the default Play audience: the designated
 human facilitator, active spectators, and ready current players;
 supplying an explicit empty array persists an audience-free draft. Such a
 draft remains editable, but `present: true` or a later presentation command is
@@ -602,14 +602,14 @@ resolution has its own `facilitator_source` and includes
 recovery path, the interaction correctly retains its automated source while
 its resolution is human-attributed.
 
-In an `agent` world, `POST .../agent-dm/continue` accepts an optional `title`
+In an `agent` World, `POST .../agent/continue` accepts an optional `title`
 and required `prompt`, derives the same ready audience/responders/context as
 Terra, and creates the interaction directly as `open`. Once responders have
-acted, `POST .../agent-dm/resolve` accepts the ordinary expected interaction and
-rules revisions, idempotency key, optional selected action/summary, public
+acted, `POST .../agent/resolve` accepts the ordinary expected Interaction and
+rules revisions, idempotency key, optional selected-Action metadata, public
 `narrative`, and concrete `effects`. It does not accept private notes. The
 server enters adjudication, previews deterministically, and commits through the
-same atomic transition and immutable receipt path; an equivalent retry returns
+same atomic transition and immutable Resolution-receipt path; an equivalent retry returns
 `replayed:true`, while different key reuse conflicts.
 
 Presented cancelled interactions remain readable to their audience and contain
@@ -628,14 +628,14 @@ A current human facilitator may compile their own prose through
 }
 ```
 
-The response preserves that narrative, supplies Luna's optional selected
-action/summary and concrete effects, and includes the ordinary advisory
+The response preserves that narrative, supplies Luna's optional selected-Action
+metadata and concrete Effects, and includes the ordinary advisory
 preview. It is read-only; the human decides whether to send those values to
 `/resolve` with a fresh idempotency key.
 
 Terra exposes lifecycle commands instead of model-output preparation commands.
 With Terra currently assigned, a ready current player sends an empty request
-to `POST /api/worlds/{world_id}/auto-dm/continue`. There must be no draft, open,
+to `POST /api/worlds/{world_id}/terra/continue`. There must be no draft, open,
 or adjudicating interaction. The server generates the prompt, then atomically
 creates and presents one interaction, returning it with `201 Created` and a `Location`
 header. Its audience is every ready active membership, its responders are all
@@ -646,14 +646,14 @@ assigned, any ready current player may send its current `expected_revision` to
 the existing `POST .../interactions/{interaction_id}/cancel` endpoint. The UI
 labels this **Skip problem**. The command records the player as the human event
 actor, makes the interaction `cancelled` without a Consequence or effects, and
-does not change the Terra assignment. It returns the table to idle and never
+does not change the Terra assignment. It returns Play to idle and never
 generates a replacement; Continue remains a separate command.
 
-Each eligible responder submits an action before Terra decides. Passing uses
-the ordinary action endpoint with `text:"I pass."` and no acting entity; it is
+Each eligible responder submits an Action before Terra decides. Passing uses
+the ordinary Action endpoint with `text:"I pass."` and no acting Entity; it is
 not a separate resource or command. When all responders have acted or passed,
 any ready current player calls
-`POST /api/worlds/{world_id}/interactions/{interaction_id}/auto-dm/decide`:
+`POST /api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`:
 
 ```json
 {
@@ -665,8 +665,8 @@ any ready current player calls
 
 The command changes an open Terra interaction to `adjudicating`, generates
 Terra's narrative, compiles it with Luna, runs the deterministic preview, and
-resolves through the normal locked receipt path in the same request. The
-requester cannot supply or edit narrative, action selection, notes, or effects,
+resolves through the normal locked Resolution-receipt path in the same request. The
+requester cannot supply or edit narrative, selected-Action metadata, notes, or Effects,
 and no model output is returned for human approval before commit. A successful
 response is the ordinary resolution result:
 
@@ -676,20 +676,20 @@ response is the ordinary resolution result:
   "interaction_revision": 6,
   "rules_revision": 7,
   "narrative": "You reach the far bank, but the current tears away your pack.",
-  "applied_effects": [],
+  "applications": [],
   "effective_changes": [],
-  "state": { "records": {} }
+  "entity_sheets": {}
 }
 ```
 
 If generation or compilation fails after adjudication begins, reload the
 interaction and retry the same decision with its current revision and the same
 idempotency key. An equivalent successful replay returns `replayed:true`;
-different reuse conflicts. Luna may return no effects for a purely narrative
-outcome. The pacing player's membership is not persisted as Terra's creator,
+different reuse conflicts. Luna may return no Effects for a narrative-only
+Consequence. The pacing current player's membership is not persisted as Terra's creator,
 resolver, or Continue/Decide event actor. Alternatively, the owner may use the
 narrow facilitator takeover above; their own action is withdrawn before the
-human ruling path opens.
+human Consequence path opens.
 
 ### Action and Consequence
 
@@ -704,9 +704,10 @@ human ruling path opens.
 The acting entity is optional but, when supplied, must be active, ready, and
 controlled by the player. The server snapshots its display name.
 
-The problem's Consequence is transported by the existing resolution request.
-Its required `narrative` field is the single public prose summary, followed by
-an ordered `effects` array. Live effects are exactly these four tagged shapes:
+The Problem's Consequence is transported by the Resolution request. Its
+required `narrative` field is the public prose account, with optional
+selected-Action metadata and an ordered `effects` array. Effects use exactly
+these four tagged shapes:
 
 ```json
 { "id": "optional UUID", "type": "set", "entity_ids": ["UUID"], "mechanic_id": "UUID", "value": { "kind": "boolean", "value": true } }
@@ -751,9 +752,8 @@ Inline modifier operations are `set`, `add-number`, and `multiply-number`.
 `set` matches the target mechanic's scalar kind; the other operations require
 a numeric target and value. Request order becomes the zero-based snapshot
 position, and an empty modifier list is valid for a named condition with no
-mechanical adjustment. `set`/`adjust-number` effects always mutate logical base
-input; an active status's effective adjustment is not included in their stored
-operand or baked back into state.
+mechanical adjustment. Scalar Effects operate on the logical input value;
+active Status modifiers are not folded into that value or persisted as stored overrides.
 
 Consequence request:
 
@@ -794,12 +794,12 @@ Consequence request:
 ```
 
 Preview permits an empty idempotency key and never writes. Resolve requires a
-non-empty key up to 200 characters. Both require the current mechanic rules
-revision. The result contains `rules_revision`, ordered scalar/status
-`applied_effects`, `effective_changes`, and evaluated state records for target
-entities. A status shown only in preview omits `source_resolution_id`, because
-no durable resolution exists yet; resolved state always includes it. Each
-`apply-status` or `remove-status` application has exactly these fields (an
+non-empty key up to 200 characters. Both require the current rules
+revision. The result contains `rules_revision`, ordered scalar and Status
+Applications, `effective_changes`, and Entity sheets for target
+Entities. A Status instance projected only in preview omits `source_resolution_id`, because
+no committed Resolution exists yet; a committed result always includes it. Each
+apply-status or remove-status Status Application has exactly these fields (an
 apply example follows):
 
 ```json
@@ -815,14 +815,14 @@ apply example follows):
 }
 ```
 
-Source provenance appears on active state rather than being repeated in an
-application receipt. Effective changes report every before/after calculated
-mechanic that moved, including derived values changed transitively by a scalar
-or status effect. Equivalent replay adds `replayed:true`; the embedded applied
-receipt retains the original rules revision and effective-change list. The
-resulting active status reports `source_interaction_id`,
+Source provenance appears on the active Status instance rather than being repeated in an
+Application. Effective changes report every before/after effective
+value that moved, including derived values changed transitively by a scalar Effect
+or Status modifier. Equivalent replay adds `replayed:true`; the embedded committed
+Resolution receipt retains the original rules revision and effective-change list. The
+resulting active Status instance reports `source_interaction_id`,
 `source_resolution_id`, and `source_effect_id`, tying the persistent instance
-to the problem that created it.
+to the Problem that created it.
 
 ## Limits and notable validation rules
 

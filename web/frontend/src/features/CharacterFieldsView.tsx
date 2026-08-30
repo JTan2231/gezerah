@@ -6,7 +6,7 @@ import {
   PageIntro,
 } from "../components/StudioUI";
 
-export type CharacterFieldVisibility = "table" | "controllers-and-facilitators";
+export type CharacterFieldVisibility = "world" | "restricted";
 
 export interface CharacterFieldDraft {
   clientKey: string;
@@ -21,7 +21,7 @@ interface CharacterFieldsIssue {
 }
 
 interface CharacterFieldsViewModel {
-  schemaLabel: string;
+  revisionLabel: string;
   fields: readonly (CharacterFieldDraft & {
     labelIssue?: string | undefined;
     helpTextIssue?: string | undefined;
@@ -70,7 +70,7 @@ export function CharacterFieldsView({
     <section className="character-fields-page content-narrow">
       <PageIntro
         title="Character fields"
-        description="Define the information every player-controlled character must complete before entering Play."
+        description="Define the information every Character must complete before entering Play."
       />
 
       <form
@@ -82,13 +82,13 @@ export function CharacterFieldsView({
       >
         <header>
           <div>
-            <h2>Requirements</h2>
+            <h2>Fields</h2>
             <p>
               {model.fields.length} required{" "}
               {model.fields.length === 1 ? "field" : "fields"}
             </p>
           </div>
-          <span>{model.schemaLabel}</span>
+          <span>{model.revisionLabel}</span>
         </header>
 
         {model.fields.length === 0 ? (
@@ -105,7 +105,7 @@ export function CharacterFieldsView({
               key={characterField.clientKey}
             >
               <legend>Required field {index + 1}</legend>
-              <div className="profile-section-actions">
+              <div className="character-field-actions">
                 <button
                   className="text-button"
                   type="button"
@@ -146,7 +146,7 @@ export function CharacterFieldsView({
               </Field>
               <Field
                 label="Guidance"
-                hint="Optional instructions shown while the player writes."
+                hint="Optional instructions shown while a Controller fills this field."
                 error={characterField.helpTextIssue}
               >
                 <textarea
@@ -161,7 +161,7 @@ export function CharacterFieldsView({
                   }
                 />
               </Field>
-              <Field label="Who can read the answer?">
+              <Field label="Who can read this value?">
                 <select
                   value={characterField.visibility}
                   onChange={(event) =>
@@ -171,10 +171,8 @@ export function CharacterFieldsView({
                     })
                   }
                 >
-                  <option value="table">Everyone at the table</option>
-                  <option value="controllers-and-facilitators">
-                    Character controllers and facilitators
-                  </option>
+                  <option value="world">World-visible</option>
+                  <option value="restricted">Restricted</option>
                 </select>
               </Field>
             </fieldset>
@@ -197,7 +195,7 @@ export function CharacterFieldsView({
             type="submit"
             disabled={!model.dirty || !model.valid || model.saving}
           >
-            {model.saving ? "Publishing…" : "Publish requirements"}
+            {model.saving ? "Publishing…" : "Publish fields"}
           </button>
         </footer>
       </form>

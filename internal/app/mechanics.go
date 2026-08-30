@@ -152,7 +152,7 @@ func (s *Server) handleArchiveWorldMechanic(w http.ResponseWriter, r *http.Reque
 		writeError(w, http.StatusBadRequest, "invalid_id", "mechanic ID is malformed", nil)
 		return
 	}
-	var request archiveWorldRuleResourceRequest
+	var request archiveWorldMechanicRequest
 	if err := decodeJSON(r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_json", err.Error(), nil)
 		return
@@ -230,11 +230,11 @@ func (s *Server) saveWorldMechanic(ctx context.Context, worldID, mechanicID, act
 		}
 		if proposed.SourceKind != current.Definition.SourceKind && proposed.SourceKind == rules.SourceDerived {
 			var stored bool
-			if err := tx.QueryRow(ctx, `select exists(select 1 from state_values where world_id = $1 and mechanic_id = $2)`, worldID, mechanicID).Scan(&stored); err != nil {
+			if err := tx.QueryRow(ctx, `select exists(select 1 from entity_input_value_overrides where world_id = $1 and mechanic_id = $2)`, worldID, mechanicID).Scan(&stored); err != nil {
 				return zero, err
 			}
 			if stored {
-				return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_in_use", Message: "a mechanic with stored input values cannot become derived"}
+				return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_in_use", Message: "a mechanic with stored overrides cannot become derived"}
 			}
 		}
 	}
@@ -244,19 +244,19 @@ func (s *Server) saveWorldMechanic(ctx context.Context, worldID, mechanicID, act
 		return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_dependents", Message: "archive active derived mechanics that depend on this mechanic first"}
 	}
 	if !creating && !current.Definition.Archived && proposed.Archived {
-		dependent, err := hasActiveStatusMechanicDependency(ctx, tx, worldID, mechanicID)
+		dependent, err := hasStatusInstanceMechanicDependency(ctx, tx, worldID, mechanicID)
 		if err != nil {
 			return zero, err
 		}
 		if dependent {
-			return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_active_statuses", Message: "remove active statuses that modify this mechanic before archiving it"}
+			return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_active_status_instances", Message: "remove status instances that modify this mechanic before archiving it"}
 		}
 	}
-	if err := validateWorldRuleConfiguration(definitions); err != nil {
+	if err := validateWorldMechanicGraph(definitions); err != nil {
 		return zero, err
 	}
 	if !creating && proposed.SourceKind == rules.SourceInput {
-		if err := validateAndNormalizeStoredMechanicValues(ctx, tx, worldID, proposed); err != nil {
+		if err := validateAndNormalizeInputValueOverrides(ctx, tx, worldID, proposed); err != nil {
 			return zero, err
 		}
 	}
@@ -298,7 +298,7 @@ func (s *Server) saveWorldMechanic(ctx context.Context, worldID, mechanicID, act
 	return worldMechanicMutationResponse{Revision: revision, Mechanic: item.Response}, nil
 }
 
-func (s *Server) archiveWorldMechanic(ctx context.Context, worldID, mechanicID, actorMembershipID string, request archiveWorldRuleResourceRequest) (worldMechanicMutationResponse, error) {
+func (s *Server) archiveWorldMechanic(ctx context.Context, worldID, mechanicID, actorMembershipID string, request archiveWorldMechanicRequest) (worldMechanicMutationResponse, error) {
 	var zero worldMechanicMutationResponse
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -333,14 +333,14 @@ func (s *Server) archiveWorldMechanic(ctx context.Context, worldID, mechanicID, 
 	if hasActiveMechanicDependents(definitions, current.ID) {
 		return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_dependents", Message: "archive active derived mechanics that depend on this mechanic first"}
 	}
-	dependent, err := hasActiveStatusMechanicDependency(ctx, tx, worldID, mechanicID)
+	dependent, err := hasStatusInstanceMechanicDependency(ctx, tx, worldID, mechanicID)
 	if err != nil {
 		return zero, err
 	}
 	if dependent {
-		return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_active_statuses", Message: "remove active statuses that modify this mechanic before archiving it"}
+		return zero, &statusError{Status: http.StatusConflict, Code: "mechanic_has_active_status_instances", Message: "remove status instances that modify this mechanic before archiving it"}
 	}
-	if err := validateWorldRuleConfiguration(definitions); err != nil {
+	if err := validateWorldMechanicGraph(definitions); err != nil {
 		return zero, err
 	}
 	if _, err := tx.Exec(ctx, `update world_mechanics set archived = true where world_id = $1 and id = $2`, worldID, mechanicID); err != nil {
@@ -378,7 +378,7 @@ func validateWorldMechanicRequest(worldID, mechanicID string, request saveWorldM
 	if request.Mode == "binary" {
 		definition.ValueKind = rules.ValueBoolean
 		if definition.SourceKind == rules.SourceInput {
-			definition.DefaultValue = rules.NewBooleanValue(false)
+			definition.DefaultValue = rules.NewBooleanMechanicValue(false)
 		}
 		if request.Minimum != nil || request.Maximum != nil || request.Step != nil || request.DefaultNumber != nil || request.Unit != nil {
 			fields["mode"] = "binary mechanics cannot declare numeric settings"
@@ -392,7 +392,7 @@ func validateWorldMechanicRequest(worldID, mechanicID string, request saveWorldM
 		} else if value, err := request.DefaultNumber.Decimal(); err != nil {
 			fields["default_number"] = "must be a finite exact decimal"
 		} else {
-			definition.DefaultValue = rules.NewNumberValue(value)
+			definition.DefaultValue = rules.NewNumberMechanicValue(value)
 		}
 		for path, source := range map[string]*decimalText{"minimum": request.Minimum, "maximum": request.Maximum, "step": request.Step} {
 			if source == nil {
@@ -450,7 +450,7 @@ func validateExpressionReferenceIDs(expression expressionDTO, path string, field
 func expressionDTOToDomain(source expressionDTO) (rules.Expression, error) {
 	result := rules.Expression{Operation: rules.ExpressionOperation(source.Operation), MechanicID: rules.ID(source.MechanicID)}
 	if source.Value != nil {
-		value, err := stateValueDTOToDomain(*source.Value)
+		value, err := mechanicValueDTOToDomain(*source.Value)
 		if err != nil {
 			return rules.Expression{}, err
 		}
@@ -470,7 +470,7 @@ func expressionDTOToDomain(source expressionDTO) (rules.Expression, error) {
 func expressionDomainToDTO(source rules.Expression) expressionDTO {
 	result := expressionDTO{Operation: string(source.Operation), MechanicID: string(source.MechanicID), Operands: make([]expressionDTO, len(source.Operands))}
 	if source.Literal != nil {
-		value := stateValueDomainToDTO(*source.Literal)
+		value := mechanicValueDomainToDTO(*source.Literal)
 		result.Value = &value
 	}
 	for index, operand := range source.Operands {
@@ -479,7 +479,7 @@ func expressionDomainToDTO(source rules.Expression) expressionDTO {
 	return result
 }
 
-func validateWorldRuleConfiguration(mechanics map[rules.ID]rules.MechanicDefinition) error {
+func validateWorldMechanicGraph(mechanics map[rules.ID]rules.MechanicDefinition) error {
 	errs := rules.ValidateMechanicGraph(mechanics)
 	if len(errs) == 0 {
 		return nil
@@ -488,7 +488,7 @@ func validateWorldRuleConfiguration(mechanics map[rules.ID]rules.MechanicDefinit
 	for _, item := range errs {
 		fields[item.Path] = item.Message
 	}
-	return &statusError{Status: http.StatusUnprocessableEntity, Code: "validation_failed", Message: "world rules are invalid", Fields: fields}
+	return &statusError{Status: http.StatusUnprocessableEntity, Code: "validation_failed", Message: "world mechanic graph is invalid", Fields: fields}
 }
 
 func hasActiveMechanicDependents(mechanics map[rules.ID]rules.MechanicDefinition, target rules.ID) bool {
@@ -503,7 +503,7 @@ func hasActiveMechanicDependents(mechanics map[rules.ID]rules.MechanicDefinition
 	return false
 }
 
-func hasActiveStatusMechanicDependency(ctx context.Context, db queryer, worldID, mechanicID string) (bool, error) {
+func hasStatusInstanceMechanicDependency(ctx context.Context, db queryer, worldID, mechanicID string) (bool, error) {
 	var dependent bool
 	err := db.QueryRow(ctx, `
 		select exists(
@@ -530,21 +530,21 @@ func expressionReferencesMechanic(expression rules.Expression, target rules.ID) 
 func mechanicValueKindInUse(ctx context.Context, db queryer, worldID, mechanicID string) (bool, error) {
 	var used bool
 	err := db.QueryRow(ctx, `
-		select exists(select 1 from state_values where world_id = $1 and mechanic_id = $2)
+		select exists(select 1 from entity_input_value_overrides where world_id = $1 and mechanic_id = $2)
 			or exists(select 1 from interaction_resolution_effects where world_id = $1 and mechanic_id = $2)
-			or exists(select 1 from interaction_resolution_effect_applications where world_id = $1 and mechanic_id = $2)
+			or exists(select 1 from interaction_resolution_scalar_applications where world_id = $1 and mechanic_id = $2)
 			or exists(select 1 from world_mechanic_expression_nodes where world_id = $1 and referenced_mechanic_id = $2)
-			or exists(select 1 from interaction_resolution_status_effect_modifiers where world_id = $1 and mechanic_id = $2)
+			or exists(select 1 from interaction_resolution_inline_status_modifiers where world_id = $1 and mechanic_id = $2)
 			or exists(select 1 from entity_status_instance_modifiers where world_id = $1 and mechanic_id = $2)
 			or exists(select 1 from interaction_resolution_effective_changes where world_id = $1 and mechanic_id = $2)`,
 		worldID, mechanicID).Scan(&used)
 	return used, err
 }
 
-func validateAndNormalizeStoredMechanicValues(ctx context.Context, tx pgx.Tx, worldID string, definition rules.MechanicDefinition) error {
+func validateAndNormalizeInputValueOverrides(ctx context.Context, tx pgx.Tx, worldID string, definition rules.MechanicDefinition) error {
 	rows, err := tx.Query(ctx, `
 		select entity_id::text, value_kind, number_value::text, boolean_value
-		from state_values where world_id = $1 and mechanic_id = $2
+		from entity_input_value_overrides where world_id = $1 and mechanic_id = $2
 		order by entity_id`, worldID, definition.ID)
 	if err != nil {
 		return err
@@ -559,20 +559,20 @@ func validateAndNormalizeStoredMechanicValues(ctx context.Context, tx pgx.Tx, wo
 			rows.Close()
 			return err
 		}
-		value, err := databaseStateValue(valueKind, numberValue, booleanValue)
+		value, err := databaseMechanicValue(valueKind, numberValue, booleanValue)
 		if err != nil {
 			rows.Close()
 			return err
 		}
-		validation := rules.ValidateStateValue(definition, value)
+		validation := rules.ValidateMechanicValue(definition, value)
 		for _, item := range validation {
-			path := fmt.Sprintf("entities[%s].values[%s]", entityID, definition.ID)
+			path := fmt.Sprintf("entities[%s].stored_overrides[%s]", entityID, definition.ID)
 			if item.Path != "" {
 				path += "." + item.Path
 			}
 			fields[path] = item.Message
 		}
-		if len(validation) == 0 && rules.StateValuesEqual(value, definition.DefaultValue) {
+		if len(validation) == 0 && rules.MechanicValuesEqual(value, definition.DefaultValue) {
 			toNormalize = append(toNormalize, entityID)
 		}
 	}
@@ -584,14 +584,14 @@ func validateAndNormalizeStoredMechanicValues(ctx context.Context, tx pgx.Tx, wo
 	if len(fields) > 0 {
 		return &statusError{
 			Status:  http.StatusConflict,
-			Code:    "mechanic_state_conflict",
-			Message: "existing entity state does not satisfy the proposed mechanic definition",
+			Code:    "mechanic_input_override_conflict",
+			Message: "existing stored overrides do not satisfy the proposed mechanic definition",
 			Fields:  fields,
 		}
 	}
 	for _, entityID := range toNormalize {
 		if _, err := tx.Exec(ctx, `
-			delete from state_values where world_id = $1 and entity_id = $2 and mechanic_id = $3`,
+			delete from entity_input_value_overrides where world_id = $1 and entity_id = $2 and mechanic_id = $3`,
 			worldID, entityID, definition.ID); err != nil {
 			return err
 		}
@@ -653,7 +653,7 @@ func insertMechanicExpressionNode(ctx context.Context, tx pgx.Tx, owner rules.Me
 	}
 	var numberValue, booleanValue, referencedMechanicID any
 	if expression.Literal != nil {
-		numberValue, booleanValue = stateValueDatabaseColumns(*expression.Literal)
+		numberValue, booleanValue = mechanicValueDatabaseColumns(*expression.Literal)
 	}
 	if expression.MechanicID.Valid() {
 		referencedMechanicID = string(expression.MechanicID)
@@ -678,7 +678,7 @@ func insertMechanicExpressionNode(ctx context.Context, tx pgx.Tx, owner rules.Me
 func advanceRulesRevision(ctx context.Context, tx pgx.Tx, worldID, actorMembershipID string, lockedRevision int64) (int64, error) {
 	var revision int64
 	if err := tx.QueryRow(ctx, `
-		update world_rule_sets set revision = revision + 1
+		update world_mechanic_graphs set revision = revision + 1
 		where world_id = $1 and revision = $2 returning revision`, worldID, lockedRevision).Scan(&revision); err != nil {
 		return 0, err
 	}
@@ -796,9 +796,9 @@ func scanWorldMechanic(row rowScanner, worldID string) (loadedMechanic, error) {
 	item.Response.Step = decimalTextPointer(definition.Step)
 	item.Response.DefaultNumber = decimalTextPointer(parsedDefault)
 	if definition.SourceKind == rules.SourceInput && definition.ValueKind == rules.ValueBoolean {
-		definition.DefaultValue = rules.NewBooleanValue(false)
+		definition.DefaultValue = rules.NewBooleanMechanicValue(false)
 	} else if definition.SourceKind == rules.SourceInput && parsedDefault != nil {
-		definition.DefaultValue = rules.NewNumberValue(*parsedDefault)
+		definition.DefaultValue = rules.NewNumberMechanicValue(*parsedDefault)
 	}
 	item.Definition = definition
 	return item, nil
@@ -871,7 +871,7 @@ func buildStoredExpression(node storedExpressionNode, children map[string][]stor
 	visiting[node.ID] = true
 	result := rules.Expression{Operation: rules.ExpressionOperation(node.Operation)}
 	if node.Operation == string(rules.ExpressionLiteral) {
-		value, err := databaseStateValue(node.ValueKind, node.NumberValue, node.BooleanValue)
+		value, err := databaseMechanicValue(node.ValueKind, node.NumberValue, node.BooleanValue)
 		if err != nil {
 			return rules.Expression{}, err
 		}

@@ -9,22 +9,22 @@ import (
 	"dnd/internal/rules"
 )
 
-// loadedStatusSet is the immutable status-instance view consumed by one state
-// evaluation. Modifiers come from immutable consequence snapshots.
-type loadedStatusSet struct {
-	Revision  int64
-	Active    []rules.ActiveStatus
-	Snapshots map[rules.ID]rules.StatusSnapshot
-	Responses []activeStatusResponse
-	Names     map[rules.ID]string
+// loadedStatusInstanceSet is the immutable status-instance view consumed by one
+// Entity sheet evaluation. Modifiers come from immutable consequence snapshots.
+type loadedStatusInstanceSet struct {
+	Revision       int64
+	Instances      []rules.StatusInstance
+	InlineStatuses map[rules.ID]rules.InlineStatus
+	Responses      []statusInstanceResponse
+	Names          map[rules.ID]string
 }
 
-func loadActiveStatusSet(ctx context.Context, db queryer, worldID, entityID string) (loadedStatusSet, error) {
-	result := loadedStatusSet{
-		Active:    []rules.ActiveStatus{},
-		Snapshots: make(map[rules.ID]rules.StatusSnapshot),
-		Responses: []activeStatusResponse{},
-		Names:     make(map[rules.ID]string),
+func loadStatusInstanceSet(ctx context.Context, db queryer, worldID, entityID string) (loadedStatusInstanceSet, error) {
+	result := loadedStatusInstanceSet{
+		Instances:      []rules.StatusInstance{},
+		InlineStatuses: make(map[rules.ID]rules.InlineStatus),
+		Responses:      []statusInstanceResponse{},
+		Names:          make(map[rules.ID]string),
 	}
 	if err := db.QueryRow(ctx, `
 		select revision from entity_status_sets where world_id = $1 and entity_id = $2`,
@@ -75,19 +75,19 @@ func loadActiveStatusSet(ctx context.Context, db queryer, worldID, entityID stri
 		if !exists {
 			index = len(result.Responses)
 			responseIndexes[instanceID] = index
-			result.Active = append(result.Active, rules.ActiveStatus{
+			result.Instances = append(result.Instances, rules.StatusInstance{
 				ID:             rules.ID(instanceID),
 				WorldID:        rules.ID(worldID),
 				EntityID:       rules.ID(entityID),
 				SourceEffectID: rules.ID(sourceEffectID),
 				AppliedOrder:   appliedOrder,
 			})
-			result.Snapshots[rules.ID(sourceEffectID)] = rules.StatusSnapshot{
+			result.InlineStatuses[rules.ID(sourceEffectID)] = rules.InlineStatus{
 				ID: rules.ID(sourceEffectID), WorldID: rules.ID(worldID),
 				Modifiers: []rules.StatusModifier{},
 			}
 			result.Names[rules.ID(sourceEffectID)] = name
-			result.Responses = append(result.Responses, activeStatusResponse{
+			result.Responses = append(result.Responses, statusInstanceResponse{
 				ID: instanceID, Name: name, Description: description,
 				SourceInteractionID: sourceInteractionID, SourceResolutionID: sourceResolutionID,
 				SourceEffectID: sourceEffectID,
@@ -99,22 +99,22 @@ func loadActiveStatusSet(ctx context.Context, db queryer, worldID, entityID stri
 			continue
 		}
 		if mechanicID == nil || operation == nil || valueKind == nil || priority == nil || position == nil {
-			return result, errors.New("active status modifier snapshot is incomplete")
+			return result, errors.New("status instance modifier snapshot is incomplete")
 		}
-		value, err := databaseStateValue(*valueKind, number, boolean)
+		value, err := databaseMechanicValue(*valueKind, number, boolean)
 		if err != nil {
 			return result, err
 		}
-		snapshot := result.Snapshots[rules.ID(sourceEffectID)]
-		snapshot.Modifiers = append(snapshot.Modifiers, rules.StatusModifier{
+		inlineStatus := result.InlineStatuses[rules.ID(sourceEffectID)]
+		inlineStatus.Modifiers = append(inlineStatus.Modifiers, rules.StatusModifier{
 			ID: rules.ID(*modifierID), Position: *position, Priority: *priority,
 			MechanicID: rules.ID(*mechanicID), Operation: rules.ModifierOperation(*operation),
 			Value: value,
 		})
-		result.Snapshots[rules.ID(sourceEffectID)] = snapshot
+		result.InlineStatuses[rules.ID(sourceEffectID)] = inlineStatus
 		result.Responses[index].Modifiers = append(result.Responses[index].Modifiers, statusModifierResponse{
 			ID: *modifierID, MechanicID: *mechanicID, Operation: *operation,
-			Value: stateValueDomainToDTO(value), Priority: *priority, Position: *position,
+			Value: mechanicValueDomainToDTO(value), Priority: *priority, Position: *position,
 		})
 	}
 	return result, rows.Err()
@@ -129,104 +129,99 @@ func loadEntityForRules(ctx context.Context, db queryer, worldID, entityID strin
 	return entity, err
 }
 
-func evaluatedStateResponse(
+func buildEntitySheetResponse(
 	entity rules.Entity,
-	record rules.StateRecord,
+	record rules.InputOverrideRecord,
 	definitions map[rules.ID]rules.MechanicDefinition,
 	rulesRevision int64,
-	statuses loadedStatusSet,
-) (stateRecordResponse, error) {
-	evaluated, err := rules.EvaluateEntityState(entity, record, definitions, statuses.Snapshots, statuses.Active)
+	statuses loadedStatusInstanceSet,
+) (entitySheetResponse, error) {
+	evaluated, err := rules.EvaluateEntity(entity, record, definitions, statuses.InlineStatuses, statuses.Instances)
 	if err != nil {
-		return stateRecordResponse{}, err
+		return entitySheetResponse{}, err
 	}
 	logical := rules.MaterializeLogicalState(entity, record, definitions)
-	response := stateRecordResponse{
-		EntityID: string(entity.ID), Revision: record.Revision,
-		StatusRevision: statuses.Revision, RulesRevision: rulesRevision,
-		Values:               make(map[string]stateValueDTO, len(logical.Values)),
-		EffectiveValues:      make(map[string]stateValueDTO, len(evaluated.Values)),
-		Evaluations:          make(map[string]evaluatedMechanicResponse, len(evaluated.Values)),
-		ActiveStatuses:       statuses.Responses,
-		DefaultedMechanicIDs: make([]string, len(logical.DefaultedMechanicIDs)),
-		UpdatedAt:            record.UpdatedAt,
+	response := entitySheetResponse{
+		EntityID: string(entity.ID), LogicalStateRevision: record.Revision,
+		StatusSetRevision: statuses.Revision, RulesRevision: rulesRevision,
+		LogicalInputValues:              make(map[string]mechanicValueDTO, len(logical.InputValues)),
+		EffectiveValues:                 make(map[string]mechanicValueDTO, len(evaluated.Values)),
+		Evaluations:                     make(map[string]evaluatedMechanicResponse, len(evaluated.Values)),
+		ActiveStatusInstances:           statuses.Responses,
+		AuthoredDefaultInputMechanicIDs: make([]string, len(logical.AuthoredDefaultInputMechanicIDs)),
 	}
-	for mechanicID, value := range logical.Values {
-		response.Values[string(mechanicID)] = stateValueDomainToDTO(value)
+	for mechanicID, value := range logical.InputValues {
+		response.LogicalInputValues[string(mechanicID)] = mechanicValueDomainToDTO(value)
 	}
-	for index, mechanicID := range logical.DefaultedMechanicIDs {
-		response.DefaultedMechanicIDs[index] = string(mechanicID)
+	for index, mechanicID := range logical.AuthoredDefaultInputMechanicIDs {
+		response.AuthoredDefaultInputMechanicIDs[index] = string(mechanicID)
 	}
 	for _, mechanicID := range evaluated.Order {
 		value := evaluated.Values[mechanicID]
-		response.EffectiveValues[string(mechanicID)] = stateValueDomainToDTO(value.Effective)
-		presence := "derived"
-		if value.SourceKind == rules.SourceInput {
-			presence = string(value.InputPresence)
-		}
+		response.EffectiveValues[string(mechanicID)] = mechanicValueDomainToDTO(value.Effective)
 		modifiers := make([]appliedModifierResponse, len(value.Modifiers))
 		for index, modifier := range value.Modifiers {
 			modifiers[index] = appliedModifierResponse{
 				StatusInstanceID: string(modifier.StatusInstanceID),
 				StatusName:       statuses.Names[modifier.SourceEffectID],
 				ModifierID:       string(modifier.ModifierID), Operation: string(modifier.Operation),
-				Priority: modifier.Priority, Operand: stateValueDomainToDTO(modifier.Operand),
-				Before: stateValueDomainToDTO(modifier.Before), After: stateValueDomainToDTO(modifier.After),
+				Priority: modifier.Priority, Operand: mechanicValueDomainToDTO(modifier.Operand),
+				Before: mechanicValueDomainToDTO(modifier.Before), After: mechanicValueDomainToDTO(modifier.After),
 			}
 		}
 		response.Evaluations[string(mechanicID)] = evaluatedMechanicResponse{
-			SourceKind: string(value.SourceKind), Presence: presence,
-			Intrinsic: stateValueDomainToDTO(value.Intrinsic),
-			Effective: stateValueDomainToDTO(value.Effective), Modifiers: modifiers,
+			SourceKind: string(value.SourceKind), Presence: string(value.Presence),
+			Intrinsic: mechanicValueDomainToDTO(value.Intrinsic),
+			Effective: mechanicValueDomainToDTO(value.Effective), Modifiers: modifiers,
 		}
 	}
 	return response, nil
 }
 
-func loadEvaluatedStateResponse(ctx context.Context, db queryer, worldID, entityID string) (stateRecordResponse, error) {
+func loadGeneratedEntitySheet(ctx context.Context, db queryer, worldID, entityID string) (entitySheetResponse, error) {
 	for attempt := 0; attempt < 3; attempt++ {
 		rulesRevision, err := loadRulesRevision(ctx, db, worldID)
 		if err != nil {
-			return stateRecordResponse{}, err
+			return entitySheetResponse{}, err
 		}
 		mechanics, err := loadWorldMechanics(ctx, db, worldID, "")
 		if err != nil {
-			return stateRecordResponse{}, err
+			return entitySheetResponse{}, err
 		}
 		entity, err := loadEntityForRules(ctx, db, worldID, entityID)
 		if err != nil {
-			return stateRecordResponse{}, err
+			return entitySheetResponse{}, err
 		}
-		record, err := loadStoredStateRecord(ctx, db, worldID, entityID)
+		record, err := loadInputOverrideRecord(ctx, db, worldID, entityID)
 		if err != nil {
-			return stateRecordResponse{}, err
+			return entitySheetResponse{}, err
 		}
-		statuses, err := loadActiveStatusSet(ctx, db, worldID, entityID)
+		statuses, err := loadStatusInstanceSet(ctx, db, worldID, entityID)
 		if err != nil {
-			return stateRecordResponse{}, err
+			return entitySheetResponse{}, err
 		}
-		var rulesAfter, stateAfter, statusesAfter int64
-		if err := db.QueryRow(ctx, `select revision from world_rule_sets where world_id = $1`, worldID).Scan(&rulesAfter); err != nil {
-			return stateRecordResponse{}, err
+		var rulesAfter, logicalStateAfter, statusSetAfter int64
+		if err := db.QueryRow(ctx, `select revision from world_mechanic_graphs where world_id = $1`, worldID).Scan(&rulesAfter); err != nil {
+			return entitySheetResponse{}, err
 		}
-		if err := db.QueryRow(ctx, `select revision from state_records where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&stateAfter); err != nil {
-			return stateRecordResponse{}, err
+		if err := db.QueryRow(ctx, `select revision from entity_logical_states where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&logicalStateAfter); err != nil {
+			return entitySheetResponse{}, err
 		}
-		if err := db.QueryRow(ctx, `select revision from entity_status_sets where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&statusesAfter); err != nil {
-			return stateRecordResponse{}, err
+		if err := db.QueryRow(ctx, `select revision from entity_status_sets where world_id = $1 and entity_id = $2`, worldID, entityID).Scan(&statusSetAfter); err != nil {
+			return entitySheetResponse{}, err
 		}
-		if rulesAfter != rulesRevision || stateAfter != record.Revision || statusesAfter != statuses.Revision {
+		if rulesAfter != rulesRevision || logicalStateAfter != record.Revision || statusSetAfter != statuses.Revision {
 			continue
 		}
-		return evaluatedStateResponse(entity, record, mechanicDefinitions(mechanics), rulesRevision, statuses)
+		return buildEntitySheetResponse(entity, record, mechanicDefinitions(mechanics), rulesRevision, statuses)
 	}
-	return stateRecordResponse{}, errors.New("entity state changed repeatedly while it was being evaluated")
+	return entitySheetResponse{}, errors.New("entity sheet inputs changed repeatedly while the sheet was being generated")
 }
 
 func effectiveChanges(
 	entityID rules.ID,
-	before rules.EvaluatedState,
-	after rules.EvaluatedState,
+	before rules.EntityEvaluation,
+	after rules.EntityEvaluation,
 ) []effectiveChangeResponse {
 	mechanicIDs := make([]rules.ID, 0, len(after.Values))
 	for mechanicID := range after.Values {
@@ -237,13 +232,13 @@ func effectiveChanges(
 	for _, mechanicID := range mechanicIDs {
 		beforeValue, beforeExists := before.Values[mechanicID]
 		afterValue := after.Values[mechanicID]
-		if !beforeExists || rules.StateValuesEqual(beforeValue.Effective, afterValue.Effective) {
+		if !beforeExists || rules.MechanicValuesEqual(beforeValue.Effective, afterValue.Effective) {
 			continue
 		}
 		changes = append(changes, effectiveChangeResponse{
 			EntityID: string(entityID), MechanicID: string(mechanicID),
-			Before: stateValueDomainToDTO(beforeValue.Effective),
-			After:  stateValueDomainToDTO(afterValue.Effective),
+			Before: mechanicValueDomainToDTO(beforeValue.Effective),
+			After:  mechanicValueDomainToDTO(afterValue.Effective),
 		})
 	}
 	return changes

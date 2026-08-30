@@ -80,7 +80,7 @@ export function InvitePageView({
           )}
           <div className="invite-role-row">
             <div>
-              <span>Role</span>
+              <span>Membership role</span>
               <RolePill role={model.invitation.role} />
             </div>
           </div>

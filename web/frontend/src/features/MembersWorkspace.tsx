@@ -10,9 +10,9 @@ import {
 import type { World, WorldInvite, WorldMember } from "../api/types";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { PeopleView, type InviteRole, type PeopleInvite } from "./PeopleView";
+import { MembersView, type InviteRole, type MemberInvite } from "./MembersView";
 
-export function PeopleWorkspace({ world }: { world: World }) {
+export function MembersWorkspace({ world }: { world: World }) {
   const members = useCollection<WorldMember>(worldPath(world.id, "members"));
   const invites = useCollection<WorldInvite>(worldPath(world.id, "invites"));
   const [role, setRole] = useState<InviteRole>("player");
@@ -78,7 +78,7 @@ export function PeopleWorkspace({ world }: { world: World }) {
   }
 
   const now = Date.now();
-  const viewInvites = invites.items.map<PeopleInvite>((invite) => {
+  const viewInvites = invites.items.map<MemberInvite>((invite) => {
     const expired = new Date(invite.expires_at).getTime() <= now;
     const closed = invite.revoked_at !== undefined || expired;
     return {
@@ -99,7 +99,7 @@ export function PeopleWorkspace({ world }: { world: World }) {
   ).length;
 
   return (
-    <PeopleView
+    <MembersView
       model={{
         inviteDraft: { role, expiresInDays: days },
         creating,

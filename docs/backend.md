@@ -54,15 +54,15 @@ Pure graph evaluation and runtime transitions:
 
 | File                     | Responsibility                                                                   |
 | ------------------------ | -------------------------------------------------------------------------------- |
-| `types.go`               | Mechanic graph, status, state, effect, evaluation, and receipt domain types.     |
+| `types.go`               | Mechanic graph, Status instance, logical-state, Effect, evaluation, and Resolution-receipt types. |
 | `definitions.go`         | Input/derived numeric/Boolean mechanic and entity validation.                    |
 | `expressions.go`         | Recursive type inference, dependency extraction, cycle paths, graph compilation. |
 | `evaluation.go`          | Intrinsic/effective evaluation and transparent modifier/expression traces.       |
-| `statuses.go`            | Inline status specification, literal modifier, and active-instance validation.   |
+| `statuses.go`            | Inline-status, literal-modifier, and active-Status-instance validation.           |
 | `values.go`              | Scalar construction, equality, and definition-aware validation.                  |
-| `state.go`               | Input defaults, sparse overrides, materialization, normalization, cloning.       |
+| `logical_state.go`       | Authored defaults, sparse stored overrides, materialization, normalization, cloning. |
 | `effects.go`             | Ordered scalar transition validation and application.                            |
-| `runtime_transitions.go` | Combined scalar and persistent-status lifecycle transition.                      |
+| `runtime_transitions.go` | Combined scalar and Status-instance lifecycle transition.                        |
 | `decimal.go`             | Immutable exact finite base-10 parsing, arithmetic, and canonicalization.        |
 | `errors.go`              | Validation paths and domain error categories.                                    |
 
@@ -82,29 +82,30 @@ HTTP and persistence adapter:
 - route handlers perform validation, visibility filtering, and transaction
   orchestration;
 - SQL loaders/savers use `world_id` on every scoped aggregate;
-- mechanic publication locks the world rules revision and validates the
+- mechanic publication locks the rules revision and validates the
   proposed complete graph before writing normalized rows;
-- evaluated-state loaders combine sparse input, compiled expressions, and
-  immutable active-status snapshots;
-- receipt persistence records ordered scalar/status applications and effective
+- Entity-sheet loaders combine sparse stored overrides, compiled expressions,
+  plus active Status instances and immutable modifier snapshots;
+- Resolution-receipt persistence records ordered Scalar and Status Applications and effective
   changes;
 - server/JSON/config files provide cross-cutting infrastructure.
 
 Durable membership and live responsibility are deliberately separate. The one
-membership vocabulary remains owner/editor/player/spectator for world access.
+membership-role vocabulary remains owner/editor/player/spectator.
 A world-level assignment designates either one active non-spectator membership,
-Terra, or an external agent as facilitator, and response mapping derives the current
-facilitator/player/spectator play role without rewriting membership.
+Terra, or an agent as facilitator, and response mapping derives the current
+facilitator/player/spectator current play role without rewriting membership.
 
 ### `internal/migrations`
 
-`001_worldwright.sql` is the clean world-native baseline;
-`002_rules_graph_statuses.sql` is its supported forward upgrade for typed
-derived mechanics, problem-sourced persistent statuses, and expanded receipts;
+`001_world_baseline.sql` is the clean World-native baseline;
+`002_mechanic_graph_status_instances.sql` adds typed
+derived Mechanics, problem-authored Status instances/modifier snapshots, and
+expanded Resolution receipts;
 `003_interaction_audience_invalidations.sql` adds constrained audience-removal
 event invalidations; and
 `004_password_auth.sql` installs credentials and server sessions.
-`005_auto_dm.sql` adds the world-level human/Terra source discriminator;
+`005_terra.sql` adds the world-level human/Terra facilitator source;
 `006_facilitator_assignment.sql` adds the designated human membership and
 human/Terra attribution on interactions, resolutions, and events; and
 `007_agent_facilitator.sql` extends the non-membership attribution shape to
@@ -143,8 +144,8 @@ the JSON `500 internal_error` envelope. Request summaries record method, path,
 status, bytes, and duration.
 
 When `OPENAI_API_KEY` is non-empty, production server construction installs the
-Auto DM provider. Without it, normal routes still start and Auto DM endpoints
-return `503 auto_dm_unavailable`.
+Terra and Luna model provider. Without it, normal routes still start and
+model-backed commands return `503 model_unavailable`.
 
 ### Static/SPA behavior
 
@@ -165,7 +166,7 @@ already-built production binary.
 
 `decodeJSON` rejects unknown fields and reads one JSON value. Exact decimals
 cross HTTP as strings, are parsed into immutable domain values at the
-application boundary, and are canonicalized in responses. The state scalar DTO
+application boundary, and are canonicalized in responses. The Mechanic-value DTO
 accepts only:
 
 ```json
@@ -191,9 +192,9 @@ Once a handler runs, it generally validates:
 1. path/query syntax and UUID shape;
 2. strict body decoding;
 3. transport required fields, lengths, and enums;
-4. active world membership and required role/readiness;
+4. active World membership and required membership role, current play role, and play status;
 5. world ownership of every referenced resource;
-6. domain mechanics/state/transition rules;
+6. domain Mechanic/logical-state/transition rules;
 7. archive/lifecycle/revision constraints;
 8. PostgreSQL constraints during persistence.
 
@@ -236,126 +237,129 @@ Top-level authoring commands remain explicit and relational. A save normally:
 Owned rows commonly cascade from their root; historical references use
 `ON DELETE RESTRICT`. Product APIs archive rather than hard delete.
 
-### Base and evaluated state
+### Logical state and Entity sheets
 
-Each entity has exactly one `state_records` root. `state_values` stores at most
-one numeric or Boolean override per mechanic.
+Each Entity has exactly one `entity_logical_states` root.
+`entity_input_value_overrides` stores at most one numeric or Boolean override
+per input Mechanic.
 
-Reading state:
+Reading an Entity sheet:
 
-1. load the world entity, complete mechanic graph, state root, and input
-   overrides;
+1. load the World Entity, complete world mechanic graph, logical-state root,
+   and stored overrides;
 2. load the entity status-set revision, active instances, and their immutable
    modifier snapshots;
-3. materialize missing input values from mechanic defaults;
+3. materialize missing logical input values from Mechanic authored defaults;
 4. compile/validate the graph and recursively evaluate derived references;
 5. apply status modifiers in deterministic order;
-6. return input `values`, all `effective_values`, per-mechanic `evaluations`,
-   active status snapshots, and state/status/rules revisions.
+6. return `logical_input_values`, all `effective_values`, per-Mechanic
+   `evaluations`, active Status instances, and logical-state/status-set/rules
+   revisions.
 
-Replacing state treats the request map as complete logical input state and
-rejects derived IDs. It locks both the mechanic rules revision and entity state
-root. Values equal to defaults normalize to absent override rows.
+Replacing logical state treats the request map as complete and rejects derived
+IDs. It locks both the rules revision and Entity logical-state
+root. Values equal to authored defaults normalize to absent override rows.
 
-Resolution persistence updates only entity records reported changed by the
-pure transition engine. Status lifecycle changes increment the independent
-entity status-set root. Both happen in the same transaction as the receipt.
+Resolution persistence updates only Entities reported changed by the
+pure transition engine. Status-instance lifecycle changes increment the independent
+Entity status-set root. Both happen in the same transaction as the Resolution receipt.
 
 ### Mechanic publication
 
-The mechanic catalog is read in `REPEATABLE READ` and returned as a
+The world mechanic graph is read in `REPEATABLE READ` and returned as a
 `{revision,...}` wrapper. Every publishing create/update or first archive:
 
-1. locks `world_rule_sets` and compares `expected_rules_revision`;
+1. locks `world_mechanic_graphs` and compares `expected_rules_revision`;
 2. loads all world mechanics;
 3. substitutes the proposed mechanic into the in-memory graph;
 4. type-checks every expression and rejects dependency cycles with
    path-indexed fields;
 5. persists the normalized mechanic/expression rows;
-6. increments the mechanic rules revision and appends `rules-updated`;
+6. increments the rules revision and appends `rules-updated`;
 7. returns the new revision with the saved mechanic.
 
-An active mechanic archive is rejected while another active derived mechanic
-depends on it (`mechanic_has_dependents`) or any active status modifier
-references it (`mechanic_has_active_statuses`). The latter status instances
+An active Mechanic archive is rejected while another active derived Mechanic
+depends on it (`mechanic_has_dependents`) or any modifier from an active Status instance
+references it (`mechanic_has_active_status_instances`). The latter Status instances
 must be removed before archive. Archived mechanics remain readable but cannot
 be changed or restored through the product API. Database constraints preserve
 tagged and world-scoped shapes, while graph-wide type and cycle checks remain
 application and pure-rule responsibilities.
 
-### Persistent status snapshots
+### Persistent Status instances
 
-Statuses are authored inline in an adjudicating problem's apply effect, not in
-world configuration. The effect supplies a name, optional description, ordered
+Inline statuses are authored in an adjudicating Problem's apply-status Effect, not in
+World configuration. The Effect supplies a name, optional description, ordered
 literal modifiers, and ordered entity targets. Resolve inserts one durable
-instance per target, snapshots the status prose and modifiers into
+instance per target, snapshots the Inline-status prose and modifiers into
 instance-owned rows, and records source interaction, resolution, and effect
 IDs. Evaluation reads those immutable snapshots rather than a reusable catalog.
 
 Modifier order is priority, application order, instance ID, modifier position,
 then modifier ID. Same-name instances from different Consequences may coexist.
-A remove effect names the exact active status instance for each entity target;
+A remove-status Effect names the exact active Status instance for each Entity target;
 unknown, removed, cross-world, or mismatched targets fail validation. Resolve
 idempotency handles equivalent retries before the transition is applied.
 
-### Character profiles
+### Entity profiles
 
-Profiles do not use mechanical state. A world-level field-set revision guards
-the ordered requirements; each entity profile has its own revision. Text rows
+Profiles do not use mechanical state. A World-level character-field-set revision guards
+the ordered character fields; each Entity profile has its own revision. Text rows
 preserve field UUID and author provenance. Read paths filter restricted fields
-and values before serialization. Profile changes never advance state revision.
+and values before serialization. Profile changes never advance the logical-state revision.
 
 ### Controller sets
 
 Controller replacement is a complete set operation over
 `world_membership_entity_controls`. The command checks the world's
-`table_revision`, validates every target as an active non-spectator membership in the
-same world, replaces rows, increments `table_revision`, and appends an event.
+`roster_revision`, validates every target as an active non-spectator membership in the
+same world, replaces rows, increments `roster_revision`, and appends an event.
 
 ## Rules execution
 
-State reads compile definitions and evaluate one entity with:
+Entity-sheet reads compile definitions and evaluate one Entity with:
 
 ```go
-rules.EvaluateEntityState(entity, record, mechanics, statusSnapshots, activeStatuses)
+rules.EvaluateEntity(entity, inputOverrides, mechanics, inlineStatuses, statusInstances)
 ```
 
-Input intrinsic values come from stored/defaulted logical state. Derived
+Input intrinsic values come from stored overrides or authored defaults. Derived
 intrinsic values recursively consume referenced mechanics' effective values.
-Each mechanic's literal status modifiers then transform intrinsic to effective.
-The evaluator returns no partial result on graph, status, or arithmetic failure.
+Each Mechanic's literal Status modifiers then transform intrinsic to effective.
+The evaluator returns no partial result on graph, Inline-status/Status-instance, or arithmetic failure.
 
 Live Consequences map concrete effect DTOs to:
 
 ```go
-rules.ApplyRuntimeTransition(plan, entities, mechanics, statuses, snapshot)
+rules.ApplyRuntimeTransition(plan, entities, mechanics, inlineStatuses, snapshot)
 ```
 
-The function validates and clones both base state and active statuses, applies
-effects by position, and returns scalar applications, status applications,
-changed record IDs, and the resulting runtime snapshot. The application
+The function validates and clones both stored overrides and active Status
+instances, applies Effects by position, and returns Applications, changed
+Entity IDs, and the resulting runtime snapshot. The application
 evaluates before and after to derive transitive effective changes. A failure
 returns no partially usable snapshot. PostgreSQL supplies transactional
 atomicity around the pure in-memory atomicity.
 
 `set` and `adjust-number` retain `entity_ids` and target only mutable inputs.
-`apply-status` uses ordered entity targets plus one inline status specification;
-`remove-status` uses ordered entity/instance targets and no status
-specification. Both status variants carry no scalar operands. Every target and
-mechanic must belong to the request world. Numeric base results must satisfy
+`apply-status` uses ordered Entity targets plus one Inline status;
+`remove-status` uses ordered Entity/Status-instance targets and no Inline
+status. Both Status-lifecycle Effect variants carry no scalar operands. Every target and
+mechanic must belong to the request World. Numeric logical-input results must satisfy
 bounds/step; Boolean mechanics accept only Boolean `set`. Scalar operations
-read/write logical base input and never use an active status-modified effective
-value as their operand. Status layers are reapplied only when the application
+read/write logical input values and never use a Status-modified effective
+value as their operand. Status modifiers are reapplied only when the application
 evaluates the post-transition runtime snapshot.
 
-## Auto DM pipeline
+## Model generation and Terra orchestration
 
-The application builds Auto DM context in one read-only `REPEATABLE READ`
-transaction. It includes the world description as campaign brief, all active
-mechanic definitions, every non-archived sheet's facilitator-visible profile
-plus exact logical/intrinsic/effective state and active statuses, and
-the latest three resolved situation/Consequence pairs. Consequence calls add
-the adjudicating situation and all submitted actions. UUIDs are replaced with
+The application builds Terra and Luna context in one read-only `REPEATABLE READ`
+transaction. It includes the World description as campaign brief, all active
+Mechanic definitions, and every non-archived Entity with its facilitator-visible
+profile values and generated sheet data (exact logical input values,
+intrinsic/effective values, and active Status instances), plus
+the latest three resolved Problem/Consequence pairs. Consequence calls add
+the adjudicating Problem and all submitted Actions. UUIDs are replaced with
 short request-local references before the snapshot leaves the process.
 
 For a human facilitator, consequence compilation remains advisory: GPT-5.6
@@ -364,7 +368,7 @@ references back to world-owned UUIDs, validates and previews the concrete
 effects, and returns them to the human. Only a later human resolve command
 writes.
 
-Terra uses two orchestration handlers instead. `auto-dm/continue` first checks
+Terra uses two orchestration handlers instead. `terra/continue` first checks
 that the caller is a ready current player, Terra is assigned, and no
 interaction is unfinished. After GPT-5.6 Terra generates the prompt, a write
 transaction locks the world and repeats those checks. It derives the audience
@@ -381,37 +385,43 @@ source, lifecycle, and expected revision, then makes the interaction
 the interaction source and world assignment remain Terra. Cancellation does
 not call the provider or generate a replacement.
 
-`auto-dm/decide` requires a ready current player, fresh interaction/rules
+`terra/decide` requires a ready current player, fresh Interaction and rules
 revisions, a non-empty idempotency key, and one submitted action for every
 eligible responder. It locks the interaction, changes `open` to
 `adjudicating`, and appends a Terra-attributed event before the provider calls.
-Terra writes the narrative; Luna produces an optional selected action/summary
+Terra writes the narrative; Luna produces optional selected-Action metadata
 and the four existing effect types. The application maps and validates every
 reference, runs the ordinary preview internally, and immediately calls the
-ordinary resolution transaction as facilitator source `terra`. The applied
-receipt and event have no human resolver/actor. A pacing player's session
+ordinary resolution transaction as facilitator source `terra`. The committed
+Resolution receipt and World event have no human resolver/actor. A pacing current player's session
 authorizes and times the request but is never substituted as the model's
 author.
 
 No prose or effects cross back to the browser for editing or approval before a
 Terra resolution commits. A failed provider/validation call can leave the
 interaction adjudicating; the client reloads its revision and retries with the
-same idempotency key. An applied replay returns the immutable result, while a
+same idempotency key. A committed replay returns the immutable result, while a
 different use of that key conflicts. Provider output still passes the normal
-world scope, lifecycle, revision, type, bounds, transition, lock, and receipt
+world scope, lifecycle, revision, type, bounds, transition, lock, and Resolution-receipt
 boundaries.
+
+Agent facilitation uses `agent/continue` and `agent/resolve` without a
+server-side model call. The handlers accept page-agent Problem and Consequence
+content from an authenticated ready current player, derive audience,
+responders, and context server-side, and invoke the same deterministic preview,
+transition, Resolution-receipt, and World-event paths with `agent` attribution.
 
 ## Transaction patterns
 
 ### Consistent reads
 
 Multiquery resources and previews may use read-only `REPEATABLE READ` so a
-response cannot combine a root at one revision with children/state from another.
+response cannot combine roots and child rows from different revisions.
 
 ### Optimistic commands
 
-World settings, world table, mechanic rules, character-field set, profile,
-state, interaction, and action roots compare expected revisions after
+World settings, World roster, world mechanic graph, character-field set,
+profile, logical state, Interaction, and Action roots compare expected revisions after
 loading/locking. Membership rows carry revisions, but no membership mutation
 currently accepts an expected membership revision. Conflicts return 409 rather
 than overwriting newer state.
@@ -422,26 +432,26 @@ Resolve checks the active world and applicable assignment/source boundary with
 ordinary transaction reads, then checks for an idempotent replay. The public
 resolve route requires the designated human facilitator—including an owner who
 has taken over a Terra-authored interaction. Terra's decision path invokes the
-same implementation with Terra assignment plus ready-player pacing checks.
-A new resolution locks the mechanic rules root, interaction, and sorted target
-entity/state/status roots. Selected
-action existence is validated by an ordinary read rather than a row lock. The
+same implementation with Terra assignment plus ready-current-player pacing checks.
+A new Resolution locks the world mechanic graph root, Interaction, and sorted target
+Entity logical-state/status-set roots. Selected
+Action existence is validated by an ordinary read rather than a row lock. The
 transaction checks lifecycle and revisions; evaluates before; applies the
-combined transition; persists base state and status snapshots with source
-provenance; evaluates after; and stores the resolution, requested effects,
-inline status-effect modifiers, exact remove targets, scalar/status
-applications, effective changes, action statuses, interaction status, and
+combined transition; persists logical state plus Status instances and modifier snapshots with source
+provenance; evaluates after; and stores the Resolution, requested Effects,
+Status modifiers authored within Inline statuses, exact remove targets, scalar and Status
+Applications, effective changes, Action statuses, Interaction status, and
 world event atomically.
 
-An equivalent idempotent replay loads the immutable receipt and current state,
-and still checks the current session, active world, receipt facilitator source,
+An equivalent idempotent replay loads the immutable Resolution receipt and current Entity sheets,
+and still checks the current session, active world, Resolution-receipt facilitator source,
 current assignment, and the applicable human-facilitator or Terra-pacing
 authority.
 
 ### Lock discipline
 
 Keep root-first and sorted-ID lock order. Do not add a path that locks target
-entity/state/status roots before the mechanic-rules and interaction roots used
+Entity logical-state/status-set roots before the mechanic-graph and Interaction roots used
 by resolution.
 
 ## Authorization and filtering
@@ -449,15 +459,15 @@ by resolution.
 Every product handler except health, signup, and signin requires an active
 opaque-cookie session. Route registration wraps protected handlers
 deny-by-default; unsafe requests additionally require an exact same-origin
-`Origin` and the session-bound `X-DND-CSRF` token. The old identity header is
-ignored. World handlers load an active membership for the session user.
+`Origin` and the session-bound `X-DND-CSRF` token. Caller-supplied identity
+headers are ignored. World handlers load an active membership for the session user.
 Owner/editor helpers grant durable configuration authority. A separate helper
 checks whether that exact membership is the currently designated human
-facilitator for live DM commands; Terra assignment is checked without
+facilitator for live facilitator commands; Terra assignment is checked without
 manufacturing a membership. Current players—including owners/editors when they
-are not DM—must satisfy controlled-character readiness before live
+are not the facilitator—must satisfy controlled-character readiness before live
 interaction/event access and before skipping a Terra-authored open or
-adjudicating interaction. `play_status` is still calculated for a designated
+adjudicating Interaction. `play_status` is still derived for a designated
 human facilitator so a later handoff knows the seat they return to, but the
 facilitator bypasses that readiness gate while assigned. Spectators report
 ready and remain audience-only.
@@ -471,9 +481,9 @@ handshake follows that ordinary path, while subsequent stream reauthorization
 is read-only and therefore does not keep an otherwise idle session alive.
 
 Profile writes allow owner/editor or the entity's current active
-non-spectator controller. Controller and field-set replacement are
-owner/editor only. An acting entity on an action must be controlled and
-complete. Interaction context/effect targets must be active and eligible.
+non-spectator Controller. Controller and field-set replacement are
+owner/editor only. An acting Entity on an Action must be controlled and
+complete. Interaction context/Effect targets must be active and eligible.
 Restricted profile reads additionally admit the currently designated human
 facilitator even when that membership is neither an editor nor controller.
 
@@ -485,9 +495,9 @@ Terra while the sole unfinished interaction is Terra-authored and open or
 adjudicating. It locks that interaction, withdraws the owner's submitted action
 if present, advances the interaction revision for the withdrawal, and preserves
 the interaction's Terra source. The owner closes/adjudicates an open problem as
-needed; the later human receipt records the owner.
+needed; the later human Resolution receipt records the owner.
 
-Action submission instead rejects spectators and the designated
+Action creation instead rejects spectators and the designated
 human facilitator; the interaction's eligible-responder snapshot supplies the
 remaining authority.
 
@@ -525,8 +535,8 @@ Clients treat them as reload signals.
 
 Ordinary human adjudication and cancellation events may be marked as audience
 projection invalidations. A non-facilitator audience member receives a marked
-cursor as `interaction-feed-invalidated`, with interaction, submission,
-resolution, and human actor IDs cleared. The projection preserves cursor/time
+cursor as `interaction-feed-invalidated`, with Interaction, Action,
+Resolution, and human actor IDs cleared. The projection preserves cursor/time
 metadata so the client can reload authoritative visibility without an
 identifier leak.
 Autonomous Terra adjudication explicitly appends an unmarked, unredacted
@@ -534,7 +544,7 @@ Terra-attributed event and remains visible while pending.
 
 The response always includes `actor_source`. Human events pair it with the
 authenticated membership; Terra events require a null human actor. Continue
-and Decide use Terra attribution, while a ready player's Skip uses human
+and Decide use Terra attribution, while a ready current player's Skip uses human
 attribution without changing the interaction's Terra source.
 
 ## Testing seams
@@ -544,7 +554,7 @@ attribution without changing the interaction's Terra source.
 - The small `queryer` interface lets helpers use pools or transactions.
 - DTO tests cover strict scalar unions and exact numbers.
 - Playwright supplies clean-PostgreSQL handler integration and multi-user flow.
-- Route tests require removed URL families to return `404 endpoint_not_found`.
+- Route tests require unknown API URLs to return `404 endpoint_not_found`.
 
 ## Adding a backend capability
 
@@ -553,12 +563,12 @@ For a new world-authored mechanic feature:
 1. extend pure scalar types/validation only when mechanical behavior changes;
 2. add a world-scoped relational migration when persistence changes;
 3. add strict DTOs and exact-number mapping;
-4. implement explicit queries/transactions and role checks;
+4. implement explicit queries/transactions and membership-role/current-play-role checks;
 5. register only a world-scoped method-aware route;
 6. cover archive, cross-world, revision, and lock-order cases;
 7. update frontend contract, browser coverage, and canonical docs;
 8. run focused CI and then full `./ci.sh`.
 
 For live commands, also define readiness, visibility, idempotency,
-receipt/event behavior, and test separate identities. Never rely on UI hiding as
+Resolution-receipt/World-event behavior, and test separate identities. Never rely on UI hiding as
 authorization.

@@ -11,7 +11,7 @@ export type BuildSection =
   | "capabilities"
   | "character-fields"
   | "roster"
-  | "people"
+  | "members"
   | "settings";
 
 type AppLocation =
@@ -34,7 +34,7 @@ const buildSections: ReadonlySet<string> = new Set([
   "capabilities",
   "character-fields",
   "roster",
-  "people",
+  "members",
   "settings",
 ]);
 

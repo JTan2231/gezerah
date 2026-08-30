@@ -49,7 +49,7 @@ export function RosterView({
     <section className="roster-workspace content-narrow">
       <PageIntro
         title="Roster & sheets"
-        description="Create ordinary world entities, assign player control, complete profiles, and make direct setup edits before entering Play."
+        description="Create ordinary World Entities, assign Controllers, complete profiles, and edit logical state before entering Play."
         actions={
           active ? (
             <button

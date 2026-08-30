@@ -10,22 +10,16 @@ preview does not convert this audit into a public-production sign-off.
 
 ## Conclusion
 
-The original audit found no signup, signin, logout, or server session. A public
-endpoint created UUID/display-name records, the UI enumerated every user, and a
-caller could assume any account by sending its UUID as `X-DND-User-ID`.
-
-That identity adapter has been removed. dnd now uses native
-username/password accounts, Argon2id password hashes, opaque revocable server
+dnd uses native username/password accounts, Argon2id password hashes, opaque revocable server
 sessions, exact-origin validation, and session-bound CSRF tokens. All product
 routes—including invite preview and redemption—require authentication; only
-health, signup, and signin are public. World membership and role authorization
+health, signup, and signin are public. World membership-role and current-play-role authorization
 remain layered after authentication.
 
 ## Product decisions
 
 | Question                  | Decision                                                                                                                                                                                         |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Existing accounts         | No populated-account upgrade is supported by the current chain. `004_password_auth.sql` fails closed if `users` is nonempty; a populated cutover requires a separately reviewed data transition. |
 | Account identifier        | User-chosen username; normalized uniqueness and signin are case-insensitive.                                                                                                                     |
 | Email                     | Not collected or stored.                                                                                                                                                                         |
 | Password storage          | Argon2id PHC string with a random salt and bounded parser.                                                                                                                                       |
@@ -34,7 +28,7 @@ remain layered after authentication.
 | CSRF                      | Exact `Origin` plus a session-bound token on every unsafe authenticated request.                                                                                                                 |
 | Recovery                  | None in this release. A lost password cannot be recovered by email.                                                                                                                              |
 | Federated identity/MFA    | Not in this release.                                                                                                                                                                             |
-| Legacy UUID adapter       | Removed; `X-DND-User-ID` cannot authenticate or override a session.                                                                                                                              |
+| Caller-supplied UUID identity | `X-DND-User-ID` cannot authenticate or override a session.                                                                                                                                    |
 
 The lack of email is deliberate, not an incomplete form field. It avoids
 collecting a contact identifier when the product has no recovery/delivery
@@ -130,13 +124,13 @@ Route registration is deny-by-default for the product API:
 - signup and signin are explicitly public exact-origin mutations;
 - authenticated safe methods require a valid session;
 - authenticated unsafe methods require session, exact origin, and CSRF;
-- application authorization then applies membership, role, readiness, control,
+- application authorization then applies membership role, current play role, Play status, control,
   visibility, revision, lifecycle, and world-scope rules.
 
 Invite preview now requires a session in addition to the opaque token.
 Redemption rejects archived worlds. If the account already has an active
 non-owner membership, redeeming a differently roled invite keeps the existing
-role rather than escalating or downgrading it.
+membership role rather than escalating or downgrading it.
 
 ## Persistence boundary
 
@@ -172,11 +166,11 @@ protection. The resulting membership belongs to the authenticated user.
 This preserves the gameplay scenarios after a one-time authentication prelude:
 
 - an owner signs up before creating a world;
-- each invited participant signs up (or signs in) in an isolated browser
+- each invitee signs up (or signs in) in an isolated browser
   context before redemption;
 - reloads retain the server session without retaining a script-readable UUID;
 - logout invalidates subsequent API calls and live streams;
-- membership, role, readiness, control, private-field, and cross-world scenarios
+- membership-role, current-play-role, Play-status, control, private-field, and cross-world scenarios
   continue unchanged because they consume the authenticated actor.
 
 ## Automated evidence
@@ -244,7 +238,8 @@ The identity impersonation finding is closed by CI evidence that:
 - recent authenticated activity does not rewrite the session row, while a
   valid session older than five minutes is touched once and cannot be revived
   after invalidation;
-- existing membership/role/readiness/privacy/world-scope matrices pass through
+- existing World-membership, membership-role, current-play-role, play-status,
+  privacy, and World-scope matrices pass through
   isolated authenticated contexts;
 - migration constraints and targeted reads of signup-created rows show an
   Argon2id password hash and a session-token digest rather than the presented

@@ -14,7 +14,7 @@ type BuildViewSection =
   | "capabilities"
   | "character-fields"
   | "roster"
-  | "people"
+  | "members"
   | "settings";
 
 interface BuildWorkspaceViewModel {
@@ -100,10 +100,10 @@ export function BuildWorkspaceView({
             onClick={() => actions.selectSection("roster")}
           />
           <BuildNavigationButton
-            active={model.section === "people"}
-            label="People & invites"
+            active={model.section === "members"}
+            label="Members & invites"
             count={model.memberCount}
-            onClick={() => actions.selectSection("people")}
+            onClick={() => actions.selectSection("members")}
           />
           <BuildNavigationButton
             active={model.section === "settings"}
@@ -141,7 +141,7 @@ export function BuildWorkspaceView({
           <option value="capabilities">Capabilities</option>
           <option value="character-fields">Character fields</option>
           <option value="roster">Roster & sheets</option>
-          <option value="people">People</option>
+          <option value="members">Members</option>
           <option value="settings">Settings</option>
         </select>
         <div className="mobile-account-controls">{mobileAccountControls}</div>

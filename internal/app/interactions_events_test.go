@@ -172,7 +172,7 @@ func TestVisibleWorldEventsAudiencePolicyIncludesAutomatedAdjudicationAndInvalid
 				and exists (
 					select 1 from worlds assigned_world
 					where assigned_world.id = interaction.world_id
-							and assigned_world.dm_source in ('terra', 'agent')
+							and assigned_world.facilitator_source in ('terra', 'agent')
 				)
 			)
 			or event.invalidates_interaction_audience
@@ -209,7 +209,7 @@ func TestInteractionLifecycleInvalidatesOnlyPreviouslyVisibleAudience(t *testing
 	}
 }
 
-func TestTerraPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
+func TestTerraCurrentPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -231,9 +231,9 @@ func TestTerraPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if got := terraPlayerCanCancelInteraction(test.facilitatorSource, test.status); got != test.want {
+			if got := terraCurrentPlayerCanCancelInteraction(test.facilitatorSource, test.status); got != test.want {
 				t.Fatalf(
-					"terraPlayerCanCancelInteraction(%q, %q) = %t, want %t",
+					"terraCurrentPlayerCanCancelInteraction(%q, %q) = %t, want %t",
 					test.facilitatorSource, test.status, got, test.want,
 				)
 			}
@@ -241,7 +241,7 @@ func TestTerraPlayerCanCancelOnlyUnfinishedTerraInteraction(t *testing.T) {
 	}
 }
 
-func TestAutomatedPlayerCanCancelOnlyCurrentSourceUnfinishedInteraction(t *testing.T) {
+func TestAutomatedCurrentPlayerCanCancelOnlyCurrentSourceUnfinishedInteraction(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
@@ -258,10 +258,10 @@ func TestAutomatedPlayerCanCancelOnlyCurrentSourceUnfinishedInteraction(t *testi
 		test := test
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			if got := automatedPlayerCanCancelInteraction(
+			if got := automatedCurrentPlayerCanCancelInteraction(
 				test.assignedSource, test.interactionSource, test.status,
 			); got != test.want {
-				t.Fatalf("automatedPlayerCanCancelInteraction() = %t, want %t", got, test.want)
+				t.Fatalf("automatedCurrentPlayerCanCancelInteraction() = %t, want %t", got, test.want)
 			}
 		})
 	}
@@ -271,7 +271,7 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 	t.Parallel()
 
 	interactionID := "f5160547-d5af-4e6d-a4d2-d3c3d99ce452"
-	submissionID := "cc40a1dd-f079-4ba8-8fb0-289c111e300d"
+	actionID := "cc40a1dd-f079-4ba8-8fb0-289c111e300d"
 	resolutionID := "55aab7c2-ee8a-40c3-85d8-9592199680a7"
 	actorID := "57898ef8-85cf-43f3-a666-afdcfdd8cc54"
 	createdAt := time.Date(2026, time.August, 7, 13, 14, 15, 0, time.UTC)
@@ -284,7 +284,7 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 				Type:              eventType,
 				ActorSource:       terraFacilitatorSource,
 				InteractionID:     &interactionID,
-				SubmissionID:      &submissionID,
+				ActionID:          &actionID,
 				ResolutionID:      &resolutionID,
 				ActorMembershipID: &actorID,
 				CreatedAt:         createdAt,
@@ -300,7 +300,7 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 			if got.ActorSource != terraFacilitatorSource {
 				t.Fatalf("actor source = %q, want Terra attribution", got.ActorSource)
 			}
-			if got.InteractionID != nil || got.SubmissionID != nil || got.ResolutionID != nil || got.ActorMembershipID != nil {
+			if got.InteractionID != nil || got.ActionID != nil || got.ResolutionID != nil || got.ActorMembershipID != nil {
 				t.Fatalf("audience invalidation leaked resource identifiers: %#v", got)
 			}
 			payload, err := json.Marshal(got)
@@ -308,7 +308,7 @@ func TestProjectVisibleWorldEventRedactsAudienceInvalidation(t *testing.T) {
 				t.Fatalf("marshal projected event: %v", err)
 			}
 			for _, field := range []string{
-				"interaction_id", "submission_id", "resolution_id", "actor_membership_id",
+				"interaction_id", "action_id", "resolution_id", "actor_membership_id",
 			} {
 				if strings.Contains(string(payload), `"`+field+`"`) {
 					t.Fatalf("audience invalidation JSON contains %q: %s", field, payload)
@@ -330,7 +330,7 @@ func TestProjectVisibleWorldEventPreservesAuthorizedPayloads(t *testing.T) {
 		eventType                      string
 	}{
 		{name: "facilitator adjudication", facilitator: true, invalidatesInteractionAudience: true, eventType: interactionAdjudicatingEventType},
-		{name: "audience resolution", eventType: "resolution-applied"},
+		{name: "audience resolution", eventType: "resolution-committed"},
 		{name: "unmarked audience cancellation", eventType: "interaction-cancelled"},
 	}
 

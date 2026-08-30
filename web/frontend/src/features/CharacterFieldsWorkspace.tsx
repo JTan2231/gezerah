@@ -116,7 +116,7 @@ function CharacterFieldsEditor({
       requirementsChanged &&
       fieldSet.fields.length > 0 &&
       !window.confirm(
-        "Publish these requirements? Existing controlled characters missing a new field will return to setup.",
+        "Publish these character fields? Existing controlled characters missing a new field will return to setup.",
       )
     )
       return;
@@ -161,7 +161,7 @@ function CharacterFieldsEditor({
   return (
     <CharacterFieldsView
       model={{
-        schemaLabel: `schema r${fieldSet.revision}`,
+        revisionLabel: `Character fields r${fieldSet.revision}`,
         fields: draft.draft.map((field, index) => ({
           clientKey: field.clientKey,
           label: field.label,
@@ -189,7 +189,7 @@ function CharacterFieldsEditor({
               clientKey: crypto.randomUUID(),
               label: "",
               helpText: "",
-              visibility: "table",
+              visibility: "world",
             },
           ]),
         publish: () => void save(),

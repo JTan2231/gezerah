@@ -12,28 +12,28 @@ const noSave = () => Promise.resolve(undefined);
 
 describe("MechanicsView", () => {
   test("renders the catalog and recursive editor from semantic fixtures", () => {
-    const armor: MechanicViewModel = {
-      id: "armor",
+    const inputMeasure: MechanicViewModel = {
+      id: "input-measure",
       kind: "capacity",
       mode: "score",
       sourceKind: "input",
-      name: "Armor",
+      name: "Input measure",
       minimum: "0",
       defaultNumber: "0",
       step: "1",
       mutableDuringPlay: true,
       archived: false,
     };
-    const defense: MechanicViewModel = {
-      id: "defense",
+    const derivedMeasure: MechanicViewModel = {
+      id: "derived-measure",
       kind: "capacity",
       mode: "score",
       sourceKind: "derived",
-      name: "Defense",
+      name: "Derived measure",
       mutableDuringPlay: false,
       expression: {
         operation: "mechanic-reference",
-        mechanicId: armor.id,
+        mechanicId: inputMeasure.id,
       },
       archived: false,
     };
@@ -41,16 +41,16 @@ describe("MechanicsView", () => {
     const html = renderToStaticMarkup(
       <MechanicsView
         kind="capacity"
-        selectedId={defense.id}
-        items={[armor, defense]}
+        selectedId={derivedMeasure.id}
+        items={[inputMeasure, derivedMeasure]}
         loading={false}
         issue={null}
         onRetry={noop}
         onSelect={noop}
         editor={
           <MechanicEditorView
-            source={defense}
-            allMechanics={[armor, defense]}
+            source={derivedMeasure}
+            allMechanics={[inputMeasure, derivedMeasure]}
             creating={false}
             saving={false}
             archiving={false}
@@ -66,9 +66,9 @@ describe("MechanicsView", () => {
     );
 
     expect(html).toContain("Capacities");
-    expect(html).toContain("Defense");
-    expect(html).toContain("Calculation");
-    expect(html).toContain("Armor · Number");
-    expect(html).toContain("Calculated");
+    expect(html).toContain("Derived measure");
+    expect(html).toContain("Expression");
+    expect(html).toContain("Input measure · Number");
+    expect(html).toContain("Derived");
   });
 });

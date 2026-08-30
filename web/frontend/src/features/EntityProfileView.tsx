@@ -7,21 +7,22 @@ import {
   LoadingState,
 } from "../components/StudioUI";
 
-export type EntityProfileStatus = "not-controlled" | "setup-required" | "ready";
+export type CharacterStatusValue =
+  "not-controlled" | "setup-required" | "ready";
 
-export interface EntityProfileFieldViewModel {
+export interface EntityProfileCharacterFieldViewModel {
   id: string;
   label: string;
   helpText?: string | undefined;
-  visibility: "table" | "controllers-and-facilitators";
+  visibility: "world" | "restricted";
   value?: string | undefined;
 }
 
 export interface EntityProfileViewModel {
   displayName: string;
   summary: string;
-  characterStatus: EntityProfileStatus;
-  fields: EntityProfileFieldViewModel[];
+  characterStatus: CharacterStatusValue;
+  fields: EntityProfileCharacterFieldViewModel[];
 }
 
 export interface EntityProfileIssue {
@@ -36,7 +37,7 @@ interface EntityProfileLoadIssue {
 }
 
 export function EntityProfileLoadingView() {
-  return <LoadingState label="Opening this character" />;
+  return <LoadingState label="Opening this Entity" />;
 }
 
 export function EntityProfileLoadErrorView({
@@ -63,7 +64,7 @@ export function EntityProfileView({
           <h2>{profile.displayName}</h2>
           <span>{profile.summary}</span>
         </div>
-        <CharacterStatus status={profile.characterStatus} />
+        <CharacterStatusBadge status={profile.characterStatus} />
       </header>
       {editor ?? <EntityProfileReaderView fields={profile.fields} />}
     </article>
@@ -79,7 +80,7 @@ export function EntityProfileEditorView({
   onValueChange,
   onSubmit,
 }: {
-  fields: EntityProfileFieldViewModel[];
+  fields: EntityProfileCharacterFieldViewModel[];
   values: Record<string, string>;
   saving: boolean;
   dirty: boolean;
@@ -98,10 +99,10 @@ export function EntityProfileEditorView({
       {fields.length === 0 ? (
         <EmptyState
           title="No character fields configured"
-          description="A facilitator can publish required fields in Build. This controlled entity is ready without them."
+          description="A world owner or editor can publish required fields in Build."
         />
       ) : (
-        <div className="character-profile-fields">
+        <div className="entity-profile-character-fields">
           {fields.map((characterField) => (
             <Field
               key={characterField.id}
@@ -119,9 +120,9 @@ export function EntityProfileEditorView({
                 }
               />
               <span className="character-field-visibility">
-                {characterField.visibility === "table"
-                  ? "Visible to everyone at the table"
-                  : "Visible only to controllers and facilitators"}
+                {characterField.visibility === "world"
+                  ? "World-visible"
+                  : "Restricted"}
               </span>
             </Field>
           ))}
@@ -138,7 +139,7 @@ export function EntityProfileEditorView({
             type="submit"
             disabled={saving || !dirty}
           >
-            {saving ? "Saving…" : "Save character"}
+            {saving ? "Saving…" : "Save profile"}
           </button>
         </footer>
       ) : null}
@@ -146,7 +147,7 @@ export function EntityProfileEditorView({
   );
 }
 
-function CharacterStatus({ status }: { status: EntityProfileStatus }) {
+function CharacterStatusBadge({ status }: { status: CharacterStatusValue }) {
   if (status === "not-controlled")
     return (
       <span className="character-status status-neutral">Uncontrolled</span>
@@ -159,12 +160,12 @@ function CharacterStatus({ status }: { status: EntityProfileStatus }) {
 function EntityProfileReaderView({
   fields,
 }: {
-  fields: EntityProfileFieldViewModel[];
+  fields: EntityProfileCharacterFieldViewModel[];
 }) {
   if (fields.length === 0)
     return (
       <EmptyState
-        title="No visible profile fields"
+        title="No visible character fields"
         description="There are no completed fields visible to you."
       />
     );
@@ -174,8 +175,8 @@ function EntityProfileReaderView({
         <section className="profile-section" key={characterField.id}>
           <header>
             <h3>{characterField.label}</h3>
-            {characterField.visibility === "controllers-and-facilitators" ? (
-              <span>Private</span>
+            {characterField.visibility === "restricted" ? (
+              <span>Restricted</span>
             ) : null}
           </header>
           <p>{characterField.value}</p>

@@ -13,7 +13,7 @@ import {
 } from "./BuildWorkspaceView";
 import { MechanicsWorkspace } from "./MechanicsWorkspace";
 import { CharacterFieldsWorkspace } from "./CharacterFieldsWorkspace";
-import { PeopleWorkspace } from "./PeopleWorkspace";
+import { MembersWorkspace } from "./MembersWorkspace";
 import { RosterWorkspace } from "./RosterWorkspace";
 import { SettingsWorkspace } from "./SettingsWorkspace";
 
@@ -140,7 +140,7 @@ export function BuildWorkspace({
       {section === "roster" ? (
         <RosterWorkspace world={world} onWorldChanged={resource.reload} />
       ) : null}
-      {section === "people" ? <PeopleWorkspace world={world} /> : null}
+      {section === "members" ? <MembersWorkspace world={world} /> : null}
       {section === "settings" ? (
         <SettingsWorkspace
           world={world}

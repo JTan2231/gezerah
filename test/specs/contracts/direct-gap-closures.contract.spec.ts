@@ -32,7 +32,7 @@ interface WorldResponse extends IdentifiedResource {
   membership_id: string;
   member_count: number;
   revision: number;
-  table_revision: number;
+  roster_revision: number;
   rules_revision: number;
   play_status:
     "waiting-for-character" | "setup-required" | "ready" | "unavailable";
@@ -74,36 +74,38 @@ interface CharacterFieldSet {
     id: string;
     label: string;
     help_text?: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
   }>;
 }
 
-interface StateResponse {
+interface EntitySheetResponse {
   entity_id: string;
-  revision: number;
-  status_revision: number;
+  logical_state_revision: number;
+  status_set_revision: number;
   rules_revision: number;
-  values: Record<string, TaggedValue>;
-  effective_values: Record<string, TaggedValue>;
-  active_statuses: Array<{
+  logical_input_values: Record<string, MechanicValue>;
+  effective_values: Record<string, MechanicValue>;
+  evaluations: Record<string, unknown>;
+  active_status_instances: Array<{
     id: string;
     source_interaction_id: string;
     source_resolution_id: string;
     source_effect_id: string;
   }>;
+  authored_default_input_mechanic_ids: string[];
 }
 
 interface EntityResponse extends IdentifiedResource {
   display_name: string;
   archived: boolean;
   character_status: "not-controlled" | "setup-required" | "ready";
-  state: StateResponse;
+  sheet: EntitySheetResponse;
 }
 
-interface ProfileResponse {
+interface EntityProfileResponse {
   entity_id: string;
   revision: number;
-  character_fields_revision: number;
+  character_field_set_revision: number;
   character_status: "not-controlled" | "setup-required" | "ready";
   required_field_count: number;
   completed_field_count: number;
@@ -112,7 +114,7 @@ interface ProfileResponse {
   fields: Array<{
     id: string;
     label: string;
-    visibility: "table" | "controllers-and-facilitators";
+    visibility: "world" | "restricted";
     value?: string;
   }>;
 }
@@ -127,16 +129,26 @@ interface InteractionAction extends IdentifiedResource {
   revision: number;
 }
 
+interface EffectApplication {
+  type: "set" | "adjust-number" | "apply-status" | "remove-status";
+  effect_id: string;
+  entity_id: string;
+  mechanic_id?: string;
+  status_instance_id?: string;
+  status_name?: string;
+  active_before?: boolean;
+  active_after?: boolean;
+  before?: MechanicValue;
+  after?: MechanicValue;
+  changed: boolean;
+}
+
 interface ResolutionReceipt extends IdentifiedResource {
   narrative: string;
   private_notes?: string;
   effects: unknown[];
-  applied_effects: Array<{
-    effect_id: string;
-    entity_id: string;
-    mechanic_id?: string;
-    status_instance_id?: string;
-  }>;
+  applications: EffectApplication[];
+  resolved_at: string;
 }
 
 interface InteractionResponse extends IdentifiedResource {
@@ -146,38 +158,38 @@ interface InteractionResponse extends IdentifiedResource {
   revision: number;
   audience_membership_ids: string[];
   eligible_responder_membership_ids: string[];
-  entity_ids: string[];
+  context_entity_ids: string[];
   actions: InteractionAction[];
   resolution?: ResolutionReceipt;
 }
 
-interface ResolutionResult {
+interface InteractionResolutionResult {
   interaction_id: string;
   interaction_revision: number;
-  applied_effects: ResolutionReceipt["applied_effects"];
-  state: { records: Record<string, StateResponse> };
+  applications: ResolutionReceipt["applications"];
+  entity_sheets: Record<string, EntitySheetResponse>;
 }
 
 interface ControllerResponse {
   entity_id: string;
   controller_world_membership_ids: string[];
-  table_revision: number;
+  roster_revision: number;
 }
 
 interface WorldEvent {
   id: number;
   type: string;
   interaction_id?: string;
-  submission_id?: string;
+  action_id?: string;
   resolution_id?: string;
 }
 
 type DecimalText = string;
 
-type TaggedValue =
+type MechanicValue =
   { kind: "number"; value: DecimalText } | { kind: "boolean"; value: boolean };
 
-test("contract: direct scenario gap closures preserve state, privacy, and authority", async ({
+test("contract: direct scenario gap closures preserve logical input values, privacy, and authority", async ({
   request,
 }) => {
   const baseURL = await readBaseURL();
@@ -250,7 +262,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     playerWorld = first;
   });
 
-  await test.step("INV-V02 another-role redemption preserves the sole owner membership", async () => {
+  await test.step("INV-V02 different-membership-role redemption preserves the sole owner membership", async () => {
     const invite = await createInvite(
       request,
       baseURL,
@@ -335,19 +347,19 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       expected_revision: initialFields.revision,
       fields: [
         {
-          label: `Public account ${unique}`,
-          visibility: "table",
+          label: `World-visible account ${unique}`,
+          visibility: "world",
         },
         {
-          label: `Private oath ${unique}`,
-          visibility: "controllers-and-facilitators",
+          label: `Restricted oath ${unique}`,
+          visibility: "restricted",
         },
       ],
     },
     owner.id,
   );
-  const publicField = required(fields.fields[0], "public field");
-  const privateField = required(fields.fields[1], "private field");
+  const worldVisibleField = required(fields.fields[0], "world-visible field");
+  const restrictedField = required(fields.fields[1], "restricted field");
 
   let rulesRevision = world.rules_revision;
   const baseMechanic = await createMechanic(
@@ -380,7 +392,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     world.id,
     owner.id,
     derivedMechanicRequest(
-      `Calculated load ${unique}`,
+      `Derived load ${unique}`,
       baseMechanic.mechanic.id,
       rulesRevision,
     ),
@@ -509,8 +521,8 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
   );
   expect(archivedEntity.archived).toBe(true);
 
-  const publicStory = `Known at every quay ${unique}`;
-  const privateStory = `Carries the hidden seal ${unique}`;
+  const worldVisibleStory = `Known at every quay ${unique}`;
+  const restrictedStory = `Carries the hidden seal ${unique}`;
   let primaryProfile = await saveProfile(
     request,
     baseURL,
@@ -520,8 +532,8 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     0,
     fields.revision,
     [
-      { field_id: publicField.id, value: publicStory },
-      { field_id: privateField.id, value: privateStory },
+      { field_id: worldVisibleField.id, value: worldVisibleStory },
+      { field_id: restrictedField.id, value: restrictedStory },
     ],
   );
   let fallbackProfile = await saveProfile(
@@ -533,8 +545,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     0,
     fields.revision,
     [
-      { field_id: publicField.id, value: `Fallback public ${unique}` },
-      { field_id: privateField.id, value: `Fallback private ${unique}` },
+      {
+        field_id: worldVisibleField.id,
+        value: `Fallback world-visible ${unique}`,
+      },
+      { field_id: restrictedField.id, value: `Fallback restricted ${unique}` },
     ],
   );
   const incompleteProfile = await saveProfile(
@@ -545,11 +560,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     setupPlayer.id,
     0,
     fields.revision,
-    [{ field_id: publicField.id, value: `Partial account ${unique}` }],
+    [{ field_id: worldVisibleField.id, value: `Partial account ${unique}` }],
   );
   expect(incompleteProfile.character_status).toBe("setup-required");
 
-  await test.step("CCY-V05 stale profile schema cannot discard a new requirement or saved values", async () => {
+  await test.step("CCY-V05 stale character-field set cannot discard a new field or saved values", async () => {
     const staleProfile = primaryProfile;
     const staleFields = fields;
     fields = await putJSON<CharacterFieldSet>(
@@ -568,7 +583,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
           })),
           {
             label: `New required bond ${unique}`,
-            visibility: "table",
+            visibility: "world",
           },
         ],
       },
@@ -580,7 +595,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         {
           data: {
             expected_revision: staleProfile.revision,
-            expected_character_fields_revision: staleFields.revision,
+            expected_character_field_set_revision: staleFields.revision,
             values: staleProfile.fields.flatMap((field) =>
               field.value === undefined
                 ? []
@@ -601,15 +616,21 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     expect(authoritative).toMatchObject({
       revision: staleProfile.revision,
-      character_fields_revision: fields.revision,
+      character_field_set_revision: fields.revision,
       character_status: "setup-required",
       required_field_count: 3,
       completed_field_count: 2,
     });
     expect(authoritative.fields).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: publicField.id, value: publicStory }),
-        expect.objectContaining({ id: privateField.id, value: privateStory }),
+        expect.objectContaining({
+          id: worldVisibleField.id,
+          value: worldVisibleStory,
+        }),
+        expect.objectContaining({
+          id: restrictedField.id,
+          value: restrictedStory,
+        }),
       ]),
     );
     expect(authoritative.missing_field_ids).toEqual([
@@ -627,9 +648,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     primaryProfile.revision,
     fields.revision,
     [
-      { field_id: publicField.id, value: publicStory },
-      { field_id: privateField.id, value: privateStory },
-      { field_id: newField.id, value: `New public bond ${unique}` },
+      { field_id: worldVisibleField.id, value: worldVisibleStory },
+      { field_id: restrictedField.id, value: restrictedStory },
+      { field_id: newField.id, value: `New world-visible bond ${unique}` },
     ],
   );
   fallbackProfile = await saveProfile(
@@ -641,8 +662,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     fallbackProfile.revision,
     fields.revision,
     [
-      { field_id: publicField.id, value: `Fallback public ${unique}` },
-      { field_id: privateField.id, value: `Fallback private ${unique}` },
+      {
+        field_id: worldVisibleField.id,
+        value: `Fallback world-visible ${unique}`,
+      },
+      { field_id: restrictedField.id, value: `Fallback restricted ${unique}` },
       { field_id: newField.id, value: `Fallback bond ${unique}` },
     ],
   );
@@ -660,7 +684,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
           data: {
-            expected_table_revision: before.table_revision,
+            expected_roster_revision: before.roster_revision,
             controller_world_membership_ids: [playerWorld!.membership_id],
           },
         },
@@ -669,7 +693,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
           data: {
-            expected_table_revision: before.table_revision,
+            expected_roster_revision: before.roster_revision,
             controller_world_membership_ids: [setupPlayerWorld.membership_id],
           },
         },
@@ -693,7 +717,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       409,
       "revision_conflict",
     );
-    expect(winner.table_revision).toBe(before.table_revision + 1);
+    expect(winner.roster_revision).toBe(before.roster_revision + 1);
     const members = await getJSON<WorldMember[]>(
       request,
       `${baseURL}/api/worlds/${world.id}/members`,
@@ -713,33 +737,36 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       request,
       `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
       {
-        expected_table_revision: postRaceWorld.table_revision,
+        expected_roster_revision: postRaceWorld.roster_revision,
         controller_world_membership_ids: [],
       },
       owner.id,
     );
   });
 
-  const initialPrimaryState = await getState(
+  const initialPrimarySheet = await getSheet(
     request,
     baseURL,
     world.id,
     primary.id,
     owner.id,
   );
-  let primaryState = await putJSON<StateResponse>(
+  let primarySheet = await putJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/state`,
+    `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
     {
-      expected_revision: initialPrimaryState.revision,
+      expected_logical_state_revision:
+        initialPrimarySheet.logical_state_revision,
       expected_rules_revision: rulesRevision,
-      values: { [baseMechanic.mechanic.id]: numberValue("5") },
+      logical_input_values: {
+        [baseMechanic.mechanic.id]: numberValue("5"),
+      },
     },
     owner.id,
   );
 
-  await test.step("MEC-V05 derived mechanics cannot acquire stored sheet state", async () => {
-    const before = await getState(
+  await test.step("MEC-V05 derived mechanics cannot acquire stored overrides", async () => {
+    const before = await getSheet(
       request,
       baseURL,
       world.id,
@@ -748,13 +775,13 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     await expectAPIError(
       await actorRequest(owner.id).put(
-        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         {
           data: {
-            expected_revision: before.revision,
+            expected_logical_state_revision: before.logical_state_revision,
             expected_rules_revision: before.rules_revision,
-            values: {
-              ...before.values,
+            logical_input_values: {
+              ...before.logical_input_values,
               [derivedMechanic.mechanic.id]: numberValue("99"),
             },
           },
@@ -764,12 +791,12 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       "validation_failed",
     );
     expect(
-      await getState(request, baseURL, world.id, primary.id, owner.id),
+      await getSheet(request, baseURL, world.id, primary.id, owner.id),
     ).toEqual(before);
   });
 
   await test.step("RST-V04 a player reads an authorized sheet but cannot mutate it", async () => {
-    const before = await getState(
+    const before = await getSheet(
       request,
       baseURL,
       world.id,
@@ -778,13 +805,13 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     await expectAPIError(
       await actorRequest(player.id).put(
-        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         {
           data: {
-            expected_revision: before.revision,
+            expected_logical_state_revision: before.logical_state_revision,
             expected_rules_revision: before.rules_revision,
-            values: {
-              ...before.values,
+            logical_input_values: {
+              ...before.logical_input_values,
               [baseMechanic.mechanic.id]: numberValue("7"),
             },
           },
@@ -794,7 +821,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       "world_editor_required",
     );
     expect(
-      await getState(request, baseURL, world.id, primary.id, player.id),
+      await getSheet(request, baseURL, world.id, primary.id, player.id),
     ).toEqual(before);
   });
 
@@ -817,7 +844,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       character_status: "setup-required",
     });
     expect(
-      await getState(request, baseURL, world.id, incomplete.id, setupPlayer.id),
+      await getSheet(request, baseURL, world.id, incomplete.id, setupPlayer.id),
     ).toMatchObject({ entity_id: incomplete.id });
     await expectAPIError(
       await actorRequest(setupPlayer.id).get(
@@ -842,7 +869,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         prompt: `No audience draft ${unique}`,
         audience_membership_ids: [],
         eligible_responder_membership_ids: [],
-        entity_ids: [],
+        context_entity_ids: [],
       },
       owner.id,
     );
@@ -876,7 +903,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
   });
 
-  await test.step("PLY-V02 non-ready responders and incomplete or archived context are rejected atomically", async () => {
+  await test.step("PLY-V02 non-ready current players and incomplete or archived context are rejected atomically", async () => {
     const before = await listInteractions(request, baseURL, world.id, owner.id);
     const cursor = await latestEventCursor(baseURL, world.id, owner.id);
     const cases = [
@@ -884,25 +911,25 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         name: "waiting responder",
         audience: [world.membership_id, waitingPlayerWorld.membership_id],
         responders: [waitingPlayerWorld.membership_id],
-        entities: [primary.id],
+        contextEntityIDs: [primary.id],
       },
       {
         name: "setup-required responder",
         audience: [world.membership_id, setupPlayerWorld.membership_id],
         responders: [setupPlayerWorld.membership_id],
-        entities: [primary.id],
+        contextEntityIDs: [primary.id],
       },
       {
         name: "incomplete context",
         audience: [world.membership_id, playerWorld!.membership_id],
         responders: [playerWorld!.membership_id],
-        entities: [incomplete.id],
+        contextEntityIDs: [incomplete.id],
       },
       {
         name: "archived context",
         audience: [world.membership_id, playerWorld!.membership_id],
         responders: [playerWorld!.membership_id],
-        entities: [archivedEntity.id],
+        contextEntityIDs: [archivedEntity.id],
       },
     ] as const;
     for (const scenarioCase of cases) {
@@ -916,7 +943,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
                 prompt: `${scenarioCase.name} ${unique}`,
                 audience_membership_ids: scenarioCase.audience,
                 eligible_responder_membership_ids: scenarioCase.responders,
-                entity_ids: scenarioCase.entities,
+                context_entity_ids: scenarioCase.contextEntityIDs,
               },
             },
           ),
@@ -933,11 +960,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     ).toEqual([]);
   });
 
-  let publicResolutionInteraction: InteractionResponse;
-  await test.step("AUT-007 same-world references traverse control, profile, action, receipt, and event boundaries", async () => {
+  let visibleResolutionInteraction: InteractionResponse;
+  await test.step("AUT-007 same-world references traverse control, profile, action, Resolution receipt, and event boundaries", async () => {
     const cursor = await latestEventCursor(baseURL, world.id, owner.id);
     const problemSecret = `Facilitator setup ${unique}`;
-    const receiptSecret = `Facilitator ruling ${unique}`;
+    const receiptSecret = `Facilitator consequence ${unique}`;
     const open = await postJSON<InteractionResponse>(
       request,
       `${baseURL}/api/worlds/${world.id}/interactions`,
@@ -951,7 +978,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
           spectatorWorld.membership_id,
         ],
         eligible_responder_membership_ids: [playerWorld!.membership_id],
-        entity_ids: [primary.id],
+        context_entity_ids: [primary.id],
       },
       owner.id,
     );
@@ -985,7 +1012,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     const effectID = randomUUID();
-    const resolved = await postJSON<ResolutionResult>(
+    const resolved = await postJSON<InteractionResolutionResult>(
       request,
       `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/resolve`,
       {
@@ -994,7 +1021,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         idempotency_key: randomUUID(),
         selected_action_id: action.id,
         action_summary: `The courier steadies the load ${unique}.`,
-        narrative: `The table sees the crossing succeed ${unique}.`,
+        narrative: `The World sees the crossing succeed ${unique}.`,
         private_notes: receiptSecret,
         effects: [
           {
@@ -1010,7 +1037,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     expect(resolved).toMatchObject({
       interaction_id: open.id,
-      applied_effects: [
+      applications: [
         {
           effect_id: effectID,
           entity_id: primary.id,
@@ -1018,9 +1045,9 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         },
       ],
     });
-    primaryState = required(
-      resolved.state.records[primary.id],
-      "same-world resolved state",
+    primarySheet = required(
+      resolved.entity_sheets[primary.id],
+      "same-world resolved Entity sheet",
     );
     const ownerHistory = await getInteraction(
       request,
@@ -1034,7 +1061,8 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       private_notes: problemSecret,
       resolution: {
         private_notes: receiptSecret,
-        applied_effects: [
+        resolved_at: expect.any(String),
+        applications: [
           expect.objectContaining({
             effect_id: effectID,
             entity_id: primary.id,
@@ -1052,14 +1080,14 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     expect(events).toContainEqual(
       expect.objectContaining({
-        type: "resolution-applied",
+        type: "resolution-committed",
         interaction_id: open.id,
         resolution_id: resolutionID,
       }),
     );
-    publicResolutionInteraction = ownerHistory;
+    visibleResolutionInteraction = ownerHistory;
 
-    await test.step("AUT-V04 non-facilitator projections omit private problem and receipt prose", async () => {
+    await test.step("AUT-V04 non-facilitator projections omit private problem and Resolution receipt prose", async () => {
       for (const actorID of [player.id, spectator.id]) {
         const projection = await getInteraction(
           request,
@@ -1072,7 +1100,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
           status: "resolved",
           prompt: open.prompt,
           resolution: {
-            narrative: `The table sees the crossing succeed ${unique}.`,
+            narrative: `The World sees the crossing succeed ${unique}.`,
           },
         });
         const serialized = JSON.stringify(projection);
@@ -1173,7 +1201,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     }
   });
 
-  await test.step("CON-V03 invalid status modifiers create no status, receipt, lifecycle, or event", async () => {
+  await test.step("CON-V03 invalid status modifiers create no status, Resolution receipt, lifecycle, or event", async () => {
     const cases = [
       {
         name: "incompatible operand",
@@ -1242,7 +1270,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
   });
 
-  await test.step("LFC-V02 an active status blocks mechanic archive while history stays interpretable", async () => {
+  await test.step("LFC-V02 an active Status instance blocks mechanic archive while history stays interpretable", async () => {
     const adjudicating = await createAdjudicatingInteraction(
       request,
       baseURL,
@@ -1251,14 +1279,14 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       `Status archive blocker ${unique}`,
       primary.id,
     );
-    const result = await postJSON<ResolutionResult>(
+    const result = await postJSON<InteractionResolutionResult>(
       request,
       `${baseURL}/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
       {
         expected_revision: adjudicating.revision,
         expected_rules_revision: rulesRevision,
         idempotency_key: randomUUID(),
-        narrative: `Poise remains under an active status ${unique}.`,
+        narrative: `Poise remains under an active Status instance ${unique}.`,
         effects: [
           {
             type: "apply-status",
@@ -1280,17 +1308,17 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       owner.id,
     );
     const statusInstanceID = required(
-      result.applied_effects[0]?.status_instance_id,
-      "active status instance",
+      result.applications[0]?.status_instance_id,
+      "active Status instance",
     );
-    const stateBefore = await getState(
+    const sheetBefore = await getSheet(
       request,
       baseURL,
       world.id,
       primary.id,
       owner.id,
     );
-    expect(stateBefore.active_statuses).toContainEqual(
+    expect(sheetBefore.active_status_instances).toContainEqual(
       expect.objectContaining({ id: statusInstanceID }),
     );
     const mechanicsBefore = await readMechanics(
@@ -1307,11 +1335,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         },
       ),
       409,
-      "mechanic_has_active_statuses",
+      "mechanic_has_active_status_instances",
     );
     expect(
-      await getState(request, baseURL, world.id, primary.id, owner.id),
-    ).toEqual(stateBefore);
+      await getSheet(request, baseURL, world.id, primary.id, owner.id),
+    ).toEqual(sheetBefore);
     expect(await readMechanics(request, baseURL, world.id, owner.id)).toEqual(
       mechanicsBefore,
     );
@@ -1325,7 +1353,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     expect(history).toMatchObject({
       status: "resolved",
       resolution: {
-        narrative: `Poise remains under an active status ${unique}.`,
+        narrative: `Poise remains under an active Status instance ${unique}.`,
       },
     });
   });
@@ -1338,7 +1366,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       primary.id,
       owner.id,
     );
-    const tableBefore = await getJSON<WorldResponse>(
+    const rosterBefore = await getJSON<WorldResponse>(
       request,
       `${baseURL}/api/worlds/${world.id}`,
       owner.id,
@@ -1347,7 +1375,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       request,
       `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/controllers`,
       {
-        expected_table_revision: tableBefore.table_revision,
+        expected_roster_revision: rosterBefore.roster_revision,
         controller_world_membership_ids: [],
       },
       owner.id,
@@ -1367,7 +1395,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         {
           data: {
             expected_revision: ownerBefore.revision,
-            expected_character_fields_revision: fields.revision,
+            expected_character_field_set_revision: fields.revision,
             values: [],
           },
         },
@@ -1384,7 +1412,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     expect(ownerAfter).toMatchObject({
       revision: ownerBefore.revision,
-      character_fields_revision: ownerBefore.character_fields_revision,
+      character_field_set_revision: ownerBefore.character_field_set_revision,
       character_status: "not-controlled",
       completed_field_count: ownerBefore.completed_field_count,
       required_field_count: ownerBefore.required_field_count,
@@ -1399,13 +1427,16 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     );
     expect(formerControllerProjection.can_edit).toBe(false);
     expect(JSON.stringify(formerControllerProjection)).not.toContain(
-      privateStory,
+      restrictedStory,
     );
     expect(JSON.stringify(formerControllerProjection)).not.toContain(
-      privateField.id,
+      restrictedField.id,
     );
     expect(formerControllerProjection.fields).toContainEqual(
-      expect.objectContaining({ id: publicField.id, value: publicStory }),
+      expect.objectContaining({
+        id: worldVisibleField.id,
+        value: worldVisibleStory,
+      }),
     );
 
     const open = await createOpenInteraction(
@@ -1437,7 +1468,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
   });
 
   await test.step("AUT-V01 outsider reads and commands reveal no nested-resource distinction and mutate nothing", async () => {
-    const realInteraction = publicResolutionInteraction!;
+    const realInteraction = visibleResolutionInteraction!;
     const before = await authoritativeSnapshot(
       request,
       baseURL,
@@ -1487,7 +1518,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       { method: "GET", path: `/api/worlds/${world.id}/entities` },
       {
         method: "GET",
-        path: `/api/worlds/${world.id}/entities/${primary.id}/state`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/sheet`,
       },
       {
         method: "GET",
@@ -1519,11 +1550,11 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
       },
       {
         method: "PUT",
-        path: `/api/worlds/${world.id}/entities/${primary.id}/state`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         data: {
-          expected_revision: before.state.revision,
-          expected_rules_revision: before.state.rules_revision,
-          values: before.state.values,
+          expected_logical_state_revision: before.sheet.logical_state_revision,
+          expected_rules_revision: before.sheet.rules_revision,
+          logical_input_values: before.sheet.logical_input_values,
         },
       },
       {
@@ -1531,7 +1562,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         path: `/api/worlds/${world.id}/entities/${primary.id}/profile`,
         data: {
           expected_revision: before.profile.revision,
-          expected_character_fields_revision: fields.revision,
+          expected_character_field_set_revision: fields.revision,
           values: [],
         },
       },
@@ -1541,7 +1572,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
         data: {
           prompt: "Outsider problem",
           eligible_responder_membership_ids: [],
-          entity_ids: [],
+          context_entity_ids: [],
         },
       },
     ] as const;
@@ -1566,7 +1597,7 @@ test("contract: direct scenario gap closures preserve state, privacy, and author
     ).toEqual(before);
   });
 
-  expect(primaryState.values[baseMechanic.mechanic.id]).toEqual(
+  expect(primarySheet.logical_input_values[baseMechanic.mechanic.id]).toEqual(
     numberValue("6"),
   );
 });
@@ -1578,7 +1609,7 @@ async function authoritativeSnapshot(
   entityID: string,
   ownerID: string,
 ) {
-  const [world, mechanics, entities, state, profile, interactions, invites] =
+  const [world, mechanics, entities, sheet, profile, interactions, invites] =
     await Promise.all([
       getJSON<WorldResponse>(
         request,
@@ -1591,7 +1622,7 @@ async function authoritativeSnapshot(
         `${baseURL}/api/worlds/${worldID}/entities`,
         ownerID,
       ),
-      getState(request, baseURL, worldID, entityID, ownerID),
+      getSheet(request, baseURL, worldID, entityID, ownerID),
       getProfile(request, baseURL, worldID, entityID, ownerID),
       listInteractions(request, baseURL, worldID, ownerID),
       getJSON<InviteResponse[]>(
@@ -1600,7 +1631,7 @@ async function authoritativeSnapshot(
         ownerID,
       ),
     ]);
-  return { world, mechanics, entities, state, profile, interactions, invites };
+  return { world, mechanics, entities, sheet, profile, interactions, invites };
 }
 
 async function assertResolutionRejectedAtomically(
@@ -1622,7 +1653,7 @@ async function assertResolutionRejectedAtomically(
       label,
       entityID,
     );
-    const stateBefore = await getState(
+    const sheetBefore = await getSheet(
       request,
       baseURL,
       world.id,
@@ -1647,8 +1678,8 @@ async function assertResolutionRejectedAtomically(
       "transition_failed",
     );
     expect(
-      await getState(request, baseURL, world.id, entityID, ownerID),
-    ).toEqual(stateBefore);
+      await getSheet(request, baseURL, world.id, entityID, ownerID),
+    ).toEqual(sheetBefore);
     const unchangedInteraction = await getInteraction(
       request,
       baseURL,
@@ -1673,7 +1704,7 @@ async function createAdjudicatingInteraction(
   world: WorldResponse,
   ownerID: string,
   label: string,
-  entityID: string,
+  contextEntityID: string,
 ): Promise<InteractionResponse> {
   const open = await postJSON<InteractionResponse>(
     request,
@@ -1683,7 +1714,7 @@ async function createAdjudicatingInteraction(
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
       audience_membership_ids: [world.membership_id],
       eligible_responder_membership_ids: [],
-      entity_ids: [entityID],
+      context_entity_ids: [contextEntityID],
     },
     ownerID,
   );
@@ -1704,7 +1735,7 @@ async function createOpenInteraction(
   ownerID: string,
   prompt: string,
   responderMembershipID: string,
-  entityID: string,
+  contextEntityID: string,
 ): Promise<InteractionResponse> {
   const open = await postJSON<InteractionResponse>(
     request,
@@ -1714,7 +1745,7 @@ async function createOpenInteraction(
       prompt,
       audience_membership_ids: [world.membership_id, responderMembershipID],
       eligible_responder_membership_ids: [responderMembershipID],
-      entity_ids: [entityID],
+      context_entity_ids: [contextEntityID],
     },
     ownerID,
   );
@@ -1939,15 +1970,15 @@ async function saveProfile(
   entityID: string,
   userID: string,
   expectedRevision: number,
-  expectedFieldsRevision: number,
+  expectedCharacterFieldSetRevision: number,
   values: Array<{ field_id: string; value: string }>,
-): Promise<ProfileResponse> {
-  return putJSON<ProfileResponse>(
+): Promise<EntityProfileResponse> {
+  return putJSON<EntityProfileResponse>(
     request,
     `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: expectedRevision,
-      expected_character_fields_revision: expectedFieldsRevision,
+      expected_character_field_set_revision: expectedCharacterFieldSetRevision,
       values,
     },
     userID,
@@ -1960,24 +1991,24 @@ async function getProfile(
   worldID: string,
   entityID: string,
   userID: string,
-): Promise<ProfileResponse> {
-  return getJSON<ProfileResponse>(
+): Promise<EntityProfileResponse> {
+  return getJSON<EntityProfileResponse>(
     request,
     `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     userID,
   );
 }
 
-async function getState(
+async function getSheet(
   request: APIRequestContext,
   baseURL: string,
   worldID: string,
   entityID: string,
   userID: string,
-): Promise<StateResponse> {
-  return getJSON<StateResponse>(
+): Promise<EntitySheetResponse> {
+  return getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/state`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }
@@ -2009,11 +2040,11 @@ async function getInteraction(
   );
 }
 
-function numberValue(value: DecimalText): TaggedValue {
+function numberValue(value: DecimalText): MechanicValue {
   return { kind: "number", value };
 }
 
-function booleanValue(value: boolean): TaggedValue {
+function booleanValue(value: boolean): MechanicValue {
   return { kind: "boolean", value };
 }
 

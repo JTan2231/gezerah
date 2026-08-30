@@ -81,15 +81,12 @@ test/
       access-and-invites.contract.spec.ts
       authentication.contract.spec.ts
       authorization-matrices.contract.spec.ts
-      concurrency-and-status-matrices.contract.spec.ts
+      concurrency-and-status-instance-matrices.contract.spec.ts
       direct-gap-closures.contract.spec.ts
       profile-and-readiness.contract.spec.ts
       resource-lifecycle.contract.spec.ts
-      rules-and-status.contract.spec.ts
+      mechanic-graph-and-status-instances.contract.spec.ts
 ```
-
-The former broad `configuration.spec.ts`, `play.spec.ts`, and
-`state-graph.spec.ts` files were replaced by these explicit evidence lanes.
 
 ## Executable ownership
 
@@ -122,7 +119,7 @@ seven separately reported checkpoints:
 2. `JRN-002/ready-player`
 3. `JRN-003/improvised-round-resolved`
 4. `JRN-004/status-lifecycle-preserved`
-5. `JRN-005/spectator-public-table-safe`
+5. `JRN-005/spectator-public-play-safe`
 6. `JRN-006/editor-authority-bounded`
 7. `JRN-007/archived-history-readable`
 

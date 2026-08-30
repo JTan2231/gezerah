@@ -107,8 +107,8 @@ export function MechanicsView({
         title={kind === "capacity" ? "Capacities" : "Capabilities"}
         description={
           kind === "capacity"
-            ? "The values and resources every entity can carry into play."
-            : "The skills and proficiencies that describe what an entity can do."
+            ? "Numeric Mechanics represented as scores or pools on every Entity sheet."
+            : "Boolean or numeric Mechanics represented as binary values or ratings on every Entity sheet."
         }
         actions={
           <button
@@ -191,7 +191,7 @@ export function MechanicsView({
               description={
                 kind === "capacity"
                   ? "Create a capacity to add a value or resource to entity sheets."
-                  : "Create a capability to add a skill or proficiency to entity sheets."
+                  : "Create a capability to add a binary value or numeric rating to Entity sheets."
               }
               action={
                 <button
@@ -284,7 +284,7 @@ export function MechanicEditorView({
           <p>
             {item.kind === "capacity"
               ? "A value an entity carries."
-              : "A skill or proficiency an entity may possess."}
+              : "A Boolean or numeric value on every Entity sheet."}
           </p>
         </div>
         {item.archived ? (
@@ -334,13 +334,13 @@ export function MechanicEditorView({
             <div className="section-heading">
               <div>
                 <h3>Behavior</h3>
-                <p>Choose how this mechanic is stored and displayed.</p>
+                <p>Choose how this Mechanic is authored and evaluated.</p>
               </div>
             </div>
             <div
               className="source-kind-cards"
               role="radiogroup"
-              aria-label={`${humanize(item.kind)} value source`}
+              aria-label={`${humanize(item.kind)} Mechanic source`}
             >
               <label
                 className={
@@ -363,8 +363,11 @@ export function MechanicEditorView({
                     })
                   }
                 />
-                <strong>Input value</strong>
-                <small>Stored on each entity and editable during setup.</small>
+                <strong>Input mechanic</strong>
+                <small>
+                  Authored default with an optional stored override for each
+                  Entity.
+                </small>
               </label>
               <label
                 className={
@@ -390,8 +393,8 @@ export function MechanicEditorView({
                     })
                   }
                 />
-                <strong>Derived value</strong>
-                <small>Calculated from other values in this world.</small>
+                <strong>Derived mechanic</strong>
+                <small>Defined by an expression over other Mechanics.</small>
               </label>
             </div>
             <div
@@ -489,7 +492,10 @@ export function MechanicEditorView({
                       placeholder="Any"
                     />
                   </Field>
-                  <Field label="Unit" hint="Optional, such as HP or points.">
+                  <Field
+                    label="Unit"
+                    hint="Optional user-authored display unit."
+                  >
                     <input
                       value={item.unit ?? ""}
                       onChange={(event) =>
@@ -506,7 +512,7 @@ export function MechanicEditorView({
               <div className="derived-expression-section">
                 <div className="derived-expression-heading">
                   <div>
-                    <strong>Calculation</strong>
+                    <strong>Expression</strong>
                     <small>
                       References use stable mechanic identities. The server
                       checks types and rejects dependency cycles when you save.
@@ -531,7 +537,7 @@ export function MechanicEditorView({
                 {numericKind ? (
                   <Field
                     label="Unit"
-                    hint="Optional display text, such as HP or points."
+                    hint="Optional user-authored display unit."
                   >
                     <input
                       value={item.unit ?? ""}
@@ -558,7 +564,8 @@ export function MechanicEditorView({
               <span>
                 <strong>May change during play</strong>
                 <small>
-                  Facilitators can change this value when resolving a problem.
+                  Facilitators can change the logical input value when resolving
+                  a Problem.
                 </small>
               </span>
               <input
@@ -580,7 +587,7 @@ export function MechanicEditorView({
                 <h3>Archive mechanic</h3>
                 <p>
                   Archive it when new entities should stop using it. Existing
-                  state and resolution history remain readable.
+                  Stored overrides and Resolution history remain readable.
                 </p>
               </div>
               <button
@@ -612,7 +619,8 @@ export function MechanicEditorView({
           </div>
           <p>
             Every entity in this world receives this configured definition.
-            Values can be adjusted during roster setup or problem resolution.
+            Logical input values can be adjusted during roster setup or Problem
+            Resolution.
           </p>
         </aside>
       </div>
@@ -673,9 +681,9 @@ export function MechanicEditorView({
 
 function PreviewValue({ mechanic }: { mechanic: MechanicViewModel }) {
   if (mechanic.sourceKind === "derived")
-    return <span className="preview-check">Calculated</span>;
+    return <span className="preview-check">Derived</span>;
   if (mechanic.mode === "binary")
-    return <span className="preview-check">Not trained</span>;
+    return <span className="preview-check">False</span>;
   const value = mechanic.defaultNumber ?? "0";
   if (mechanic.mode === "pool" && mechanic.maximum !== undefined)
     return (
@@ -801,7 +809,7 @@ function ExpressionEditor({
       <div className="expression-node-bar">
         <span>{label}</span>
         <select
-          aria-label={`${label} calculation`}
+          aria-label={`${label} expression`}
           value={expression.operation}
           onChange={(event) =>
             chooseOperation(event.currentTarget.value as ExpressionOperation)
@@ -1120,9 +1128,8 @@ function optionalDecimalText(value: string): string | undefined {
 }
 
 function mechanicSummary(item: MechanicViewModel): string {
-  if (item.sourceKind === "derived")
-    return `${humanize(item.mode)} · calculated`;
-  if (item.mode === "binary") return "Possessed or not";
+  if (item.sourceKind === "derived") return `${humanize(item.mode)} · derived`;
+  if (item.mode === "binary") return "True or False";
   const bounds =
     item.minimum === undefined && item.maximum === undefined
       ? "Open scale"
@@ -1133,7 +1140,7 @@ function mechanicSummary(item: MechanicViewModel): string {
 function modeDescription(mode: string): string {
   switch (mode) {
     case "score":
-      return "A single attribute value.";
+      return "A numeric value.";
     case "pool":
       return "A resource that is spent and restored.";
     case "binary":

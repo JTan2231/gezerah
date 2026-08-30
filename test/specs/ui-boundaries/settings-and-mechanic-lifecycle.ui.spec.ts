@@ -36,7 +36,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
     base: `Foundation Score ${unique}`,
     derived: `Dependent Score ${unique}`,
     entity: `Archive Witness ${unique}`,
-    history: `A retained ruling ${unique}`,
+    history: `A retained resolution ${unique}`,
   };
   const editorContext = await browser.newContext({ reducedMotion: "reduce" });
   const editorPage = await editorContext.newPage();
@@ -137,7 +137,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       );
       await expect(editorFacilitatorNote).toContainText(labels.owner);
       await expect(editorFacilitatorNote).toContainText(
-        "Hand off the Dungeon Master role from Play between problems.",
+        "Hand off Dungeon Master responsibility from Play between Problems.",
       );
       await expect(editorPage.getByLabel("DM source")).toHaveCount(0);
 

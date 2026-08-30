@@ -61,6 +61,8 @@ describe("BuildLibraryView", () => {
     );
 
     expect(html).toContain("No worlds");
-    expect(html).toContain("Create a world to configure its mechanics");
+    expect(html).toContain(
+      "Create a world to configure its Mechanics and issue membership invitations.",
+    );
   });
 });

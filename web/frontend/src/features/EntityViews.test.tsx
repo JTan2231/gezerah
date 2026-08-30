@@ -19,9 +19,9 @@ describe("entity presentation views", () => {
   test("renders linked tabs with one selected and focusable control", () => {
     const html = renderToStaticMarkup(
       <EntityDetailView
-        tab="story"
+        tab="profile"
         showControllers
-        characterPanel={<p>Character story</p>}
+        profilePanel={<p>Entity profile</p>}
         sheetPanel={<p>Generated sheet</p>}
         onSelectTab={noop}
         onManageControllers={noop}
@@ -34,16 +34,16 @@ describe("entity presentation views", () => {
     expect(html).toContain('role="tabpanel"');
     expect(html).toContain("aria-controls=");
     expect(html).toContain('tabindex="-1"');
-    expect(html).toContain("Character story");
+    expect(html).toContain("Entity profile");
     expect(html).toContain("Controllers");
   });
 
-  test("renders a generated sheet from display-ready state", () => {
+  test("renders a generated Entity sheet view model", () => {
     const html = renderToStaticMarkup(
       <EntitySheetView
         displayName="Mara Vey"
         metadata="Entity sheet · current rules"
-        statuses={[
+        statusInstances={[
           {
             id: "status-1",
             name: "Inspired",
@@ -52,11 +52,11 @@ describe("entity presentation views", () => {
         ]}
         mechanics={[
           {
-            id: "grit",
+            id: "measure",
             kind: "capacity",
             mode: "pool",
             sourceKind: "input",
-            name: "Grit",
+            name: "Measure",
             maximum: "6",
             effectiveValue: "4 / 6",
             modifiers: [
@@ -78,8 +78,8 @@ describe("entity presentation views", () => {
           },
         ]}
         editable
-        values={{ grit: "3" }}
-        saving
+        logicalInputValues={{ measure: "3" }}
+        saving={false}
         issue={{ kind: "request", message: "Check the sheet values." }}
         onValueChange={noop}
         onSubmit={noop}
@@ -90,9 +90,10 @@ describe("entity presentation views", () => {
     expect(html).toContain("Entity sheet · current rules");
     expect(html).toContain("Inspired");
     expect(html).toContain("4 / 6");
-    expect(html).toContain("Calculated");
+    expect(html).toContain("Derived");
+    expect(html).toContain("Logical input values");
+    expect(html).toContain("Save logical state");
     expect(html).toContain("Check the sheet values.");
-    expect(html).toContain("Saving…");
   });
 
   test("renders profile loading, failure, reader, and editor states", () => {
@@ -108,7 +109,7 @@ describe("entity presentation views", () => {
         id: "origin",
         label: "Origin",
         helpText: "Where did you begin?",
-        visibility: "controllers-and-facilitators" as const,
+        visibility: "restricted" as const,
         value: "The northern road",
       },
     ];
@@ -139,18 +140,18 @@ describe("entity presentation views", () => {
       />,
     );
 
-    expect(loadingHtml).toContain("Opening this character");
+    expect(loadingHtml).toContain("Opening this Entity");
     expect(failureHtml).toContain("Connection lost");
     expect(failureHtml).toContain("Try again");
     expect(readerHtml).toContain("1 of 1 required fields · current profile");
-    expect(readerHtml).toContain("Private");
+    expect(readerHtml).toContain("Restricted");
     expect(readerHtml).toContain("The northern road");
     expect(editorHtml).toContain("Origin is too long.");
     expect(editorHtml).toContain("Saving…");
   });
 
   test("renders entity and controller modal fixtures", () => {
-    const players = [
+    const eligibleControllers = [
       { id: "member-1", displayName: "Jo Rowan" },
       { id: "member-2", displayName: "Tamsin Hale" },
     ];
@@ -158,7 +159,7 @@ describe("entity presentation views", () => {
       <NewEntityModalView
         name="Mara"
         controllerIds={["member-1"]}
-        players={players}
+        eligibleControllers={eligibleControllers}
         saving
         issue={{
           kind: "request",
@@ -175,7 +176,7 @@ describe("entity presentation views", () => {
       <ManageControllersModalView
         entityName="Mara"
         controllerIds={[]}
-        players={[]}
+        eligibleControllers={[]}
         saving={false}
         issue={null}
         onToggleController={noop}
@@ -188,8 +189,10 @@ describe("entity presentation views", () => {
     expect(createHtml).toContain("Use a longer name.");
     expect(createHtml).toContain("Jo Rowan");
     expect(createHtml).toContain("Creating…");
-    expect(manageHtml).toContain("Manage character control");
-    expect(manageHtml).toContain("Invite a player before assigning control.");
+    expect(manageHtml).toContain("Manage Entity controllers");
+    expect(manageHtml).toContain(
+      "No active owner, editor, or player is available.",
+    );
     expect(manageHtml).toContain("Save controllers");
   });
 });

@@ -4,7 +4,7 @@ import { expect, test, type Page } from "../../src/scenario";
 
 const LIFECYCLE_PASSWORD = "lantern-estuary-keeps-four-safe-harbors";
 
-test("one rendered lifecycle carries the table from authoring through archive", async ({
+test("one rendered lifecycle carries the World from authoring through archive", async ({
   scenario,
 }) => {
   const { baseURL } = scenario;
@@ -30,11 +30,11 @@ test("one rendered lifecycle carries the table from authoring through archive", 
     numeric: `Bearing ${run}`,
     boolean: `Carries Signal ${run}`,
     derived: `Current Bearing ${run}`,
-    publicField: `Public Sign ${run}`,
-    privateField: `Private Oath ${run}`,
+    worldVisibleField: `World-visible Sign ${run}`,
+    restrictedField: `Restricted Oath ${run}`,
     entity: `Glasswing Courier ${run}`,
-    publicStory: `Known by a silver wake ${run}.`,
-    privateStory: `Carries the unopened letter ${run}.`,
+    worldVisibleStory: `Known by a silver wake ${run}.`,
+    restrictedStory: `Carries the unopened letter ${run}.`,
     status: `Off Balance ${run}`,
     firstStatusDescription: `The first crossing left a visible stagger ${run}.`,
     secondStatusDescription: `A separate gust caused another stagger ${run}.`,
@@ -108,7 +108,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await ownerPage.getByLabel("Name").fill(labels.boolean);
         await ownerPage
           .getByLabel("Description")
-          .fill("Whether the courier carries the table's authored signal.");
+          .fill("Whether the courier carries the World's authored signal.");
         await ownerPage
           .getByRole("button", { name: "Create capability" })
           .click();
@@ -145,15 +145,15 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await ownerPage
           .getByLabel("Field label")
           .nth(0)
-          .fill(labels.publicField);
+          .fill(labels.worldVisibleField);
         await ownerPage
           .getByLabel("Guidance")
           .nth(0)
-          .fill("Write the sign the whole table can recognize.");
+          .fill("Write the sign the whole World can recognize.");
         await ownerPage
           .getByLabel("Field label")
           .nth(1)
-          .fill(labels.privateField);
+          .fill(labels.restrictedField);
         await ownerPage
           .getByLabel("Guidance")
           .nth(1)
@@ -161,16 +161,14 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             "Write the promise only controllers and facilitators may read.",
           );
         await ownerPage
-          .getByLabel("Who can read the answer?")
+          .getByLabel("Who can read this value?")
           .nth(1)
-          .selectOption("controllers-and-facilitators");
-        await ownerPage
-          .getByRole("button", { name: "Publish requirements" })
-          .click();
-        await expect(ownerPage.getByText("schema r1")).toBeVisible();
+          .selectOption("restricted");
+        await ownerPage.getByRole("button", { name: "Publish fields" }).click();
+        await expect(ownerPage.getByText("Character fields r1")).toBeVisible();
       },
       async () => {
-        await expect(ownerPage.getByText("schema r1")).toBeVisible();
+        await expect(ownerPage.getByText("Character fields r1")).toBeVisible();
       },
     );
 
@@ -196,8 +194,10 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .getByRole("textbox", { name: labels.numeric, exact: true })
           .fill("9");
         await ownerPage.getByLabel(labels.boolean).check();
-        await ownerPage.getByRole("button", { name: "Save sheet" }).click();
-        await expect(ownerPage.getByText("state r1")).toBeVisible();
+        await ownerPage
+          .getByRole("button", { name: "Save logical state" })
+          .click();
+        await expect(ownerPage.getByText("logical state r1")).toBeVisible();
         await expect(
           ownerPage.getByLabel(`${labels.derived} effective value`, {
             exact: true,
@@ -236,7 +236,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       "invites.create-and-redeem",
       async () => {
         await ownerPage
-          .getByRole("button", { name: /People & invites/ })
+          .getByRole("button", { name: /Members & invites/ })
           .click();
         const editorInvite = await createInvite(ownerPage, "editor");
         const playerInvite = await createInvite(ownerPage, "player");
@@ -275,7 +275,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             .getByRole("button", { name: /Roster & sheets/ })
             .click();
           await ownerPage
-            .getByRole("button", { name: /People & invites/ })
+            .getByRole("button", { name: /Members & invites/ })
             .click();
           const usedPlayerInvite = ownerPage
             .locator(".invite-row")
@@ -312,7 +312,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           .getByRole("button", { name: /Roster & sheets/ })
           .click();
         await ownerPage
-          .getByRole("button", { name: /People & invites/ })
+          .getByRole("button", { name: /Members & invites/ })
           .click();
         await expect(ownerPage.getByLabel("Invite link")).toHaveCount(0);
         for (const inviteURL of [editorInvite, playerInvite, spectatorInvite]) {
@@ -387,11 +387,9 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       "profile.save-partial",
       async () => {
         await playerPage
-          .getByLabel(labels.publicField)
-          .fill(labels.publicStory);
-        await playerPage
-          .getByRole("button", { name: "Save character" })
-          .click();
+          .getByLabel(labels.worldVisibleField)
+          .fill(labels.worldVisibleStory);
+        await playerPage.getByRole("button", { name: "Save profile" }).click();
         await expect(playerPage.getByText("profile r1")).toBeVisible();
         await expect(
           playerPage.getByText("Setup required").first(),
@@ -409,11 +407,9 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       "profile.complete",
       async () => {
         await playerPage
-          .getByLabel(labels.privateField)
-          .fill(labels.privateStory);
-        await playerPage
-          .getByRole("button", { name: "Save character" })
-          .click();
+          .getByLabel(labels.restrictedField)
+          .fill(labels.restrictedStory);
+        await playerPage.getByRole("button", { name: "Save profile" }).click();
         await expect(playerPage.getByText("Your character")).toBeVisible();
         await expect(playerPage.getByText("profile r2")).toBeVisible();
         await expect(
@@ -451,11 +447,11 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await editorPage.getByRole("button", { name: "Save changes" }).click();
         await expect(editorPage.getByText("All changes saved")).toBeVisible();
         await playerRulesReload;
-        await expect(spectatorPage.getByText("rules r4")).toBeVisible({
+        await expect(spectatorPage.getByText("rules revision r4")).toBeVisible({
           timeout: 4_000,
         });
         await playerPage.getByRole("tab", { name: "Sheet" }).click();
-        await expect(playerPage.getByText("rules r4")).toBeVisible({
+        await expect(playerPage.getByText("rules revision r4")).toBeVisible({
           timeout: 4_000,
         });
         await expect(
@@ -465,7 +461,9 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         ).toHaveText("9");
       },
       async () => {
-        await expect(spectatorPage.getByText("rules r4")).toBeVisible();
+        await expect(
+          spectatorPage.getByText("rules revision r4"),
+        ).toBeVisible();
         await expect(
           playerPage.getByLabel(`${labels.derived} effective value`, {
             exact: true,
@@ -534,11 +532,11 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         ).toBeVisible();
         await expect(
           editorPage
-            .locator(".play-header-actions .table-role")
-            .getByText("Facilitator", { exact: true }),
+            .locator(".play-header-actions .play-role")
+            .getByText("Dungeon Master", { exact: true }),
         ).toBeVisible();
         await expect(
-          editorPage.getByText("World access: Editor"),
+          editorPage.getByText("Membership role: Editor"),
         ).toBeVisible();
       },
       async () => {
@@ -549,11 +547,11 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         ).toBeVisible();
         await expect(
           editorPage
-            .locator(".play-header-actions .table-role")
-            .getByText("Facilitator", { exact: true }),
+            .locator(".play-header-actions .play-role")
+            .getByText("Dungeon Master", { exact: true }),
         ).toBeVisible();
         await expect(
-          editorPage.getByText("World access: Editor"),
+          editorPage.getByText("Membership role: Editor"),
         ).toBeVisible();
       },
     );
@@ -563,7 +561,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
     const title = `The tide gate bends ${run}`;
     const prompt = `A green surge folds the tide gate inward ${run}. What do you do?`;
     const action = `I lash the courier to the beacon chain ${run}.`;
-    const outcome = `The courier holds, but the current tears at every footing ${run}.`;
+    const consequence = `The courier holds, but the current tears at every footing ${run}.`;
 
     await scenario.behavior(
       "problem.present",
@@ -584,38 +582,38 @@ test("one rendered lifecycle carries the table from authoring through archive", 
     );
 
     await scenario.checkpoint(
-      "JRN-005/spectator-public-table-safe",
+      "JRN-005/spectator-world-visible-safe",
       async () => {
         await scenario.behavior(
           "profile.project-visibility",
           async () => {
-            await spectatorPage.getByRole("tab", { name: "Character" }).click();
-            await playerPage.getByRole("tab", { name: "Character" }).click();
+            await spectatorPage.getByRole("tab", { name: "Profile" }).click();
+            await playerPage.getByRole("tab", { name: "Profile" }).click();
             await expect(
-              spectatorPage.getByText(labels.publicStory),
+              spectatorPage.getByText(labels.worldVisibleStory),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByText(labels.privateStory),
+              spectatorPage.getByText(labels.restrictedStory),
             ).toHaveCount(0);
             await expect(
-              playerPage.getByText(labels.privateStory),
+              playerPage.getByText(labels.restrictedStory),
             ).toBeVisible();
           },
           async () => {
             await expect(
-              spectatorPage.getByText(labels.publicStory),
+              spectatorPage.getByText(labels.worldVisibleStory),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByText(labels.privateStory),
+              spectatorPage.getByText(labels.restrictedStory),
             ).toHaveCount(0);
             await expect(
-              playerPage.getByText(labels.privateStory),
+              playerPage.getByText(labels.restrictedStory),
             ).toBeVisible();
           },
         );
 
         await scenario.behavior(
-          "spectator.project-table",
+          "spectator.project-world-visible",
           async () => {
             await expect(
               spectatorPage.getByText(prompt, { exact: true }),
@@ -728,34 +726,40 @@ test("one rendered lifecycle carries the table from authoring through archive", 
         await scenario.behavior(
           "consequence.preview",
           async () => {
-            const invalidOutcome = `${outcome} The courier loses twenty bearing.`;
-            await compileNarrative(editorPage, invalidOutcome);
+            const invalidConsequence = `${consequence} The courier loses twenty bearing.`;
+            await compileNarrative(editorPage, invalidConsequence);
             await expect(
               editorPage.getByText("number is below the configured minimum"),
             ).toBeVisible();
             await expect(
-              editorPage.locator(".history-card").filter({ hasText: outcome }),
+              editorPage
+                .locator(".history-card")
+                .filter({ hasText: consequence }),
             ).toHaveCount(0);
-            await expect(editorPage.locator(".active-status-chip")).toHaveCount(
-              0,
-            );
-            await compileNarrative(editorPage, outcome);
+            await expect(
+              editorPage.locator(".status-instance-chip"),
+            ).toHaveCount(0);
+            await compileNarrative(editorPage, consequence);
             await expect(
               editorPage.getByText("Preview is valid"),
             ).toBeVisible();
             await expect(
-              editorPage.locator(".history-card").filter({ hasText: outcome }),
+              editorPage
+                .locator(".history-card")
+                .filter({ hasText: consequence }),
             ).toHaveCount(0);
-            await expect(spectatorPage.getByText(outcome)).toHaveCount(0);
+            await expect(spectatorPage.getByText(consequence)).toHaveCount(0);
           },
           async () => {
             await expect(
               editorPage.getByText("Preview is valid"),
             ).toBeVisible();
             await expect(
-              editorPage.locator(".history-card").filter({ hasText: outcome }),
+              editorPage
+                .locator(".history-card")
+                .filter({ hasText: consequence }),
             ).toHaveCount(0);
-            await expect(spectatorPage.getByText(outcome)).toHaveCount(0);
+            await expect(spectatorPage.getByText(consequence)).toHaveCount(0);
           },
         );
 
@@ -766,23 +770,25 @@ test("one rendered lifecycle carries the table from authoring through archive", 
               .getByRole("button", { name: "Resolve problem" })
               .click();
             await expect(
-              editorPage.getByText(outcome, { exact: true }),
+              editorPage.getByText(consequence, { exact: true }),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByText(outcome, { exact: true }),
+              spectatorPage.getByText(consequence, { exact: true }),
             ).toBeVisible();
             await expect(
-              playerPage.getByText(outcome, { exact: true }),
+              playerPage.getByText(consequence, { exact: true }),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByText(labels.privateStory),
+              spectatorPage.getByText(labels.restrictedStory),
             ).toHaveCount(0);
             await expect(
-              playerPage.locator(".history-card").filter({ hasText: outcome }),
+              playerPage
+                .locator(".history-card")
+                .filter({ hasText: consequence }),
             ).toContainText(`${labels.entity}: ${labels.numeric} 9 → 7`);
 
             const firstStatus = editorPage
-              .locator(".active-status-chip")
+              .locator(".status-instance-chip")
               .filter({ hasText: labels.firstStatusDescription });
             await expect(firstStatus).toHaveCount(1);
             firstStatusInstance = visibleStatusInstance(
@@ -801,10 +807,10 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           },
           async () => {
             await expect(
-              playerPage.getByText(outcome, { exact: true }),
+              playerPage.getByText(consequence, { exact: true }),
             ).toBeVisible();
             await expect(
-              spectatorPage.getByText(outcome, { exact: true }),
+              spectatorPage.getByText(consequence, { exact: true }),
             ).toBeVisible();
             await expect(
               editorPage.getByLabel(`${labels.derived} effective value`, {
@@ -818,7 +824,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
   });
 
   await scenario.checkpoint("JRN-004/status-lifecycle-preserved", async () => {
-    const secondOutcome = `A second gust settles into a separate strain ${run}.`;
+    const secondConsequence = `A second gust settles into a separate strain ${run}.`;
     await scenario.behavior(
       "status.apply",
       async () => {
@@ -829,12 +835,12 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           labels.entity,
         );
         await editorPage.getByRole("button", { name: "Close actions" }).click();
-        await compileNarrative(editorPage, secondOutcome);
+        await compileNarrative(editorPage, secondConsequence);
         await editorPage
           .getByRole("button", { name: "Resolve problem" })
           .click();
         await expect(
-          editorPage.getByText(secondOutcome, { exact: true }),
+          editorPage.getByText(secondConsequence, { exact: true }),
         ).toBeVisible();
         await expect(
           editorPage.getByLabel(`${labels.numeric} effective value`, {
@@ -849,7 +855,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       },
       async () => {
         await expect(
-          editorPage.getByText(secondOutcome, { exact: true }),
+          editorPage.getByText(secondConsequence, { exact: true }),
         ).toBeVisible();
         await expect(
           editorPage.getByLabel(`${labels.derived} effective value`, {
@@ -863,7 +869,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       "status.keep-same-name-distinct",
       async () => {
         const sameNameStatuses = editorPage
-          .locator(".active-status-chip")
+          .locator(".status-instance-chip")
           .filter({ hasText: labels.status });
         await expect(sameNameStatuses).toHaveCount(2);
         await expect(sameNameStatuses.nth(0)).toContainText(
@@ -875,13 +881,13 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       },
       async () => {
         const sameNameStatuses = editorPage
-          .locator(".active-status-chip")
+          .locator(".status-instance-chip")
           .filter({ hasText: labels.status });
         await expect(sameNameStatuses).toHaveCount(2);
       },
     );
 
-    const removalOutcome = `The first stagger ends while the second remains ${run}.`;
+    const removalConsequence = `The first stagger ends while the second remains ${run}.`;
     await scenario.behavior(
       "status.remove-exact",
       async () => {
@@ -892,16 +898,16 @@ test("one rendered lifecycle carries the table from authoring through archive", 
           labels.entity,
         );
         await editorPage.getByRole("button", { name: "Close actions" }).click();
-        await compileNarrative(editorPage, removalOutcome);
+        await compileNarrative(editorPage, removalConsequence);
         await editorPage
           .getByRole("button", { name: "Resolve problem" })
           .click();
         await expect(
-          editorPage.getByText(removalOutcome, { exact: true }),
+          editorPage.getByText(removalConsequence, { exact: true }),
         ).toBeVisible();
 
         const remainingStatus = editorPage
-          .locator(".active-status-chip")
+          .locator(".status-instance-chip")
           .filter({ hasText: labels.status });
         await expect(remainingStatus).toHaveCount(1);
         await expect(remainingStatus).toContainText(
@@ -924,7 +930,7 @@ test("one rendered lifecycle carries the table from authoring through archive", 
       },
       async () => {
         const remainingStatus = editorPage
-          .locator(".active-status-chip")
+          .locator(".status-instance-chip")
           .filter({ hasText: labels.status });
         await expect(remainingStatus).toHaveCount(1);
         await expect(remainingStatus).toContainText(
@@ -986,9 +992,9 @@ test("one rendered lifecycle carries the table from authoring through archive", 
             ).toHaveCount(0);
           }),
         );
-        await expect(spectatorPage.getByText(labels.privateStory)).toHaveCount(
-          0,
-        );
+        await expect(
+          spectatorPage.getByText(labels.restrictedStory),
+        ).toHaveCount(0);
       },
       async () => {
         await expect(ownerPage.locator(".history-card")).toHaveCount(0);
@@ -1043,7 +1049,7 @@ async function beginInvalidNumericInput(page: Page, name: string) {
   await page
     .getByLabel("Description")
     .fill("A user-authored measure of balance against the current.");
-  await page.getByLabel("Default").fill("8");
+  await page.getByRole("textbox", { name: "Default", exact: true }).fill("8");
   await minimumInput.fill("20");
   await maximumInput.fill("10");
   await page.getByLabel("Step").fill("1");
@@ -1082,9 +1088,9 @@ async function createNumericReference(
 ) {
   await page.getByRole("button", { name: "New capacity" }).click();
   await page.getByLabel("Name").fill(name);
-  await page.getByRole("radio", { name: "Derived value" }).check();
+  await page.getByRole("radio", { name: "Derived mechanic" }).check();
   await page
-    .getByLabel("Result calculation")
+    .getByLabel("Result expression")
     .selectOption({ label: "Value reference" });
   const referencedOption = page
     .getByLabel("Result referenced value")
@@ -1181,7 +1187,7 @@ function visibleStatusInstance(label: string | null): string {
   const instance = label?.match(/instance ([^ ]+)$/)?.[1];
   if (instance === undefined || instance === "")
     throw new Error(
-      `active status did not expose its visible identity: ${label}`,
+      `active Status instance did not expose its visible identity: ${label}`,
     );
   return instance;
 }

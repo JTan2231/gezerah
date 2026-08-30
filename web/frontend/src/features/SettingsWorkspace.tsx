@@ -106,10 +106,10 @@ export function SettingsWorkspace({
           dungeonMaster:
             world.facilitator.display_name ??
             (world.facilitator.source === "terra"
-              ? "Terra Auto DM"
+              ? "Terra"
               : world.facilitator.source === "agent"
                 ? "ChatGPT"
-                : "Human facilitator"),
+                : "Dungeon Master"),
         },
         canArchive: world.role === "owner" && world.status === "active",
       }}

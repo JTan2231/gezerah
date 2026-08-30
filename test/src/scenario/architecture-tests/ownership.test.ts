@@ -130,7 +130,7 @@ describe("scenario executable ownership", () => {
         "JRN-002/ready-player": ["JRN-002"],
         "JRN-003/improvised-round-resolved": ["JRN-003"],
         "JRN-004/status-lifecycle-preserved": ["JRN-004"],
-        "JRN-005/spectator-public-table-safe": ["JRN-005"],
+        "JRN-005/spectator-world-visible-safe": ["JRN-005"],
         "JRN-006/editor-authority-bounded": ["JRN-006"],
         "JRN-007/archived-history-readable": ["JRN-007"],
       });

@@ -15,9 +15,9 @@ const (
 	ValueBoolean ValueKind = "boolean"
 )
 
-// SourceKind identifies whether a mechanic owns writable input state or is
-// calculated from other mechanics. Derived mechanics never own stored scalar
-// state; their expression consumes the effective values of its references.
+// SourceKind identifies whether a mechanic can own a stored override or is
+// derived from other mechanics. Derived expressions consume the effective
+// values of their references.
 type SourceKind string
 
 const (
@@ -54,7 +54,7 @@ const (
 // normalized shape makes dependency extraction and storage adapters mechanical.
 type Expression struct {
 	Operation  ExpressionOperation
-	Literal    *StateValue
+	Literal    *MechanicValue
 	MechanicID ID
 	Operands   []Expression
 }
@@ -77,7 +77,7 @@ const (
 )
 
 // Entity is the complete mechanical identity of a world subject. Product
-// profile fields deliberately remain outside the rules engine.
+// Entity profile values deliberately remain outside the rules engine.
 type Entity struct {
 	ID          ID
 	WorldID     ID
@@ -89,13 +89,13 @@ type Entity struct {
 
 // MechanicDefinition is a universal scalar mechanic in one world. Inputs have
 // a valid default and sparse stored overrides; derived mechanics have one typed
-// expression and no stored scalar value.
+// expression and no stored override.
 type MechanicDefinition struct {
 	ID           ID
 	WorldID      ID
 	SourceKind   SourceKind
 	ValueKind    ValueKind
-	DefaultValue StateValue
+	DefaultValue MechanicValue
 	Expression   *Expression
 	Minimum      *Decimal
 	Maximum      *Decimal
@@ -106,17 +106,17 @@ type MechanicDefinition struct {
 	UpdatedAt    time.Time
 }
 
-// StatusSnapshot is the mechanical portion of one inline apply-status
-// consequence effect. Its ID is the source effect ID. Active instances retain
-// immutable snapshots so evaluation never depends on mutable configuration.
-type StatusSnapshot struct {
+// InlineStatus is the mechanical portion of one inline apply-status Effect.
+// Its ID is the source Effect ID. Active Status instances retain immutable
+// modifier snapshots so evaluation never depends on mutable configuration.
+type InlineStatus struct {
 	ID        ID
 	WorldID   ID
 	Modifiers []StatusModifier
 }
 
 // StatusModifier is one deterministic literal transformation. Positions are
-// complete and zero-based within one status effect. Priority orders modifiers
+// complete and zero-based within one apply-status Effect. Priority orders modifiers
 // across active instances; lower values execute first.
 type StatusModifier struct {
 	ID         ID
@@ -124,13 +124,13 @@ type StatusModifier struct {
 	Priority   int
 	MechanicID ID
 	Operation  ModifierOperation
-	Value      StateValue
+	Value      MechanicValue
 }
 
-// ActiveStatus is a durable consequence-owned status instance. The internal
+// StatusInstance is a durable consequence-owned status instance. The internal
 // SourceEffectID is the immutable source apply-effect ID, never a global
 // configuration resource. AppliedOrder provides deterministic layering.
-type ActiveStatus struct {
+type StatusInstance struct {
 	ID             ID
 	WorldID        ID
 	EntityID       ID
@@ -138,69 +138,63 @@ type ActiveStatus struct {
 	AppliedOrder   int64
 }
 
-// StateValue is a scalar tagged union. Exactly one value pointer must be set
+// MechanicValue is a scalar tagged union. Exactly one value pointer must be set
 // according to Kind.
-type StateValue struct {
+type MechanicValue struct {
 	Kind    ValueKind
 	Number  *Decimal
 	Boolean *bool
 }
 
-type StateRecord struct {
+type InputOverrideRecord struct {
 	EntityID  ID
 	Revision  int64
-	Values    map[ID]StateValue
-	UpdatedAt time.Time
+	Overrides map[ID]MechanicValue
 }
 
-type StateSnapshot struct {
-	Records map[ID]StateRecord
+type InputOverrideSnapshot struct {
+	ByEntity map[ID]InputOverrideRecord
 }
 
-type AppliedEffect struct {
+type ScalarApplication struct {
 	EffectID   ID
 	EntityID   ID
 	MechanicID ID
-	Before     StateValue
-	After      StateValue
+	Before     MechanicValue
+	After      MechanicValue
 	Changed    bool
 }
 
-// ConcreteEffect is an ordered state mutation against durable entity IDs.
+// ConcreteEffect is an ordered mechanical mutation against durable entity IDs.
 type ConcreteEffect struct {
 	ID               ID
 	Position         int
 	Operation        EffectOperation
 	EntityIDs        []ID
 	MechanicID       ID
-	Value            *StateValue
+	Value            *MechanicValue
 	AdjustmentAmount *Decimal
-	// Status is populated only by apply-status and is owned by this effect.
-	Status *StatusSnapshot
+	// InlineStatus is populated only by apply-status and is owned by this Effect.
+	InlineStatus *InlineStatus
 	// StatusInstanceIDs names the exact active instance paired to each target
 	// entity for remove-status. It is empty for every other operation.
 	StatusInstanceIDs map[ID]ID
 	// StatusInstances contains caller-assigned durable instances keyed by
 	// target entity for apply-status. It is empty for every other operation.
-	StatusInstances map[ID]ActiveStatus
+	StatusInstances map[ID]StatusInstance
 }
 
 // TransitionPlan is the mechanical boundary for facilitator-authored live
-// rulings.
+// Consequences.
 type TransitionPlan struct {
 	Effects []ConcreteEffect
 }
 
-type TransitionResult struct {
-	AppliedEffects   []AppliedEffect
-	State            StateSnapshot
-	ChangedRecordIDs []ID
-}
-
-// AppliedStatusCommand is the lifecycle receipt emitted by the pure runtime
-// transition. SourceEffectID is the source apply-effect ID retained for
-// internal snapshot lookup; every accepted command changes the lifecycle.
-type AppliedStatusCommand struct {
+// StatusApplication is the concrete per-target result of executing an
+// apply-status or remove-status Effect. SourceEffectID is retained for
+// Inline-status lookup; every accepted Application changes the Status-instance
+// lifecycle.
+type StatusApplication struct {
 	EffectID         ID
 	EntityID         ID
 	SourceEffectID   ID
@@ -210,16 +204,16 @@ type AppliedStatusCommand struct {
 }
 
 type RuntimeSnapshot struct {
-	State          StateSnapshot
-	ActiveStatuses []ActiveStatus
+	InputOverrides  InputOverrideSnapshot
+	StatusInstances []StatusInstance
 }
 
 type RuntimeTransitionResult struct {
-	AppliedEffects        []AppliedEffect
-	AppliedStatusCommands []AppliedStatusCommand
-	State                 StateSnapshot
-	ActiveStatuses        []ActiveStatus
-	ChangedRecordIDs      []ID
+	ScalarApplications []ScalarApplication
+	StatusApplications []StatusApplication
+	InputOverrides     InputOverrideSnapshot
+	StatusInstances    []StatusInstance
+	ChangedEntityIDs   []ID
 }
 
 // ExpressionTrace records the recursively evaluated value of an expression.
@@ -227,9 +221,9 @@ type RuntimeTransitionResult struct {
 type ExpressionTrace struct {
 	Operation  ExpressionOperation
 	MechanicID ID
-	Literal    *StateValue
+	Literal    *MechanicValue
 	Operands   []ExpressionTrace
-	Value      StateValue
+	Value      MechanicValue
 }
 
 type AppliedModifier struct {
@@ -239,22 +233,22 @@ type AppliedModifier struct {
 	Priority         int
 	Position         int
 	Operation        ModifierOperation
-	Operand          StateValue
-	Before           StateValue
-	After            StateValue
+	Operand          MechanicValue
+	Before           MechanicValue
+	After            MechanicValue
 }
 
 type EvaluatedMechanic struct {
-	MechanicID    ID
-	SourceKind    SourceKind
-	InputPresence ValuePresence
-	Intrinsic     StateValue
-	Effective     StateValue
-	Expression    *ExpressionTrace
-	Modifiers     []AppliedModifier
+	MechanicID ID
+	SourceKind SourceKind
+	Presence   EvaluationPresence
+	Intrinsic  MechanicValue
+	Effective  MechanicValue
+	Expression *ExpressionTrace
+	Modifiers  []AppliedModifier
 }
 
-type EvaluatedState struct {
+type EntityEvaluation struct {
 	EntityID ID
 	Revision int64
 	Order    []ID

@@ -43,7 +43,7 @@ binary whose SPA routes return 503.
 | `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                        |
 | `DND_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
 | `DND_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
-| `OPENAI_API_KEY`      | Empty                          | Enables Terra/Luna Auto DM calls through the OpenAI Responses API.                                    |
+| `OPENAI_API_KEY`      | Empty                          | Enables Terra and Luna calls through the OpenAI Responses API.                                        |
 | `DND_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                             |
 
 If neither database variable is set, the final fallback is
@@ -67,7 +67,7 @@ Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
 read secret files or rotate credentials. Supply them through the deployment
 platform and restrict who can view process configuration. Omitting the OpenAI
 key leaves non-model routes available, but Terra Continue/Decide and human
-Luna compilation return `503 auto_dm_unavailable`.
+Luna compilation return `503 model_unavailable`.
 
 There are no environment settings for pool size, SSE interval, HTTP timeouts,
 request body size, or event batch size; changing those currently requires code.
@@ -264,10 +264,8 @@ preparing for broader public use:
 2. Run the complete `./ci.sh` against the exact clean committed source to be
    built; investigate any nondeterminism rather than treating a later pass as a
    substitute for a failure.
-3. Review every migration for existing-data assumptions, backfill, lock time,
-   and application/schema ordering. Migration `004_password_auth.sql` requires
-   an empty `users` table, so use a fresh database unless a separately reviewed
-   data-transition plan exists.
+3. Review every migration for data assumptions, lock time, and
+   application/schema ordering.
 4. Define and rehearse backup/restore and cutback when the target will hold any
    durable data; confirm Bun/Go versions and that Vite builds before Go.
 5. Set the PostgreSQL reference, exact HTTPS `DND_PUBLIC_ORIGIN`, expected log
@@ -340,22 +338,12 @@ buffering/timeouts before increasing replicas.
 Migrations are automatic and forward-only. Deployment is therefore also the
 schema-change mechanism.
 
-`001_worldwright.sql` remains the clean supported baseline rather than an
-upgrade from the removed schema. New databases apply `001`,
-`002_rules_graph_statuses.sql`, and
-`003_interaction_audience_invalidations.sql`, then the empty-user account
-cutover in `004_password_auth.sql`, followed by the constrained `human`/`terra`
-world source discriminator in `005_auto_dm.sql`, followed by the designated
-facilitator/live attribution upgrade in `006_facilitator_assignment.sql`; a
-database at a recorded prefix upgrades in place, including
-mechanic-rules/status-set root backfills and the
-audience-invalidation event flag. `004` deliberately stops if any user row
-exists; this repository has no account-claim or password-invention migration.
-Use a fresh deployment database for this cutover. Do not attach a database with
-a different migration history or unledgered application tables. If unsupported
-data must be retained, use separately reviewed one-time
-export/transform/import tooling outside the running service, verify the new
-database, and retire that tooling.
+The current ordered chain is `001_world_baseline.sql`,
+`002_mechanic_graph_status_instances.sql`,
+`003_interaction_audience_invalidations.sql`, `004_password_auth.sql`,
+`005_terra.sql`, `006_facilitator_assignment.sql`, and
+`007_agent_facilitator.sql`. Do not attach a database with a different
+migration history or unledgered application tables.
 
 For each migration applied to a deployed database:
 
@@ -391,8 +379,8 @@ be unsafe because migrations do not roll back. Options are:
 
 Never run ad hoc destructive SQL against the only production database. Preserve
 the incident database for analysis, stop writers when consistency requires it,
-and verify worlds, rules graphs, status instances/snapshots and their source
-problem provenance, base and effective state, receipts, revisions, and event
+and verify Worlds, Mechanic graphs, Status instances, modifier snapshots, and their source
+Interaction provenance, logical state, effective values, Resolution receipts, revisions, and World-event
 cursors after recovery. See
 [Database](database.md) for a logical backup example.
 
@@ -438,7 +426,7 @@ with a replaced revision.
 ### Ambiguous live resolve
 
 Retry the identical resolve body with the same world-scoped idempotency key. A
-matching committed Consequence returns `replayed:true`; different content must
+matching committed Resolution returns `replayed:true`; different content must
 be treated as an idempotency conflict and investigated rather than forced.
 
 ### SSE freshness issue
@@ -455,7 +443,7 @@ be treated as an idempotency conflict and investigated rather than forced.
 6. A ready Play surface performs one catch-up refresh when the stream ends and
    reconnects after 1.5 seconds; it does not run a general polling fallback.
    The three-second poll is limited to player onboarding while the world is not
-   play-ready, so distinguish that state from a ready-table stream failure.
+   play-ready, so distinguish that state from a ready Play stream failure.
 
 ## Current operational gaps
 
@@ -474,7 +462,7 @@ broader audience, durable real-user data, or production commitment:
   rollback;
 - no documented provider-specific incident response or disaster-recovery SLO.
 
-Username/password sessions close the former impersonation gap. If a public
+Username/password sessions bind each request to the server-authenticated identity. If a public
 launch is ever proposed, it will require deliberate TLS/proxy configuration,
 backup/restore evidence, capacity/abuse testing, monitoring, and an
 account-support policy for a product that intentionally collects no email and
