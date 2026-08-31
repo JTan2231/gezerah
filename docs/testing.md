@@ -161,6 +161,71 @@ permissions. Deploy mode reserves `.dnd/deployments/<deployment-id>.json`; verif
 mode writes a distinct `<deployment-id>.verify.<run-id>.json` record so it cannot
 replace deploy provenance.
 
+### ChatGPT web acceptance
+
+Changes to the ChatGPT handoff, page-tool registration, or agent narration
+require one human-operated acceptance loop in the signed-in ChatGPT web app.
+CI, the direct WebMCP contract, and deployed smoke do not substitute for this
+boundary.
+
+1. Build the production frontend and Go artifact from the exact source under
+   test. Create a uniquely named disposable PostgreSQL database and synthetic
+   account; do not reuse development or hosted data.
+2. Put an official, checksum-verified `cloudflared` binary in a unique temporary
+   directory. Run
+   `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080` in the
+   foreground and record its random HTTPS origin. Treat that origin as public
+   while the process is alive.
+3. Start the standalone artifact on `127.0.0.1:8080` with the disposable
+   database and `DND_PUBLIC_ORIGIN` set to that exact HTTPS origin. Do not use
+   normal `./run.sh`: its Vite UI is on port 5173 and its public origin is
+   loopback. Require `GET /api/health` through the public origin to return
+   `ok:true`.
+4. In an ordinary browser, open the public Home page and choose **Start a World
+   with ChatGPT**. Continue as a person would: use the prompt in ChatGPT, answer
+   its short questions, and perform signup, World authoring, Character setup,
+   and Dungeon Master assignment only through visible dnd controls. Do not call
+   APIs, edit storage, or name page tools.
+5. From Play, choose **Open in ChatGPT**. If ChatGPT requires its built-in
+   browser to attach the authenticated Play page, use it only for that signin
+   and attachment step and keep it open. Open the same conversation at
+   `chatgpt.com` and perform the actual play turn there.
+6. Ask ChatGPT to begin, respond naturally to the first Problem, and continue
+   until ChatGPT resolves the Action and presents the next decision. Confirm
+   that its location prose includes concrete, innocuous details filtered
+   through the Character without private thoughts or hidden facts, and that the
+   stakes and tradeoffs are clear.
+7. Reload Play and require its durable history to agree with the chat: the same
+   Problem, current-player Action, committed Resolution and Effects, and next
+   playable state. Create a ChatGPT share link only after this check.
+8. Record the source identity, date, World and Character names, resolved
+   Problem, next Problem, and share URL. Never record the password, session
+   cookie, CSRF token, database URL, or transient tunnel URL.
+9. End exposure first: stop `cloudflared`, then stop the standalone app. Confirm
+   port 8080 has no listener, drop only the exact disposable database, and
+   remove only the exact temporary directory. A Quick Tunnel creates no
+   account-owned DNS or tunnel resource to delete.
+
+Cloudflare Quick Tunnels do not support SSE and have no uptime guarantee. This
+procedure proves a single-player ChatGPT tool loop because each page-tool
+mutation reloads Play; it is not evidence for SSE delivery or multi-player
+freshness.
+
+#### Acceptance record — 2026-08-30
+
+- Source artifact: `63a0ec3`.
+- Runtime: disposable standalone production artifact, synthetic
+  database/account, and Cloudflare Quick Tunnel. Railway was not used as
+  acceptance evidence.
+- World: **The Quiet Bell**. Character: **Silas Vale**.
+- Observed loop: ChatGPT presented **The Bell Without a Clapper**, resolved the
+  player's natural-language Action, persisted the Resolution, and continued
+  with **Three Strides to the Gallery**.
+- Transcript: [shared ChatGPT conversation](https://chatgpt.com/share/6a94e18f-02f0-83e9-9a6b-003db830cfb3).
+- Cleanup: the public tunnel and standalone app were stopped, the synthetic
+  database/account was removed, and the temporary runtime directory was
+  deleted.
+
 ## Test layers
 
 ### Rules engine tests

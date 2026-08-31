@@ -226,6 +226,9 @@ CGO_ENABLED=0 go build -trimpath -o out ./cmd/dnd
 
 The Vite output is embedded at Go compile time. A binary compiled before
 `web/static/index.html` exists serves the API but returns 503 for SPA routes.
+For public ChatGPT acceptance, do not expose the normal managed development
+pair; follow the disposable HTTPS [ChatGPT web acceptance](testing.md#chatgpt-web-acceptance)
+procedure instead.
 
 ## Normal change workflow
 

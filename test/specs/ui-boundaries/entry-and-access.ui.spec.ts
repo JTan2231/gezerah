@@ -63,7 +63,21 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
       page.getByRole("heading", { name: "Play or Build" }),
     ).toBeVisible();
     await page.keyboard.press("Tab");
-    await expect(page.getByRole("link", { name: /Play/ })).toBeFocused();
+    await expect(
+      page.getByRole("link", { name: "Start in ChatGPT" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "Copy starter prompt" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: "Start manually in Build" }),
+    ).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: "Play", exact: true }),
+    ).toBeFocused();
   });
 
   await test.step("NAV-V01/non-editor-build-boundary", async () => {

@@ -7,6 +7,7 @@ import {
   WorldPlayView,
 } from "./WorldPlayView";
 import {
+  AgentDecisionPendingView,
   NewProblemView,
   OpenProblemView,
   TerraDecisionPendingView,
@@ -236,6 +237,9 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Once claimed, it becomes your character.");
     expect(html).toContain("A courier who knows the flooded roads.");
     expect(html).toContain("Open in ChatGPT");
+    expect(html).toContain("ChatGPT is connected to this Play page");
+    expect(html).toContain("continue the same chat on chatgpt.com");
+    expect(html).not.toContain("Site Tools");
     expect(html).toContain("codex://threads/new?");
     expect(html).toContain("https://game.example/play/world-1");
   });
@@ -513,6 +517,7 @@ describe("WorldPlayView", () => {
         onRetry={noop}
       />,
     );
+    const agentPendingHtml = renderToStaticMarkup(<AgentDecisionPendingView />);
 
     expect(liveHtml).toContain("Adjudicating");
     expect(liveHtml).toContain("Consequence fixture");
@@ -526,5 +531,7 @@ describe("WorldPlayView", () => {
     expect(consequenceHtml).toContain("Refreshing the current rules");
     expect(consequenceHtml).toContain("Interpreting…");
     expect(terraRetryHtml).toContain("Retry Terra");
+    expect(agentPendingHtml).toContain("ask it to refresh Play");
+    expect(agentPendingHtml).not.toContain("inspect_play");
   });
 });

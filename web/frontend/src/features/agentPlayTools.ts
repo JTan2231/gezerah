@@ -15,7 +15,7 @@ import type {
 } from "../api/types";
 
 export function buildAgentStarterPrompt(playURL: string): string {
-  return `Open ${playURL} in your built-in browser. If the page asks, sign in; the Play page provides Site Tools. Be the Dungeon Master for this World. Use inspect_play, help me choose an available Entity if needed, then present the first Problem.`;
+  return `Be the Dungeon Master while I play this dnd World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in dnd. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
 }
 
 export function buildAgentLaunchURL(playURL: string, prompt: string): string {
@@ -36,6 +36,9 @@ const emptyInputSchema = {
   properties: {},
   additionalProperties: false,
 } as const;
+
+const characterAttunedNarrationGuidance =
+  "When establishing or materially changing a location, include a small handful of concrete environmental details. Filter some through what the current player's Character would naturally notice or care about based on the visible profile, effective Mechanics, active Statuses, equipment, and demonstrated temperament. Details need not be clues. Describe attention rather than private thoughts; do not let an NPC or another Character know unexpressed thoughts, invent a Perception check, reveal hidden information, or make suggested Actions exhaustive.";
 
 const mechanicValueSchema = {
   oneOf: [
@@ -205,7 +208,7 @@ export function createAgentPlayTools(
     {
       name: "inspect_play",
       description:
-        "Inspect the current World, current-player Play status, available Entities, World roster, Entity sheets, active Problem, Actions, and recent history. Call this before taking another Play action.",
+        "Read the current World and all Play context visible to the signed-in current player: Play status, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
       inputSchema: emptyInputSchema,
       annotations: { readOnlyHint: true },
       execute: async (input, options) => {
@@ -241,7 +244,8 @@ export function createAgentPlayTools(
               viewer: viewerSummary(viewer, world),
               available_entities: available.entities,
               roster_revision: available.roster_revision,
-              next_step: "Choose one available entity with claim_entity.",
+              next_step:
+                "Ask the current player which available Entity they want as their Character, then claim that choice.",
             });
           }
           const controlledEntities = entities.filter((entity) =>
@@ -339,7 +343,7 @@ export function createAgentPlayTools(
     {
       name: "claim_entity",
       description:
-        "Claim one currently available Entity for the signed-in current player. Use an entity_id returned by inspect_play. Claiming it makes the Entity the current player's Character and advances the World roster.",
+        "Claim one currently available Entity for the signed-in current player. Choose an entity_id from the available Entities in the current Play inspection. Claiming it makes the Entity the current player's Character and advances the World roster.",
       inputSchema: {
         type: "object",
         properties: {
@@ -382,15 +386,14 @@ export function createAgentPlayTools(
           roster_revision: result.roster_revision,
           next_step:
             result.play_status === "ready"
-              ? "Use inspect_play again, then present the first Problem."
+              ? "Refresh your view of Play, then present the first Problem."
               : "Ask the current player to complete the claimed Character's required fields in the page.",
         });
       },
     },
     {
       name: "present_problem",
-      description:
-        "As ChatGPT Dungeon Master, present the next fictional Problem to ready World memberships. Use only while the World has no unfinished Problem.",
+      description: `As ChatGPT Dungeon Master, present the next fictional Problem to ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -399,7 +402,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 10000,
             description:
-              "Public prose that presents a concrete Problem and invites the current player to act.",
+              "Public prose that presents a concrete Problem and invites the current player to act. Follow the character-attuned narration and privacy guidance in this tool's description.",
           },
         },
         required: ["prompt"],
@@ -428,7 +431,7 @@ export function createAgentPlayTools(
     {
       name: "submit_action",
       description:
-        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities.",
+        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities shown by the current Play inspection.",
       inputSchema: {
         type: "object",
         properties: {
@@ -473,14 +476,13 @@ export function createAgentPlayTools(
         return toolResult({
           submitted_action: action,
           next_step:
-            "Use inspect_play. Once every responder has acted, resolve the Problem.",
+            "Refresh your view of Play. Once every responder has acted, resolve the Problem.",
         });
       },
     },
     {
       name: "resolve_problem",
-      description:
-        "As ChatGPT Dungeon Master, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. Use inspect_play first and account for every submitted Action. An empty effects array is valid.",
+      description: `As ChatGPT Dungeon Master, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. Preserve the same character-attuned narration and privacy boundaries while describing what changes. An empty effects array is valid. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -489,13 +491,14 @@ export function createAgentPlayTools(
           narrative: {
             type: "string",
             maxLength: 20000,
-            description: "The public fictional consequence of the actions.",
+            description:
+              "The public fictional Consequence of the Actions. Follow the character-attuned narration and privacy guidance in this tool's description.",
           },
           effects: {
             type: "array",
             items: effectSchema,
             description:
-              "Ordered mechanical Effects. Use IDs and exact value shapes from inspect_play.",
+              "Ordered mechanical Effects. Use IDs and exact value shapes from the current Play inspection.",
           },
         },
         required: ["narrative", "effects"],
@@ -561,7 +564,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Describe the Consequence to the current player. Use inspect_play before presenting another Problem.",
+            "Describe the Consequence to the current player. Refresh your view of Play before presenting another Problem.",
         });
       },
     },
@@ -599,7 +602,7 @@ export async function registerTools(
                     fields: reason.fields,
                   },
                   next_step:
-                    "Use inspect_play and retry with fresh World and Entity-sheet data.",
+                    "Refresh your view of Play, then retry with current World and Entity-sheet data.",
                 });
               }
               if (reason instanceof AgentToolUsageError) {
@@ -607,7 +610,7 @@ export async function registerTools(
                   ok: false,
                   error: { code: "tool_usage_error", message: reason.message },
                   next_step:
-                    "Use inspect_play and retry with fresh World and Entity-sheet data.",
+                    "Refresh your view of Play, then retry with current World and Entity-sheet data.",
                 });
               }
               throw reason;
@@ -720,10 +723,9 @@ function nextPlayStep(
   interaction: Interaction | undefined,
 ): string {
   if (world.status === "archived") return "This world is read-only.";
-  if (interaction === undefined)
-    return "Present the next problem with present_problem.";
+  if (interaction === undefined) return "Present the next Problem.";
   if (interaction.status === "adjudicating")
-    return "Retry the pending Resolution with resolve_problem using fresh World and Entity-sheet data.";
+    return "Refresh your view of Play and the Entity sheets, then retry the pending Resolution.";
   if (interaction.status !== "open")
     return "Wait for the current problem to finish updating.";
   const submittedMembershipIDs = new Set(
@@ -736,12 +738,12 @@ function nextPlayStep(
     interaction.eligible_responder_membership_ids.includes(viewer.id) &&
     !submittedMembershipIDs.has(viewer.id)
   )
-    return "Ask the current player what they do, then record it with submit_action.";
+    return "Ask the current player what they do, then record their Action.";
   const allRespondersActed =
     interaction.eligible_responder_membership_ids.every((membershipID) =>
       submittedMembershipIDs.has(membershipID),
     );
   return allRespondersActed
-    ? "Resolve the Problem with resolve_problem."
+    ? "Resolve the Problem."
     : "Wait for the remaining responders.";
 }

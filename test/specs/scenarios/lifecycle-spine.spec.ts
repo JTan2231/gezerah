@@ -52,7 +52,9 @@ test("one rendered lifecycle carries the World from authoring through archive", 
             name: "Play or Build",
           }),
         ).toBeVisible();
-        await ownerPage.getByRole("link", { name: /Build/ }).click();
+        await ownerPage
+          .getByRole("link", { name: "Build", exact: true })
+          .click();
         await createAccount(ownerPage, labels.ownerUsername, labels.owner);
         await expect(
           ownerPage.getByRole("heading", { name: "Worlds", exact: true }),
@@ -501,7 +503,9 @@ test("one rendered lifecycle carries the World from authoring through archive", 
           editorPage.getByRole("button", { name: "Archive world" }),
         ).toHaveCount(0);
         await editorPage.getByRole("button", { name: "Return home" }).click();
-        await editorPage.getByRole("link", { name: /Play/ }).click();
+        await editorPage
+          .getByRole("link", { name: "Play", exact: true })
+          .click();
         await enterWorldFromLibrary(editorPage, labels.world);
         await expect(
           editorPage.getByRole("heading", { name: labels.world }),
@@ -960,7 +964,9 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         ).toBeVisible();
 
         await ownerPage.getByRole("button", { name: "Return home" }).click();
-        await ownerPage.getByRole("link", { name: /Play/ }).click();
+        await ownerPage
+          .getByRole("link", { name: "Play", exact: true })
+          .click();
         const ownerPlayCard = ownerPage
           .locator(".world-card")
           .filter({ hasText: labels.world });

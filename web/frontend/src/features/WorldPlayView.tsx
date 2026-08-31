@@ -453,8 +453,8 @@ function AgentModeNotice({
         <strong>ChatGPT is Dungeon Master</strong>
         <p>
           {model.siteToolsAvailable
-            ? "Site Tools are connected. Keep this page open beside the chat."
-            : "Open in ChatGPT launches this exact Play page and starter prompt; sign in there if asked."}
+            ? "ChatGPT is connected to this Play page. Keep it open; once the chat begins, you can continue the same chat on chatgpt.com."
+            : "Open in ChatGPT starts the chat in the desktop app with this Play page attached. Keep the page open; once the chat begins, you can continue the same chat on chatgpt.com."}
         </p>
         <code>{model.starterPrompt}</code>
       </div>

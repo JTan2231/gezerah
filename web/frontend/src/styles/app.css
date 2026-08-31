@@ -565,6 +565,85 @@ textarea {
   font-size: clamp(1.8rem, 4vw, 2.4rem);
 }
 
+.chatgpt-world-start {
+  width: min(760px, calc(100vw - 2rem));
+  padding: clamp(1.5rem, 4vw, 2.25rem);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-large);
+  background: var(--surface);
+  box-shadow: var(--shadow-soft);
+  text-align: left;
+}
+
+.chatgpt-world-start-eyebrow {
+  display: inline-flex;
+  margin-bottom: 0.75rem;
+  color: var(--ember-dark);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.chatgpt-world-start h2 {
+  margin-bottom: 0.55rem;
+  font-size: clamp(1.45rem, 3vw, 1.9rem);
+}
+
+.chatgpt-world-start > p {
+  max-width: 650px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.chatgpt-world-start .chatgpt-world-start-definition {
+  margin-bottom: 0.65rem;
+  color: var(--ink-soft);
+  font-weight: 700;
+}
+
+.chatgpt-world-start-prompt {
+  margin: 1.25rem 0;
+  padding: 1rem 1.1rem;
+  border-left: 3px solid var(--ember);
+  border-radius: 0 var(--radius-small) var(--radius-small) 0;
+  background: var(--paper-soft);
+}
+
+.chatgpt-world-start-prompt p {
+  margin: 0;
+  overflow-wrap: anywhere;
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.chatgpt-world-start-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+}
+
+.chatgpt-world-start .chatgpt-world-start-status {
+  min-height: 1.2rem;
+  margin: 0.65rem 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.chatgpt-world-start .chatgpt-world-start-footnote {
+  margin: 0.2rem 0 0;
+  color: var(--faint);
+  font-size: 0.72rem;
+}
+
+.play-library-page .chatgpt-world-start {
+  width: min(780px, 100%);
+  margin: 0 auto;
+}
+
 .home-choice-grid {
   display: grid;
   width: min(760px, calc(100vw - 2rem));
@@ -3953,6 +4032,11 @@ textarea {
   .home-choice-card {
     min-height: 100px;
     padding: 1.3rem;
+  }
+
+  .chatgpt-world-start-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .page-intro,

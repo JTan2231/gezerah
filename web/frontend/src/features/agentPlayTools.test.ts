@@ -43,9 +43,33 @@ describe("ChatGPT play tools", () => {
     expect(
       registrations.every(({ signal }) => signal === controller.signal),
     ).toBe(true);
-    expect(
-      buildAgentStarterPrompt("https://play.example/play/world-1"),
-    ).toContain("https://play.example/play/world-1");
+    const starterPrompt = buildAgentStarterPrompt(
+      "https://play.example/play/world-1",
+    );
+    expect(starterPrompt).toContain("https://play.example/play/world-1");
+    expect(starterPrompt).toContain("Keep lasting game state in dnd");
+    expect(starterPrompt).toContain("naturally notice or care about");
+    expect(starterPrompt).toContain("not private thoughts");
+    expect(starterPrompt).not.toContain("inspect_play");
+    expect(starterPrompt).not.toContain("Site Tools");
+    expect(starterPrompt).not.toContain("built-in browser");
+    const inspectDescription = registrations.find(
+      ({ tool }) => tool.name === "inspect_play",
+    )?.tool.description;
+    const presentDescription = registrations.find(
+      ({ tool }) => tool.name === "present_problem",
+    )?.tool.description;
+    const resolveDescription = registrations.find(
+      ({ tool }) => tool.name === "resolve_problem",
+    )?.tool.description;
+    expect(inspectDescription).toContain("visible profile prose");
+    expect(inspectDescription).toContain("unexpressed private thoughts");
+    expect(presentDescription).toContain("concrete environmental details");
+    expect(presentDescription).toContain("effective Mechanics");
+    expect(presentDescription).toContain("Details need not be clues");
+    expect(presentDescription).toContain("invent a Perception check");
+    expect(resolveDescription).toContain("character-attuned narration");
+    expect(resolveDescription).toContain("unexpressed thoughts");
     expect(
       buildAgentLaunchURL("https://play.example/play/world-1", "Inspect Play."),
     ).toBe(
@@ -279,6 +303,7 @@ describe("ChatGPT play tools", () => {
     const result = (await claim?.execute({ entity_id: "entity-1" })) as {
       claimed_character: { id: string };
       roster_revision: number;
+      next_step: string;
     };
 
     expect(requests.map(({ path }) => path)).toEqual([
@@ -293,6 +318,8 @@ describe("ChatGPT play tools", () => {
     });
     expect(result.claimed_character.id).toBe("entity-1");
     expect(result.roster_revision).toBe(8);
+    expect(result.next_step).toContain("Refresh your view of Play");
+    expect(result.next_step).not.toContain("inspect_play");
     expect(changed).toBe(1);
   });
 
@@ -374,7 +401,8 @@ describe("ChatGPT play tools", () => {
     expect(payload.error.fields["expected_revision"]).toBe(
       "The world roster changed.",
     );
-    expect(payload.next_step).toContain("inspect_play");
+    expect(payload.next_step).toContain("Refresh your view of Play");
+    expect(payload.next_step).not.toContain("inspect_play");
   });
 
   test("returns recoverable usage errors as tool results", async () => {
@@ -402,6 +430,7 @@ describe("ChatGPT play tools", () => {
     expect(payload.ok).toBe(false);
     expect(payload.error.code).toBe("tool_usage_error");
     expect(payload.error.message).toContain("must be an object");
-    expect(payload.next_step).toContain("inspect_play");
+    expect(payload.next_step).toContain("Refresh your view of Play");
+    expect(payload.next_step).not.toContain("inspect_play");
   });
 });

@@ -356,11 +356,22 @@ evaluates the post-transition runtime snapshot.
 The application builds Terra and Luna context in one read-only `REPEATABLE READ`
 transaction. It includes the World description as campaign brief, all active
 Mechanic definitions, and every non-archived Entity with its facilitator-visible
-profile values and generated sheet data (exact logical input values,
+profile values and their authored character-field guidance plus generated sheet data (exact logical input values,
 intrinsic/effective values, and active Status instances), plus
 the latest three resolved Problem/Consequence pairs. Consequence calls add
 the adjudicating Problem and all submitted Actions. UUIDs are replaced with
 short request-local references before the snapshot leaves the process.
+
+Terra's Problem and Consequence instructions ask for a small amount of concrete
+sensory and environmental texture, including otherwise innocuous details whose
+emphasis follows relevant profile prose and guidance, effective Mechanics,
+active Statuses, contextual equipment, and demonstrated temperament. That is a
+narration rule, not a privileged Perception/Temperament field or an invented
+check. Private profile context may preserve consistency but cannot be exposed,
+and one Character never learns another's unexpressed thoughts from it. Problem
+prose keeps pressure, stakes, and meaningful tradeoffs clear without making
+suggested Actions exhaustive; Consequence prose carries those choices into
+observable costs and changed pressure.
 
 For a human facilitator, consequence compilation remains advisory: GPT-5.6
 Luna interprets the human's immutable prose, the application maps request-local

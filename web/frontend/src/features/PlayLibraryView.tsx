@@ -3,11 +3,14 @@ import type { ReactNode } from "react";
 import {
   Avatar,
   Brand,
-  EmptyState,
   ErrorMessage,
   LoadingState,
   RolePill,
 } from "../components/StudioUI";
+import {
+  ChatGPTWorldStartView,
+  type ChatGPTWorldStartViewProps,
+} from "./ChatGPTWorldStartView";
 
 interface PlayLibraryIssue {
   kind: "connection" | "request";
@@ -26,7 +29,7 @@ interface PlayLibraryWorld {
   lastActive: string;
 }
 
-interface PlayLibraryViewModel {
+export interface PlayLibraryViewModel {
   account: {
     displayName: string;
     username: string;
@@ -42,12 +45,14 @@ export function PlayLibraryView({
   onReturnHome,
   onOpenWorld,
   onRetry,
+  worldStart,
 }: {
   model: PlayLibraryViewModel;
   accountControls: ReactNode;
   onReturnHome: () => void;
   onOpenWorld: (worldID: string) => void;
   onRetry: () => void;
+  worldStart: ChatGPTWorldStartViewProps;
 }) {
   return (
     <div className="library-page play-library-page">
@@ -83,10 +88,7 @@ export function PlayLibraryView({
           <ErrorMessage error={model.issue} onRetry={onRetry} />
         )}
         {!model.loading && model.issue === null && model.worlds.length === 0 ? (
-          <EmptyState
-            title="No worlds"
-            description="Use an invitation link to join a world."
-          />
+          <ChatGPTWorldStartView {...worldStart} />
         ) : null}
 
         <div className="world-grid">

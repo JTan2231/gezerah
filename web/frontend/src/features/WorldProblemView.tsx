@@ -341,9 +341,9 @@ export function AgentDecisionPendingView() {
     <section className="agent-decision-pending" aria-live="polite">
       <h3>ChatGPT resolution pending</h3>
       <p>
-        Return to ChatGPT and ask it to use inspect_play, then retry resolving
-        this problem. The submitted actions remain locked until it succeeds or
-        you skip the problem.
+        Return to ChatGPT and ask it to refresh Play, then retry resolving this
+        problem. The submitted actions remain locked until it succeeds or you
+        skip the problem.
       </p>
     </section>
   );

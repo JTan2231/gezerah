@@ -3,9 +3,13 @@
 ## Product surface
 
 The React application presents two deliberately separate product areas over the
-same World model. `/play` is the Play area and `/build` is the configuration area; the
-root route only asks which area the user wants to enter. A signed-in account
-sees only worlds it owns or has joined. Authors configure three
+same World model. `/play` is the Play area and `/build` is the configuration area.
+The root route keeps both choices and also presents the recommended, data-free
+**Start a World with ChatGPT** quick start. Its copyable prompt asks ChatGPT to
+shape the idea and guide the person through Build while the person signs in and
+makes every durable change. The primary action opens that prompt in ChatGPT Work
+on the web; copying it remains available. A signed-in account sees only worlds
+it owns or has joined. Authors configure three
 user-authored lists:
 
 - **capacities**: numeric input or derived scores/pools carried by every entity;
@@ -43,6 +47,8 @@ component framework, or service worker.
 | `src/**/*View.tsx`                          | Backend-independent markup, layout, accessibility, and local UI interaction.     |
 | `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
 | `src/features/HomeChoice.tsx`               | Data-free root navigation controller for Play and Build.                         |
+| `src/features/ChatGPTWorldStartView.tsx`     | Shared ChatGPT Work and copyable World-start surface for Home and an empty Play library. |
+| `src/features/useChatGPTWorldStart.ts`       | Friendly Build-guide prompt construction and clipboard status.                   |
 | `src/features/IdentityGate.tsx`             | Username/password authentication command controller.                             |
 | `src/features/AccountControls.tsx`          | Password and server-side signout command controller.                             |
 | `src/features/BuildLibrary.tsx`             | Build-world collection and creation controller.                                  |
@@ -224,7 +230,7 @@ Routes are parsed without an external router:
 
 | URL                                             | Surface                                       |
 | ----------------------------------------------- | --------------------------------------------- |
-| `/`                                             | Neutral Play or Build choice; no API load.    |
+| `/`                                             | ChatGPT World quick start plus Play/Build; no API load. |
 | `/play`                                         | Current account's World list for Play.        |
 | `/play/{world-id}`                              | Onboarding or Play.                           |
 | `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
@@ -242,7 +248,7 @@ A bare Build world path canonicalizes to capacities. A player or spectator
 cannot cause Play to render under a Build URL; Build shows an explicit
 access boundary and offers a deliberate transition to Play.
 
-The root choice remains data-free. On entering Play, Build, or an invite URL,
+The root quick start and area choices remain data-free. On entering Play, Build, or an invite URL,
 the application bootstraps with `GET /api/me`. An anonymous browser sees a
 username/password gate; signup asks for username, display name, and a password
 of at least 8 characters with confirmation, while signin asks only for username
@@ -271,8 +277,10 @@ Both libraries request `GET /api/worlds`. The Build library filters to
 owner/editor memberships, offers world creation, and
 opens the capacity editor. The Play library shows every admitted world and
 emphasizes the current play role, Play status, roster size, and last
-activity. The membership role remains available separately inside the World. Neither
-library exposes actions belonging to the other area.
+activity. The membership role remains available separately inside the World.
+When the Play library is empty, it replaces the invitation-only empty state
+with the same ChatGPT quick start and a deliberate secondary transition to
+Build; populated libraries remain focused on their own area.
 
 ## Static configuration
 

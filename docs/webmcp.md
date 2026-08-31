@@ -35,19 +35,28 @@ to require a Terra-facilitated World and are unavailable in agent mode.
 
 ## Current-player journey
 
-1. An owner authors a world, mechanics, and a small roster through Build, then
+1. From Home, **Start a World with ChatGPT** exposes a copyable, ordinary-language
+   prompt and opens it directly in ChatGPT Work on the web. ChatGPT asks a few
+   setup questions and guides the person through Build one step at a time; the
+   person signs in and makes every durable World change through the normal UI.
+2. An owner authors a World and a starting roster through Build, adding Mechanics
+   and character fields when they matter, then
    assigns ChatGPT as Dungeon Master.
-2. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
-   starter prompt. Copying the prompt remains available as a fallback. The
-   current player opens Play in ChatGPT's top-level built-in browser and signs in.
-3. If the current player has no Character, the page and its Entity-selection tool
+3. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
+   starter prompt. Copying the prompt remains available as a fallback. Its
+   user-visible prose describes the desired play outcome without naming browser
+   plumbing or page-tool identifiers. The current player opens Play in ChatGPT's
+   top-level built-in browser and signs in. Once that attached chat has started,
+   the same conversation can be continued from `chatgpt.com` while the desktop
+   Play page remains open.
+4. If the current player has no Character, the page and its Entity-selection tool
    expose only eligible, unclaimed Entities. Claiming one is an atomic server
    command that makes it the current player's Character rather than granting unrestricted
    Controller editing.
-4. ChatGPT inspects Play, presents an improvised Problem, records the current player's
+5. ChatGPT inspects Play, presents an improvised Problem, records the current player's
    chosen Action, and resolves the
    Problem with a narrative and optional valid Effects.
-5. The page refreshes after each command. Closing or navigating away from the
+6. The page refreshes after each command. Closing or navigating away from the
    page removes its tools; reopening the authenticated Play page restores them
    from current durable state.
 
@@ -77,6 +86,16 @@ The tool handlers reuse the frontend API adapter and refresh the Play surface
 after mutations. Tool results are concise structured text for ChatGPT; the
 backend response and reloaded UI are the source of truth.
 
+The registered inspection, presentation, and resolution contracts tell ChatGPT
+to establish materially changed locations with a small handful of concrete
+details, including innocuous texture filtered through visible profile prose,
+effective Mechanics, active Statuses, equipment, and demonstrated temperament.
+They describe observable attention rather than private thoughts, never promote
+a user-authored Perception-like label into a privileged key or invented check,
+and keep suggested Actions non-exhaustive. These instructions live in the page
+tool contracts so the person-facing starter and recovery copy can stay in
+ordinary language.
+
 ## Availability and testing
 
 WebMCP support is experimental and rollout-dependent. OpenAI's current Site
@@ -84,6 +103,10 @@ tools documentation describes support in ChatGPT's built-in browser and
 requires JavaScript registration from the top-level page; iframe and
 declarative registrations are not currently discovered there. See
 <https://learn.chatgpt.com/docs/webmcp>.
+
+Run the human-operated [ChatGPT web acceptance](testing.md#chatgpt-web-acceptance)
+for every change to handoff, registration, or agent narration. Automated
+page-tool contracts do not exercise the signed-in ChatGPT web UI.
 
 Release validation should cover:
 
