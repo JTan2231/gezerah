@@ -50,46 +50,48 @@ export function WorldPlayView({
       <header className="play-header">
         <div>
           <h1>{model.worldName}</h1>
-          <p>Dungeon Master: {model.dungeonMaster.name}</p>
+          <p>Facilitator: {model.facilitatorAssignment.name}</p>
         </div>
         <div className="play-header-actions">
-          {model.dungeonMaster.canChange ? (
-            <label className="dungeon-master-picker">
-              <span>Dungeon Master</span>
+          {model.facilitatorAssignment.canChange ? (
+            <label className="facilitator-picker">
+              <span>Facilitator</span>
               <select
-                value={model.dungeonMaster.selectedValue}
-                disabled={model.dungeonMaster.changing}
+                value={model.facilitatorAssignment.selectedValue}
+                disabled={model.facilitatorAssignment.changing}
                 onChange={(event) =>
                   actions.changeFacilitator(event.currentTarget.value)
                 }
               >
-                {model.dungeonMaster.choices.map((choice) => (
+                {model.facilitatorAssignment.choices.map((choice) => (
                   <option key={choice.value} value={choice.value}>
                     {choice.name}
                   </option>
                 ))}
               </select>
-              {model.dungeonMaster.changing ? (
+              {model.facilitatorAssignment.changing ? (
                 <small role="status">Handing off…</small>
               ) : null}
             </label>
           ) : (
-            <div className="play-role dungeon-master-role">
-              <Avatar name={model.dungeonMaster.name} size="small" />
+            <div className="play-role facilitator-role">
+              <Avatar name={model.facilitatorAssignment.name} size="small" />
               <span>
-                <small>Dungeon Master</small>
-                <strong>{model.dungeonMaster.name}</strong>
+                <small>Facilitator</small>
+                <strong>{model.facilitatorAssignment.name}</strong>
               </span>
             </div>
           )}
-          {model.dungeonMaster.canTakeOver ? (
+          {model.facilitatorAssignment.canTakeOver ? (
             <button
               className="button button-ink"
               type="button"
-              disabled={model.dungeonMaster.changing}
+              disabled={model.facilitatorAssignment.changing}
               onClick={actions.takeOverFacilitation}
             >
-              {model.dungeonMaster.changing ? "Taking over…" : "Take over"}
+              {model.facilitatorAssignment.changing
+                ? "Taking over…"
+                : "Take over"}
             </button>
           ) : null}
           <div className="play-role">
@@ -112,9 +114,9 @@ export function WorldPlayView({
           ) : null}
         </div>
       </header>
-      {model.dungeonMaster.issue === null ? null : (
+      {model.facilitatorAssignment.issue === null ? null : (
         <div className="play-header-issue">
-          <ErrorMessage error={model.dungeonMaster.issue} />
+          <ErrorMessage error={model.facilitatorAssignment.issue} />
         </div>
       )}
 
@@ -251,7 +253,7 @@ export function CharacterOnboardingView({
             {model.currentUserName}, complete all required fields for a
             controlled character before entering Play.
           </p>
-          <p>Dungeon Master: {model.dungeonMasterName}</p>
+          <p>Facilitator: {model.facilitatorName}</p>
         </div>
         <div className="play-header-actions">
           <span className="character-status status-setup">
@@ -415,7 +417,7 @@ function IdlePlayView({
                 ? "This world is archived."
                 : facilitator
                   ? "Create a Problem to begin Play."
-                  : "The Dungeon Master can create the next Problem."}
+                  : "The Facilitator can create the next Problem."}
       </p>
       {issue === null ? null : <ErrorMessage error={issue} />}
       {terraFacilitated && canContinue ? (
@@ -448,9 +450,9 @@ function AgentModeNotice({
   onCopyPrompt: () => void;
 }) {
   return (
-    <aside className="agent-mode-notice" aria-label="ChatGPT Dungeon Master">
+    <aside className="agent-mode-notice" aria-label="ChatGPT Facilitator">
       <div>
-        <strong>ChatGPT is Dungeon Master</strong>
+        <strong>ChatGPT is Facilitator</strong>
         <p>
           {model.siteToolsAvailable
             ? "ChatGPT is connected to this Play page. Keep it open; once the chat begins, you can continue the same chat on chatgpt.com."

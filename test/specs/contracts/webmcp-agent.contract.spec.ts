@@ -7,6 +7,10 @@ import {
   type APIResponse,
 } from "@playwright/test";
 
+import {
+  webMCPDatabaseTracePath,
+  WorldDatabaseTrace,
+} from "../../src/databaseState";
 import { readBaseURL } from "../../src/runtime";
 import { sanitizeDiagnosticBody, sanitizeURL } from "../../src/scenario";
 import {
@@ -146,7 +150,7 @@ type MechanicValue =
 
 test("contract: Agent facilitation uses current-player authority without impersonating a membership", async ({
   request,
-}) => {
+}, testInfo) => {
   const baseURL = await readBaseURL();
   const unique = randomUUID().slice(0, 8);
   const owner = await signupActor(baseURL, `Agent Owner ${unique}`);
@@ -222,6 +226,15 @@ test("contract: Agent facilitation uses current-player authority without imperso
     revision: world.revision + 1,
   });
   expect(agentWorld.facilitator.membership_id).toBeUndefined();
+
+  const databaseTrace = new WorldDatabaseTrace(world.id);
+  const baselineDatabaseState = await databaseTrace.capture("baseline", {
+    world_id: world.id,
+  });
+  expect(baselineDatabaseState.changed_tables).toEqual([]);
+  expect(baselineDatabaseState.state.world_membership_entity_controls).toEqual(
+    [],
+  );
 
   await test.step("a waiting player sees only the narrow claim surface", async () => {
     expect(
@@ -325,6 +338,23 @@ test("contract: Agent facilitation uses current-player authority without imperso
       [mechanic.mechanic.id]: { kind: "number", value: "3" },
     },
   });
+  const claimDatabaseState = await databaseTrace.capture("claim_entity", {
+    entity_id: preset.id,
+    membership_id: playerWorld.membership_id,
+  });
+  expect(claimDatabaseState.changed_tables).toEqual([
+    "worlds",
+    "world_membership_entity_controls",
+    "world_events",
+  ]);
+  expect(
+    claimDatabaseState.state.world_membership_entity_controls,
+  ).toContainEqual(
+    expect.objectContaining({
+      membership_id: playerWorld.membership_id,
+      entity_id: preset.id,
+    }),
+  );
 
   await expectAPIError(
     await postAs(
@@ -379,6 +409,23 @@ test("contract: Agent facilitation uses current-player authority without imperso
     actions: [],
   });
   expect(interaction.created_by_membership_id).toBeUndefined();
+  const presentDatabaseState = await databaseTrace.capture("present_problem", {
+    interaction_id: interaction.id,
+  });
+  expect(presentDatabaseState.changed_tables).toEqual([
+    "interactions",
+    "interaction_audience_members",
+    "interaction_eligible_responders",
+    "interaction_context_entities",
+    "world_events",
+  ]);
+  expect(presentDatabaseState.state.interactions).toContainEqual(
+    expect.objectContaining({
+      id: interaction.id,
+      status: "open",
+      facilitator_source: "agent",
+    }),
+  );
 
   const action = await postJSON<InteractionActionResponse>(
     request,
@@ -395,6 +442,22 @@ test("contract: Agent facilitation uses current-player authority without imperso
     acting_entity_id: preset.id,
     status: "submitted",
   });
+  const actionDatabaseState = await databaseTrace.capture("submit_action", {
+    interaction_id: interaction.id,
+    action_id: action.id,
+  });
+  expect(actionDatabaseState.changed_tables).toEqual([
+    "interactions",
+    "interaction_actions",
+    "world_events",
+  ]);
+  expect(actionDatabaseState.state.interaction_actions).toContainEqual(
+    expect.objectContaining({
+      id: action.id,
+      interaction_id: interaction.id,
+      status: "submitted",
+    }),
+  );
 
   const readyToResolve = await getJSON<InteractionResponse>(
     request,
@@ -457,6 +520,57 @@ test("contract: Agent facilitation uses current-player authority without imperso
       },
     ],
   });
+  const resolutionDatabaseState = await databaseTrace.capture(
+    "resolve_problem",
+    {
+      interaction_id: interaction.id,
+      action_id: action.id,
+      effect_id: effectID,
+    },
+  );
+  expect(resolutionDatabaseState.changed_tables).toEqual([
+    "entity_logical_states",
+    "entity_input_value_overrides",
+    "interactions",
+    "interaction_actions",
+    "interaction_resolutions",
+    "interaction_resolution_effects",
+    "interaction_resolution_effect_targets",
+    "interaction_resolution_scalar_applications",
+    "interaction_resolution_effective_changes",
+    "world_events",
+  ]);
+  expect(
+    resolutionDatabaseState.state.entity_input_value_overrides,
+  ).toContainEqual(
+    expect.objectContaining({
+      entity_id: preset.id,
+      mechanic_id: mechanic.mechanic.id,
+      number_value: "2",
+    }),
+  );
+  expect(
+    resolutionDatabaseState.state.interaction_resolution_scalar_applications,
+  ).toContainEqual(
+    expect.objectContaining({
+      effect_id: effectID,
+      entity_id: preset.id,
+      before_number: "3",
+      after_number: "2",
+      changed: true,
+    }),
+  );
+  expect(
+    resolutionDatabaseState.state.world_events
+      .filter((event) => event.interaction_id === interaction.id)
+      .map((event) => event.event_type),
+  ).toEqual([
+    "interaction-created",
+    "interaction-presented",
+    "action-submitted",
+    "interaction-adjudicating",
+    "resolution-committed",
+  ]);
 
   const replay = await postJSON<AgentResolutionResult>(
     request,
@@ -469,6 +583,17 @@ test("contract: Agent facilitation uses current-player authority without imperso
     interaction_id: resolved.interaction_id,
     interaction_revision: resolved.interaction_revision,
     applications: resolved.applications,
+  });
+  const replayDatabaseState = await databaseTrace.capture(
+    "resolve_problem (idempotent replay)",
+    { interaction_id: interaction.id },
+  );
+  expect(replayDatabaseState.changed_tables).toEqual([]);
+  expect(replayDatabaseState.state).toEqual(resolutionDatabaseState.state);
+
+  await testInfo.attach("webmcp-database-trace", {
+    path: webMCPDatabaseTracePath,
+    contentType: "application/json",
   });
 
   const durable = await getJSON<InteractionResponse>(

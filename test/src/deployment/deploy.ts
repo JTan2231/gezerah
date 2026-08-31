@@ -323,23 +323,26 @@ async function runDeployment(
 function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
   return {
     expectedProjectId:
-      env.DND_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    expectedProject: env.DND_DEPLOY_PROJECT ?? "dnd",
+      env.SCRYER_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    expectedProject: env.SCRYER_DEPLOY_PROJECT ?? "Scryer",
     expectedEnvironmentId:
-      env.DND_DEPLOY_ENVIRONMENT_ID ?? "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
-    expectedEnvironment: env.DND_DEPLOY_ENVIRONMENT ?? "production",
+      env.SCRYER_DEPLOY_ENVIRONMENT_ID ??
+      "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+    expectedEnvironment: env.SCRYER_DEPLOY_ENVIRONMENT ?? "production",
     expectedWebId:
-      env.DND_DEPLOY_WEB_SERVICE_ID ?? "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    expectedWeb: env.DND_DEPLOY_WEB_SERVICE ?? "dnd-web",
+      env.SCRYER_DEPLOY_WEB_SERVICE_ID ??
+      "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+    expectedWeb: env.SCRYER_DEPLOY_WEB_SERVICE ?? "scryer-web",
     expectedDatabaseId:
-      env.DND_DEPLOY_DATABASE_SERVICE_ID ??
+      env.SCRYER_DEPLOY_DATABASE_SERVICE_ID ??
       "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
-    expectedDatabase: env.DND_DEPLOY_DATABASE_SERVICE ?? "Postgres",
-    expectedDatabaseVolume: env.DND_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
-    ...(env.DND_DEPLOY_URL === undefined
-      ? {}
-      : { publicURL: normalizePublicURL(env.DND_DEPLOY_URL) }),
-    timeoutMs: readTimeout(env.DND_DEPLOY_TIMEOUT_SECONDS),
+    expectedDatabase: env.SCRYER_DEPLOY_DATABASE_SERVICE ?? "Postgres",
+    expectedDatabaseVolume:
+      env.SCRYER_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
+    publicURL: normalizePublicURL(
+      env.SCRYER_DEPLOY_URL ?? "https://scryingorb.com",
+    ),
+    timeoutMs: readTimeout(env.SCRYER_DEPLOY_TIMEOUT_SECONDS),
   };
 }
 
@@ -348,7 +351,7 @@ function readTimeout(value: string | undefined): number {
   const seconds = Number(value);
   if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3_600) {
     throw new UsageError(
-      "DND_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
+      "SCRYER_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
     );
   }
   return seconds * 1_000;
@@ -399,7 +402,7 @@ async function uploadCommittedSource(options: {
   signal: AbortSignal;
 }): Promise<UploadedDeployment> {
   const temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "dnd-deploy-source-"),
+    path.join(os.tmpdir(), "scryer-deploy-source-"),
   );
   const checkout = path.join(temporaryRoot, "source");
   let worktreeAdded = false;
@@ -486,7 +489,7 @@ function boundPublicURL(
   const discoveredURL = normalizePublicURL(requiredPublicURL(service));
   if (configuredURL !== undefined && configuredURL !== discoveredURL) {
     throw new Error(
-      `DND_DEPLOY_URL is ${configuredURL}, but Railway service ${service.id} exposes ${discoveredURL}`,
+      `SCRYER_DEPLOY_URL is ${configuredURL}, but Railway service ${service.id} exposes ${discoveredURL}`,
     );
   }
   return discoveredURL;

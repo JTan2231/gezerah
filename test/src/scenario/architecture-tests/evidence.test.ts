@@ -26,9 +26,9 @@ describe("scenario evidence", () => {
       csrf_token: "csrf secret",
       session_token_hash: "session digest",
       headers: {
-        Cookie: "dnd_session=session-secret",
-        "Set-Cookie": "dnd_session=session-secret; HttpOnly",
-        "X-DND-CSRF": "csrf secret",
+        Cookie: "scryer_session=session-secret",
+        "Set-Cookie": "scryer_session=session-secret; HttpOnly",
+        "X-SCRYER-CSRF": "csrf secret",
       },
       nested: {
         value: secret("private prose"),
@@ -52,7 +52,7 @@ describe("scenario evidence", () => {
       headers: {
         Cookie: REDACTED,
         "Set-Cookie": REDACTED,
-        "X-DND-CSRF": REDACTED,
+        "X-SCRYER-CSRF": REDACTED,
       },
       nested: {
         value: REDACTED,
@@ -78,9 +78,9 @@ describe("scenario evidence", () => {
     );
     assert.equal(
       sanitizeText(
-        "Cookie: dnd_session=secret\nSet-Cookie: dnd_session=secret\nX-DND-CSRF: secret\npassword=secret\ncurrent_password=old-secret\nnew_password=new-secret\ncurrentPassword=old-camel-secret\nnewPassword=new-camel-secret",
+        "Cookie: scryer_session=secret\nSet-Cookie: scryer_session=secret\nX-SCRYER-CSRF: secret\npassword=secret\ncurrent_password=old-secret\nnew_password=new-secret\ncurrentPassword=old-camel-secret\nnewPassword=new-camel-secret",
       ),
-      `Cookie: ${REDACTED}\nSet-Cookie: ${REDACTED}\nX-DND-CSRF: ${REDACTED}\npassword=${REDACTED}\ncurrent_password=${REDACTED}\nnew_password=${REDACTED}\ncurrentPassword=${REDACTED}\nnewPassword=${REDACTED}`,
+      `Cookie: ${REDACTED}\nSet-Cookie: ${REDACTED}\nX-SCRYER-CSRF: ${REDACTED}\npassword=${REDACTED}\ncurrent_password=${REDACTED}\nnew_password=${REDACTED}\ncurrentPassword=${REDACTED}\nnewPassword=${REDACTED}`,
     );
   });
 

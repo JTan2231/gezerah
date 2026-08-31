@@ -2,7 +2,7 @@
 set -eu
 
 repo_root="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-database_url="${DND_DATABASE_URL:-${DATABASE_URL:-postgres://localhost:5432/dnd?sslmode=disable}}"
+database_url="${SCRYER_DATABASE_URL:-${DATABASE_URL:-postgres://localhost:5432/scryer?sslmode=disable}}"
 assume_yes=0
 
 usage() {
@@ -79,9 +79,9 @@ case "$database_name" in
 	;;
 esac
 
-is_dnd_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
-if [ "$is_dnd_database" != "t" ]; then
-	printf 'Refusing to reset database "%s": the dnd migration ledger is absent.\n' \
+is_scryer_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
+if [ "$is_scryer_database" != "t" ]; then
+	printf 'Refusing to reset database "%s": the Scryer migration ledger is absent.\n' \
 		"$database_name" >&2
 	exit 1
 fi
@@ -102,7 +102,7 @@ if [ "$assume_yes" -ne 1 ]; then
 	fi
 fi
 
-state_dir="${DND_RUN_STATE_DIR:-$repo_root/.dnd/run}"
+state_dir="${SCRYER_RUN_STATE_DIR:-$repo_root/.scryer/run}"
 backend_was_running=0
 backend_stopped=0
 backend_pid=""

@@ -526,7 +526,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         });
         editorPage.once("dialog", async (dialog) => dialog.accept());
         await editorPage
-          .getByRole("button", { name: "Become Dungeon Master" })
+          .getByRole("button", { name: "Become Facilitator" })
           .click();
         await Promise.all([facilitatorHandoff, facilitatorRefresh]);
         await expect(
@@ -537,7 +537,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await expect(
           editorPage
             .locator(".play-header-actions .play-role")
-            .getByText("Dungeon Master", { exact: true }),
+            .getByText("Facilitator", { exact: true }),
         ).toBeVisible();
         await expect(
           editorPage.getByText("Membership role: Editor"),
@@ -552,7 +552,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await expect(
           editorPage
             .locator(".play-header-actions .play-role")
-            .getByText("Dungeon Master", { exact: true }),
+            .getByText("Facilitator", { exact: true }),
         ).toBeVisible();
         await expect(
           editorPage.getByText("Membership role: Editor"),

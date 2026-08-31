@@ -42,7 +42,7 @@ is no root `package.json`.
 Create the default database and install frontend dependencies:
 
 ```sh
-createdb dnd
+createdb scryer
 (cd web/frontend && bun install --frozen-lockfile)
 ```
 
@@ -56,7 +56,7 @@ Open `http://127.0.0.1:5173`. Vite serves the React application and proxies
 `/api` to `http://localhost:8080`. The Go process connects by default to:
 
 ```text
-postgres://localhost:5432/dnd?sslmode=disable
+postgres://localhost:5432/scryer?sslmode=disable
 ```
 
 Migrations run automatically when the backend starts. The current chain is
@@ -74,9 +74,9 @@ Reset the development application to an empty state with:
 ./reset-db.sh
 ```
 
-The script uses `DND_DATABASE_URL`, then `DATABASE_URL`, then the same default
+The script uses `SCRYER_DATABASE_URL`, then `DATABASE_URL`, then the same default
 URL as the application. It refuses PostgreSQL system databases, non-loopback
-servers, and databases without the dnd migration ledger. After
+servers, and databases without the Scryer migration ledger. After
 displaying the resolved database name and server, it requires that database
 name to be typed exactly. `--yes` skips only this confirmation; it does not
 bypass the target safety checks.
@@ -103,16 +103,16 @@ shell/process manager that launches the application. Vite independently loads
 
 | Variable              | Default/precedence                 | Purpose                                                                                           |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `DND_ADDR`            | First; default `:8080`             | HTTP listen address.                                                                              |
-| `PORT`                | Used only when `DND_ADDR` is empty | Hosting port converted to `:<port>`.                                                              |
-| `DND_DATABASE_URL`    | First database URL                 | Preferred PostgreSQL connection URL.                                                              |
-| `DATABASE_URL`        | Hosting fallback                   | Used when `DND_DATABASE_URL` is empty.                                                            |
-| `DND_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
-| `DND_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
+| `SCRYER_ADDR`            | First; default `:8080`             | HTTP listen address.                                                                              |
+| `PORT`                | Used only when `SCRYER_ADDR` is empty | Hosting port converted to `:<port>`.                                                              |
+| `SCRYER_DATABASE_URL`    | First database URL                 | Preferred PostgreSQL connection URL.                                                              |
+| `DATABASE_URL`        | Hosting fallback                   | Used when `SCRYER_DATABASE_URL` is empty.                                                            |
+| `SCRYER_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
+| `SCRYER_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
 | `OPENAI_API_KEY`      | Empty                              | Enables Terra and Luna calls through the OpenAI Responses API.                                    |
-| `DND_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
+| `SCRYER_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
 
-When the binary is launched directly with `DND_PUBLIC_ORIGIN` unset, the server
+When the binary is launched directly with `SCRYER_PUBLIC_ORIGIN` unset, the server
 uses the incoming request's scheme and host; plain HTTP authentication is
 accepted only when both that host and the network peer are loopback. Managed
 `run.sh` supplies `http://127.0.0.1:5173` unless the variable is already
@@ -122,14 +122,14 @@ without a path, query, or fragment.
 `OPENAI_API_KEY` is optional for startup but required for Terra's autonomous
 Continue/Decide lifecycle and for Luna compilation of human Consequences. When it is empty, those
 endpoints return `503 model_unavailable`; the key is never sent to the
-frontend. Leave `DND_OPENAI_BASE_URL` empty for the official API.
+frontend. Leave `SCRYER_OPENAI_BASE_URL` empty for the official API.
 
 ### Local process variables
 
 | Variable            | Default    | Purpose                         |
 | ------------------- | ---------- | ------------------------------- |
-| `DND_RUN_STATE_DIR` | `.dnd/run` | Managed binaries and PID files. |
-| `DND_RUN_LOG_DIR`   | `.dnd/log` | Managed development logs.       |
+| `SCRYER_RUN_STATE_DIR` | `.scryer/run` | Managed binaries and PID files. |
+| `SCRYER_RUN_LOG_DIR`   | `.scryer/log` | Managed development logs.       |
 
 Managed `run.sh` expects the backend at port 8080 because the Vite proxy is
 fixed. It defaults to `127.0.0.1:8080`, also accepts `localhost:8080`, and
@@ -141,17 +141,17 @@ binary directly, not when using the managed local workflow.
 
 | Variable                     | Consumer              | Purpose                                                                                                                         |
 | ---------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `DND_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
-| `DND_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
-| `DND_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
-| `DND_E2E_DIAGNOSTICS`        | Direct E2E            | Set to `1` to retain trace and video on failure; the root performance-gated run keeps both disabled.                            |
-| `DND_E2E_APP_BINARY`         | E2E harness           | Prebuilt embedded application passed by `ci.sh`; direct test runs normally leave it unset and use the safe build fallback.      |
-| `DND_CI_CACHE_DIR`           | Root validator        | Optional persistent tool-cache directory; defaults to ignored `.dnd/cache/ci`.                                                  |
+| `SCRYER_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
+| `SCRYER_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
+| `SCRYER_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
+| `SCRYER_E2E_DIAGNOSTICS`        | Direct E2E            | Set to `1` to retain trace and video on failure; the root performance-gated run keeps both disabled.                            |
+| `SCRYER_E2E_APP_BINARY`         | E2E harness           | Prebuilt embedded application passed by `ci.sh`; direct test runs normally leave it unset and use the safe build fallback.      |
+| `SCRYER_CI_CACHE_DIR`           | Root validator        | Optional persistent tool-cache directory; defaults to ignored `.scryer/cache/ci`.                                                  |
 | `PLAYWRIGHT_BROWSERS_PATH`   | Playwright/CI         | Browser cache/install location.                                                                                                 |
 
 The E2E admin URL path is rewritten to `/postgres` for database administration.
 Use credentials that can safely operate there. The backend smoke behavior is
-different: it applies migrations directly to `DND_TEST_DATABASE_URL`.
+different: it applies migrations directly to `SCRYER_TEST_DATABASE_URL`.
 
 ## Managed local services
 
@@ -173,9 +173,9 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 ### Backend behavior
 
 - Verifies Go and curl.
-- Builds `cmd/dnd` into `.dnd/run/backend/dnd`.
+- Builds `cmd/scryer` into `.scryer/run/backend/scryer`.
 - Starts that binary in the background.
-- Appends stdout/stderr to `.dnd/log/backend.log`.
+- Appends stdout/stderr to `.scryer/log/backend.log`.
 - Waits up to 60 seconds for `/api/health`.
 - Does not watch Go files. Restart after backend edits:
 
@@ -188,7 +188,7 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 - Verifies Bun and curl.
 - Runs a frozen install only when the local Vite executable is missing.
 - Starts Vite on `127.0.0.1:5173 --strictPort`.
-- Appends output to `.dnd/log/frontend.log`.
+- Appends output to `.scryer/log/frontend.log`.
 - Waits up to 60 seconds for `/`.
 - Uses Vite HMR for source changes.
 
@@ -213,14 +213,14 @@ Build frontend assets before compiling/running Go:
 
 ```sh
 (cd web/frontend && bun install --frozen-lockfile && bun run build)
-go run ./cmd/dnd
+go run ./cmd/scryer
 ```
 
 For a reusable binary:
 
 ```sh
 (cd web/frontend && bun run build)
-CGO_ENABLED=0 go build -trimpath -o out ./cmd/dnd
+CGO_ENABLED=0 go build -trimpath -o out ./cmd/scryer
 ./out
 ```
 
@@ -240,7 +240,7 @@ procedure instead.
    in proportion to the behavior.
 5. Run a focused validator while iterating.
 6. Run the complete `./ci.sh` before handing off a cross-layer change.
-7. Review `git status`; generated `web/static`, dependencies, `.dnd`, test
+7. Review `git status`; generated `web/static`, dependencies, `.scryer`, test
    artifacts, and `out` should remain ignored.
 8. Stop services used for debugging.
 
@@ -308,7 +308,7 @@ from non-facilitator JSON.
 
 | Path                         | Producer/content                                               |
 | ---------------------------- | -------------------------------------------------------------- |
-| `.dnd/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
+| `.scryer/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
 | `out`                        | Production/Railway-style binary.                               |
 | `web/frontend/node_modules/` | Frontend install.                                              |
 | `web/static/*`               | Vite production assets; placeholder is tracked.                |
@@ -368,12 +368,12 @@ builds there.
 
 Confirm `psql` is on `PATH` and the selected admin URL can connect to
 `postgres`, create/drop databases, and terminate connections. Check for an
-abandoned `dnd_e2e_*` database if a previous process was forcibly interrupted.
+abandoned `scryer_e2e_*` database if a previous process was forcibly interrupted.
 
 ### E2E browser fails
 
 Install Playwright Chromium or Chrome/Chromium in one of the launcher's common
-system locations. `DND_E2E_BROWSER_EXECUTABLE` is not currently a reliable
+system locations. `SCRYER_E2E_BROWSER_EXECUTABLE` is not currently a reliable
 discovery bypass: the launcher performs discovery/install first and may replace
 the value with a detected system browser. Inspect `test/artifacts/` after a test
 failure.

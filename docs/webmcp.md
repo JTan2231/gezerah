@@ -1,7 +1,7 @@
 # ChatGPT play through WebMCP
 
 The ChatGPT play surface is an authenticated top-level Play page. ChatGPT is
-the Dungeon Master, the signed-in person remains a current player, and the page remains
+the Facilitator, the signed-in person remains a current player, and the page remains
 the canonical Play surface: it displays the current Problem, current-player Action,
 Resolution history, Entity sheets, and logical state.
 
@@ -41,7 +41,7 @@ to require a Terra-facilitated World and are unavailable in agent mode.
    person signs in and makes every durable World change through the normal UI.
 2. An owner authors a World and a starting roster through Build, adding Mechanics
    and character fields when they matter, then
-   assigns ChatGPT as Dungeon Master.
+   assigns ChatGPT as Facilitator.
 3. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
    starter prompt. Copying the prompt remains available as a fallback. Its
    user-visible prose describes the desired play outcome without naming browser
@@ -95,6 +95,35 @@ a user-authored Perception-like label into a privileged key or invented check,
 and keep suggested Actions non-exhaustive. These instructions live in the page
 tool contracts so the person-facing starter and recovery copy can stay in
 ordinary language.
+
+### Database-state companion
+
+The direct WebMCP contract writes
+`test/artifacts/webmcp-database-trace.json` as a diagnostic companion to its
+replayed conversation. The trace contains a baseline plus the state after
+`claim_entity`, `present_problem`, `submit_action`, `resolve_problem`, and an
+idempotent `resolve_problem` replay. Each step records its operation and durable
+references, the tables changed since the preceding step, and the complete safe
+World-scoped projection at that boundary.
+
+Every state is observed in a read-only, repeatable-read transaction. The
+projection uses explicit columns and stable ordering; it omits identities,
+authentication and invite secrets, restricted profile prose, facilitator-only
+notes, and idempotency keys. It is test evidence, not canonical product storage
+or a production export endpoint.
+
+Run the contract directly when the ignored artifact needs to remain in the
+working checkout:
+
+```sh
+(cd test && bunx playwright test specs/contracts/webmcp-agent.contract.spec.ts --workers=1)
+```
+
+The generated values describe the disposable contract replay. A completed
+ChatGPT conversation cannot be given exact historical physical snapshots from
+the final database alone: World events are invalidation cursors rather than an
+audit log. Exact snapshots for a manual run must be captured at its mutation
+boundaries while that run is in progress or recreated by replaying it.
 
 ## Availability and testing
 

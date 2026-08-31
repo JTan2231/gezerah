@@ -94,7 +94,7 @@ export function MembersView({
                   <option value="player">Player — respond in Play</option>
                   <option value="spectator">Spectator — observe Play</option>
                   <option value="editor">
-                    Editor — configure and assign the DM
+                    Editor — configure and assign the Facilitator
                   </option>
                 </select>
               </Field>

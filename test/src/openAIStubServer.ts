@@ -21,7 +21,7 @@ interface ResponsesRequest {
 }
 
 interface CompilerContext {
-  world: { name: string; campaign_brief?: string };
+  world: { name: string; world_brief?: string };
   mechanics: {
     ref: string;
     source_kind: string;
@@ -129,7 +129,7 @@ function compileConsequence(input: string) {
   );
   if (entity === undefined || mechanic === undefined)
     throw new Error("e2e consequence context has no numeric entity target");
-  if (context.world.campaign_brief === undefined || entity.profile.length < 2)
+  if (context.world.world_brief === undefined || entity.profile.length < 2)
     throw new Error(
       "e2e consequence context is missing its World or Entity profile",
     );

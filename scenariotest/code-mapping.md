@@ -172,10 +172,10 @@ Root `./ci.sh e2e` validates frontend and backend code, installs test
 dependencies, builds the frontend and Go binary once, runs scenario
 architecture verification, and then starts the browser suite with the verified
 binary. `test/src/appServer.ts` builds only during a direct test-project run
-when `DND_E2E_APP_BINARY` is absent.
+when `SCRYER_E2E_APP_BINARY` is absent.
 
 Default CI captures screenshots on failure. Trace and video are disabled unless
-`DND_E2E_DIAGNOSTICS=1` is explicitly enabled.
+`SCRYER_E2E_DIAGNOSTICS=1` is explicitly enabled.
 
 The scenario evidence set is:
 
@@ -187,6 +187,7 @@ The scenario evidence set is:
 | `scenario-coverage.json`            | Final 141-record coverage inventory.                      |
 | `app-server.log`                    | Disposable application diagnostics.                       |
 | `playwright/` and `report/`         | Playwright results, failure screenshots, and HTML report. |
+| `webmcp-database-trace.json`        | Per-command World states from the WebMCP contract.        |
 
 The generated coverage record includes owner and execution IDs, evidence tier,
 named cases, checkpoint, observed surfaces, behavior/contract/validator IDs

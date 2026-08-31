@@ -1,13 +1,13 @@
 # Product glossary
 
-This glossary is the single authority for dnd product and architecture
+This glossary is the single authority for Scryer product and architecture
 vocabulary. The domain model and API reference define detailed behavior and
 transport shapes; this document defines what their terms mean and how the
 terms relate.
 
 ## Vocabulary ownership
 
-dnd keeps three kinds of vocabulary separate:
+Scryer keeps three kinds of vocabulary separate:
 
 | Kind | Authority | Contents |
 | ---- | --------- | -------- |
@@ -25,7 +25,7 @@ validation but does not seed their content.
 | ---- | ------- |
 | **World** | The sole authorization, configuration, entity, live-play, history, and event boundary. |
 | **World configuration** | Durable user-authored setup belonging to one World, including Mechanics and character fields. Problems and status catalogs are not configuration. |
-| **World description** | World-authored prose that orients invited members and serves as Terra's campaign brief. It does not define mechanical behavior. |
+| **World description** | World-authored prose that orients invited members and serves as Terra's world brief. It does not define mechanical behavior. |
 | **World mechanic graph** | The World's complete Mechanic definitions and the dependency references among derived Mechanics. It is one aggregate within the World, not another product scope. |
 | **Revision** | An optimistic concurrency version for one mutable aggregate. A command supplies the revision it observed and conflicts if that aggregate has advanced. |
 | **Rules revision** | The optimistic concurrency version of the world mechanic graph. |
@@ -36,8 +36,7 @@ validation but does not seed their content.
 | **Membership role** | A World membership's durable access level: owner, editor, player, or spectator. It governs World and Build authority. |
 | **Facilitator assignment** | The World's designation of exactly one facilitator source: a human World membership, Terra, or an agent. |
 | **Facilitator source** | The authorial source selected by the facilitator assignment: human, Terra, or agent. |
-| **Dungeon Master (DM)** | The product label for the currently assigned facilitator. |
-| **Facilitator** | The domain authority that authors and adjudicates Problems. A human facilitator is an assigned active non-spectator membership; Terra and an agent are non-membership facilitator sources. |
+| **Facilitator** | The product label and domain authority for the source that authors and adjudicates Problems. A human facilitator is an assigned active non-spectator membership; Terra and an agent are non-membership facilitator sources. |
 | **Current play role** | A membership's derived responsibility in Play: facilitator, player, or spectator. It does not change the membership role. |
 | **Membership status** | A World membership's lifecycle state: `active` or `left`. It is not play readiness. |
 | **Play status** | A membership's derived player-seat readiness: `waiting-for-character`, `setup-required`, `ready`, or `unavailable` when the membership is inactive. It remains distinct from membership status and current play role. |

@@ -6,7 +6,7 @@
    username, display name, and password but no email address.
 2. Create a world from the Build library. The creator's owner membership is the
    initial human facilitator. In **Settings**, write the world description;
-   Terra uses it as the campaign brief when later designated in Play.
+   Terra uses it as the world brief when later designated in Play.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
 4. Define capabilities the same way, using binary or rating scalar shape.
@@ -51,7 +51,7 @@ authenticated account, and redemption binds the membership to that account.
 
 Problems are runtime moments, never authored configuration.
 
-First enter the world through `/play` and inspect the Dungeon Master shown in
+First enter the world through `/play` and inspect the Facilitator shown in
 the header. Between problems, an owner/editor or the current human facilitator
 may assign any active non-spectator, Terra, or an agent. A replaced human facilitator
 immediately returns to current play role `player`; their membership role does not
@@ -77,7 +77,7 @@ For a human facilitator:
 For Terra:
 
 1. While no interaction is unfinished, any ready current player clicks **Ask
-   Terra to continue**. Terra uses the campaign brief, current Entity sheets, and recent
+   Terra to continue**. Terra uses the world brief, current Entity sheets, and recent
    history to create and present the problem.
 2. Every ready active member is in the audience, every ready non-spectator is a
    responder, and ready controlled entities are context.

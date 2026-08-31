@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"dnd/web"
+	"scryer/web"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

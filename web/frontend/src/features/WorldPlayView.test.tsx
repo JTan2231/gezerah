@@ -23,12 +23,12 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          currentPlayRoleLabel: "Dungeon Master",
+          currentPlayRoleLabel: "Facilitator",
           membershipRoleLabel: "Owner",
           facilitator: true,
           canCreateProblem: true,
           hasActiveProblem: true,
-          dungeonMaster: {
+          facilitatorAssignment: {
             name: "Mara Vale",
             source: "human",
             selectedValue: "human:member-1",
@@ -141,7 +141,7 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          dungeonMasterName: "Terra",
+          facilitatorName: "Terra",
           statusLabel: "Setup required",
           facilitatorActionLabel: "Take over from Terra",
           canBecomeFacilitator: true,
@@ -181,7 +181,7 @@ describe("WorldPlayView", () => {
     );
 
     expect(html).toContain("Your characters");
-    expect(html).toContain("Dungeon Master: Terra");
+    expect(html).toContain("Facilitator: Terra");
     expect(html).toContain("Take over from Terra");
     expect(html).not.toContain("Skip problem");
     expect(html).toContain("2 of 3 complete");
@@ -195,7 +195,7 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
-          dungeonMasterName: "ChatGPT",
+          facilitatorName: "ChatGPT",
           statusLabel: "Waiting for a character",
           facilitatorActionLabel: "Take over from ChatGPT",
           canBecomeFacilitator: false,
@@ -232,7 +232,7 @@ describe("WorldPlayView", () => {
       />,
     );
 
-    expect(html).toContain("Dungeon Master: ChatGPT");
+    expect(html).toContain("Facilitator: ChatGPT");
     expect(html).toContain("Choose an entity");
     expect(html).toContain("Once claimed, it becomes your character.");
     expect(html).toContain("A courier who knows the flooded roads.");
@@ -313,7 +313,7 @@ describe("WorldPlayView", () => {
     expect(actionHtml).toContain("Seal the breach");
   });
 
-  test("renders Terra as the assigned DM with player pacing controls", () => {
+  test("renders Terra as the assigned Facilitator with player pacing controls", () => {
     const idleHtml = renderToStaticMarkup(
       <WorldPlayView
         model={{
@@ -324,7 +324,7 @@ describe("WorldPlayView", () => {
           facilitator: false,
           canCreateProblem: false,
           hasActiveProblem: false,
-          dungeonMaster: {
+          facilitatorAssignment: {
             name: "Terra",
             source: "terra",
             selectedValue: "terra",
@@ -402,7 +402,7 @@ describe("WorldPlayView", () => {
       />,
     );
 
-    expect(idleHtml).toContain("Dungeon Master: Terra");
+    expect(idleHtml).toContain("Facilitator: Terra");
     expect(idleHtml).toContain("Your current play role");
     expect(idleHtml).toContain("Membership role");
     expect(idleHtml).toContain("Ask Terra for the next Problem");

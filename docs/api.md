@@ -50,12 +50,12 @@ sets an opaque HttpOnly session cookie:
 }
 ```
 
-The cookie is `dnd_session` only for loopback HTTP development and
-`__Host-dnd_session` for an HTTPS public origin. Non-loopback configured origins
+The cookie is `scryer_session` only for loopback HTTP development and
+`__Host-scryer_session` for an HTTPS public origin. Non-loopback configured origins
 must use HTTPS. The cookie is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
-Clients must send the returned token as `X-DND-CSRF` on authenticated methods
+Clients must send the returned token as `X-SCRYER-CSRF` on authenticated methods
 other than GET, HEAD, and OPTIONS. Those requests must also have an `Origin`
-matching `DND_PUBLIC_ORIGIN`, or the request's own origin when that setting is
+matching `SCRYER_PUBLIC_ORIGIN`, or the request's own origin when that setting is
 empty. An unset origin permits plain HTTP authentication only when both the
 request host and network peer are loopback. The token is session-bound and
 changes when the password is changed.
@@ -209,8 +209,8 @@ unfinished Interaction exists, it is authored by the currently assigned Terra
 or agent source, and it is open or adjudicating. That transaction
 withdraws the owner's submitted action if present, advances the interaction
 revision for that withdrawal, and lets the owner close/adjudicate as needed and
-finish with human-DM commands.
-The world description is the campaign brief when Terra is designated.
+finish with human-Facilitator commands.
+The world description is the world brief when Terra is designated.
 
 ### Capacities and capabilities
 

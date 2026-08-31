@@ -1,7 +1,7 @@
 # Deployment readiness
 
 This directory tracks the evidence, blockers, decisions, and exit criteria for
-deploying dnd beyond a trusted local environment. It complements the
+deploying Scryer beyond a trusted local environment. It complements the
 system descriptions in [Operations](../operations.md) and
 [Security](../security.md); it does not replace them.
 

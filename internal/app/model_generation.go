@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	openaiapi "dnd/internal/openai"
-	"dnd/internal/rules"
+	openaiapi "scryer/internal/openai"
+	"scryer/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -71,7 +71,7 @@ type modelContext struct {
 
 type modelWorldContext struct {
 	Name           string  `json:"name"`
-	CampaignBrief  *string `json:"campaign_brief,omitempty"`
+	WorldBrief     *string `json:"world_brief,omitempty"`
 	Revision       int64   `json:"revision"`
 	RosterRevision int64   `json:"roster_revision"`
 	RulesRevision  int64   `json:"rules_revision"`
@@ -174,7 +174,7 @@ func newOpenAIModelProvider(apiKey, baseURL string) (modelProvider, error) {
 
 func (provider *openAIModelProvider) GenerateProblem(ctx context.Context, contextJSON []byte) (string, error) {
 	generation, err := provider.client.GenerateTerra(ctx, openaiapi.Prompt{
-		Instructions: strings.TrimSpace(`You are the dungeon master for a collaborative narrative game. Write the next Problem as plain public prose. Ground it in the campaign brief, Entity profiles and sheets, and the three recent Problem/Consequence pairs.
+		Instructions: strings.TrimSpace(`You are the facilitator for a collaborative narrative game. Write the next Problem as plain public prose. Ground it in the world brief, Entity profiles and sheets, and the three recent Problem/Consequence pairs.
 
 Establish or materially update the scene with a handful of concrete sensory and environmental details, including some that are otherwise innocuous. Filter what the prose emphasizes through what the involved Characters would naturally notice or care about, using their profile prose and guidance, effective Mechanics, active Statuses, equipment present in the context, and demonstrated temperament. Use these sources to describe attention and observable cues, not private thoughts; never give another Character knowledge of unexpressed thoughts. Restricted character fields are private context; use them for consistency but do not reveal their contents unless prior public fiction already did. Treat every character-field label and Mechanic name as ordinary user-authored vocabulary. Do not privilege a field or Mechanic named Perception, Temperament, or anything similar, and do not invent or claim a check.
 
@@ -190,7 +190,7 @@ Present concrete pressure that invites action. Make the stakes and meaningful tr
 
 func (provider *openAIModelProvider) GenerateConsequence(ctx context.Context, contextJSON []byte) (string, error) {
 	generation, err := provider.client.GenerateTerra(ctx, openaiapi.Prompt{
-		Instructions: strings.TrimSpace(`You are the dungeon master for a collaborative narrative game. Write only the public fictional Consequence of the submitted Actions as plain prose. Account for every submitted Action and stay consistent with the campaign brief, Entity profiles and sheets, current Problem, and recent history.
+		Instructions: strings.TrimSpace(`You are the facilitator for a collaborative narrative game. Write only the public fictional Consequence of the submitted Actions as plain prose. Account for every submitted Action and stay consistent with the world brief, Entity profiles and sheets, current Problem, and recent history.
 
 Carry the choices through to observable consequences, including their costs, foreclosed opportunities, and changed pressure where the fiction supports them; do not erase meaningful tradeoffs. Render material changes to the scene with concrete sensory and environmental details, including some that are otherwise innocuous. Filter what the prose emphasizes through what the involved Characters would naturally notice or care about, using their profile prose and guidance, effective Mechanics, active Statuses, equipment present in the context, and demonstrated temperament. Use these sources to describe attention and observable cues, not private thoughts; never give another Character knowledge of unexpressed thoughts. Restricted character fields are private context; use them for consistency but do not reveal their contents unless prior public fiction already did. Treat every character-field label and Mechanic name as ordinary user-authored vocabulary. Do not privilege a field or Mechanic named Perception, Temperament, or anything similar, and do not invent or claim a check.
 
@@ -474,7 +474,7 @@ func loadModelContext(
 		select name, description, revision, roster_revision
 		from worlds where id = $1`, worldID,
 	).Scan(
-		&result.World.Name, &result.World.CampaignBrief,
+		&result.World.Name, &result.World.WorldBrief,
 		&result.World.Revision, &result.World.RosterRevision,
 	); err != nil {
 		return result, err

@@ -45,7 +45,7 @@ export function PlayWorkspace({
       worldName={world.name}
       currentPlayRoleLabel={
         world.current_play_role === "facilitator"
-          ? "Dungeon Master"
+          ? "Facilitator"
           : humanize(world.current_play_role)
       }
       user={{ displayName: user.display_name, username: user.username }}

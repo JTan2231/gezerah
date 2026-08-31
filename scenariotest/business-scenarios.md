@@ -10,7 +10,7 @@ behavior drivers, outcome contracts, and validators execute. The
 [code-mapping reference](code-mapping.md) maps every scenario family and scenario ID
 below to the product code and existing tests that implement or protect it.
 
-This catalog follows the current dnd workflows and domain model. All
+This catalog follows the current Scryer workflows and domain model. All
 world, mechanic, field, entity, problem, and status names used by a test are
 run-local, user-authored examples. They are never built-in vocabulary, entity
 classes, privileged keys, or seeded definitions.
@@ -50,7 +50,7 @@ looked right” from “the system committed the right facts.” A validator mus
 never seed, modify, retry with altered data, or repair journey state through a
 back channel.
 
-dnd uses username/password accounts and revocable server sessions.
+Scryer uses username/password accounts and revocable server sessions.
 Anonymous visitors may load the authentication boundary and static shell, but
 product data and actions require a valid session before world authorization is
 evaluated. Passwords, session tokens, and CSRF tokens are never scenario

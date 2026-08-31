@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 )
 
 // loadedStatusInstanceSet is the immutable status-instance view consumed by one

@@ -16,7 +16,7 @@ unavailable.
 
 ## Startup and shutdown
 
-`cmd/dnd/main.go`:
+`cmd/scryer/main.go`:
 
 1. loads environment configuration;
 2. installs a JSON `slog` handler;
@@ -44,7 +44,7 @@ stalled write ends it, and clients reconnect with their last world-event cursor.
 
 ## Package map
 
-### `cmd/dnd`
+### `cmd/scryer`
 
 Executable and process lifecycle only.
 
@@ -354,7 +354,7 @@ evaluates the post-transition runtime snapshot.
 ## Model generation and Terra orchestration
 
 The application builds Terra and Luna context in one read-only `REPEATABLE READ`
-transaction. It includes the World description as campaign brief, all active
+transaction. It includes the World description as world brief, all active
 Mechanic definitions, and every non-archived Entity with its facilitator-visible
 profile values and their authored character-field guidance plus generated sheet data (exact logical input values,
 intrinsic/effective values, and active Status instances), plus
@@ -470,7 +470,7 @@ by resolution.
 Every product handler except health, signup, and signin requires an active
 opaque-cookie session. Route registration wraps protected handlers
 deny-by-default; unsafe requests additionally require an exact same-origin
-`Origin` and the session-bound `X-DND-CSRF` token. Caller-supplied identity
+`Origin` and the session-bound `X-SCRYER-CSRF` token. Caller-supplied identity
 headers are ignored. World handlers load an active membership for the session user.
 Owner/editor helpers grant durable configuration authority. A separate helper
 checks whether that exact membership is the currently designated human

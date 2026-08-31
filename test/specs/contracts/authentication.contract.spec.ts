@@ -155,7 +155,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   await test.step("IDN-V03[malformed] session is rejected", async () => {
     const malformed = await playwrightRequest.newContext({
       baseURL,
-      extraHTTPHeaders: { Cookie: "dnd_session=not-a-valid-session" },
+      extraHTTPHeaders: { Cookie: "scryer_session=not-a-valid-session" },
     });
     try {
       await expectAPIError(
@@ -243,7 +243,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     expect(firstRecord.sessionTokenHash).not.toBe(sessionCookie.value);
     expect(firstRecord.sessionCount).toBe(1);
     expect(sessionCookie).toMatchObject({
-      name: "dnd_session",
+      name: "scryer_session",
       path: "/",
       httpOnly: true,
       secure: false,
@@ -337,7 +337,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     await expectAPIError(
       await csrfActor.api.post(csrfWorldsURL, {
         data: { name: `Missing CSRF ${unique}` },
-        headers: { "X-DND-CSRF": "" },
+        headers: { "X-SCRYER-CSRF": "" },
       }),
       403,
       "csrf_invalid",
@@ -351,7 +351,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     await expectAPIError(
       await csrfActor.api.post(csrfWorldsURL, {
         data: { name: `Wrong CSRF ${unique}` },
-        headers: { "X-DND-CSRF": "wrong-token" },
+        headers: { "X-SCRYER-CSRF": "wrong-token" },
       }),
       403,
       "csrf_invalid",
@@ -505,7 +505,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const victim = await signupActor(baseURL, `Forgery victim ${unique}`);
     await expectAPIError(
       await request.get(`${baseURL}/api/worlds`, {
-        headers: { "X-DND-User-ID": victim.id },
+        headers: { "X-SCRYER-User-ID": victim.id },
       }),
       401,
       "authentication_required",
@@ -523,13 +523,13 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     expect(
       await expectJSON<unknown[]>(
         await actorRequest(attacker.id).get("/api/worlds", {
-          headers: { "X-DND-User-ID": victim.id },
+          headers: { "X-SCRYER-User-ID": victim.id },
         }),
       ),
     ).toEqual([]);
     await expectAPIError(
       await actorRequest(attacker.id).get(`/api/worlds/${victimWorld.id}`, {
-        headers: { "X-DND-User-ID": victim.id },
+        headers: { "X-SCRYER-User-ID": victim.id },
       }),
       403,
       "world_forbidden",

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 )
 
 func TestConsequenceTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t *testing.T) {

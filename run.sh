@@ -2,8 +2,8 @@
 set -eu
 
 repo_root="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-state_dir="${DND_RUN_STATE_DIR:-$repo_root/.dnd/run}"
-log_dir="${DND_RUN_LOG_DIR:-$repo_root/.dnd/log}"
+state_dir="${SCRYER_RUN_STATE_DIR:-$repo_root/.scryer/run}"
+log_dir="${SCRYER_RUN_LOG_DIR:-$repo_root/.scryer/log}"
 
 usage() {
 	cat <<'EOF'
@@ -146,29 +146,29 @@ start_backend() {
 		return 0
 	fi
 
-	backend_addr="${DND_ADDR:-127.0.0.1:8080}"
-	backend_public_origin="${DND_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
+	backend_addr="${SCRYER_ADDR:-127.0.0.1:8080}"
+	backend_public_origin="${SCRYER_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
 	case "$backend_addr" in
 	localhost:8080 | 127.0.0.1:8080)
 		;;
 	*)
-		printf 'DND_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
+		printf 'SCRYER_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
 		return 1
 		;;
 	esac
 
 	backend_dir="$state_dir/backend"
-	backend_bin="$backend_dir/dnd"
+	backend_bin="$backend_dir/scryer"
 	backend_log="$(log_path backend)"
 	mkdir -p "$backend_dir"
 
 	printf 'Building backend\n'
-	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/dnd)
+	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/scryer)
 	printf '\n==> backend start %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$backend_log"
 	(
 		cd "$repo_root"
-		DND_ADDR="$backend_addr" \
-			DND_PUBLIC_ORIGIN="$backend_public_origin" \
+		SCRYER_ADDR="$backend_addr" \
+			SCRYER_PUBLIC_ORIGIN="$backend_public_origin" \
 			nohup "$backend_bin" >>"$backend_log" 2>&1 </dev/null &
 		printf '%s\n' "$!" >"$(pid_path backend)"
 	)

@@ -136,7 +136,7 @@ func TestAccountCredentialValidation(t *testing.T) {
 }
 
 func TestSessionTokenDigestsAndCSRFDerivation(t *testing.T) {
-	const expectedKnownCSRF = "qEj0O7fTHQKYkCwXldrC5wA46TrMZmyzyf7lReZFcvY"
+	const expectedKnownCSRF = "kzxDOaJqXO-nJmOHjnhLx4NYPfjm-kvIuPOk1Xl7Egc"
 	if got := deriveCSRFToken("known-token"); got != expectedKnownCSRF {
 		t.Fatalf("known CSRF derivation = %q, want %q", got, expectedKnownCSRF)
 	}
@@ -298,7 +298,7 @@ func TestAuthenticationRoutesRejectForgedIdentityAndEnforceOrigin(t *testing.T) 
 
 	for _, path := range []string{"/api/worlds", "/api/world-invites/not-a-real-token"} {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
-		request.Header.Set("X-Dnd-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
+		request.Header.Set("X-Scryer-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, request)
 		if response.Code != http.StatusUnauthorized {

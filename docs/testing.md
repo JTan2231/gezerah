@@ -34,11 +34,11 @@ On first invocation, `ci.sh`:
 
 This design validates unsaved/untracked source changes while keeping dependency
 installs and generated frontend assets out of the active checkout. Ignored
-files are not copied, so tests must not depend on local `.dnd`, `node_modules`,
+files are not copied, so tests must not depend on local `.scryer`, `node_modules`,
 `web/static` output, or test artifacts.
 
 Bun downloads, Go build and module data, and Node compile caches live under the
-ignored `.dnd/cache/ci` directory by default, or under `DND_CI_CACHE_DIR` when
+ignored `.scryer/cache/ci` directory by default, or under `SCRYER_CI_CACHE_DIR` when
 configured. The detached worktree still owns dependency installations, build
 output, installed tool binaries, and runtime state; only
 content-addressed/download caches survive between invocations. An explicit
@@ -75,7 +75,7 @@ build does not repeat the TypeScript check performed in the validation group.
 5. `go test` over application packages;
 6. govulncheck 1.6.0 over production and test reachability;
 7. shell syntax checking for `ci.sh`, `deploy.sh`, `run.sh`, and `reset-db.sh`;
-8. trimmed `cmd/dnd` binary build;
+8. trimmed `cmd/scryer` binary build;
 9. optional application-startup/migration smoke test.
 
 The validator downloads the official golangci-lint 2.12.2 archive into the
@@ -99,7 +99,7 @@ continuation after a full SSE event batch, cancellation while waiting, rolling
 write-deadline set/clear behavior, a real stream surviving the ordinary server
 write timeout, and request-context propagation from the process root.
 
-The smoke test runs only when `DND_TEST_DATABASE_URL` is set. It starts the
+The smoke test runs only when `SCRYER_TEST_DATABASE_URL` is set. It starts the
 built binary against that exact database, waits for the listening log, and
 stops it. The database must be explicitly disposable because startup installs
 the schema.
@@ -139,7 +139,7 @@ draining. Database health includes Railway's non-migrating flag, the pinned
 volume name, `READY` state, at least 5 GB, and the standard
 `/var/lib/postgresql/data` mount. They refuse to attest while another web
 rollout is unresolved. HTTP checks then require HTTPS with no redirects, `ok:true` health JSON, the
-dnd app shell at `/`, the same shell at a direct SPA route, and every
+Scryer app shell at `/`, the same shell at a direct SPA route, and every
 same-origin JavaScript and stylesheet discovered from the returned HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
@@ -157,7 +157,7 @@ hosted database. `./ci.sh` owns broad, deterministic product behavior against a
 disposable database; deployed smoke owns the narrower Railway build, service,
 public TLS/proxy, deployed-origin, asset, and database-read-path boundary.
 Passing runs write an allowlisted, secret-free record with private file
-permissions. Deploy mode reserves `.dnd/deployments/<deployment-id>.json`; verify
+permissions. Deploy mode reserves `.scryer/deployments/<deployment-id>.json`; verify
 mode writes a distinct `<deployment-id>.verify.<run-id>.json` record so it cannot
 replace deploy provenance.
 
@@ -177,14 +177,14 @@ boundary.
    foreground and record its random HTTPS origin. Treat that origin as public
    while the process is alive.
 3. Start the standalone artifact on `127.0.0.1:8080` with the disposable
-   database and `DND_PUBLIC_ORIGIN` set to that exact HTTPS origin. Do not use
+   database and `SCRYER_PUBLIC_ORIGIN` set to that exact HTTPS origin. Do not use
    normal `./run.sh`: its Vite UI is on port 5173 and its public origin is
    loopback. Require `GET /api/health` through the public origin to return
    `ok:true`.
 4. In an ordinary browser, open the public Home page and choose **Start a World
    with ChatGPT**. Continue as a person would: use the prompt in ChatGPT, answer
    its short questions, and perform signup, World authoring, Character setup,
-   and Dungeon Master assignment only through visible dnd controls. Do not call
+   and Facilitator assignment only through visible Scryer controls. Do not call
    APIs, edit storage, or name page tools.
 5. From Play, choose **Open in ChatGPT**. If ChatGPT requires its built-in
    browser to attach the authenticated Play page, use it only for that signin
@@ -397,7 +397,7 @@ When invoked through `./ci.sh e2e`, Playwright global setup:
 1. creates `test/artifacts` and removes stale runtime metadata;
 2. validates the prebuilt binary supplied by the root validator; that binary
    already embeds the production frontend from the same invocation;
-3. creates a unique database named `dnd_e2e_<timestamp>_<random>`;
+3. creates a unique database named `scryer_e2e_<timestamp>_<random>`;
 4. selects a free loopback port;
 5. starts the application with debug logging and the disposable URL as its
    exact public origin;
@@ -424,9 +424,9 @@ scenario/journey runtime, and must not be used by the UI-authentic spine.
 
 Database URL precedence is:
 
-1. `DND_TEST_DATABASE_URL`;
-2. `DND_E2E_ADMIN_DATABASE_URL`;
-3. `DND_DATABASE_URL`;
+1. `SCRYER_TEST_DATABASE_URL`;
+2. `SCRYER_E2E_ADMIN_DATABASE_URL`;
+3. `SCRYER_DATABASE_URL`;
 4. `postgres://localhost:5432/postgres?sslmode=disable`.
 
 The harness rewrites the selected URL's database path to `/postgres` for admin
@@ -440,7 +440,7 @@ The E2E launcher tries, in order:
 2. common system Chrome/Chromium locations for the platform;
 3. `bunx playwright install chromium`.
 
-The Playwright config reads `DND_E2E_BROWSER_EXECUTABLE`, but the custom launcher
+The Playwright config reads `SCRYER_E2E_BROWSER_EXECUTABLE`, but the custom launcher
 performs the discovery sequence before starting Playwright. A discovered system
 browser replaces the configured value; if no bundled or system browser exists,
 the launcher installs Chromium before it can proceed. The variable is therefore
@@ -465,9 +465,19 @@ On E2E runs, inspect:
 | `test/artifacts/report/`                           | HTML report.                                                    |
 | `test/artifacts/scenario-test-results.json`        | Exact Playwright owner results and durations.                   |
 | `test/artifacts/scenario-coverage.json`            | Final 141-row scenario inventory; root E2E requires all passed. |
+| `test/artifacts/webmcp-database-trace.json`        | Per-command World database states for the WebMCP contract.      |
+
+The WebMCP database trace is a mode-`0600`, test-only JSON sidecar. It records a
+baseline, the state after every mutating tool-equivalent command, the changed
+tables at each boundary, and an idempotent replay. Capture uses one read-only,
+repeatable-read transaction per state and an explicit World-scoped projection.
+Identity/authentication rows, invitation secrets, private notes, restricted
+profile prose, and idempotency keys are excluded. The trace is attached to the
+Playwright result as `webmcp-database-trace` as well as written at the path
+above.
 
 Deployment verification records are separate from test artifacts. They live at
-`.dnd/deployments/`, are ignored by Git, and contain only allowlisted
+`.scryer/deployments/`, are ignored by Git, and contain only allowlisted
 project/service IDs and names, whether CI passed/was skipped/was not run,
 deployment state, manifest and database-volume facts, public URL, check
 measurements, and timestamps. Deploy records identify the clean commit
@@ -481,10 +491,14 @@ The active checkout usually receives no artifacts when invoked through root
 removed afterward. To preserve artifacts for interactive debugging, run the
 test project directly in the working checkout after installing dependencies.
 A direct run also rebuilds ignored production output under `web/static` in that
-checkout.
+checkout. Run the WebMCP contract directly to preserve its database sidecar:
+
+```sh
+(cd test && bunx playwright test specs/contracts/webmcp-agent.contract.spec.ts --workers=1)
+```
 
 Passing required runs do not record trace or video. Set
-`DND_E2E_DIAGNOSTICS=1` on a direct diagnostic run to retain both on failure;
+`SCRYER_E2E_DIAGNOSTICS=1` on a direct diagnostic run to retain both on failure;
 the root performance-gated target deliberately keeps them off.
 
 ## Fast local iteration
@@ -545,7 +559,7 @@ applicable.
 
 Exercise an empty database through E2E. The migration-history test accepts only
 prefixes of the full `001`–current chain, and focused SQL contracts assert the
-current schema behavior. Set `DND_TEST_DATABASE_URL` only to a database that
+current schema behavior. Set `SCRYER_TEST_DATABASE_URL` only to a database that
 can be destroyed or modified without consequence.
 
 ## Current gaps

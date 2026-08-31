@@ -1,6 +1,6 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "cd web/frontend && bun install --frozen-lockfile && bun run build && cd ../.. && CGO_ENABLED=0 go build -trimpath -o out ./cmd/dnd"
+buildCommand = "cd web/frontend && bun install --frozen-lockfile && bun run build && cd ../.. && CGO_ENABLED=0 go build -trimpath -o out ./cmd/scryer"
 
 [deploy]
 startCommand = "./out"

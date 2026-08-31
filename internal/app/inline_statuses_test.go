@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 )
 
 func TestConsequenceOwnedStatusesWithSameNameRemainDistinct(t *testing.T) {

@@ -2,7 +2,7 @@
 
 ## Purpose and boundaries
 
-dnd is a world-centered typed state-transition system. Authors define
+Scryer is a world-centered typed state-transition system. Authors define
 only the capacities, capabilities, character fields, and entities that matter
 to their world. Problems are improvised in the multiplayer loop rather than
 authored as reusable configuration.
@@ -37,7 +37,7 @@ The system does not currently own:
 ```mermaid
 flowchart TB
     Client[Browser]
-    Binary[Single dnd Go binary]
+    Binary[Single Scryer Go binary]
     Migrations[Embedded SQL migrations]
     Static[Embedded Vite build]
     Postgres[(PostgreSQL)]
@@ -72,7 +72,7 @@ flowchart LR
 ```
 
 `./run.sh` builds and manages the Go process and starts Vite. PID files and
-logs live below ignored `.dnd/`. The frontend uses the same relative `/api`
+logs live below ignored `.scryer/`. The frontend uses the same relative `/api`
 paths in both topologies.
 
 ## Architectural layers
@@ -291,7 +291,7 @@ sequenceDiagram
     participant V as Existing preview path
     participant R as Existing resolve path
 
-    U->>H: Continue while Terra is DM and Play is idle
+    U->>H: Continue while Terra is Facilitator and Play is idle
     H->>T: Revision-consistent world snapshot
     T-->>H: Problem prose
     H->>DB: Lock/recheck; create and present Terra interaction
@@ -314,7 +314,7 @@ strict JSON Schema for the mechanical interpretation. Both one-shot Responses
 API calls set `reasoning.effort` to `none` and `store` to `false`.
 
 Each call receives a read-only `REPEATABLE READ` snapshot containing the world
-description as campaign brief, all active Mechanics with their exact authored
+description as world brief, all active Mechanics with their exact authored
 constraints and expressions, every non-archived Entity with its
 facilitator-visible profile values and generated sheet data (logical input,
 intrinsic/effective values, and active Status instances), and the three most recent resolved
@@ -408,7 +408,7 @@ clients reconnect with their last cursor.
 
 | Path                            | Responsibility                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------- |
-| `cmd/dnd/`                      | Executable entrypoint and process lifecycle.                                     |
+| `cmd/scryer/`                      | Executable entrypoint and process lifecycle.                                     |
 | `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions.       |
 | `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                       |
 | `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                              |

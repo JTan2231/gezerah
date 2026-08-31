@@ -44,12 +44,14 @@ describe("API authentication adapter", () => {
 
     expect(requests).toHaveLength(2);
     expect(requests[0]?.credentials).toBe("same-origin");
-    expect(new Headers(requests[0]?.headers).has("X-DND-CSRF")).toBe(false);
+    expect(new Headers(requests[0]?.headers).has("X-SCRYER-CSRF")).toBe(false);
     expect(requests[1]?.credentials).toBe("same-origin");
-    expect(new Headers(requests[1]?.headers).get("X-DND-CSRF")).toBe(
+    expect(new Headers(requests[1]?.headers).get("X-SCRYER-CSRF")).toBe(
       "csrf-value",
     );
-    expect(new Headers(requests[1]?.headers).has("X-DND-User-ID")).toBe(false);
+    expect(new Headers(requests[1]?.headers).has("X-SCRYER-User-ID")).toBe(
+      false,
+    );
   });
 
   test("reports a 401 and clears the CSRF token", async () => {
@@ -86,7 +88,7 @@ describe("API authentication adapter", () => {
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(401);
     expect(authenticationRequiredCount).toBe(1);
-    expect(new Headers(requests[1]?.headers).has("X-DND-CSRF")).toBe(false);
+    expect(new Headers(requests[1]?.headers).has("X-SCRYER-CSRF")).toBe(false);
   });
 
   test("a late 401 from an old session cannot clear a newer session", async () => {
@@ -131,7 +133,7 @@ describe("API authentication adapter", () => {
     unsubscribe();
 
     expect(authenticationRequiredCount).toBe(0);
-    expect(new Headers(currentRequest?.headers).get("X-DND-CSRF")).toBe(
+    expect(new Headers(currentRequest?.headers).get("X-SCRYER-CSRF")).toBe(
       "new-session-csrf",
     );
   });
@@ -186,13 +188,13 @@ describe("API authentication adapter", () => {
       "/api/me",
       "/api/worlds",
     ]);
-    expect(new Headers(requests[0]?.init?.headers).get("X-DND-CSRF")).toBe(
+    expect(new Headers(requests[0]?.init?.headers).get("X-SCRYER-CSRF")).toBe(
       "stale-session-csrf",
     );
-    expect(new Headers(requests[1]?.init?.headers).has("X-DND-CSRF")).toBe(
+    expect(new Headers(requests[1]?.init?.headers).has("X-SCRYER-CSRF")).toBe(
       false,
     );
-    expect(new Headers(requests[2]?.init?.headers).get("X-DND-CSRF")).toBe(
+    expect(new Headers(requests[2]?.init?.headers).get("X-SCRYER-CSRF")).toBe(
       "rotated-session-csrf",
     );
   });

@@ -26,7 +26,7 @@ export interface SettingsViewModel {
     memberCount: number;
     mechanicCount: number;
     status: "active" | "archived";
-    dungeonMaster: string;
+    facilitator: string;
   };
   canArchive: boolean;
 }
@@ -77,7 +77,7 @@ export function SettingsView({
           </Field>
           <Field
             label="Description"
-            hint="Orient newly invited players and give Terra a campaign brief."
+            hint="Orient newly invited players and give Terra a world brief."
           >
             <textarea
               value={model.draft.description}
@@ -89,10 +89,10 @@ export function SettingsView({
             />
           </Field>
           <div className="settings-facilitator-note">
-            <span>Dungeon Master</span>
-            <strong>{model.access.dungeonMaster}</strong>
+            <span>Facilitator</span>
+            <strong>{model.access.facilitator}</strong>
             <small>
-              Hand off Dungeon Master responsibility from Play between Problems.
+              Hand off Facilitator responsibility from Play between Problems.
             </small>
           </div>
           {model.issue === null ? null : <ErrorMessage error={model.issue} />}
@@ -117,8 +117,8 @@ export function SettingsView({
           <RolePill role={model.access.role} />
           <p>
             {model.access.role === "owner"
-              ? "You can configure mechanics, invite members, assign the Dungeon Master, and archive this world."
-              : "You can configure mechanics and assign the Dungeon Master."}
+              ? "You can configure mechanics, invite members, assign the Facilitator, and archive this world."
+              : "You can configure mechanics and assign the Facilitator."}
           </p>
           <dl>
             <div>
@@ -130,8 +130,8 @@ export function SettingsView({
               <dd>{model.access.mechanicCount}</dd>
             </div>
             <div>
-              <dt>Dungeon Master</dt>
-              <dd>{model.access.dungeonMaster}</dd>
+              <dt>Facilitator</dt>
+              <dd>{model.access.facilitator}</dd>
             </div>
             <div>
               <dt>World status</dt>

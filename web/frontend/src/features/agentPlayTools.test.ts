@@ -47,7 +47,7 @@ describe("ChatGPT play tools", () => {
       "https://play.example/play/world-1",
     );
     expect(starterPrompt).toContain("https://play.example/play/world-1");
-    expect(starterPrompt).toContain("Keep lasting game state in dnd");
+    expect(starterPrompt).toContain("Keep lasting game state in Scryer");
     expect(starterPrompt).toContain("naturally notice or care about");
     expect(starterPrompt).toContain("not private thoughts");
     expect(starterPrompt).not.toContain("inspect_play");

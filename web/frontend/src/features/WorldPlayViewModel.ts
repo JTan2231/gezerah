@@ -38,7 +38,7 @@ export interface WorldPlayViewModel {
   facilitator: boolean;
   canCreateProblem: boolean;
   hasActiveProblem: boolean;
-  dungeonMaster: {
+  facilitatorAssignment: {
     name: string;
     source: "human" | "terra" | "agent";
     selectedValue: string;
@@ -105,7 +105,7 @@ export interface AgentModeViewModel {
 export interface CharacterOnboardingViewModel {
   worldName: string;
   currentUserName: string;
-  dungeonMasterName: string;
+  facilitatorName: string;
   statusLabel: string;
   facilitatorActionLabel: string;
   canBecomeFacilitator: boolean;

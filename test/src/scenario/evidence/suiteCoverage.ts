@@ -654,7 +654,7 @@ function isSuccessfulBrowserTest(test: ScenarioTestResult): boolean {
 }
 
 function expectedGoPackage(ownerFile: string): string {
-  return `dnd/${posix.dirname(ownerFile)}`;
+  return `scryer/${posix.dirname(ownerFile)}`;
 }
 
 function normalizeArchitectureOwner(file: string): string {

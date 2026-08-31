@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 )
 
 func TestExpressionDTORoundTripPreservesTypedTreeAndExactNumbers(t *testing.T) {

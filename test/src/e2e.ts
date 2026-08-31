@@ -9,14 +9,16 @@ async function main(): Promise<void> {
   const browser = await timed("browser resolution", ensureBrowser);
   const env = {
     ...process.env,
-    ...(browser === undefined ? {} : { DND_E2E_BROWSER_EXECUTABLE: browser }),
+    ...(browser === undefined
+      ? {}
+      : { SCRYER_E2E_BROWSER_EXECUTABLE: browser }),
   };
   await timed("Playwright execution", async () => {
     await runCommand("bunx", ["playwright", "test"], { cwd: testRoot, env });
   });
   const inventory = await timed("coverage inventory", async () =>
     finalizeSuiteCoverage({
-      requireComplete: process.env.DND_E2E_REQUIRE_COMPLETE_COVERAGE === "1",
+      requireComplete: process.env.SCRYER_E2E_REQUIRE_COMPLETE_COVERAGE === "1",
     }),
   );
   process.stdout.write(

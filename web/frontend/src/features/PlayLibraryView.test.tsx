@@ -53,7 +53,7 @@ describe("PlayLibraryView", () => {
               name: "Glass Harbor",
               description: "Ships, storms, and difficult bargains.",
               membershipRole: "owner",
-              currentPlayRoleLabel: "Dungeon Master",
+              currentPlayRoleLabel: "Facilitator",
               status: "active",
               playStatus: "Ready",
               memberCount: 3,

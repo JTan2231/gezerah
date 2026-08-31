@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

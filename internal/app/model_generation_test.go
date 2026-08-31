@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	openaiapi "dnd/internal/openai"
+	openaiapi "scryer/internal/openai"
 )
 
 const (

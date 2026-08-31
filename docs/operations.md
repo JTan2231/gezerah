@@ -1,7 +1,7 @@
 # Operations
 
-> **Current state (2026-08-09):** dnd has a public-addressable Railway
-> preview at <https://dnd-web-production.up.railway.app>, backed by a
+> **Current state (2026-08-31):** Scryer is deployed on Railway at
+> <https://scryingorb.com>, backed by a
 > managed PostgreSQL service that was created fresh for this target. Railway
 > names the environment `production`; that provider name is not a declaration
 > of public-production readiness. This runbook governs the active preview, while
@@ -9,7 +9,7 @@
 
 ## Deployable artifact
 
-dnd deploys as one statically built Go application plus PostgreSQL. The
+Scryer deploys as one statically built Go application plus PostgreSQL. The
 browser assets are compiled by Vite into `web/static` and embedded in the Go
 binary. That binary:
 
@@ -27,7 +27,7 @@ cd web/frontend
 bun install --frozen-lockfile
 bun run build
 cd ../..
-CGO_ENABLED=0 go build -trimpath -o out ./cmd/dnd
+CGO_ENABLED=0 go build -trimpath -o out ./cmd/scryer
 ```
 
 Building Go before Vite embeds only the tracked placeholder and produces a
@@ -37,17 +37,17 @@ binary whose SPA routes return 503.
 
 | Variable              | Default/precedence             | Operational use                                                                                       |
 | --------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `DND_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                         |
-| `PORT`                | Fallback when `DND_ADDR` unset | Hosting-provider port.                                                                                |
-| `DND_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                       |
+| `SCRYER_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                         |
+| `PORT`                | Fallback when `SCRYER_ADDR` unset | Hosting-provider port.                                                                                |
+| `SCRYER_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                       |
 | `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                        |
-| `DND_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
-| `DND_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
+| `SCRYER_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
+| `SCRYER_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
 | `OPENAI_API_KEY`      | Empty                          | Enables Terra and Luna calls through the OpenAI Responses API.                                        |
-| `DND_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                             |
+| `SCRYER_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                             |
 
 If neither database variable is set, the final fallback is
-`postgres://localhost:5432/dnd?sslmode=disable`. This is intended for local
+`postgres://localhost:5432/scryer?sslmode=disable`. This is intended for local
 development; a deployed process with no database variable would try that local
 address rather than fail configuration parsing. Unknown log-level values also
 silently select `info`.
@@ -56,12 +56,12 @@ The binary's default bind address `:8080` listens on all interfaces, but an
 unset public origin permits HTTP authentication only when both the request host
 and network peer are loopback. `./run.sh` instead binds its Vite-facing backend
 to `127.0.0.1:8080` and supplies
-`DND_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
+`SCRYER_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
 Configuration rejects a non-loopback HTTP public origin and also rejects a
 wildcard listener paired with a loopback HTTP origin. For every deployment,
-set `DND_PUBLIC_ORIGIN` to the exact external HTTPS origin (scheme and authority, with no
+set `SCRYER_PUBLIC_ORIGIN` to the exact external HTTPS origin (scheme and authority, with no
 path/query/fragment); this is required when a reverse proxy changes the request
-host and ensures the `Secure` `__Host-dnd_session` cookie is issued.
+host and ensures the `Secure` `__Host-scryer_session` cookie is issued.
 
 Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
 read secret files or rotate credentials. Supply them through the deployment
@@ -80,7 +80,7 @@ Startup is fail-fast:
 2. create/ping database pool;
 3. take migration advisory lock and apply pending migrations;
 4. construct routes/static filesystem;
-5. bind and log `dnd listening`.
+5. bind and log `Scryer listening`.
 
 `GET /api/health` performs a fresh database ping with a two-second deadline:
 
@@ -147,11 +147,11 @@ careful not to add private notes or player action text to telemetry.
 
 ## Railway deployment
 
-The active Railway project is `dnd`, with environment `production` and
+The active Railway project is `Scryer`, with environment `production` and
 these existing resources:
 
-- `dnd-web`, one public web replica at
-  <https://dnd-web-production.up.railway.app>;
+- `scryer-web`, one public web replica at <https://scryingorb.com>, with
+  <https://scryer-web-production.up.railway.app> as its provider domain;
 - `Postgres`, one managed PostgreSQL replica;
 - `postgres-volume`, a 5 GB persistent database volume.
 
@@ -201,7 +201,7 @@ Deploy mode:
    public URL, replica health, or database-volume health changed during smoke,
    or if another rollout is unresolved;
 9. writes passing, allowlisted evidence to
-   `.dnd/deployments/<deployment-id>.json` and prints its path.
+   `.scryer/deployments/<deployment-id>.json` and prints its path.
 
 Inspect the active release without uploading source or running CI with:
 
@@ -220,17 +220,18 @@ which still requires clean committed source but omits the normal correctness
 gate. Use `./deploy.sh --help` for the accepted forms.
 
 The default target pins both immutable Railway IDs and display names. Alternate
-existing targets must set the matching `DND_DEPLOY_PROJECT_ID`,
-`DND_DEPLOY_ENVIRONMENT_ID`, `DND_DEPLOY_WEB_SERVICE_ID`, and
-`DND_DEPLOY_DATABASE_SERVICE_ID` together with `DND_DEPLOY_PROJECT`,
-`DND_DEPLOY_ENVIRONMENT`, `DND_DEPLOY_WEB_SERVICE`, and
-`DND_DEPLOY_DATABASE_SERVICE`; `DND_DEPLOY_DATABASE_VOLUME` pins that service's
+existing targets must set the matching `SCRYER_DEPLOY_PROJECT_ID`,
+`SCRYER_DEPLOY_ENVIRONMENT_ID`, `SCRYER_DEPLOY_WEB_SERVICE_ID`, and
+`SCRYER_DEPLOY_DATABASE_SERVICE_ID` together with `SCRYER_DEPLOY_PROJECT`,
+`SCRYER_DEPLOY_ENVIRONMENT`, `SCRYER_DEPLOY_WEB_SERVICE`, and
+`SCRYER_DEPLOY_DATABASE_SERVICE`; `SCRYER_DEPLOY_DATABASE_VOLUME` pins that service's
 volume name. The database check also requires no volume migration, exactly one
 ready volume of at least 5 GB mounted at `/var/lib/postgresql/data`.
-`DND_DEPLOY_URL` can assert a credential-free exact HTTPS origin, but it must
+`SCRYER_DEPLOY_URL` defaults to <https://scryingorb.com> and can assert another
+credential-free exact HTTPS origin, but it must
 equal the URL Railway reports for the selected web service; it cannot redirect
 evidence to another host.
-`DND_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
+`SCRYER_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
 timeout and accepts 30 through 3600 seconds. Overrides select already-existing
 resources; they do not bootstrap them.
 
@@ -242,8 +243,13 @@ manual rollback. Evidence is written only after all selected checks pass.
 Adding a Railway PostgreSQL service does not by itself inject its variables into
 the application service. Define a reference variable such as
 `DATABASE_URL=${{Postgres.DATABASE_URL}}`, using the actual database service
-name, or set `DND_DATABASE_URL` to an equivalent reference. Without it, the
+name, or set `SCRYER_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
+
+The custom domain uses an apex `ALIAS` in Squarespace DNS plus Railway's
+ownership-verification `TXT` record. `SCRYER_PUBLIC_ORIGIN` must remain exactly
+`https://scryingorb.com`. Squarespace requires DNSSEC to stay disabled while
+the apex `ALIAS` is in use.
 
 The checked-in 15-second Railway drain exceeds the application's ten-second
 shutdown deadline. The deployment script verifies that the active manifest
@@ -268,7 +274,7 @@ preparing for broader public use:
    application/schema ordering.
 4. Define and rehearse backup/restore and cutback when the target will hold any
    durable data; confirm Bun/Go versions and that Vite builds before Go.
-5. Set the PostgreSQL reference, exact HTTPS `DND_PUBLIC_ORIGIN`, expected log
+5. Set the PostgreSQL reference, exact HTTPS `SCRYER_PUBLIC_ORIGIN`, expected log
    level, TLS/proxy policy, and secret access boundaries.
 6. Verify the checked-in 15-second termination/draining setting is active and
    remains greater than the ten-second application shutdown deadline, then
@@ -277,7 +283,7 @@ preparing for broader public use:
 7. Beyond the script's health/deep-link/invalid-signin smoke, verify signup,
    successful signin, `/api/me`, logout revocation, and representative
    authorized API reads against an explicitly managed canary account.
-8. In a real HTTPS browser, verify `__Host-dnd_session` is `Secure`, `HttpOnly`,
+8. In a real HTTPS browser, verify `__Host-scryer_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
    missing-CSRF mutations fail.
 9. Keep an SSE connection open beyond 30 seconds; verify prompt session
@@ -292,7 +298,7 @@ A hosting platform must provide:
 
 - a Linux or macOS Go binary environment;
 - PostgreSQL with `pgcrypto` and migration privileges;
-- one HTTP port from `DND_ADDR` or `PORT`;
+- one HTTP port from `SCRYER_ADDR` or `PORT`;
 - TLS termination/reverse proxy if exposed;
 - persistent database backups;
 - signal delivery and a termination grace period longer than the application's

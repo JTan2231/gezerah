@@ -180,12 +180,12 @@ export function WorldPlay({
         : "";
     const confirmation =
       emergencyTakeover || possibleAutomatedTakeover
-        ? `Take over from ${world.facilitator.source === "agent" ? "ChatGPT" : "Terra"}? If a problem is active, your submitted action will be withdrawn and you will resolve the problem as Dungeon Master.`
+        ? `Take over from ${world.facilitator.source === "agent" ? "ChatGPT" : "Terra"}? If a problem is active, your submitted action will be withdrawn and you will resolve the problem as Facilitator.`
         : terra
           ? `Hand facilitation to Terra? Terra will author and resolve the next Problem.${returningToSeat}`
           : agent
             ? `Hand facilitation to ChatGPT? ChatGPT will use this signed-in Play page to author and resolve Problems.${returningToSeat}`
-            : `${targetMember?.display_name ?? "This member"} will become the Dungeon Master and their current play role will become facilitator.${returningToSeat}`;
+            : `${targetMember?.display_name ?? "This member"} will become the Facilitator and their current play role will become facilitator.${returningToSeat}`;
     if (!window.confirm(confirmation)) return;
     setChangingFacilitator(true);
     setFacilitatorError(null);
@@ -292,13 +292,13 @@ export function WorldPlay({
           availableEntities.reload();
         }}
         refreshToken={profileRefreshToken}
-        dungeonMasterName={
+        facilitatorName={
           world.facilitator.display_name ??
           (world.facilitator.source === "terra"
             ? "Terra"
             : world.facilitator.source === "agent"
               ? "ChatGPT"
-              : "Dungeon Master")
+              : "Facilitator")
         }
         canBecomeFacilitator={
           world.status === "active" &&
@@ -391,7 +391,7 @@ export function WorldPlay({
         ? "ChatGPT"
         : (members.items.find(
             (item) => item.id === world.facilitator.membership_id,
-          )?.display_name ?? "Dungeon Master"));
+          )?.display_name ?? "Facilitator"));
   const facilitatorValue =
     world.facilitator.source !== "human"
       ? world.facilitator.source
@@ -428,13 +428,13 @@ export function WorldPlay({
         currentUserName: user.display_name,
         currentPlayRoleLabel:
           world.current_play_role === "facilitator"
-            ? "Dungeon Master"
+            ? "Facilitator"
             : humanize(world.current_play_role),
         membershipRoleLabel: humanize(world.role),
         facilitator,
         canCreateProblem: facilitator && world.status === "active",
         hasActiveProblem: active !== undefined,
-        dungeonMaster: {
+        facilitatorAssignment: {
           name: facilitatorName,
           source: world.facilitator.source,
           selectedValue: facilitatorValue,
@@ -576,7 +576,7 @@ function CharacterOnboarding({
   availableEntitiesError,
   onRetry,
   refreshToken,
-  dungeonMasterName,
+  facilitatorName,
   canBecomeFacilitator,
   changingFacilitator,
   facilitatorError,
@@ -596,7 +596,7 @@ function CharacterOnboarding({
   availableEntitiesError: ApiError | null;
   onRetry: () => void;
   refreshToken: number;
-  dungeonMasterName: string;
+  facilitatorName: string;
   canBecomeFacilitator: boolean;
   changingFacilitator: boolean;
   facilitatorError: ApiError | null;
@@ -647,7 +647,7 @@ function CharacterOnboarding({
       model={{
         worldName: world.name,
         currentUserName: user.display_name,
-        dungeonMasterName,
+        facilitatorName,
         statusLabel:
           world.play_status === "waiting-for-character"
             ? "Waiting for a character"
@@ -657,7 +657,7 @@ function CharacterOnboarding({
             ? "Take over from Terra"
             : world.facilitator.source === "agent"
               ? "Take over from ChatGPT"
-              : "Become Dungeon Master",
+              : "Become Facilitator",
         canBecomeFacilitator,
         changingFacilitator,
         facilitatorIssue: toPlayViewIssue(facilitatorError),
@@ -926,7 +926,7 @@ function LiveInteraction({
   async function skipProblem() {
     if (
       !window.confirm(
-        `Skip this problem? Submitted actions will not affect the world. ${agentFacilitated ? "ChatGPT" : "Terra"} will remain Dungeon Master, and you can ask for another problem.`,
+        `Skip this problem? Submitted actions will not affect the world. ${agentFacilitated ? "ChatGPT" : "Terra"} will remain Facilitator, and you can ask for another problem.`,
       )
     )
       return;
@@ -1445,7 +1445,7 @@ function toHistoryCardViewModel(
         ? "ChatGPT"
         : (memberships.find(
             (membership) => membership.id === facilitatorMembershipID,
-          )?.display_name ?? "Dungeon Master");
+          )?.display_name ?? "Facilitator");
   if (interaction.status === "cancelled")
     return {
       id: interaction.id,

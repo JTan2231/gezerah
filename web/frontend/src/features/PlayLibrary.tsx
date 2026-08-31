@@ -38,7 +38,7 @@ export function PlayLibrary({
           membershipRole: world.role,
           currentPlayRoleLabel:
             world.current_play_role === "facilitator"
-              ? "Dungeon Master"
+              ? "Facilitator"
               : humanize(world.current_play_role),
           status: world.status,
           playStatus: playStatus(world),

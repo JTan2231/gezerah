@@ -1,11 +1,11 @@
 # System documentation
 
-This directory is the canonical guide to dnd. It describes the system
+This directory is the canonical guide to Scryer. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 Status-instance layers, generated Entity sheets, membership-controlled Characters with
 world-authored onboarding fields, and Play with exactly one
-designated Dungeon Master: a human facilitator, Terra, or an agent such as
+designated Facilitator: a human facilitator, Terra, or an agent such as
 ChatGPT.
 
 The application intentionally has no built-in entity classes, privileged
@@ -31,7 +31,7 @@ constraints.
 | [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |
 | [Operations](operations.md)     | Production build, configuration, scripted Railway deployment and verification, health, backups, and recovery. |
 | [Security](security.md)         | Current trust boundary, authorization rules, visibility filtering, known gaps, and hardening path.    |
-| [ChatGPT/WebMCP](webmcp.md)     | ChatGPT DM journey, page-tool boundary, same-origin session model, commands, and release checks.       |
+| [ChatGPT/WebMCP](webmcp.md)     | ChatGPT Facilitator journey, page-tool boundary, same-origin session model, commands, and release checks.       |
 | [Deployment readiness](deployment-readiness/README.md) | Audits, blockers, decisions, and exit criteria for trusted staging and public release. |
 
 ## System at a glance
@@ -60,9 +60,9 @@ route. During development, Vite serves the frontend on port `5173` and proxies
 A world author defines input and derived capacities/capabilities, generates
 sheets for stateful subjects, admits user accounts by invite link, and runs
 improvised Problems during Play. The membership role stays separate from
-the current play role, so an authorized membership can hand the DM responsibility to
+the current play role, so an authorized membership can hand the Facilitator responsibility to
 another non-spectator, Terra, or an agent, normally between
-Problems. A human DM authors one prose Consequence and may preview Luna's
+Problems. A human Facilitator authors one prose Consequence and may preview Luna's
 compiled Effects. Terra instead creates and resolves its own Interactions
 autonomously. In agent mode, ChatGPT authors the
 Problem and Consequence through the signed-in Play page while the person's current

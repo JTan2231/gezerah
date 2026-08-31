@@ -2,7 +2,7 @@
 
 ## Model overview
 
-dnd separates world membership, user-authored mechanics, fictional
+Scryer separates world membership, user-authored mechanics, fictional
 entities, and improvised live play. Nothing in the mechanical vocabulary is
 globally special: every mechanic name and entity is created by a user inside a
 World. Problems exist only as live Interactions created during Play.
@@ -42,7 +42,7 @@ an `owner`, `editor`, `player`, or `spectator` membership role. That membership 
 Build access and survives every facilitator handoff; it is not the membership's
 momentary current play role in Play.
 
-Exactly one facilitator assignment identifies the Dungeon Master. Its source
+Exactly one facilitator assignment identifies the Facilitator. Its source
 is `human`, with one active non-spectator `facilitator_membership_id`, or a
 non-membership `terra` or `agent` source. A new world's owner is its initial
 human facilitator. The assignment derives each membership's `current_play_role`:
@@ -53,14 +53,14 @@ Changing the assignment does not rewrite any durable membership role.
 The assignment is represented by its `facilitator_source` and, for a human,
 its membership. Handoff is a separate world-revisioned command, not an
 ordinary settings patch. An
-owner/editor or the current human facilitator may hand the DM assignment to another
+owner/editor or the current human facilitator may hand the Facilitator assignment to another
 active non-spectator, Terra, or an agent, but only when no Interaction
 is draft, open, or adjudicating. The narrow recovery exception lets the owner
 assign themself when
 the sole unfinished interaction is authored by the currently assigned
 non-human source and is open or adjudicating;
-the owner's submitted action is withdrawn before they continue as human DM. In
-Terra mode the world description also serves as the campaign
+the owner's submitted action is withdrawn before they continue as human Facilitator. In
+Terra mode the world description also serves as the world
 brief supplied to generation; it remains ordinary user-authored prose rather
 than a privileged rules field.
 

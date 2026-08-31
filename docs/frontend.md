@@ -23,8 +23,8 @@ by an active non-spectator membership is presented as that membership's Characte
 separately loaded profile generated from the world's active character fields.
 Those values never become engine state.
 Problems are not a configuration resource in this UI. A facilitator describes
-each Problem during Play, or Terra creates it when designated as Dungeon
-Master. Responders offer free-form Actions or pass. A human DM writes one
+each Problem during Play, or Terra creates it when designated as Facilitator.
+Responders offer free-form Actions or pass. A human Facilitator writes one
 unstructured account of what transpires and reviews Luna's compiled preview.
 Terra instead authors and compiles a Consequence, then commits its Resolution without
 exposing model output for human editing or approval. An apply-status Effect
@@ -182,10 +182,10 @@ it.
 
 For example, `SettingsWorkspace` receives the authoritative `World` DTO and
 maps `name` and optional `description` into a settings draft. `SettingsView`
-edits that draft and emits save/archive intent while displaying the current DM
+edits that draft and emits save/archive intent while displaying the current Facilitator
 read-only. The controller adds `expected_revision`, accepts the returned
 `World` as the new draft baseline, refreshes the workspace resource, and
-performs archive navigation. DM handoff is a separate Play command. The view
+performs archive navigation. Facilitator handoff is a separate Play command. The view
 never sees the world ID, revision, endpoint, HTTP method, or response DTO.
 
 ### Errors, permissions, and server authority
@@ -240,7 +240,7 @@ Routes are parsed without an external router:
 | `/build/{world-id}/character-fields`            | Required character-field editor.              |
 | `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
 | `/build/{world-id}/members`                     | World memberships and invite links.           |
-| `/build/{world-id}/settings`                    | World details, current-DM summary, lifecycle. |
+| `/build/{world-id}/settings`                    | World details, current-Facilitator summary, lifecycle. |
 | `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
 Unknown paths render a not-found screen rather than silently opening a library.
@@ -260,7 +260,7 @@ to the intended area or opaque invite without storing a redirect target.
 The browser owns no durable identity credential in JavaScript. `fetch` sends
 the server's HttpOnly SameSite session cookie, while the CSRF token returned by
 signup, signin, `/api/me`, or password change lives only in module memory and
-is added to unsafe calls as `X-DND-CSRF`. A global 401 boundary clears that
+is added to unsafe calls as `X-SCRYER-CSRF`. A global 401 boundary clears that
 token and returns protected surfaces to the signin gate; each request captures
 its starting authentication token so a late 401 from an old session cannot
 tear down a newly established one. A `csrf_invalid` response caused by another
@@ -380,15 +380,15 @@ membership is facilitator. The facilitator can enter Play regardless, and a
 handoff confirmation warns whether they will return to a ready seat or to
 character setup. Spectators are always ready and read-only.
 
-The Play header names the current Dungeon Master, the viewer's current play
+The Play header names the current Facilitator, the viewer's current play
 role, and their membership role. Between Problems, an owner/editor or the
-current human facilitator can use the DM picker to assign another active
+current human facilitator can use the Facilitator picker to assign another active
 non-spectator or Terra. The control is unavailable while an interaction is
 unfinished; Settings only displays the assignment. The sole recovery exception
 is a **Take over** button for an owner while a Terra interaction is open or
 adjudicating.
 
-With a human DM, the lifecycle is:
+With a human Facilitator, the lifecycle is:
 
 1. the designated facilitator clicks **New problem** and writes the moment;
 2. the UI audience is every active membership whose `play_status` is ready,
@@ -407,7 +407,7 @@ The facilitator may instead choose **Cancel problem** while it is unfinished; a
 presented cancellation remains in audience history, while a cancelled draft
 remains private.
 
-With Terra as DM, the human controls are pacing only:
+With Terra as Facilitator, the human controls are pacing only:
 
 1. while Play is idle, any ready current player clicks **Ask Terra to
    continue**;
@@ -418,7 +418,7 @@ With Terra as DM, the human controls are pacing only:
    passed progress and enables the decision only after every responder Action is submitted;
 4. while the problem is open or Terra is adjudicating it, any ready current
    player may confirm **Skip problem**. The interaction becomes cancelled
-   without a Consequence, Terra remains Dungeon Master, and Play returns
+   without a Consequence, Terra remains Facilitator, and Play returns
    to idle without automatically preparing a replacement;
 5. any ready current player asks Terra to decide. The UI moves to a Terra
    pending state while the server generates prose, compiles it with Luna,
@@ -429,7 +429,7 @@ With Terra as DM, the human controls are pacing only:
    recovery path, the owner may confirm **Take over** during the open or
    adjudicating interaction; their own submitted action is withdrawn. An open
    problem exposes the human close/adjudicate flow, while an adjudicating one
-   opens the human-DM Consequence UI directly.
+   opens the human-Facilitator Consequence UI directly.
 
 Resolved and presented-cancelled history remains visible to its audience.
 Human cancellations are labelled **Cancelled**; cancelled Terra-authored

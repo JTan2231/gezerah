@@ -137,9 +137,9 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       );
       await expect(editorFacilitatorNote).toContainText(labels.owner);
       await expect(editorFacilitatorNote).toContainText(
-        "Hand off Dungeon Master responsibility from Play between Problems.",
+        "Hand off Facilitator responsibility from Play between Problems.",
       );
-      await expect(editorPage.getByLabel("DM source")).toHaveCount(0);
+      await expect(editorPage.getByLabel("Facilitator source")).toHaveCount(0);
 
       await ownerPage
         .getByLabel("Description")

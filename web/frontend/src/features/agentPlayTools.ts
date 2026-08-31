@@ -15,7 +15,7 @@ import type {
 } from "../api/types";
 
 export function buildAgentStarterPrompt(playURL: string): string {
-  return `Be the Dungeon Master while I play this dnd World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in dnd. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
+  return `Be the Facilitator while I play this Scryer World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in Scryer. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
 }
 
 export function buildAgentLaunchURL(playURL: string, prompt: string): string {
@@ -393,7 +393,7 @@ export function createAgentPlayTools(
     },
     {
       name: "present_problem",
-      description: `As ChatGPT Dungeon Master, present the next fictional Problem to ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, present the next fictional Problem to ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -482,7 +482,7 @@ export function createAgentPlayTools(
     },
     {
       name: "resolve_problem",
-      description: `As ChatGPT Dungeon Master, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. Preserve the same character-attuned narration and privacy boundaries while describing what changes. An empty effects array is valid. ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. Preserve the same character-attuned narration and privacy boundaries while describing what changes. An empty effects array is valid. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {

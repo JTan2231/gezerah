@@ -2717,19 +2717,19 @@ textarea {
   gap: 1rem;
 }
 
-.dungeon-master-picker {
+.facilitator-picker {
   display: grid;
   min-width: 170px;
   gap: 0.2rem;
 }
 
-.dungeon-master-picker > span,
-.dungeon-master-picker > small {
+.facilitator-picker > span,
+.facilitator-picker > small {
   color: var(--muted);
   font-size: 0.58rem;
 }
 
-.dungeon-master-picker select {
+.facilitator-picker select {
   min-height: 36px;
   padding: 0.4rem 1.8rem 0.4rem 0.55rem;
   font-size: 0.68rem;
@@ -4223,7 +4223,7 @@ textarea {
     justify-content: space-between;
   }
 
-  .dungeon-master-picker {
+  .facilitator-picker {
     flex: 1 1 100%;
   }
 

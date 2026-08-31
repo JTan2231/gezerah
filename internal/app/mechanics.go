@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"dnd/internal/rules"
+	"scryer/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

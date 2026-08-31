@@ -24,9 +24,9 @@ import (
 )
 
 const (
-	localSessionCookieName  = "dnd_session"
-	secureSessionCookieName = "__Host-dnd_session"
-	csrfHeaderName          = "X-Dnd-Csrf"
+	localSessionCookieName  = "scryer_session"
+	secureSessionCookieName = "__Host-scryer_session"
+	csrfHeaderName          = "X-Scryer-Csrf"
 
 	passwordMinimumRunes = 8
 
@@ -355,7 +355,7 @@ func hashSessionToken(token string) string {
 }
 
 func deriveCSRFToken(token string) string {
-	digest := sha256.Sum256(append([]byte("dnd.csrf.v1\x00"), []byte(token)...))
+	digest := sha256.Sum256(append([]byte("scryer.csrf.v1\x00"), []byte(token)...))
 	return base64.RawURLEncoding.EncodeToString(digest[:])
 }
 

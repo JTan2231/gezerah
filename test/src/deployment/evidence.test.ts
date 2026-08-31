@@ -37,14 +37,19 @@ describe("deployment evidence", () => {
 
   test("writes an atomic private record beneath the ignored state directory", async () => {
     const temporaryRoot = await mkdtemp(
-      path.join(os.tmpdir(), "dnd-deploy-test-"),
+      path.join(os.tmpdir(), "scryer-deploy-test-"),
     );
     try {
       const evidence = fixture();
       const destination = await writeEvidence(temporaryRoot, evidence);
       assert.equal(
         destination,
-        path.join(temporaryRoot, ".dnd", "deployments", `${deploymentID}.json`),
+        path.join(
+          temporaryRoot,
+          ".scryer",
+          "deployments",
+          `${deploymentID}.json`,
+        ),
       );
       assert.equal(
         await readFile(destination, "utf8"),
@@ -80,7 +85,7 @@ describe("deployment evidence", () => {
 function fixture(mode: "deploy" | "verify" = "deploy") {
   const project: RailwayProject = {
     id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    name: "dnd",
+    name: "Scryer",
     environments: [],
   };
   const environment: RailwayEnvironment = {
@@ -89,9 +94,9 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   };
   const web = service({
     id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    name: "dnd-web",
+    name: "scryer-web",
     deploymentId: deploymentID,
-    url: "https://dnd-web-production.up.railway.app",
+    url: "https://scryingorb.com",
   });
   const database = service({
     id: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
@@ -126,11 +131,11 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     database,
     deployment,
     localCommit: "a".repeat(40),
-    publicURL: "https://dnd-web-production.up.railway.app",
+    publicURL: "https://scryingorb.com",
     http: [
       {
         name: "health",
-        url: "https://dnd-web-production.up.railway.app/api/health",
+        url: "https://scryingorb.com/api/health",
         status: 200,
         contentType: "application/json",
         bytes: 57,
@@ -139,7 +144,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     ],
     browser: {
       skipped: false,
-      title: "dnd",
+      title: "Scryer",
       finalPath: "/play",
       authProbe: true,
       failureCount: 0,

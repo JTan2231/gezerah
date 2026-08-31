@@ -1,4 +1,4 @@
-module dnd
+module scryer
 
 go 1.25.14
 

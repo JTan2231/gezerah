@@ -35,7 +35,7 @@ export function ChatGPTWorldStartView({
       <span className="chatgpt-world-start-eyebrow">Recommended</span>
       <h2 id={titleID}>Start a World with ChatGPT</h2>
       <p className="chatgpt-world-start-definition">
-        A World is your campaign setting and continuing history.
+        A World is your world setting and continuing history.
       </p>
       <p>
         Start in ChatGPT or copy the prompt below. It will help shape your idea,

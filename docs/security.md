@@ -2,20 +2,20 @@
 
 ## Current deployment classification
 
-As of 2026-08-09, dnd has a public-addressable Railway preview backed by
-managed PostgreSQL. It is not designated public production, and no
+As of 2026-08-31, Scryer is deployed at <https://scryingorb.com> on Railway,
+backed by managed PostgreSQL. It is not designated public production, and no
 public-release gate or production-audience commitment has been opened. The
 conditions in this document therefore remain requirements before broader or
 real-user use; reachability and a healthy smoke check do not satisfy them.
 
-dnd has native username/password authentication and revocable server sessions.
+Scryer has native username/password authentication and revocable server sessions.
 Caller-selected identity headers do not authenticate or override a session. Health,
 signup, and signin are the explicit public API exceptions; every other product
 endpoint derives its actor from a valid session.
 
 This prevents direct caller-selected impersonation. The
 active preview has Railway HTTPS termination and an exact external
-`DND_PUBLIC_ORIGIN`, but broader public use still needs deployed secure-cookie
+`SCRYER_PUBLIC_ORIGIN`, but broader public use still needs deployed secure-cookie
 verification, backups, monitoring, capacity/abuse testing, and an explicit
 support policy. The account model intentionally collects no email and therefore
 provides no password recovery.
@@ -71,12 +71,12 @@ reads of `users.password_hash` and `auth_sessions.token_hash` for signup-created
 fixtures. Those reads verify the inspected rows; they are not an exhaustive
 inspection of PostgreSQL or platform diagnostic logging.
 
-Loopback-only local HTTP uses `dnd_session`. HTTPS uses `__Host-dnd_session`, which is
+Loopback-only local HTTP uses `scryer_session`. HTTPS uses `__Host-scryer_session`, which is
 `Secure`, host-only by construction, and scoped to `/`. Both variants are
 `HttpOnly` and `SameSite=Lax`; logout clears both names. Configured non-loopback
 HTTP origins are rejected, and an unset origin fails closed to secure cookies
 unless both the request host and network peer are loopback. Configure the exact
-external HTTPS origin in `DND_PUBLIC_ORIGIN` when deploying behind a proxy.
+external HTTPS origin in `SCRYER_PUBLIC_ORIGIN` when deploying behind a proxy.
 
 `POST /api/auth/logout` revokes the current session. `POST
 /api/auth/logout-all` revokes every active session for the account. Password
@@ -87,10 +87,10 @@ checked in PostgreSQL rather than trusted from the cookie.
 
 Every unsafe authenticated request requires both:
 
-- one `Origin` header exactly matching `DND_PUBLIC_ORIGIN`, or the request's own
+- one `Origin` header exactly matching `SCRYER_PUBLIC_ORIGIN`, or the request's own
   scheme and host when the setting is empty (with plain HTTP requiring both a
   loopback request host and loopback network peer); and
-- `X-DND-CSRF` equal to a token derived with a domain-separated SHA-256 digest
+- `X-SCRYER-CSRF` equal to a token derived with a domain-separated SHA-256 digest
   from that session's random token.
 
 Signup and signin also require the exact origin, although they do not require a
@@ -226,6 +226,15 @@ Focused application tests cover invitation-bearer redaction in ordinary request
 and panic logs. That scope does not prove absence from reverse-proxy, database,
 hosting-provider, or newly added diagnostic logs; those need separate review.
 
+The WebMCP contract's database-state trace is test-only, World-scoped,
+read-only diagnostic evidence. Its explicit projection excludes user and
+session records, invitation data, private interaction/Resolution notes,
+character-field/profile prose, facilitator-only context labels, and Resolution
+idempotency keys. It can contain public generated World, Entity, mechanic,
+Problem, Action, and Resolution content from the disposable test, so the
+artifact remains ignored, is written mode `0600`, and is not exposed by an
+application endpoint.
+
 ## Abuse controls
 
 The process has bounded in-memory throttles for every signup (120 per direct
@@ -254,7 +263,7 @@ connections and outbound Terra/Luna model requests still have no general per-use
 If a public launch is ever proposed:
 
 1. Terminate TLS at a trusted proxy, redirect HTTP to HTTPS, set the exact HTTPS
-   `DND_PUBLIC_ORIGIN`, and verify secure-cookie/HSTS behavior end to end.
+   `SCRYER_PUBLIC_ORIGIN`, and verify secure-cookie/HSTS behavior end to end.
 2. Decide the no-email support policy: lost passwords currently mean creating a
    new account; there is no automated recovery or account-administration API.
 3. Decide whether MFA or federated login is needed for the threat model.
@@ -294,7 +303,7 @@ For every route or field:
 
 - Use a fresh empty database for the password-auth migration; it intentionally
   refuses to invent credentials for preexisting users.
-- Keep `DND_PUBLIC_ORIGIN` aligned exactly with the browser-visible origin.
+- Keep `SCRYER_PUBLIC_ORIGIN` aligned exactly with the browser-visible origin.
 - Do not put personal secrets in narrative or character-field values.
 - Protect database and deployment configuration independently of application
   authentication.

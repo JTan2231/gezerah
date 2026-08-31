@@ -5,22 +5,22 @@ import (
 	"testing"
 )
 
-func TestLoadConfigPrefersDNDVariables(t *testing.T) {
-	t.Setenv("DND_ADDR", ":9090")
+func TestLoadConfigPrefersSCRYERVariables(t *testing.T) {
+	t.Setenv("SCRYER_ADDR", ":9090")
 	t.Setenv("PORT", "7070")
-	t.Setenv("DND_DATABASE_URL", "postgres://dnd-primary")
+	t.Setenv("SCRYER_DATABASE_URL", "postgres://scryer-primary")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
-	t.Setenv("DND_PUBLIC_ORIGIN", " https://app.example ")
+	t.Setenv("SCRYER_PUBLIC_ORIGIN", " https://app.example ")
 	t.Setenv("OPENAI_API_KEY", " test-key ")
-	t.Setenv("DND_OPENAI_BASE_URL", " http://models.example/v1 ")
-	t.Setenv("DND_LOG_LEVEL", "warning")
+	t.Setenv("SCRYER_OPENAI_BASE_URL", " http://models.example/v1 ")
+	t.Setenv("SCRYER_LOG_LEVEL", "warning")
 
 	config := LoadConfig()
 	if config.Addr != ":9090" {
 		t.Fatalf("Addr = %q, want :9090", config.Addr)
 	}
-	if config.DatabaseURL != "postgres://dnd-primary" {
-		t.Fatalf("DatabaseURL = %q, want DND_DATABASE_URL", config.DatabaseURL)
+	if config.DatabaseURL != "postgres://scryer-primary" {
+		t.Fatalf("DatabaseURL = %q, want SCRYER_DATABASE_URL", config.DatabaseURL)
 	}
 	if config.PublicOrigin != "https://app.example" {
 		t.Fatalf("PublicOrigin = %q, want configured origin", config.PublicOrigin)
@@ -37,12 +37,12 @@ func TestLoadConfigPrefersDNDVariables(t *testing.T) {
 }
 
 func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
-	t.Setenv("DND_ADDR", "")
+	t.Setenv("SCRYER_ADDR", "")
 	t.Setenv("PORT", "7070")
-	t.Setenv("DND_DATABASE_URL", "")
+	t.Setenv("SCRYER_DATABASE_URL", "")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
-	t.Setenv("DND_LOG_LEVEL", "not-a-level")
-	t.Setenv("DND_PUBLIC_ORIGIN", "")
+	t.Setenv("SCRYER_LOG_LEVEL", "not-a-level")
+	t.Setenv("SCRYER_PUBLIC_ORIGIN", "")
 
 	config := LoadConfig()
 	if config.Addr != ":7070" {
@@ -61,7 +61,7 @@ func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
 	if config.Addr != ":8080" {
 		t.Fatalf("default Addr = %q, want :8080", config.Addr)
 	}
-	if config.DatabaseURL != "postgres://localhost:5432/dnd?sslmode=disable" {
+	if config.DatabaseURL != "postgres://localhost:5432/scryer?sslmode=disable" {
 		t.Fatalf("default DatabaseURL = %q", config.DatabaseURL)
 	}
 }

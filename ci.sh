@@ -14,13 +14,13 @@ clock_milliseconds() {
 	printf '%s000\n' "$seconds"
 }
 
-case "${DND_CI_STARTED_MS:-}" in
+case "${SCRYER_CI_STARTED_MS:-}" in
 "" | *[!0-9]*)
 	ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
 	;;
 *)
-	if [ "${DND_CI_IN_WORKTREE:-}" = "1" ]; then
-		ci_invocation_started_ms="$DND_CI_STARTED_MS"
+	if [ "${SCRYER_CI_IN_WORKTREE:-}" = "1" ]; then
+		ci_invocation_started_ms="$SCRYER_CI_STARTED_MS"
 	else
 		ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
 	fi
@@ -275,11 +275,11 @@ run_in_isolated_worktree() {
 	GIT_INDEX_FILE="$tmp_index" git add -A -- . || return 1
 	tree="$(GIT_INDEX_FILE="$tmp_index" git write-tree)" || return 1
 	snapshot_commit="$(
-		printf 'dnd ci snapshot\n' |
-			GIT_AUTHOR_NAME='DND CI' \
-			GIT_AUTHOR_EMAIL='ci@dnd.invalid' \
-			GIT_COMMITTER_NAME='DND CI' \
-			GIT_COMMITTER_EMAIL='ci@dnd.invalid' \
+		printf 'Scryer CI snapshot\n' |
+			GIT_AUTHOR_NAME='SCRYER CI' \
+			GIT_AUTHOR_EMAIL='ci@scryer.invalid' \
+			GIT_COMMITTER_NAME='SCRYER CI' \
+			GIT_COMMITTER_EMAIL='ci@scryer.invalid' \
 			git commit-tree "$tree" -p "$base_commit"
 	)" || return 1
 
@@ -290,15 +290,15 @@ run_in_isolated_worktree() {
 		"$worktree_preparation_started_ms" \
 		"$worktree_preparation_finished_ms"
 
-	if [ "${DND_CI_CACHE_DIR:-}" = "" ]; then
-		shared_cache_dir="$(pwd -P)/.dnd/cache/ci"
+	if [ "${SCRYER_CI_CACHE_DIR:-}" = "" ]; then
+		shared_cache_dir="$(pwd -P)/.scryer/cache/ci"
 	else
-		case "$DND_CI_CACHE_DIR" in
+		case "$SCRYER_CI_CACHE_DIR" in
 		/*)
-			shared_cache_dir="$DND_CI_CACHE_DIR"
+			shared_cache_dir="$SCRYER_CI_CACHE_DIR"
 			;;
 		*)
-			shared_cache_dir="$(pwd -P)/$DND_CI_CACHE_DIR"
+			shared_cache_dir="$(pwd -P)/$SCRYER_CI_CACHE_DIR"
 			;;
 		esac
 	fi
@@ -306,9 +306,9 @@ run_in_isolated_worktree() {
 
 	section "CI: running checks in isolated worktree"
 	worktree_checks_started_ms="$(clock_milliseconds)" || return 1
-	DND_CI_CACHE_DIR="$shared_cache_dir" \
-		DND_CI_STARTED_MS="$ci_invocation_started_ms" \
-		DND_CI_IN_WORKTREE=1 \
+	SCRYER_CI_CACHE_DIR="$shared_cache_dir" \
+		SCRYER_CI_STARTED_MS="$ci_invocation_started_ms" \
+		SCRYER_CI_IN_WORKTREE=1 \
 		"$ci_worktree_path/ci.sh" "$@"
 	worktree_checks_status=$?
 	worktree_checks_finished_ms="$(clock_milliseconds)" || return 1
@@ -320,7 +320,7 @@ run_in_isolated_worktree() {
 }
 
 configure_ci_caches() {
-	ci_cache_dir="${DND_CI_CACHE_DIR:-$tmp_dir/cache}"
+	ci_cache_dir="${SCRYER_CI_CACHE_DIR:-$tmp_dir/cache}"
 	playwright_browsers_path="${PLAYWRIGHT_BROWSERS_PATH:-}"
 
 	if [ "$playwright_browsers_path" = "" ]; then
@@ -361,12 +361,12 @@ configure_ci_caches() {
 	export GOLANGCI_LINT_CACHE="$tmp_dir/golangci-lint"
 	export NODE_COMPILE_CACHE="$ci_cache_dir/node-compile"
 	export PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path"
-	export DND_BUN_CACHE_DIR="$ci_cache_dir/bun"
+	export SCRYER_BUN_CACHE_DIR="$ci_cache_dir/bun"
 	export BUN_INSTALL_CACHE_DIR="$ci_cache_dir/bun"
 }
 
 bun_ci() {
-	bun install --frozen-lockfile --cache-dir "$DND_BUN_CACHE_DIR"
+	bun install --frozen-lockfile --cache-dir "$SCRYER_BUN_CACHE_DIR"
 }
 
 run_frontend() {
@@ -469,22 +469,22 @@ run_frontend_build() {
 }
 
 run_database_smoke() {
-	if [ "${DND_TEST_DATABASE_URL:-}" = "" ]; then
-		section "Database: skipped (DND_TEST_DATABASE_URL is unset)"
+	if [ "${SCRYER_TEST_DATABASE_URL:-}" = "" ]; then
+		section "Database: skipped (SCRYER_TEST_DATABASE_URL is unset)"
 		return 0
 	fi
 
 	section "Database: applying migrations through application startup"
 	smoke_log="$tmp_dir/database-smoke.log"
-	DND_ADDR=127.0.0.1:0 \
-		DND_DATABASE_URL="$DND_TEST_DATABASE_URL" \
-		DND_LOG_LEVEL=debug \
-		"$tmp_dir/dnd" >"$smoke_log" 2>&1 &
+	SCRYER_ADDR=127.0.0.1:0 \
+		SCRYER_DATABASE_URL="$SCRYER_TEST_DATABASE_URL" \
+		SCRYER_LOG_LEVEL=debug \
+		"$tmp_dir/scryer" >"$smoke_log" 2>&1 &
 	smoke_pid=$!
 
 	attempt=0
 	while [ "$attempt" -lt 80 ]; do
-		if grep -q '"msg":"dnd listening"' "$smoke_log"; then
+		if grep -q '"msg":"Scryer listening"' "$smoke_log"; then
 			sleep 0.25
 			if ! kill -0 "$smoke_pid" >/dev/null 2>&1; then
 				printf 'Application exited immediately after startup:\n' >&2
@@ -577,8 +577,8 @@ run_backend_checks() {
 run_backend_build() {
 	require_go || return 1
 
-	section "Backend: building dnd binary"
-	go build -trimpath -o "$tmp_dir/dnd" ./cmd/dnd || return 1
+	section "Backend: building Scryer binary"
+	go build -trimpath -o "$tmp_dir/scryer" ./cmd/scryer || return 1
 
 	run_database_smoke || return 1
 }
@@ -732,16 +732,16 @@ run_parallel_build_and_test_validation() {
 }
 
 run_browser_scenarios() {
-	if [ ! -x "$tmp_dir/dnd" ]; then
+	if [ ! -x "$tmp_dir/scryer" ]; then
 		printf 'The verified E2E application binary is missing or not executable: %s\n' \
-			"$tmp_dir/dnd" >&2
+			"$tmp_dir/scryer" >&2
 		return 1
 	fi
 	(
 		cd test &&
-			DND_E2E_APP_BINARY="$tmp_dir/dnd" \
-			DND_E2E_DIAGNOSTICS=0 \
-			DND_E2E_REQUIRE_COMPLETE_COVERAGE=1 \
+			SCRYER_E2E_APP_BINARY="$tmp_dir/scryer" \
+			SCRYER_E2E_DIAGNOSTICS=0 \
+			SCRYER_E2E_REQUIRE_COMPLETE_COVERAGE=1 \
 			bun run e2e
 	)
 }
@@ -759,7 +759,7 @@ run_e2e() {
 	run_timed_stage "E2E browser scenarios" run_browser_scenarios || return 1
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/dnd-ci.XXXXXX")" || exit 1
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/scryer-ci.XXXXXX")" || exit 1
 ci_worktree_path=""
 smoke_pid=""
 frontend_checks_pid=""
@@ -810,11 +810,11 @@ if [ "$#" -eq 1 ]; then
 	esac
 fi
 
-if [ "$target" = "e2e" ] && [ "${DND_CI_IN_WORKTREE:-}" != "1" ]; then
+if [ "$target" = "e2e" ] && [ "${SCRYER_CI_IN_WORKTREE:-}" != "1" ]; then
 	enforce_e2e_budget=1
 fi
 
-if [ "${DND_CI_IN_WORKTREE:-}" != "1" ]; then
+if [ "${SCRYER_CI_IN_WORKTREE:-}" != "1" ]; then
 	run_in_isolated_worktree "$@"
 	exit $?
 fi

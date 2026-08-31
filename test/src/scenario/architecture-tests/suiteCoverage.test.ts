@@ -191,7 +191,7 @@ describe("whole-suite scenario coverage", () => {
     );
     assert.equal(
       recordFor(goTrace!, {
-        goTestEvents: [{ ...goEvents[0]!, packageName: "dnd/wrong" }],
+        goTestEvents: [{ ...goEvents[0]!, packageName: "scryer/wrong" }],
       }).result,
       "not-run",
     );
@@ -423,5 +423,5 @@ function userStep(
 }
 
 function expectedGoPackage(trace: ScenarioTrace): string {
-  return `dnd/${trace.ownerFile.slice(0, trace.ownerFile.lastIndexOf("/"))}`;
+  return `scryer/${trace.ownerFile.slice(0, trace.ownerFile.lastIndexOf("/"))}`;
 }

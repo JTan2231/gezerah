@@ -103,13 +103,13 @@ export function SettingsWorkspace({
           memberCount: world.member_count,
           mechanicCount: world.capacity_count + world.capability_count,
           status: world.status,
-          dungeonMaster:
+          facilitator:
             world.facilitator.display_name ??
             (world.facilitator.source === "terra"
               ? "Terra"
               : world.facilitator.source === "agent"
                 ? "ChatGPT"
-                : "Dungeon Master"),
+                : "Facilitator"),
         },
         canArchive: world.role === "owner" && world.status === "active",
       }}
