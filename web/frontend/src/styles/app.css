@@ -639,7 +639,7 @@ textarea {
   font-size: 0.72rem;
 }
 
-.play-library-page .chatgpt-world-start {
+.build-library-page .chatgpt-world-start {
   width: min(780px, 100%);
   margin: 0 auto;
 }

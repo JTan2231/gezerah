@@ -198,11 +198,11 @@ the revision to public production.
    normal `./run.sh`: its Vite UI is on port 5173 and its public origin is
    loopback. Require `GET /api/health` through the public origin to return
    `ok:true`.
-4. In an ordinary browser, open the public Home page and choose **Start a World
+4. In an ordinary browser, open the public Home page and choose **Start playing
    with ChatGPT**. Continue as a person would: use the prompt in ChatGPT, answer
-   its short questions, and perform signup, World authoring, Character setup,
-   and Facilitator assignment only through visible Gezerah controls. Do not call
-   APIs, edit storage, or name page tools.
+   its short questions, sign up, choose and copy one of the three World
+   templates, and choose a Character only through visible Gezerah controls. Do
+   not call APIs, edit storage, or name page tools.
 5. From Play, choose **Open in ChatGPT**. If ChatGPT requires its built-in
    browser to attach the authenticated Play page, use it only for that signin
    and attachment step and keep it open. Open the same conversation at

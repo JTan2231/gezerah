@@ -93,8 +93,10 @@ flowchart TD
 
 ### Browser layer
 
-The browser starts with a data-free choice between `/build` and `/play`.
-Build owns the owner/editor world library and configuration. Play owns
+The browser starts with a data-free template-Play quick start plus the choice
+between `/build` and `/play`. The quick start points to the authenticated
+`/play/new` chooser without duplicating its catalog. Build owns the owner/editor
+world library, custom-World ChatGPT prompt, and configuration. Play owns
 the admitted-World picker, player onboarding, and Play surface. Both areas
 share the authenticated account boundary, API types, fetch helpers, route
 helpers, and UI primitives.

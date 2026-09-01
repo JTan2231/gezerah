@@ -10,6 +10,10 @@ import {
   Modal,
   RolePill,
 } from "../components/StudioUI";
+import {
+  ChatGPTWorldStartView,
+  type ChatGPTWorldStartViewProps,
+} from "./ChatGPTWorldStartView";
 
 export interface LibraryIssue {
   kind: "connection" | "request";
@@ -48,11 +52,13 @@ export interface BuildLibraryViewActions {
 export function BuildLibraryView({
   model,
   actions,
+  worldStart,
   accountControls,
   createWorldDialog,
 }: {
   model: BuildLibraryViewModel;
   actions: BuildLibraryViewActions;
+  worldStart: ChatGPTWorldStartViewProps;
   accountControls: ReactNode;
   createWorldDialog: ReactNode;
 }) {
@@ -91,6 +97,8 @@ export function BuildLibraryView({
             Create world
           </button>
         </header>
+
+        <ChatGPTWorldStartView {...worldStart} />
 
         {model.loading ? <LoadingState label="Loading worlds" /> : null}
         {model.issue === null ? null : (
