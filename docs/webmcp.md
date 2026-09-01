@@ -35,8 +35,9 @@ to require a Terra-facilitated World and are unavailable in agent mode.
 
 ## Current-player journey
 
-1. From Home, choose **Play** and sign in. `/play` asks which World to play and
-   shows saved Worlds alongside **New world**.
+1. From Home, choose **Start playing with ChatGPT** to begin an assisted
+   template choice, or choose **Play** to see saved Worlds alongside **New
+   world**. Both new-World paths enter `/play/new` after sign-in.
 2. **New world** offers the three bundled settings without ranking them. **Copy
    and play** creates an independent, agent-facilitated World, then opens
    Character selection. A saved World resumes without being copied or reset.
@@ -62,9 +63,10 @@ There is no episode scheduler or authored encounter sequence. The World descript
 Mechanics, and available Entities set the stage; ChatGPT and the current player determine
 what happens.
 
-The Home-page **Start a World with ChatGPT** path remains the general-purpose
-authoring route for a custom World. The three-template chooser is the bounded
-new-World route inside Play.
+The Home-page **Start playing with ChatGPT** path is the assisted entry to the
+three-template chooser. The separate **Start a World with ChatGPT** prompt in
+the Build library remains the general-purpose authoring route for a custom
+World.
 
 ## Page tools
 

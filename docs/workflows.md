@@ -2,7 +2,9 @@
 
 ## Start from a World template
 
-1. Open **Play** and choose **New World**.
+1. From Home, choose **Start playing with ChatGPT** and follow its prompt, or
+   open **Play** and choose **New World**. Both routes lead to `/play/new` after
+   sign-in.
 2. Choose any one of the three equal starting templates. Each card describes
    its setting and shows the number of available Characters.
 3. The server atomically copies that template into a new, independent World.
@@ -22,7 +24,9 @@ or pre-authored play history beyond its ordinary `world-created` event.
 ## Create and configure a world
 
 1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
-   username, display name, and password but no email address.
+   username, display name, and password but no email address. The Build library
+   offers a copyable **Start a World with ChatGPT** prompt for shaping the idea
+   and guiding this configuration; every durable change remains the person's.
 2. Create a world from the Build library. The creator's owner membership is the
    initial human facilitator. In **Settings**, write the world description;
    Terra uses it as the world brief when later designated in Play.

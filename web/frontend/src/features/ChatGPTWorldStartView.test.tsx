@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { ChatGPTWorldStartView } from "./ChatGPTWorldStartView";
 import {
+  createChatGPTTemplateStartPrompt,
   createChatGPTWorldStartPrompt,
   createChatGPTWorldStartURL,
 } from "./useChatGPTWorldStart";
@@ -10,19 +11,18 @@ import {
 const noop = () => undefined;
 
 describe("ChatGPTWorldStartView", () => {
-  test("offers an honest, copyable route through Build", () => {
+  test("offers the custom World route from Build", () => {
     const prompt = createChatGPTWorldStartPrompt(
       "https://gezerah.example/build",
     );
     const chatGPTHref = createChatGPTWorldStartURL(prompt);
     const html = renderToStaticMarkup(
       <ChatGPTWorldStartView
+        variant="build"
         prompt={prompt}
         chatGPTHref={chatGPTHref}
         copyStatus="idle"
-        buildHref="/build"
         onCopyPrompt={noop}
-        onStartBuild={noop}
       />,
     );
 
@@ -38,30 +38,52 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain('target="_blank"');
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toContain("Copy starter prompt");
-    expect(html).toContain("Start manually in Build");
-    expect(html).toContain('href="/build"');
+    expect(html).not.toContain("Choose a World yourself");
     expect(html).toContain('aria-live="polite"');
+  });
+
+  test("offers a copyable route through the three World templates", () => {
+    const prompt = createChatGPTTemplateStartPrompt(
+      "https://gezerah.example/play/new",
+    );
+    const html = renderToStaticMarkup(
+      <ChatGPTWorldStartView
+        variant="template"
+        prompt={prompt}
+        chatGPTHref={createChatGPTWorldStartURL(prompt)}
+        copyStatus="idle"
+        onCopyPrompt={noop}
+        manualHref="/play/new"
+        onStartManually={noop}
+      />,
+    );
+
+    expect(html).toContain("Start playing with ChatGPT");
+    expect(html).toContain("three complete World templates");
+    expect(html).toContain("Gezerah&#x27;s three ready-made Worlds");
+    expect(html).toContain("https://gezerah.example/play/new");
+    expect(html).toContain("Keep lasting game state in Gezerah");
+    expect(html).toContain("Choose a World yourself");
+    expect(html).toContain('href="/play/new"');
   });
 
   test("reports copy success and failure accessibly", () => {
     const copied = renderToStaticMarkup(
       <ChatGPTWorldStartView
+        variant="template"
         prompt="Starter prompt"
         chatGPTHref="https://chatgpt.com/?surface=work&prompt=Starter+prompt"
         copyStatus="copied"
-        buildHref="/build"
         onCopyPrompt={noop}
-        onStartBuild={noop}
       />,
     );
     const failed = renderToStaticMarkup(
       <ChatGPTWorldStartView
+        variant="template"
         prompt="Starter prompt"
         chatGPTHref="https://chatgpt.com/?surface=work&prompt=Starter+prompt"
         copyStatus="failed"
-        buildHref="/build"
         onCopyPrompt={noop}
-        onStartBuild={noop}
       />,
     );
 

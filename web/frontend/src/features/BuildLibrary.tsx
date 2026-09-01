@@ -11,6 +11,7 @@ import {
   CreateWorldView,
   type BuildLibraryWorld,
 } from "./BuildLibraryView";
+import { useChatGPTWorldStart } from "./useChatGPTWorldStart";
 
 export function BuildLibrary({
   user,
@@ -27,6 +28,7 @@ export function BuildLibrary({
 }) {
   const worlds = useCollection<World>("/api/worlds");
   const [creating, setCreating] = useState(false);
+  const worldStart = useChatGPTWorldStart("/build", "build");
   const editableWorlds = worlds.items.flatMap<BuildLibraryWorld>((world) => {
     if (world.role !== "owner" && world.role !== "editor") return [];
     return [
@@ -62,6 +64,13 @@ export function BuildLibrary({
         createWorld: () => setCreating(true),
         openWorld: (worldID) => navigate(buildWorldURL(worldID, "capacities")),
         retry: worlds.reload,
+      }}
+      worldStart={{
+        variant: "build",
+        prompt: worldStart.prompt,
+        chatGPTHref: worldStart.chatGPTHref,
+        copyStatus: worldStart.copyStatus,
+        onCopyPrompt: () => void worldStart.copyPrompt(),
       }}
       accountControls={
         <AccountControls

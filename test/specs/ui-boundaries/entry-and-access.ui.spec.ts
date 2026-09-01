@@ -72,7 +72,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("link", { name: "Start manually in Build" }),
+      page.getByRole("link", { name: "Choose a World yourself" }),
     ).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(

@@ -4,7 +4,8 @@ import { useChatGPTWorldStart } from "./useChatGPTWorldStart";
 
 export function HomeChoice({ navigate }: { navigate: Navigate }) {
   const buildHref = "/build";
-  const worldStart = useChatGPTWorldStart(buildHref);
+  const templateHref = "/play/new";
+  const worldStart = useChatGPTWorldStart(templateHref, "template");
 
   return (
     <HomeChoiceView
@@ -13,12 +14,13 @@ export function HomeChoice({ navigate }: { navigate: Navigate }) {
       onChoosePlay={() => navigate("/play")}
       onChooseBuild={() => navigate(buildHref)}
       worldStart={{
+        variant: "template",
         prompt: worldStart.prompt,
         chatGPTHref: worldStart.chatGPTHref,
         copyStatus: worldStart.copyStatus,
-        buildHref,
         onCopyPrompt: () => void worldStart.copyPrompt(),
-        onStartBuild: () => navigate(buildHref),
+        manualHref: templateHref,
+        onStartManually: () => navigate(templateHref),
       }}
     />
   );
