@@ -1,0 +1,8 @@
+{
+  "$schema": "https://schema.railpack.com",
+  "provider": "golang",
+  "packages": {
+    "bun": "1.1.42",
+    "node": "22.12.0"
+  }
+}

@@ -1,0 +1,79 @@
+:root {
+  color-scheme: light;
+
+  --paper: #f6f7f9;
+  --paper-deep: #eef1f4;
+  --paper-soft: #f9fafb;
+  --surface: #fff;
+  --surface-muted: #f2f4f7;
+  --ink: #1d2939;
+  --ink-soft: #344054;
+  --muted: #667085;
+  --faint: #98a2b3;
+  --line: #e4e7ec;
+  --line-strong: #cfd4dc;
+  --ember: #2563eb;
+  --ember-dark: #1d4ed8;
+  --ember-soft: #eff6ff;
+  --gold: #475467;
+  --moss: #067647;
+  --moss-soft: #ecfdf3;
+  --danger: #b42318;
+  --danger-soft: #fef3f2;
+  --night: #f6f7f9;
+  --night-raised: #fff;
+  --night-soft: #f2f4f7;
+  --night-line: #e4e7ec;
+  --night-copy: #1d2939;
+  --night-muted: #667085;
+  --play: #2563eb;
+  --play-bright: #1d4ed8;
+  --white: #fff;
+  --black: #000;
+  --ink-hover: #101828;
+  --play-ink: #fff;
+  --role-owner-line: #b2ccff;
+  --role-owner-bg: #eff4ff;
+  --role-owner-ink: #1849a9;
+  --role-editor-line: #d0d5dd;
+  --role-editor-bg: #f2f4f7;
+  --role-editor-ink: #344054;
+  --role-player-line: #abefc6;
+  --role-player-ink: #067647;
+  --active-green: #079455;
+  --sidebar: #20252b;
+  --sidebar-raised: #292f36;
+  --sidebar-active: #343b44;
+  --sidebar-line: #48515c;
+  --sidebar-text: #f2f4f7;
+  --sidebar-copy: #d0d5dd;
+  --sidebar-muted: #aeb7c2;
+  --sidebar-faint: #8e99a6;
+  --sidebar-gold: #d0d5dd;
+  --gold-line: #b2ccff;
+  --success-line: #75e0a7;
+  --success-line-soft: #abefc6;
+  --success-bg: #ecfdf3;
+  --success-bright: #067647;
+  --success-muted: #027a48;
+  --success-copy: #05603a;
+  --success-text: #067647;
+  --danger-pale: #b42318;
+  --night-field: #fff;
+  --night-copy-soft: #344054;
+  --night-copy-strong: #1d2939;
+  --shadow-soft: 0 1px 2px rgb(16 24 40 / 6%);
+  --shadow-card: 0 1px 3px rgb(16 24 40 / 8%);
+  --shadow-modal: 0 12px 32px rgb(16 24 40 / 18%);
+  --radius-small: 4px;
+  --radius: 6px;
+  --radius-large: 8px;
+  --radius-round: 999px;
+  --font-sans:
+    inter, ui-sans-serif, -apple-system, blinkmacsystemfont, "Segoe UI",
+    sans-serif;
+  --font-display:
+    inter, ui-sans-serif, -apple-system, blinkmacsystemfont, "Segoe UI",
+    sans-serif;
+  --font-mono: "SFMono-Regular", consolas, "Liberation Mono", monospace;
+}
