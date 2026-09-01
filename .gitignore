@@ -3,6 +3,26 @@
 /out
 /coverage/
 
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.cer
+*.crt
+*.der
+*.key
+*.p12
+*.pem
+*.pfx
+
+# Security scanner output
+.scannerwork/
+*.sarif
+gitleaks-report.*
+govulncheck-report.*
+security-reports/
+trivy-report.*
+
 web/frontend/node_modules/
 web/frontend/bun.lockb
 web/static/*

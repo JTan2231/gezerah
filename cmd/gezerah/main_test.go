@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"gezerah/internal/app"
+	"github.com/JTan2231/gezerah/internal/app"
 )
 
 func TestHTTPServerDerivesRequestsFromProcessContext(t *testing.T) {

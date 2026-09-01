@@ -13,7 +13,11 @@ import type {
   RailwayService,
 } from "./railway";
 
-const deploymentID = "86f35ac9-6e76-4eea-970c-9841944042f8";
+const deploymentID = "55555555-5555-4555-8555-555555555555";
+const projectID = "11111111-1111-4111-8111-111111111111";
+const environmentID = "22222222-2222-4222-8222-222222222222";
+const webServiceID = "33333333-3333-4333-8333-333333333333";
+const databaseServiceID = "44444444-4444-4444-8444-444444444444";
 
 describe("deployment evidence", () => {
   test("serializes only the allowlisted release proof", () => {
@@ -84,24 +88,24 @@ describe("deployment evidence", () => {
 
 function fixture(mode: "deploy" | "verify" = "deploy") {
   const project: RailwayProject = {
-    id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    id: projectID,
     name: "Gezerah",
     environments: [],
   };
   const environment: RailwayEnvironment = {
-    id: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+    id: environmentID,
     name: "production",
   };
   const web = service({
-    id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+    id: webServiceID,
     name: "gezerah-web",
     deploymentId: deploymentID,
     url: "https://gezerah.com",
   });
   const database = service({
-    id: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+    id: databaseServiceID,
     name: "Postgres",
-    deploymentId: "881dc329-b72d-43f5-8abd-a8eaa3a0dcf0",
+    deploymentId: "66666666-6666-4666-8666-666666666666",
     volumes: [
       {
         name: "postgres-volume",

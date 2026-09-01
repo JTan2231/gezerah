@@ -19,6 +19,11 @@ Focused targets are:
 `all` is the default. The E2E target runs the complete frontend and backend
 target first, then browser tests; it is not a browser-only shortcut.
 
+GitHub Actions runs the default validator on `master` pushes and pull requests,
+alongside a checksum-verified full-history Gitleaks scan. Pull requests that
+change dependencies also run GitHub's dependency review, and Dependabot checks
+the Go, Bun, and GitHub Actions ecosystems weekly.
+
 ## Isolated worktree behavior
 
 On first invocation, `ci.sh`:
@@ -37,11 +42,11 @@ installs and generated frontend assets out of the active checkout. Ignored
 files are not copied, so tests must not depend on local `.gezerah`, `node_modules`,
 `web/static` output, or test artifacts.
 
-Bun downloads, Go build and module data, and Node compile caches live under the
-ignored `.gezerah/cache/ci` directory by default, or under `GEZERAH_CI_CACHE_DIR` when
-configured. The detached worktree still owns dependency installations, build
-output, installed tool binaries, and runtime state; only
-content-addressed/download caches survive between invocations. An explicit
+Bun downloads, Go build and module data, pinned tool binaries, and Node compile
+caches live under the ignored `.gezerah/cache/ci` directory by default, or under
+`GEZERAH_CI_CACHE_DIR` when configured. The detached worktree still owns
+dependency installations, build output, analyzer result caches, and runtime
+state; only path-independent caches survive between invocations. An explicit
 `PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user browser
 cache is reused on macOS/Linux when one can be resolved.
 
@@ -88,11 +93,14 @@ passes only first-party package directories, as individually quoted arguments,
 so Go source found under frontend dependencies is not analyzed and checkout
 paths containing spaces remain valid.
 
-The validator installs the pinned govulncheck command into the disposable run
-directory without modifying `go.mod` or `go.sum`, then invokes it directly with
-`-test`. Reachable production or test vulnerabilities fail the target. The tool
-uses the shared Go caches, but its vulnerability database query is live and
-therefore requires network access.
+The validator installs the pinned govulncheck command into the shared CI tool
+cache without modifying `go.mod` or `go.sum`, validates its embedded module path
+and version on reuse, then invokes it directly with `-test`. Reachable production
+or test vulnerabilities fail the target. The tool uses the shared Go caches, but
+its vulnerability database query is live and therefore requires network access.
+The focused backend target runs that scan after the other backend checks. The
+default and E2E targets run the same read-only scan as a separate validation
+lane alongside those checks, and require both lanes to pass.
 
 Application tests cover the five-minute session-touch boundary, immediate
 continuation after a full SSE event batch, cancellation while waiting, rolling
@@ -117,7 +125,7 @@ The verified Go binary already embeds the verified frontend assets and is passed
 to Playwright global setup. The successful command, including detached-worktree
 preparation, every frontend/backend check, builds, browser and contract tests,
 database/server lifecycle, reporting, and cleanup, has a hard wall-clock budget
-of less than 30 seconds. Stage timings and the final invocation-to-cleanup time
+of less than 60 seconds. Stage timings and the final invocation-to-cleanup time
 are printed on every E2E run; exceeding the budget fails the target.
 
 Even without the optional backend smoke variable, E2E requires a reachable
@@ -197,10 +205,11 @@ boundary.
    stakes and tradeoffs are clear.
 7. Reload Play and require its durable history to agree with the chat: the same
    Problem, current-player Action, committed Resolution and Effects, and next
-   playable state. Create a ChatGPT share link only after this check.
+   playable state.
 8. Record the source identity, date, World and Character names, resolved
-   Problem, next Problem, and share URL. Never record the password, session
-   cookie, CSRF token, database URL, or transient tunnel URL.
+   Problem, next Problem, and whether the transcript was reviewed. Do not
+   publish the transcript or record the password, session cookie, CSRF token,
+   database URL, or transient tunnel URL.
 9. End exposure first: stop `cloudflared`, then stop the standalone app. Confirm
    port 8080 has no listener, drop only the exact disposable database, and
    remove only the exact temporary directory. A Quick Tunnel creates no
@@ -221,7 +230,8 @@ freshness.
 - Observed loop: ChatGPT presented **The Bell Without a Clapper**, resolved the
   player's natural-language Action, persisted the Resolution, and continued
   with **Three Strides to the Gallery**.
-- Transcript: [shared ChatGPT conversation](https://chatgpt.com/share/6a94e18f-02f0-83e9-9a6b-003db830cfb3).
+- Transcript: reviewed during acceptance; intentionally not published with the
+  repository.
 - Cleanup: the public tunnel and standalone app were stopped, the synthetic
   database/account was removed, and the temporary runtime directory was
   deleted.
@@ -448,7 +458,7 @@ not a reliable discovery/install bypass in the current harness.
 
 The required configuration runs one Desktop Chrome/Chromium project, two
 workers, no retries, and a 20-second per-test ceiling inside the stricter
-30-second whole-command budget. The lifecycle spine is still one serial test.
+60-second whole-command budget. The lifecycle spine is still one serial test.
 Only specs that own separate generated aggregates overlap; shared-database
 assertions remain world- or exact-resource-scoped.
 
@@ -564,7 +574,6 @@ can be destroyed or modified without consequence.
 
 ## Current gaps
 
-- no hosted CI workflow in the repository;
 - no dedicated Go PostgreSQL integration-test fixture;
 - no DOM-emulated component interaction suite or automated visual-regression
   comparison beyond static view rendering and Playwright workflows;

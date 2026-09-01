@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"gezerah/web"
+	"github.com/JTan2231/gezerah/web"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

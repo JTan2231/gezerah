@@ -33,13 +33,13 @@ import {
 } from "./smoke";
 
 interface DeploymentConfiguration {
-  expectedProjectId: string;
+  expectedProjectId: string | undefined;
   expectedProject: string;
-  expectedEnvironmentId: string;
+  expectedEnvironmentId: string | undefined;
   expectedEnvironment: string;
-  expectedWebId: string;
+  expectedWebId: string | undefined;
   expectedWeb: string;
-  expectedDatabaseId: string;
+  expectedDatabaseId: string | undefined;
   expectedDatabase: string;
   expectedDatabaseVolume: string;
   publicURL?: string;
@@ -182,10 +182,10 @@ async function runDeployment(
         () => railway.services(environment.id, signal),
         {
           targetDeploymentId: deployment.id,
-          webServiceId: configuration.expectedWebId,
-          webService: configuration.expectedWeb,
-          databaseServiceId: configuration.expectedDatabaseId,
-          databaseService: configuration.expectedDatabase,
+          webServiceId: target.web.id,
+          webService: target.web.name,
+          databaseServiceId: target.database.id,
+          databaseService: target.database.name,
           databaseVolume: configuration.expectedDatabaseVolume,
           timeoutMs: 60_000,
           pollMs: 2_000,
@@ -256,14 +256,14 @@ async function runDeployment(
   const finalTarget = selectTarget({
     project,
     services: await railway.services(environment.id, signal),
-    expectedProjectId: configuration.expectedProjectId,
-    expectedProject: configuration.expectedProject,
-    expectedEnvironmentId: configuration.expectedEnvironmentId,
-    expectedEnvironment: configuration.expectedEnvironment,
-    expectedWebId: configuration.expectedWebId,
-    expectedWeb: configuration.expectedWeb,
-    expectedDatabaseId: configuration.expectedDatabaseId,
-    expectedDatabase: configuration.expectedDatabase,
+    expectedProjectId: target.project.id,
+    expectedProject: target.project.name,
+    expectedEnvironmentId: target.environment.id,
+    expectedEnvironment: target.environment.name,
+    expectedWebId: target.web.id,
+    expectedWeb: target.web.name,
+    expectedDatabaseId: target.database.id,
+    expectedDatabase: target.database.name,
   });
   const finalDeployments = await railway.deployments(
     finalTarget.web.id,
@@ -322,20 +322,13 @@ async function runDeployment(
 
 function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
   return {
-    expectedProjectId:
-      env.GEZERAH_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    expectedProjectId: env.GEZERAH_DEPLOY_PROJECT_ID,
     expectedProject: env.GEZERAH_DEPLOY_PROJECT ?? "Gezerah",
-    expectedEnvironmentId:
-      env.GEZERAH_DEPLOY_ENVIRONMENT_ID ??
-      "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+    expectedEnvironmentId: env.GEZERAH_DEPLOY_ENVIRONMENT_ID,
     expectedEnvironment: env.GEZERAH_DEPLOY_ENVIRONMENT ?? "production",
-    expectedWebId:
-      env.GEZERAH_DEPLOY_WEB_SERVICE_ID ??
-      "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+    expectedWebId: env.GEZERAH_DEPLOY_WEB_SERVICE_ID,
     expectedWeb: env.GEZERAH_DEPLOY_WEB_SERVICE ?? "gezerah-web",
-    expectedDatabaseId:
-      env.GEZERAH_DEPLOY_DATABASE_SERVICE_ID ??
-      "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+    expectedDatabaseId: env.GEZERAH_DEPLOY_DATABASE_SERVICE_ID,
     expectedDatabase: env.GEZERAH_DEPLOY_DATABASE_SERVICE ?? "Postgres",
     expectedDatabaseVolume:
       env.GEZERAH_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
@@ -445,29 +438,31 @@ async function uploadCommittedSource(options: {
 
 function exactEnvironment(
   project: RailwayProject,
-  expectedProjectId: string,
+  expectedProjectId: string | undefined,
   expectedProjectName: string,
-  expectedId: string,
+  expectedId: string | undefined,
   expectedName: string,
 ): RailwayEnvironment {
   if (
-    project.id !== expectedProjectId ||
+    (expectedProjectId !== undefined && project.id !== expectedProjectId) ||
     project.name !== expectedProjectName
   ) {
     throw new Error(
-      `linked Railway project is ${project.id} ${JSON.stringify(project.name)}, expected ${expectedProjectId} ${JSON.stringify(expectedProjectName)}`,
+      `linked Railway project is ${project.id} ${JSON.stringify(project.name)}, expected ${expectedProjectId === undefined ? "a project named" : expectedProjectId} ${JSON.stringify(expectedProjectName)}`,
     );
   }
-  const matches = project.environments.filter(({ id }) => id === expectedId);
+  const matches = project.environments.filter(({ id, name }) =>
+    expectedId === undefined ? name === expectedName : id === expectedId,
+  );
   if (matches.length !== 1) {
     throw new Error(
-      `expected exactly one Railway environment with ID ${expectedId}, found ${matches.length}`,
+      `expected exactly one Railway environment ${expectedId === undefined ? `named ${JSON.stringify(expectedName)}` : `with ID ${expectedId}`}, found ${matches.length}`,
     );
   }
   const environment = matches[0] as RailwayEnvironment;
   if (environment.name !== expectedName) {
     throw new Error(
-      `Railway environment ${expectedId} is named ${JSON.stringify(environment.name)}, expected ${JSON.stringify(expectedName)}`,
+      `Railway environment ${environment.id} is named ${JSON.stringify(environment.name)}, expected ${JSON.stringify(expectedName)}`,
     );
   }
   return environment;

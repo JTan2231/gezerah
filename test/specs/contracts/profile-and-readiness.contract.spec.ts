@@ -27,6 +27,7 @@ test.afterEach(async () => disposeAuthenticatedActors());
 
 interface WorldResponse extends IdentifiedResource {
   membership_id: string;
+  revision: number;
   rules_revision: number;
   play_status:
     "waiting-for-character" | "setup-required" | "ready" | "unavailable";
@@ -175,6 +176,19 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   expect(joinedPlayer.play_status).toBe("waiting-for-character");
 
+  const waitingPlayerFields = await getJSON<CharacterFieldSetResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
+    player.id,
+  );
+  expect(waitingPlayerFields).toMatchObject({ revision: fields.revision });
+  expect(waitingPlayerFields.fields).toEqual([
+    expect.objectContaining({
+      id: worldVisibleField.id,
+      visibility: "world",
+    }),
+  ]);
+
   const controlled = await postJSON<EntityResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/entities`,
@@ -189,6 +203,65 @@ test("contract: readiness and profile projections preserve authority and privacy
     `${baseURL}/api/worlds/${world.id}/entities`,
     { display_name: `Uncontrolled Sentinel ${unique}` },
     owner.id,
+  );
+
+  const currentWorld = await getJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}`,
+    owner.id,
+  );
+  const playerFacilitatedWorld = await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    {
+      source: "human",
+      membership_id: joinedPlayer.membership_id,
+      expected_revision: currentWorld.revision,
+    },
+    owner.id,
+  );
+  const facilitatorReadOnlyProfile = await getJSON<EntityProfileResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
+    player.id,
+  );
+  expect(facilitatorReadOnlyProfile).toMatchObject({
+    revision: 0,
+    can_edit: false,
+  });
+  expect(facilitatorReadOnlyProfile.fields).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: restrictedField.id }),
+    ]),
+  );
+  await expectAPIError(
+    await actorRequest(player.id).put(
+      `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
+      {
+        data: {
+          expected_revision: facilitatorReadOnlyProfile.revision,
+          expected_character_field_set_revision: fields.revision,
+          values: [
+            {
+              field_id: restrictedField.id,
+              value: `Facilitator-only write must fail ${unique}.`,
+            },
+          ],
+        },
+      },
+    ),
+    403,
+    "entity_profile_forbidden",
+  );
+  await putJSON<WorldResponse>(
+    request,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    {
+      source: "human",
+      membership_id: world.membership_id,
+      expected_revision: playerFacilitatedWorld.revision,
+    },
+    player.id,
   );
 
   const beforeProfile = await getJSON<EntityProfileResponse>(

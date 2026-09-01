@@ -31,7 +31,7 @@ unavailable.
 | ----------------------- | ---------- |
 | Read header             | 5 seconds  |
 | Read request            | 15 seconds |
-| Ordinary response write | 30 seconds |
+| Ordinary response write | 130 seconds |
 | SSE write/flush         | 5 seconds  |
 | Idle connection         | 60 seconds |
 | Graceful shutdown       | 10 seconds |

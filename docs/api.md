@@ -320,7 +320,7 @@ full batch so a known backlog drains without the 1.5-second wait. Empty streams
 wait for a local mutation wake or the fallback poll.
 
 Each write/flush has a five-second deadline, cleared while the stream waits, so
-the ordinary 30-second response timeout does not end a healthy connection. The
+the ordinary 130-second response timeout does not end a healthy connection. The
 handler closes on process/request cancellation, session revocation/expiry or
 account disablement, membership revocation, query failure, or write failure.
 The client reconnects with its cursor unless authentication has ended. Events

@@ -35,16 +35,16 @@ binary whose SPA routes return 503.
 
 ## Runtime configuration
 
-| Variable              | Default/precedence             | Operational use                                                                                       |
-| --------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------- |
-| `GEZERAH_ADDR`            | Preferred; `:8080` default     | Bind address.                                                                                         |
-| `PORT`                | Fallback when `GEZERAH_ADDR` unset | Hosting-provider port.                                                                                |
-| `GEZERAH_DATABASE_URL`    | Preferred                      | PostgreSQL URL.                                                                                       |
-| `DATABASE_URL`        | Fallback                       | Hosting-provider database URL.                                                                        |
-| `GEZERAH_LOG_LEVEL`       | `info`                         | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
-| `GEZERAH_PUBLIC_ORIGIN`   | Request origin                 | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
-| `OPENAI_API_KEY`      | Empty                          | Enables Terra and Luna calls through the OpenAI Responses API.                                        |
-| `GEZERAH_OPENAI_BASE_URL` | Official OpenAI API            | Optional Responses API base URL override.                                                             |
+| Variable                  | Default/precedence                 | Operational use                                                                                       |
+| ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `GEZERAH_ADDR`            | Preferred; `:8080` default         | Bind address.                                                                                         |
+| `PORT`                    | Fallback when `GEZERAH_ADDR` unset | Hosting-provider port.                                                                                |
+| `GEZERAH_DATABASE_URL`    | Preferred                          | PostgreSQL URL.                                                                                       |
+| `DATABASE_URL`            | Fallback                           | Hosting-provider database URL.                                                                        |
+| `GEZERAH_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
+| `GEZERAH_PUBLIC_ORIGIN`   | Request origin                     | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
+| `OPENAI_API_KEY`          | Empty                              | Enables Terra and Luna calls through the OpenAI Responses API.                                        |
+| `GEZERAH_OPENAI_BASE_URL` | Official OpenAI API                | Optional Responses API base URL override.                                                             |
 
 If neither database variable is set, the final fallback is
 `postgres://localhost:5432/gezerah?sslmode=disable`. This is intended for local
@@ -101,7 +101,7 @@ ten-second deadline. HTTP request contexts derive from that root, so cancellatio
 ends open SSE loops while the server stops accepting new connections and waits
 for other handlers.
 
-The ordinary HTTP write timeout remains 30 seconds. SSE overrides that absolute
+The ordinary HTTP write timeout is 130 seconds. SSE overrides that absolute
 deadline: each write/flush gets a five-second deadline, which is cleared after
 a successful flush. Healthy streams can therefore remain open, while a stalled
 client does not block a write indefinitely. The active Railway target uses a
@@ -219,14 +219,19 @@ explicit escape hatch for either mode. Deploy mode alone accepts `--skip-ci`,
 which still requires clean committed source but omits the normal correctness
 gate. Use `./deploy.sh --help` for the accepted forms.
 
-The default target pins both immutable Railway IDs and display names. Alternate
-existing targets must set the matching `GEZERAH_DEPLOY_PROJECT_ID`,
-`GEZERAH_DEPLOY_ENVIRONMENT_ID`, `GEZERAH_DEPLOY_WEB_SERVICE_ID`, and
-`GEZERAH_DEPLOY_DATABASE_SERVICE_ID` together with `GEZERAH_DEPLOY_PROJECT`,
-`GEZERAH_DEPLOY_ENVIRONMENT`, `GEZERAH_DEPLOY_WEB_SERVICE`, and
-`GEZERAH_DEPLOY_DATABASE_SERVICE`; `GEZERAH_DEPLOY_DATABASE_VOLUME` pins that service's
-volume name. The database check also requires no volume migration, exactly one
-ready volume of at least 5 GB mounted at `/var/lib/postgresql/data`.
+The default target identifies the linked Railway project, environment, web
+service, and database service by the display names `Gezerah`, `production`,
+`gezerah-web`, and `Postgres`, then carries their discovered IDs through the
+release. Set `GEZERAH_DEPLOY_PROJECT`, `GEZERAH_DEPLOY_ENVIRONMENT`,
+`GEZERAH_DEPLOY_WEB_SERVICE`, and `GEZERAH_DEPLOY_DATABASE_SERVICE` for an
+alternate existing target. The optional matching
+`GEZERAH_DEPLOY_PROJECT_ID`, `GEZERAH_DEPLOY_ENVIRONMENT_ID`,
+`GEZERAH_DEPLOY_WEB_SERVICE_ID`, and
+`GEZERAH_DEPLOY_DATABASE_SERVICE_ID` add immutable identity pins; they have no
+checked-in target-specific defaults. `GEZERAH_DEPLOY_DATABASE_VOLUME` pins the
+database service's volume name. The database check also requires no volume
+migration, exactly one ready volume of at least 5 GB mounted at
+`/var/lib/postgresql/data`.
 `GEZERAH_DEPLOY_URL` defaults to <https://gezerah.com> and can assert another
 credential-free exact HTTPS origin, but it must
 equal the URL Railway reports for the selected web service; it cannot redirect
@@ -286,7 +291,7 @@ preparing for broader public use:
 8. In a real HTTPS browser, verify `__Host-gezerah_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
    missing-CSRF mutations fail.
-9. Keep an SSE connection open beyond 30 seconds; verify prompt session
+9. Keep an SSE connection open beyond 130 seconds; verify prompt session
    revocation, cursor recovery without event loss, and one safe
    revision-guarded command.
 10. Establish monitoring and a staffed release window only if the target and
@@ -330,7 +335,7 @@ for any future horizontal scaling:
   by another replica remain visible and clients can reconnect anywhere;
 - every connected Play client holds a streaming HTTP request; SSE writes have a
   five-second deadline that is cleared after each flush, so the ordinary
-  30-second response timeout does not routinely force reconnection;
+  130-second response timeout does not routinely force reconnection;
 - event delivery is at-least-observed through cursor replay, but it is an
   invalidation hint rather than a broker guarantee.
 
@@ -441,7 +446,7 @@ be treated as an idempotency conflict and investigated rather than forced.
    play-ready membership.
 2. Check proxy buffering and idle timeouts; the response sets no-buffer hints
    and sends keep-alives.
-3. Confirm keep-alives continue beyond 30 seconds. Each stream write has a
+3. Confirm keep-alives continue beyond 130 seconds. Each stream write has a
    five-second deadline; a stalled proxy/client still causes reconnection.
 4. Verify cursor syntax and inspect recent `world_events`. Full 100-row batches
    should drain immediately rather than waiting for the next poll.
@@ -464,8 +469,8 @@ broader audience, durable real-user data, or production commitment:
 - no metrics/tracing/alerts or audit trail for configuration changes;
 - no pool tuning or capacity test;
 - no multi-replica/load/SSE soak test;
-- only an operator-initiated deployment script; no hosted CI/CD or automatic
-  rollback;
+- only an operator-initiated deployment script; no hosted deployment workflow
+  or automatic rollback;
 - no documented provider-specific incident response or disaster-recovery SLO.
 
 Username/password sessions bind each request to the server-authenticated identity. If a public

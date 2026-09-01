@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"gezerah/internal/app"
-	"gezerah/internal/migrations"
+	"github.com/JTan2231/gezerah/internal/app"
+	"github.com/JTan2231/gezerah/internal/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

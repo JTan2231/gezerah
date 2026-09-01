@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	openaiapi "gezerah/internal/openai"
+	openaiapi "github.com/JTan2231/gezerah/internal/openai"
 )
 
 const (

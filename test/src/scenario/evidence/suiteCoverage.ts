@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 
-import { artifactsDir } from "../../paths";
+import { artifactsDir, repoRoot } from "../../paths";
 import {
   SCENARIO_TRACE_REGISTRY,
   type ScenarioId,
@@ -653,8 +653,14 @@ function isSuccessfulBrowserTest(test: ScenarioTestResult): boolean {
   return test.status === "passed" && test.expectedStatus === "passed";
 }
 
-function expectedGoPackage(ownerFile: string): string {
-  return `gezerah/${posix.dirname(ownerFile)}`;
+export function expectedGoPackage(ownerFile: string): string {
+  const moduleMatch = readFileSync(join(repoRoot, "go.mod"), "utf8").match(
+    /^module\s+(\S+)\s*$/mu,
+  );
+  if (moduleMatch?.[1] === undefined) {
+    throw new Error("go.mod does not declare a module path");
+  }
+  return `${moduleMatch[1]}/${posix.dirname(ownerFile)}`;
 }
 
 function normalizeArchitectureOwner(file: string): string {

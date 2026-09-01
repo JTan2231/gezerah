@@ -400,7 +400,7 @@ the backlog is below the batch limit.
 The SSE handshake uses ordinary authentication, including a coarse activity
 touch when due; subsequent stream session checks are read-only. Each stream
 write/flush has a five-second deadline that is cleared while waiting, so the
-ordinary 30-second response deadline does not routinely close healthy streams.
+ordinary 130-second response deadline does not routinely close healthy streams.
 Process cancellation propagates through request contexts. On any disconnect,
 clients reconnect with their last cursor.
 

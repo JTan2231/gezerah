@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"gezerah/internal/rules"
+	"github.com/JTan2231/gezerah/internal/rules"
 )
 
 // decimalText is the HTTP representation of an exact decimal. Keeping it as

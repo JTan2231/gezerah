@@ -15,8 +15,12 @@ import {
   waitForHealthyServices,
 } from "./railway";
 
-const deploymentID = "86f35ac9-6e76-4eea-970c-9841944042f8";
+const deploymentID = "55555555-5555-4555-8555-555555555555";
 const previousDeploymentID = "27b630f9-5837-4329-b4d2-e2e9c360fb18";
+const projectID = "11111111-1111-4111-8111-111111111111";
+const environmentID = "22222222-2222-4222-8222-222222222222";
+const webServiceID = "33333333-3333-4333-8333-333333333333";
+const databaseServiceID = "44444444-4444-4444-8444-444444444444";
 
 describe("Railway deployment adapter", () => {
   test("parses the linked project, services, replicas, and public URL", () => {
@@ -25,17 +29,17 @@ describe("Railway deployment adapter", () => {
     const target = selectTarget({
       project,
       services,
-      expectedProjectId: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+      expectedProjectId: undefined,
       expectedProject: "Gezerah",
-      expectedEnvironmentId: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+      expectedEnvironmentId: undefined,
       expectedEnvironment: "production",
-      expectedWebId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+      expectedWebId: undefined,
       expectedWeb: "gezerah-web",
-      expectedDatabaseId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+      expectedDatabaseId: undefined,
       expectedDatabase: "Postgres",
     });
 
-    assert.equal(target.project.id, "0bc0c39c-c630-4898-b4af-d7f0ebe459db");
+    assert.equal(target.project.id, projectID);
     assert.equal(target.environment.name, "production");
     assert.equal(target.web.url, "https://gezerah.com");
     assert.deepEqual(target.web.replicas, {
@@ -88,11 +92,11 @@ describe("Railway deployment adapter", () => {
           services,
           expectedProjectId: "00000000-0000-4000-8000-000000000000",
           expectedProject: "Gezerah",
-          expectedEnvironmentId: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+          expectedEnvironmentId: environmentID,
           expectedEnvironment: "production",
-          expectedWebId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+          expectedWebId: webServiceID,
           expectedWeb: "gezerah-web",
-          expectedDatabaseId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+          expectedDatabaseId: databaseServiceID,
           expectedDatabase: "Postgres",
         }),
       /linked Railway project/,
@@ -275,9 +279,9 @@ describe("Railway deployment adapter", () => {
       },
       {
         targetDeploymentId: deploymentID,
-        webServiceId: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+        webServiceId: webServiceID,
         webService: "gezerah-web",
-        databaseServiceId: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+        databaseServiceId: databaseServiceID,
         databaseService: "Postgres",
         databaseVolume: "postgres-volume",
         timeoutMs: 100,
@@ -295,13 +299,13 @@ describe("Railway deployment adapter", () => {
 
 function projectFixture(): unknown {
   return {
-    id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    id: projectID,
     name: "Gezerah",
     environments: {
       edges: [
         {
           node: {
-            id: "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+            id: environmentID,
             name: "production",
           },
         },
@@ -313,10 +317,10 @@ function projectFixture(): unknown {
 function serviceFixture(webDeploymentID: string): unknown {
   return [
     {
-      id: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+      id: databaseServiceID,
       name: "Postgres",
       status: "SUCCESS",
-      deploymentId: "881dc329-b72d-43f5-8abd-a8eaa3a0dcf0",
+      deploymentId: "66666666-6666-4666-8666-666666666666",
       deploymentStopped: false,
       volumeMigrating: false,
       url: null,
@@ -337,7 +341,7 @@ function serviceFixture(webDeploymentID: string): unknown {
       ],
     },
     {
-      id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+      id: webServiceID,
       name: "gezerah-web",
       status: "SUCCESS",
       deploymentId: webDeploymentID,

@@ -7,6 +7,7 @@ import {
 } from "../catalog/scenarioTraces";
 import {
   buildSuiteCoverageInventory,
+  expectedGoPackage as expectedGoPackageForOwnerFile,
   parseArchitectureTestResults,
   parseGoTestResults,
   type ArchitectureTestResult,
@@ -423,5 +424,5 @@ function userStep(
 }
 
 function expectedGoPackage(trace: ScenarioTrace): string {
-  return `gezerah/${trace.ownerFile.slice(0, trace.ownerFile.lastIndexOf("/"))}`;
+  return expectedGoPackageForOwnerFile(trace.ownerFile);
 }

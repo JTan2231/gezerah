@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"gezerah/internal/rules"
+	"github.com/JTan2231/gezerah/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

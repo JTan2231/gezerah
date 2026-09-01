@@ -89,11 +89,8 @@ func (s *Server) handlePutWorldEntityProfile(w http.ResponseWriter, r *http.Requ
 		})
 		return
 	}
-	if !access.CanReadRestricted {
-		handleAppError(w, &statusError{
-			Status: http.StatusForbidden, Code: "entity_profile_forbidden",
-			Message: "entity control or world editing permission is required",
-		})
+	if err := requireEntityProfileEditAccess(access); err != nil {
+		handleAppError(w, err)
 		return
 	}
 
@@ -286,9 +283,19 @@ func loadWorldEntityProfileAccess(
 
 	editor := member.Role == "owner" || member.Role == "editor"
 	controller := member.Role != "spectator" && access.Controlled
-	access.CanReadRestricted = editor || member.Facilitator || controller
+	access.CanReadRestricted = canReadRestrictedCharacterFields(member, access.Controlled)
 	access.CanEdit = (editor || controller) && member.WorldStatus == "active" && !access.EntityArchived
 	return access, nil
+}
+
+func requireEntityProfileEditAccess(access worldEntityProfileAccess) error {
+	if access.CanEdit {
+		return nil
+	}
+	return &statusError{
+		Status: http.StatusForbidden, Code: "entity_profile_forbidden",
+		Message: "entity control or world editing permission is required",
+	}
 }
 
 func loadEntityProfileResponse(

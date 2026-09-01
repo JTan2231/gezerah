@@ -30,6 +30,17 @@ the comprehensive system documentation starts at
 workflows, the complete HTTP API, backend and frontend internals, the database,
 development, testing, operations, and security.
 
+## Project status and community
+
+Gezerah is under active development. The hosted Railway instance is a
+conditional preview, not a public-production service; the remaining release
+gates are tracked in [deployment readiness](docs/deployment-readiness/README.md).
+
+Before participating, read the [contribution guide](CONTRIBUTING.md) and
+[Code of Conduct](CODE_OF_CONDUCT.md). Use the [support guide](SUPPORT.md) for
+ordinary questions and bug reports, and the [security policy](SECURITY.md) for
+private vulnerability reports.
+
 ## Stack
 
 - Go 1.25.14, standard-library HTTP routing, and embedded static assets.
@@ -95,14 +106,14 @@ concurrent starts serialize schema upgrades.
 
 ## Configuration
 
-| Variable            | Default                                         | Purpose                                                                         |
-| ------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
-| `GEZERAH_ADDR`          | `:8080`                                         | HTTP listen address.                                                            |
-| `PORT`              | unset                                           | Hosting fallback when `GEZERAH_ADDR` is unset.                                      |
-| `GEZERAH_DATABASE_URL`  | `postgres://localhost:5432/gezerah?sslmode=disable` | PostgreSQL connection URL.                                                      |
-| `DATABASE_URL`      | unset                                           | Hosting fallback when `GEZERAH_DATABASE_URL` is unset.                              |
-| `GEZERAH_LOG_LEVEL`     | `info`                                          | `debug`, `info`, `warn`, or `error`.                                            |
-| `GEZERAH_PUBLIC_ORIGIN` | request origin                                  | Exact browser origin for authenticated writes; HTTP is loopback-only.            |
+| Variable                | Default                                             | Purpose                                                               |
+| ----------------------- | --------------------------------------------------- | --------------------------------------------------------------------- |
+| `GEZERAH_ADDR`          | `:8080`                                             | HTTP listen address.                                                  |
+| `PORT`                  | unset                                               | Hosting fallback when `GEZERAH_ADDR` is unset.                        |
+| `GEZERAH_DATABASE_URL`  | `postgres://localhost:5432/gezerah?sslmode=disable` | PostgreSQL connection URL.                                            |
+| `DATABASE_URL`          | unset                                               | Hosting fallback when `GEZERAH_DATABASE_URL` is unset.                |
+| `GEZERAH_LOG_LEVEL`     | `info`                                              | `debug`, `info`, `warn`, or `error`.                                  |
+| `GEZERAH_PUBLIC_ORIGIN` | request origin                                      | Exact browser origin for authenticated writes; HTTP is loopback-only. |
 
 World membership roles, lifecycle states, visibility, and mutation permissions are
 enforced by the server. Username/password authentication creates an opaque,
@@ -172,3 +183,7 @@ name. Attaching the database alone does not inject its variables into the
 application service.
 
 Generated files under `web/static` are build output and are not committed.
+
+## License
+
+Gezerah is licensed under the [MIT License](LICENSE).

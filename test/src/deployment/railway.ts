@@ -365,21 +365,22 @@ export function parseUploadOutput(output: string): UploadedDeployment {
 export function selectTarget(options: {
   project: RailwayProject;
   services: readonly RailwayService[];
-  expectedProjectId: string;
+  expectedProjectId: string | undefined;
   expectedProject: string;
-  expectedEnvironmentId: string;
+  expectedEnvironmentId: string | undefined;
   expectedEnvironment: string;
-  expectedWebId: string;
+  expectedWebId: string | undefined;
   expectedWeb: string;
-  expectedDatabaseId: string;
+  expectedDatabaseId: string | undefined;
   expectedDatabase: string;
 }): RailwayTarget {
   if (
-    options.project.id !== options.expectedProjectId ||
+    (options.expectedProjectId !== undefined &&
+      options.project.id !== options.expectedProjectId) ||
     options.project.name !== options.expectedProject
   ) {
     throw new Error(
-      `linked Railway project is ${options.project.id} ${JSON.stringify(options.project.name)}, expected ${options.expectedProjectId} ${JSON.stringify(options.expectedProject)}`,
+      `linked Railway project is ${options.project.id} ${JSON.stringify(options.project.name)}, expected ${options.expectedProjectId === undefined ? "a project named" : options.expectedProjectId} ${JSON.stringify(options.expectedProject)}`,
     );
   }
   const environment = exactIdentity(
@@ -633,20 +634,22 @@ function parseManifest(
 
 function exactIdentity<T extends { id: string; name: string }>(
   values: readonly T[],
-  expectedId: string,
+  expectedId: string | undefined,
   expectedName: string,
   label: string,
 ): T {
-  const matches = values.filter(({ id }) => id === expectedId);
+  const matches = values.filter(({ id, name }) =>
+    expectedId === undefined ? name === expectedName : id === expectedId,
+  );
   if (matches.length !== 1) {
     throw new Error(
-      `expected exactly one ${label} with ID ${expectedId}, found ${matches.length}`,
+      `expected exactly one ${label} ${expectedId === undefined ? `named ${JSON.stringify(expectedName)}` : `with ID ${expectedId}`}, found ${matches.length}`,
     );
   }
   const match = matches[0] as T;
   if (match.name !== expectedName) {
     throw new Error(
-      `${label} ${expectedId} is named ${JSON.stringify(match.name)}, expected ${JSON.stringify(expectedName)}`,
+      `${label} ${match.id} is named ${JSON.stringify(match.name)}, expected ${JSON.stringify(expectedName)}`,
     );
   }
   return match;

@@ -20,15 +20,50 @@ func (s *Server) handleGetWorldCharacterFields(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
+	includeRestricted, err := canReadRestrictedWorldCharacterFields(r.Context(), s.db, member)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
 
 	item, err := loadWorldCharacterFieldSetResponse(
-		r.Context(), s.db, worldID, member.Role != "spectator",
+		r.Context(), s.db, worldID, includeRestricted,
 	)
 	if err != nil {
 		handleAppError(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, item)
+}
+
+func canReadRestrictedWorldCharacterFields(
+	ctx context.Context,
+	db queryer,
+	member authorizedWorldMember,
+) (bool, error) {
+	includeRestricted := canReadRestrictedCharacterFields(member, false)
+	if includeRestricted || member.Role == "spectator" {
+		return includeRestricted, nil
+	}
+
+	var controlsEntity bool
+	if err := db.QueryRow(ctx, `
+		select exists(
+			select 1
+			from world_membership_entity_controls
+			where world_id = $1 and membership_id = $2
+		)`, member.WorldID, member.ID,
+	).Scan(&controlsEntity); err != nil {
+		return false, err
+	}
+	return canReadRestrictedCharacterFields(member, controlsEntity), nil
+}
+
+func canReadRestrictedCharacterFields(member authorizedWorldMember, controlsEntity bool) bool {
+	if member.Role == "spectator" {
+		return false
+	}
+	return member.Role == "owner" || member.Role == "editor" || member.Facilitator || controlsEntity
 }
 
 func (s *Server) handlePutWorldCharacterFields(w http.ResponseWriter, r *http.Request) {

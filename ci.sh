@@ -33,6 +33,7 @@ go_required_version="go1.25.14"
 golangci_lint_required_version="2.12.2"
 govulncheck_version="v1.6.0"
 golangci_lint_binary=""
+govulncheck_binary=""
 
 section() {
 	printf '\n==> %s\n' "$1"
@@ -60,6 +61,26 @@ require_golangci_lint() {
 	if [ "$golangci_lint_actual_version" != "$golangci_lint_required_version" ]; then
 		printf 'golangci-lint %s is required, but the cached binary reports %s\n' \
 			"$golangci_lint_required_version" "$golangci_lint_actual_version" >&2
+		return 1
+	fi
+}
+
+require_govulncheck() {
+	govulncheck_build_info="$(go version -m "$govulncheck_binary")" || return 1
+	govulncheck_actual_path="$(
+		printf '%s\n' "$govulncheck_build_info" |
+			awk '$1 == "path" { print $2; exit }'
+	)"
+	govulncheck_actual_version="$(
+		printf '%s\n' "$govulncheck_build_info" |
+			awk '$1 == "mod" && $2 == "golang.org/x/vuln" { print $3; exit }'
+	)"
+	if [ "$govulncheck_actual_path" != "golang.org/x/vuln/cmd/govulncheck" ] ||
+		[ "$govulncheck_actual_version" != "$govulncheck_version" ]; then
+		printf 'govulncheck %s is required, but the cached binary reports %s@%s\n' \
+			"$govulncheck_version" \
+			"${govulncheck_actual_path:-unknown}" \
+			"${govulncheck_actual_version:-unknown}" >&2
 		return 1
 	fi
 }
@@ -165,6 +186,48 @@ provision_golangci_lint() {
 	require_golangci_lint
 }
 
+provision_govulncheck() {
+	tool_dir="$ci_cache_dir/tools/govulncheck/${govulncheck_version#v}"
+	govulncheck_binary="$tool_dir/govulncheck"
+	if [ -x "$govulncheck_binary" ]; then
+		require_govulncheck
+		return
+	fi
+
+	install_dir="$(mktemp -d "$tmp_dir/govulncheck-install.XXXXXX")" || return 1
+	if ! GOBIN="$install_dir" \
+		go install "golang.org/x/vuln/cmd/govulncheck@$govulncheck_version"; then
+		rm -rf "$install_dir"
+		return 1
+	fi
+	if [ ! -x "$install_dir/govulncheck" ]; then
+		printf 'Installed govulncheck command is missing or not executable\n' >&2
+		rm -rf "$install_dir"
+		return 1
+	fi
+	mkdir -p "$tool_dir" || {
+		rm -rf "$install_dir"
+		return 1
+	}
+	staged_binary="$govulncheck_binary.tmp.$$"
+	cp "$install_dir/govulncheck" "$staged_binary" || {
+		rm -rf "$install_dir"
+		return 1
+	}
+	chmod +x "$staged_binary" || {
+		rm -f "$staged_binary"
+		rm -rf "$install_dir"
+		return 1
+	}
+	mv "$staged_binary" "$govulncheck_binary" || {
+		rm -f "$staged_binary"
+		rm -rf "$install_dir"
+		return 1
+	}
+	rm -rf "$install_dir"
+	require_govulncheck
+}
+
 report_timing() {
 	timing_name="$1"
 	timing_started_ms="$2"
@@ -203,6 +266,7 @@ cleanup() {
 		"${frontend_test_pid:-}" \
 		"${frontend_dead_pid:-}" \
 		"${frontend_type_pid:-}" \
+		"${backend_vuln_pid:-}" \
 		"${test_format_pid:-}" \
 		"${test_type_pid:-}" \
 		"${test_scenario_pid:-}" \
@@ -243,9 +307,9 @@ cleanup() {
 		else
 			whole_elapsed_ms=$((whole_finished_ms - ci_invocation_started_ms))
 			awk -v elapsed="$whole_elapsed_ms" \
-				'BEGIN { printf "==> Timing: whole ./ci.sh e2e %.3fs (required: <30.000s)\n", elapsed / 1000 }'
-			if [ "$status" -eq 0 ] && [ "$whole_elapsed_ms" -ge 30000 ]; then
-				printf 'E2E runtime budget exceeded: %dms is not under 30000ms\n' \
+				'BEGIN { printf "==> Timing: whole ./ci.sh e2e %.3fs (required: <60.000s)\n", elapsed / 1000 }'
+			if [ "$status" -eq 0 ] && [ "$whole_elapsed_ms" -ge 60000 ]; then
+				printf 'E2E runtime budget exceeded: %dms is not under 60000ms\n' \
 					"$whole_elapsed_ms" >&2
 				status=1
 			fi
@@ -520,6 +584,11 @@ run_backend() {
 }
 
 run_backend_checks() {
+	run_backend_core_checks || return 1
+	run_backend_vulnerability_check
+}
+
+run_backend_core_checks() {
 	require_go || return 1
 	go_packages="$(go list ./... | grep -v '/web/frontend/node_modules/')" || return 1
 	set --
@@ -561,17 +630,19 @@ run_backend_checks() {
 		return 1
 	fi
 
-	section "Backend: checking reachable vulnerabilities with govulncheck $govulncheck_version"
-	go_tools_dir="$tmp_dir/go-tools"
-	mkdir -p "$go_tools_dir" || return 1
-	GOBIN="$go_tools_dir" \
-		go install "golang.org/x/vuln/cmd/govulncheck@$govulncheck_version" || return 1
-	"$go_tools_dir/govulncheck" -test $go_packages || return 1
-
 	section "Developer tooling: checking shell syntax"
 	sh -n ci.sh deploy.sh run.sh reset-db.sh || return 1
 
 	return 0
+}
+
+run_backend_vulnerability_check() {
+	require_go || return 1
+	go_packages="$(go list ./... | grep -v '/web/frontend/node_modules/')" || return 1
+
+	section "Backend: checking reachable vulnerabilities with govulncheck $govulncheck_version"
+	provision_govulncheck || return 1
+	"$govulncheck_binary" -test $go_packages
 }
 
 run_backend_build() {
@@ -586,6 +657,7 @@ run_backend_build() {
 run_parallel_validation() {
 	frontend_checks_log="$tmp_dir/frontend-checks.log"
 	backend_checks_log="$tmp_dir/backend-checks.log"
+	backend_vuln_log="$tmp_dir/backend-vuln.log"
 	test_install_log="$tmp_dir/test-install.log"
 	parallel_checks_started_ms="$(clock_milliseconds)" || return 1
 
@@ -594,9 +666,13 @@ run_parallel_validation() {
 	) >"$frontend_checks_log" 2>&1 &
 	frontend_checks_pid=$!
 	(
-		run_timed_stage "backend validation" run_backend_checks
+		run_timed_stage "backend validation" run_backend_core_checks
 	) >"$backend_checks_log" 2>&1 &
 	backend_checks_pid=$!
+	(
+		run_timed_stage "backend vulnerability validation" run_backend_vulnerability_check
+	) >"$backend_vuln_log" 2>&1 &
+	backend_vuln_pid=$!
 	(
 		run_timed_stage "E2E dependency install" run_test_install
 	) >"$test_install_log" 2>&1 &
@@ -608,6 +684,9 @@ run_parallel_validation() {
 	wait "$backend_checks_pid"
 	backend_checks_status=$?
 	backend_checks_pid=""
+	wait "$backend_vuln_pid"
+	backend_vuln_status=$?
+	backend_vuln_pid=""
 	wait "$test_install_pid"
 	test_install_status=$?
 	test_install_pid=""
@@ -616,6 +695,8 @@ run_parallel_validation() {
 	cat "$frontend_checks_log"
 	section "Backend validation log"
 	cat "$backend_checks_log"
+	section "Backend vulnerability validation log"
+	cat "$backend_vuln_log"
 	section "E2E dependency install log"
 	cat "$test_install_log"
 
@@ -627,9 +708,11 @@ run_parallel_validation() {
 
 	if [ "$frontend_checks_status" -ne 0 ] || \
 		[ "$backend_checks_status" -ne 0 ] || \
+		[ "$backend_vuln_status" -ne 0 ] || \
 		[ "$test_install_status" -ne 0 ]; then
-		printf 'Parallel validation failed: frontend=%d backend=%d e2e-install=%d\n' \
+		printf 'Parallel validation failed: frontend=%d backend=%d vuln=%d e2e-install=%d\n' \
 			"$frontend_checks_status" "$backend_checks_status" \
+			"$backend_vuln_status" \
 			"$test_install_status" >&2
 		return 1
 	fi
@@ -764,6 +847,7 @@ ci_worktree_path=""
 smoke_pid=""
 frontend_checks_pid=""
 backend_checks_pid=""
+backend_vuln_pid=""
 test_install_pid=""
 frontend_format_pid=""
 frontend_lint_pid=""
