@@ -172,9 +172,18 @@ replace deploy provenance.
 ### ChatGPT web acceptance
 
 Changes to the ChatGPT handoff, page-tool registration, or agent narration
-require one human-operated acceptance loop in the signed-in ChatGPT web app.
-CI, the direct WebMCP contract, and deployed smoke do not substitute for this
-boundary.
+should receive one human-operated acceptance loop in the signed-in ChatGPT web
+app before that revision is described as manually accepted. CI, the direct
+WebMCP contract, and deployed smoke do not substitute for this boundary. Manual
+acceptance is not a source-publication gate and does not turn source publication
+into a hosted deployment.
+
+**Current publication candidate (2026-08-31):** its manual WebMCP acceptance
+attempt was stopped before completion because this operator process needs
+refactoring. The attempt supplies no passing acceptance evidence for the current
+revision. Source publication may proceed without claiming that it passed this
+boundary; rerun a refactored procedure before making that claim or promoting
+the revision to public production.
 
 1. Build the production frontend and Go artifact from the exact source under
    test. Create a uniquely named disposable PostgreSQL database and synthetic
@@ -220,7 +229,10 @@ procedure proves a single-player ChatGPT tool loop because each page-tool
 mutation reloads Play; it is not evidence for SSE delivery or multi-player
 freshness.
 
-#### Acceptance record — 2026-08-30
+#### Historical acceptance record — 2026-08-30
+
+This record applies only to source artifact `63a0ec3`; it is not acceptance
+evidence for later revisions or the current publication candidate.
 
 - Source artifact: `63a0ec3`.
 - Runtime: disposable standalone production artifact, synthetic

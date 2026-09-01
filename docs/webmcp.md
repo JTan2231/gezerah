@@ -134,8 +134,10 @@ declarative registrations are not currently discovered there. See
 <https://learn.chatgpt.com/docs/webmcp>.
 
 Run the human-operated [ChatGPT web acceptance](testing.md#chatgpt-web-acceptance)
-for every change to handoff, registration, or agent narration. Automated
-page-tool contracts do not exercise the signed-in ChatGPT web UI.
+before describing a handoff, registration, or agent-narration revision as
+manually accepted or promoting it to public production. Automated page-tool
+contracts do not exercise the signed-in ChatGPT web UI. Source publication may
+proceed without that claim; the current manual procedure is being refactored.
 
 Release validation should cover:
 

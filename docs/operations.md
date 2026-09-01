@@ -7,6 +7,11 @@
 > of public-production readiness. This runbook governs the active preview, while
 > the separate public-release gate remains closed.
 
+In this runbook, **deploy** means changing the active Railway preview through the
+operator-initiated `deploy.sh` path. Publishing the repository's source does not
+invoke that path, change the Railway release, or designate the preview as public
+production.
+
 ## Deployable artifact
 
 Gezerah deploys as one statically built Go application plus PostgreSQL. The
