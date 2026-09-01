@@ -4,6 +4,7 @@ import { describe, test } from "bun:test";
 import {
   assertNoActiveDeployment,
   assertDeploymentManifest,
+  assertPublicURLExposed,
   databaseHealthy,
   parseDeploymentList,
   parseProjectStatus,
@@ -16,14 +17,14 @@ import {
 } from "./railway";
 
 const deploymentID = "55555555-5555-4555-8555-555555555555";
-const previousDeploymentID = "27b630f9-5837-4329-b4d2-e2e9c360fb18";
+const previousDeploymentID = "77777777-7777-4777-8777-777777777777";
 const projectID = "11111111-1111-4111-8111-111111111111";
 const environmentID = "22222222-2222-4222-8222-222222222222";
 const webServiceID = "33333333-3333-4333-8333-333333333333";
 const databaseServiceID = "44444444-4444-4444-8444-444444444444";
 
 describe("Railway deployment adapter", () => {
-  test("parses the linked project, services, replicas, and public URL", () => {
+  test("parses the linked project, services, replicas, and domains", () => {
     const project = parseProjectStatus(projectFixture());
     const services = parseServiceList(serviceFixture(deploymentID));
     const target = selectTarget({
@@ -41,7 +42,23 @@ describe("Railway deployment adapter", () => {
 
     assert.equal(target.project.id, projectID);
     assert.equal(target.environment.name, "production");
-    assert.equal(target.web.url, "https://gezerah.com");
+    assert.equal(target.web.url, "https://legacy.gezerah.test");
+    assert.deepEqual(target.environment.serviceDomains, [
+      {
+        serviceId: webServiceID,
+        serviceName: "gezerah-web",
+        domains: [
+          "legacy.gezerah.test",
+          "gezerah.com",
+          "gezerah-web-production.up.railway.app",
+        ],
+      },
+      {
+        serviceId: databaseServiceID,
+        serviceName: "Postgres",
+        domains: [],
+      },
+    ]);
     assert.deepEqual(target.web.replicas, {
       configured: 1,
       running: 1,
@@ -100,6 +117,94 @@ describe("Railway deployment adapter", () => {
           expectedDatabase: "Postgres",
         }),
       /linked Railway project/,
+    );
+  });
+
+  test("binds public origins to the exact environment and service", () => {
+    const project = parseProjectStatus(projectFixture());
+    const environment = project.environments[0]!;
+    const web = parseServiceList(serviceFixture(deploymentID)).find(
+      ({ id }) => id === webServiceID,
+    )!;
+
+    assert.doesNotThrow(() =>
+      assertPublicURLExposed(environment, web, "https://gezerah.com"),
+    );
+    assert.doesNotThrow(() =>
+      assertPublicURLExposed(environment, web, "https://legacy.gezerah.test"),
+    );
+    assert.throws(
+      () =>
+        assertPublicURLExposed(
+          environment,
+          web,
+          "https://unattached.gezerah.test",
+        ),
+      /does not expose/,
+    );
+
+    const domainOnDatabaseOnly = {
+      ...environment,
+      serviceDomains: environment.serviceDomains.map((binding) =>
+        binding.serviceId === webServiceID
+          ? { ...binding, domains: ["legacy.gezerah.test"] }
+          : { ...binding, domains: ["gezerah.com"] },
+      ),
+    };
+    assert.throws(
+      () =>
+        assertPublicURLExposed(
+          domainOnDatabaseOnly,
+          web,
+          "https://gezerah.com",
+        ),
+      /does not expose/,
+    );
+
+    const missingBinding = {
+      ...environment,
+      serviceDomains: environment.serviceDomains.filter(
+        ({ serviceId }) => serviceId !== webServiceID,
+      ),
+    };
+    assert.throws(
+      () => assertPublicURLExposed(missingBinding, web, "https://gezerah.com"),
+      /exactly one Railway domain set.*found 0/,
+    );
+
+    const duplicateBinding = {
+      ...environment,
+      serviceDomains: [
+        ...environment.serviceDomains,
+        environment.serviceDomains[0]!,
+      ],
+    };
+    assert.throws(
+      () =>
+        assertPublicURLExposed(duplicateBinding, web, "https://gezerah.com"),
+      /exactly one Railway domain set.*found 2/,
+    );
+
+    for (const publicURL of [
+      "https://user@gezerah.com",
+      "https://gezerah.com/path",
+      "https://gezerah.com?query=yes",
+    ]) {
+      assert.throws(
+        () => assertPublicURLExposed(environment, web, publicURL),
+        /credential-free exact HTTPS origin/,
+      );
+    }
+  });
+
+  test("rejects duplicate service-domain bindings in project status", () => {
+    const serviceInstances = serviceInstanceFixture();
+    assert.throws(
+      () =>
+        parseProjectStatus(
+          projectFixture([...serviceInstances, serviceInstances[0]!]),
+        ),
+      /duplicate service domain bindings/,
     );
   });
 
@@ -297,7 +402,9 @@ describe("Railway deployment adapter", () => {
   });
 });
 
-function projectFixture(): unknown {
+function projectFixture(
+  serviceInstances: readonly unknown[] = serviceInstanceFixture(),
+): unknown {
   return {
     id: projectID,
     name: "Gezerah",
@@ -307,11 +414,42 @@ function projectFixture(): unknown {
           node: {
             id: environmentID,
             name: "production",
+            serviceInstances: {
+              edges: serviceInstances,
+            },
           },
         },
       ],
     },
   };
+}
+
+function serviceInstanceFixture(): readonly Record<string, unknown>[] {
+  return [
+    {
+      node: {
+        serviceId: webServiceID,
+        serviceName: "gezerah-web",
+        domains: {
+          customDomains: [
+            { domain: "legacy.gezerah.test" },
+            { domain: "gezerah.com" },
+          ],
+          serviceDomains: [{ domain: "gezerah-web-production.up.railway.app" }],
+        },
+      },
+    },
+    {
+      node: {
+        serviceId: databaseServiceID,
+        serviceName: "Postgres",
+        domains: {
+          customDomains: [],
+          serviceDomains: [],
+        },
+      },
+    },
+  ];
 }
 
 function serviceFixture(webDeploymentID: string): unknown {
@@ -347,7 +485,7 @@ function serviceFixture(webDeploymentID: string): unknown {
       deploymentId: webDeploymentID,
       deploymentStopped: false,
       volumeMigrating: false,
-      url: "https://gezerah.com",
+      url: "https://legacy.gezerah.test",
       replicas: {
         configured: 1,
         running: 1,

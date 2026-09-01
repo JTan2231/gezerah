@@ -12,6 +12,7 @@ import { buildEvidence, writeEvidence } from "./evidence";
 import {
   assertDeploymentManifest,
   assertNoActiveDeployment,
+  assertPublicURLExposed,
   databaseHealthy,
   findDeployment,
   RailwayClient,
@@ -42,7 +43,7 @@ interface DeploymentConfiguration {
   expectedDatabaseId: string | undefined;
   expectedDatabase: string;
   expectedDatabaseVolume: string;
-  publicURL?: string;
+  publicURL: string;
   timeoutMs: number;
 }
 
@@ -228,7 +229,11 @@ async function runDeployment(
     assertDeploymentManifest(deployment);
   }
 
-  const publicURL = boundPublicURL(configuration.publicURL, target.web);
+  const publicURL = boundPublicURL(
+    configuration.publicURL,
+    target.web,
+    environment,
+  );
   stage("Public HTTPS smoke");
   const http = await verifyHTTP(publicURL, { signal });
   for (const check of http) {
@@ -253,8 +258,16 @@ async function runDeployment(
   }
 
   stage("Final Railway consistency");
+  const finalProject = await railway.project(signal);
+  const finalEnvironment = exactEnvironment(
+    finalProject,
+    target.project.id,
+    target.project.name,
+    target.environment.id,
+    target.environment.name,
+  );
   const finalTarget = selectTarget({
-    project,
+    project: finalProject,
     services: await railway.services(environment.id, signal),
     expectedProjectId: target.project.id,
     expectedProject: target.project.name,
@@ -286,6 +299,7 @@ async function runDeployment(
   const finalPublicURL = boundPublicURL(
     configuration.publicURL,
     finalTarget.web,
+    finalEnvironment,
   );
   if (finalPublicURL !== publicURL) {
     throw new Error(
@@ -478,16 +492,14 @@ function requiredPublicURL(service: RailwayService): string {
 }
 
 function boundPublicURL(
-  configuredURL: string | undefined,
+  configuredURL: string,
   service: RailwayService,
+  environment: RailwayEnvironment,
 ): string {
   const discoveredURL = normalizePublicURL(requiredPublicURL(service));
-  if (configuredURL !== undefined && configuredURL !== discoveredURL) {
-    throw new Error(
-      `GEZERAH_DEPLOY_URL is ${configuredURL}, but Railway service ${service.id} exposes ${discoveredURL}`,
-    );
-  }
-  return discoveredURL;
+  assertPublicURLExposed(environment, service, discoveredURL);
+  assertPublicURLExposed(environment, service, configuredURL);
+  return configuredURL;
 }
 
 function stage(name: string): void {

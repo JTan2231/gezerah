@@ -5,6 +5,13 @@ type JSONRecord = Record<string, unknown>;
 export interface RailwayEnvironment {
   id: string;
   name: string;
+  serviceDomains: readonly RailwayServiceDomains[];
+}
+
+export interface RailwayServiceDomains {
+  serviceId: string;
+  serviceName: string;
+  domains: readonly string[];
 }
 
 export interface RailwayProject {
@@ -205,9 +212,78 @@ export function parseProjectStatus(value: unknown): RailwayProject {
       edgeRecord.node,
       `Railway environment edge ${index} node`,
     );
+    const serviceInstanceContainer = record(
+      node.serviceInstances,
+      `Railway environment ${index} service instances`,
+    );
+    const serviceInstanceEdges = array(
+      serviceInstanceContainer.edges,
+      `Railway environment ${index} service instance edges`,
+    );
+    const serviceDomains = serviceInstanceEdges.map(
+      (serviceEdge, serviceIndex) => {
+        const serviceEdgeRecord = record(
+          serviceEdge,
+          `Railway environment ${index} service instance edge ${serviceIndex}`,
+        );
+        const service = record(
+          serviceEdgeRecord.node,
+          `Railway environment ${index} service instance ${serviceIndex}`,
+        );
+        const domainContainer = record(
+          service.domains,
+          `Railway environment ${index} service instance ${serviceIndex} domains`,
+        );
+        const domainValues = [
+          ...array(
+            domainContainer.customDomains,
+            `Railway environment ${index} service instance ${serviceIndex} custom domains`,
+          ),
+          ...array(
+            domainContainer.serviceDomains,
+            `Railway environment ${index} service instance ${serviceIndex} service domains`,
+          ),
+        ];
+        const domains = domainValues.map((domainValue, domainIndex) => {
+          const domain = record(
+            domainValue,
+            `Railway environment ${index} service instance ${serviceIndex} domain ${domainIndex}`,
+          );
+          return string(
+            domain.domain,
+            `Railway environment ${index} service instance ${serviceIndex} domain ${domainIndex} name`,
+          );
+        });
+        if (new Set(domains).size !== domains.length) {
+          throw new Error(
+            `Railway environment ${index} service instance ${serviceIndex} contains duplicate domains`,
+          );
+        }
+        return {
+          serviceId: string(
+            service.serviceId,
+            `Railway environment ${index} service instance ${serviceIndex} service id`,
+          ),
+          serviceName: string(
+            service.serviceName,
+            `Railway environment ${index} service instance ${serviceIndex} service name`,
+          ),
+          domains,
+        };
+      },
+    );
+    if (
+      new Set(serviceDomains.map(({ serviceId }) => serviceId)).size !==
+      serviceDomains.length
+    ) {
+      throw new Error(
+        `Railway environment ${index} contains duplicate service domain bindings`,
+      );
+    }
     return {
       id: string(node.id, `Railway environment ${index} id`),
       name: string(node.name, `Railway environment ${index} name`),
+      serviceDomains,
     };
   });
   return {
@@ -402,6 +478,44 @@ export function selectTarget(options: {
     "Railway service",
   );
   return { project: options.project, environment, web, database };
+}
+
+export function assertPublicURLExposed(
+  environment: RailwayEnvironment,
+  service: RailwayService,
+  publicURL: string,
+): void {
+  let hostname: string;
+  try {
+    const parsed = new URL(publicURL);
+    if (parsed.protocol !== "https:" || parsed.origin !== publicURL) {
+      throw new Error("not an exact HTTPS origin");
+    }
+    hostname = parsed.hostname;
+  } catch {
+    throw new Error(
+      `public URL ${JSON.stringify(publicURL)} is not a credential-free exact HTTPS origin`,
+    );
+  }
+  const matches = environment.serviceDomains.filter(
+    ({ serviceId }) => serviceId === service.id,
+  );
+  if (matches.length !== 1) {
+    throw new Error(
+      `expected exactly one Railway domain set for service ${service.id}, found ${matches.length}`,
+    );
+  }
+  const match = matches[0] as RailwayServiceDomains;
+  if (match.serviceName !== service.name) {
+    throw new Error(
+      `Railway domain service ${service.id} is named ${JSON.stringify(match.serviceName)}, expected ${JSON.stringify(service.name)}`,
+    );
+  }
+  if (!match.domains.includes(hostname)) {
+    throw new Error(
+      `Railway service ${service.id} does not expose ${publicURL}; exposed domains: ${match.domains.length === 0 ? "none" : match.domains.join(", ")}`,
+    );
+  }
 }
 
 export function assertNoActiveDeployment(
