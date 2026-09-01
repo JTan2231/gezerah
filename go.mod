@@ -1,4 +1,4 @@
-module scryer
+module gezerah
 
 go 1.25.14
 

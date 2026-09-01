@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"scryer/internal/rules"
+	"gezerah/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

@@ -10,7 +10,7 @@ preview does not convert this audit into a public-production sign-off.
 
 ## Conclusion
 
-Scryer uses native username/password accounts, Argon2id password hashes, opaque revocable server
+Gezerah uses native username/password accounts, Argon2id password hashes, opaque revocable server
 sessions, exact-origin validation, and session-bound CSRF tokens. All product
 routes—including invite preview and redemption—require authentication; only
 health, signup, and signin are public. World membership-role and current-play-role authorization
@@ -28,7 +28,7 @@ remain layered after authentication.
 | CSRF                      | Exact `Origin` plus a session-bound token on every unsafe authenticated request.                                                                                                                 |
 | Recovery                  | None in this release. A lost password cannot be recovered by email.                                                                                                                              |
 | Federated identity/MFA    | Not in this release.                                                                                                                                                                             |
-| Caller-supplied UUID identity | `X-SCRYER-User-ID` cannot authenticate or override a session.                                                                                                                                    |
+| Caller-supplied UUID identity | `X-GEZERAH-User-ID` cannot authenticate or override a session.                                                                                                                                    |
 
 The lack of email is deliberate, not an incomplete form field. It avoids
 collecting a contact identifier when the product has no recovery/delivery
@@ -209,7 +209,7 @@ that preview—and before any public-production use—remain conditional on the
 following:
 
 1. Maintain correct HTTPS termination/redirection and the exact external HTTPS
-   `SCRYER_PUBLIC_ORIGIN`, and verify `__Host-scryer_session` in the deployed browser.
+   `GEZERAH_PUBLIC_ORIGIN`, and verify `__Host-gezerah_session` in the deployed browser.
 2. Decide how support handles a forgotten password when no email/recovery proof
    exists; do not invent an administrator bypass ad hoc.
 3. Decide whether the production threat model requires MFA or federated login.

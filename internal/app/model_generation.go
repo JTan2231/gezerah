@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	openaiapi "scryer/internal/openai"
-	"scryer/internal/rules"
+	openaiapi "gezerah/internal/openai"
+	"gezerah/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

@@ -125,7 +125,7 @@ export async function writeEvidence(
   if (!isUUID(evidence.deployment.id)) {
     throw new Error("refusing to write evidence for an invalid deployment ID");
   }
-  const directory = path.join(repoRoot, ".scryer", "deployments");
+  const directory = path.join(repoRoot, ".gezerah", "deployments");
   const filename =
     evidence.mode === "deploy"
       ? `${evidence.deployment.id}.json`

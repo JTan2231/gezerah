@@ -1,6 +1,6 @@
 # System documentation
 
-This directory is the canonical guide to Scryer. It describes the system
+This directory is the canonical guide to Gezerah. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 Status-instance layers, generated Entity sheets, membership-controlled Characters with

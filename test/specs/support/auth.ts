@@ -100,7 +100,7 @@ export function actorRequest(actorID: string): APIRequestContext {
 }
 
 export function actorMutationHeaders(actorID: string): Record<string, string> {
-  return { "X-SCRYER-CSRF": actorByID(actorID).csrfToken };
+  return { "X-GEZERAH-CSRF": actorByID(actorID).csrfToken };
 }
 
 export async function actorCookieHeader(actorID: string): Promise<string> {
@@ -120,7 +120,7 @@ export async function actorSessionCookie(actorID: string): Promise<
 > {
   const state = await actorByID(actorID).api.storageState();
   const cookie = state.cookies.find(({ name }) =>
-    ["scryer_session", "__Host-scryer_session"].includes(name),
+    ["gezerah_session", "__Host-gezerah_session"].includes(name),
   );
   if (cookie === undefined) {
     throw new Error(`authenticated actor ${actorID} has no session cookie`);
@@ -237,7 +237,7 @@ async function authenticatedContext(
     storageState,
     extraHTTPHeaders: {
       Origin: originOf(baseURL),
-      "X-SCRYER-CSRF": csrfToken,
+      "X-GEZERAH-CSRF": csrfToken,
     },
   });
 }

@@ -2,8 +2,8 @@
 set -eu
 
 repo_root="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-state_dir="${SCRYER_RUN_STATE_DIR:-$repo_root/.scryer/run}"
-log_dir="${SCRYER_RUN_LOG_DIR:-$repo_root/.scryer/log}"
+state_dir="${GEZERAH_RUN_STATE_DIR:-$repo_root/.gezerah/run}"
+log_dir="${GEZERAH_RUN_LOG_DIR:-$repo_root/.gezerah/log}"
 
 usage() {
 	cat <<'EOF'
@@ -146,29 +146,29 @@ start_backend() {
 		return 0
 	fi
 
-	backend_addr="${SCRYER_ADDR:-127.0.0.1:8080}"
-	backend_public_origin="${SCRYER_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
+	backend_addr="${GEZERAH_ADDR:-127.0.0.1:8080}"
+	backend_public_origin="${GEZERAH_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
 	case "$backend_addr" in
 	localhost:8080 | 127.0.0.1:8080)
 		;;
 	*)
-		printf 'SCRYER_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
+		printf 'GEZERAH_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
 		return 1
 		;;
 	esac
 
 	backend_dir="$state_dir/backend"
-	backend_bin="$backend_dir/scryer"
+	backend_bin="$backend_dir/gezerah"
 	backend_log="$(log_path backend)"
 	mkdir -p "$backend_dir"
 
 	printf 'Building backend\n'
-	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/scryer)
+	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/gezerah)
 	printf '\n==> backend start %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$backend_log"
 	(
 		cd "$repo_root"
-		SCRYER_ADDR="$backend_addr" \
-			SCRYER_PUBLIC_ORIGIN="$backend_public_origin" \
+		GEZERAH_ADDR="$backend_addr" \
+			GEZERAH_PUBLIC_ORIGIN="$backend_public_origin" \
 			nohup "$backend_bin" >>"$backend_log" 2>&1 </dev/null &
 		printf '%s\n' "$!" >"$(pid_path backend)"
 	)

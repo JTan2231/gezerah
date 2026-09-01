@@ -165,7 +165,7 @@ performance measurement; timeline evidence; and redaction. The custom reporter
 writes `scenario-test-results.json`.
 
 Screenshots are captured on failure. Trace and video are disabled in the
-authoritative run and are retained only when `SCRYER_E2E_DIAGNOSTICS=1` is set.
+authoritative run and are retained only when `GEZERAH_E2E_DIAGNOSTICS=1` is set.
 Default CI therefore does not promise trace or video links.
 
 ## Harness and isolation
@@ -173,7 +173,7 @@ Default CI therefore does not promise trace or video links.
 The harness runs the production-built React assets, real Go application, and a
 uniquely named disposable PostgreSQL database. Root `ci.sh e2e` builds the
 frontend and binary once and passes the verified binary through
-`SCRYER_E2E_APP_BINARY`. `test/src/appServer.ts` builds only as a safe fallback for
+`GEZERAH_E2E_APP_BINARY`. `test/src/appServer.ts` builds only as a safe fallback for
 a direct `test/` invocation.
 
 Playwright uses one Desktop Chrome/Chromium project, two workers, zero retries,
@@ -206,7 +206,7 @@ For each scenario it emits the primary tier, owner, execution/checkpoint ID,
 named-case results, observed scopes, contracts/validators, mutation/snapshot
 metadata when available, duration, and `passed` or `not-run`.
 
-Root E2E sets `SCRYER_E2E_REQUIRE_COMPLETE_COVERAGE=1`, so any required scenario
+Root E2E sets `GEZERAH_E2E_REQUIRE_COMPLETE_COVERAGE=1`, so any required scenario
 without passing evidence fails the run.
 
 ## Enforcement

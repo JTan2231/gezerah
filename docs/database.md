@@ -58,7 +58,7 @@ The current schema is installed by this ordered chain:
 | `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live Interactions, Resolution receipts, and World events. |
 | `007_agent_facilitator.sql`                  | Non-membership agent attribution for WebMCP-driven interactions, resolutions, and events.             |
 
-For a local database that already has a Scryer migration ledger,
+For a local database that already has a Gezerah migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
 backend start.
 
@@ -435,12 +435,12 @@ and test PostgreSQL-native backups before relying on the application for
 durable history.
 
 ```sh
-database_url="${SCRYER_DATABASE_URL:-${DATABASE_URL:-}}"
+database_url="${GEZERAH_DATABASE_URL:-${DATABASE_URL:-}}"
 if [ -z "$database_url" ]; then
-  echo "SCRYER_DATABASE_URL or DATABASE_URL is required" >&2
+  echo "GEZERAH_DATABASE_URL or DATABASE_URL is required" >&2
   exit 1
 fi
-pg_dump --format=custom --no-owner --file=scryer.dump "$database_url"
+pg_dump --format=custom --no-owner --file=gezerah.dump "$database_url"
 ```
 
 Restore into an empty access-controlled database using the same major

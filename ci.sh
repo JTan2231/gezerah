@@ -14,13 +14,13 @@ clock_milliseconds() {
 	printf '%s000\n' "$seconds"
 }
 
-case "${SCRYER_CI_STARTED_MS:-}" in
+case "${GEZERAH_CI_STARTED_MS:-}" in
 "" | *[!0-9]*)
 	ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
 	;;
 *)
-	if [ "${SCRYER_CI_IN_WORKTREE:-}" = "1" ]; then
-		ci_invocation_started_ms="$SCRYER_CI_STARTED_MS"
+	if [ "${GEZERAH_CI_IN_WORKTREE:-}" = "1" ]; then
+		ci_invocation_started_ms="$GEZERAH_CI_STARTED_MS"
 	else
 		ci_invocation_started_ms="$(clock_milliseconds)" || exit 1
 	fi
@@ -275,11 +275,11 @@ run_in_isolated_worktree() {
 	GIT_INDEX_FILE="$tmp_index" git add -A -- . || return 1
 	tree="$(GIT_INDEX_FILE="$tmp_index" git write-tree)" || return 1
 	snapshot_commit="$(
-		printf 'Scryer CI snapshot\n' |
-			GIT_AUTHOR_NAME='SCRYER CI' \
-			GIT_AUTHOR_EMAIL='ci@scryer.invalid' \
-			GIT_COMMITTER_NAME='SCRYER CI' \
-			GIT_COMMITTER_EMAIL='ci@scryer.invalid' \
+		printf 'Gezerah CI snapshot\n' |
+			GIT_AUTHOR_NAME='GEZERAH CI' \
+			GIT_AUTHOR_EMAIL='ci@gezerah.invalid' \
+			GIT_COMMITTER_NAME='GEZERAH CI' \
+			GIT_COMMITTER_EMAIL='ci@gezerah.invalid' \
 			git commit-tree "$tree" -p "$base_commit"
 	)" || return 1
 
@@ -290,15 +290,15 @@ run_in_isolated_worktree() {
 		"$worktree_preparation_started_ms" \
 		"$worktree_preparation_finished_ms"
 
-	if [ "${SCRYER_CI_CACHE_DIR:-}" = "" ]; then
-		shared_cache_dir="$(pwd -P)/.scryer/cache/ci"
+	if [ "${GEZERAH_CI_CACHE_DIR:-}" = "" ]; then
+		shared_cache_dir="$(pwd -P)/.gezerah/cache/ci"
 	else
-		case "$SCRYER_CI_CACHE_DIR" in
+		case "$GEZERAH_CI_CACHE_DIR" in
 		/*)
-			shared_cache_dir="$SCRYER_CI_CACHE_DIR"
+			shared_cache_dir="$GEZERAH_CI_CACHE_DIR"
 			;;
 		*)
-			shared_cache_dir="$(pwd -P)/$SCRYER_CI_CACHE_DIR"
+			shared_cache_dir="$(pwd -P)/$GEZERAH_CI_CACHE_DIR"
 			;;
 		esac
 	fi
@@ -306,9 +306,9 @@ run_in_isolated_worktree() {
 
 	section "CI: running checks in isolated worktree"
 	worktree_checks_started_ms="$(clock_milliseconds)" || return 1
-	SCRYER_CI_CACHE_DIR="$shared_cache_dir" \
-		SCRYER_CI_STARTED_MS="$ci_invocation_started_ms" \
-		SCRYER_CI_IN_WORKTREE=1 \
+	GEZERAH_CI_CACHE_DIR="$shared_cache_dir" \
+		GEZERAH_CI_STARTED_MS="$ci_invocation_started_ms" \
+		GEZERAH_CI_IN_WORKTREE=1 \
 		"$ci_worktree_path/ci.sh" "$@"
 	worktree_checks_status=$?
 	worktree_checks_finished_ms="$(clock_milliseconds)" || return 1
@@ -320,7 +320,7 @@ run_in_isolated_worktree() {
 }
 
 configure_ci_caches() {
-	ci_cache_dir="${SCRYER_CI_CACHE_DIR:-$tmp_dir/cache}"
+	ci_cache_dir="${GEZERAH_CI_CACHE_DIR:-$tmp_dir/cache}"
 	playwright_browsers_path="${PLAYWRIGHT_BROWSERS_PATH:-}"
 
 	if [ "$playwright_browsers_path" = "" ]; then
@@ -361,12 +361,12 @@ configure_ci_caches() {
 	export GOLANGCI_LINT_CACHE="$tmp_dir/golangci-lint"
 	export NODE_COMPILE_CACHE="$ci_cache_dir/node-compile"
 	export PLAYWRIGHT_BROWSERS_PATH="$playwright_browsers_path"
-	export SCRYER_BUN_CACHE_DIR="$ci_cache_dir/bun"
+	export GEZERAH_BUN_CACHE_DIR="$ci_cache_dir/bun"
 	export BUN_INSTALL_CACHE_DIR="$ci_cache_dir/bun"
 }
 
 bun_ci() {
-	bun install --frozen-lockfile --cache-dir "$SCRYER_BUN_CACHE_DIR"
+	bun install --frozen-lockfile --cache-dir "$GEZERAH_BUN_CACHE_DIR"
 }
 
 run_frontend() {
@@ -469,22 +469,22 @@ run_frontend_build() {
 }
 
 run_database_smoke() {
-	if [ "${SCRYER_TEST_DATABASE_URL:-}" = "" ]; then
-		section "Database: skipped (SCRYER_TEST_DATABASE_URL is unset)"
+	if [ "${GEZERAH_TEST_DATABASE_URL:-}" = "" ]; then
+		section "Database: skipped (GEZERAH_TEST_DATABASE_URL is unset)"
 		return 0
 	fi
 
 	section "Database: applying migrations through application startup"
 	smoke_log="$tmp_dir/database-smoke.log"
-	SCRYER_ADDR=127.0.0.1:0 \
-		SCRYER_DATABASE_URL="$SCRYER_TEST_DATABASE_URL" \
-		SCRYER_LOG_LEVEL=debug \
-		"$tmp_dir/scryer" >"$smoke_log" 2>&1 &
+	GEZERAH_ADDR=127.0.0.1:0 \
+		GEZERAH_DATABASE_URL="$GEZERAH_TEST_DATABASE_URL" \
+		GEZERAH_LOG_LEVEL=debug \
+		"$tmp_dir/gezerah" >"$smoke_log" 2>&1 &
 	smoke_pid=$!
 
 	attempt=0
 	while [ "$attempt" -lt 80 ]; do
-		if grep -q '"msg":"Scryer listening"' "$smoke_log"; then
+		if grep -q '"msg":"Gezerah listening"' "$smoke_log"; then
 			sleep 0.25
 			if ! kill -0 "$smoke_pid" >/dev/null 2>&1; then
 				printf 'Application exited immediately after startup:\n' >&2
@@ -577,8 +577,8 @@ run_backend_checks() {
 run_backend_build() {
 	require_go || return 1
 
-	section "Backend: building Scryer binary"
-	go build -trimpath -o "$tmp_dir/scryer" ./cmd/scryer || return 1
+	section "Backend: building Gezerah binary"
+	go build -trimpath -o "$tmp_dir/gezerah" ./cmd/gezerah || return 1
 
 	run_database_smoke || return 1
 }
@@ -732,16 +732,16 @@ run_parallel_build_and_test_validation() {
 }
 
 run_browser_scenarios() {
-	if [ ! -x "$tmp_dir/scryer" ]; then
+	if [ ! -x "$tmp_dir/gezerah" ]; then
 		printf 'The verified E2E application binary is missing or not executable: %s\n' \
-			"$tmp_dir/scryer" >&2
+			"$tmp_dir/gezerah" >&2
 		return 1
 	fi
 	(
 		cd test &&
-			SCRYER_E2E_APP_BINARY="$tmp_dir/scryer" \
-			SCRYER_E2E_DIAGNOSTICS=0 \
-			SCRYER_E2E_REQUIRE_COMPLETE_COVERAGE=1 \
+			GEZERAH_E2E_APP_BINARY="$tmp_dir/gezerah" \
+			GEZERAH_E2E_DIAGNOSTICS=0 \
+			GEZERAH_E2E_REQUIRE_COMPLETE_COVERAGE=1 \
 			bun run e2e
 	)
 }
@@ -759,7 +759,7 @@ run_e2e() {
 	run_timed_stage "E2E browser scenarios" run_browser_scenarios || return 1
 }
 
-tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/scryer-ci.XXXXXX")" || exit 1
+tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/gezerah-ci.XXXXXX")" || exit 1
 ci_worktree_path=""
 smoke_pid=""
 frontend_checks_pid=""
@@ -810,11 +810,11 @@ if [ "$#" -eq 1 ]; then
 	esac
 fi
 
-if [ "$target" = "e2e" ] && [ "${SCRYER_CI_IN_WORKTREE:-}" != "1" ]; then
+if [ "$target" = "e2e" ] && [ "${GEZERAH_CI_IN_WORKTREE:-}" != "1" ]; then
 	enforce_e2e_budget=1
 fi
 
-if [ "${SCRYER_CI_IN_WORKTREE:-}" != "1" ]; then
+if [ "${GEZERAH_CI_IN_WORKTREE:-}" != "1" ]; then
 	run_in_isolated_worktree "$@"
 	exit $?
 fi

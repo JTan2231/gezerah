@@ -2,7 +2,7 @@
 
 ## Purpose and boundaries
 
-Scryer is a world-centered typed state-transition system. Authors define
+Gezerah is a world-centered typed state-transition system. Authors define
 only the capacities, capabilities, character fields, and entities that matter
 to their world. Problems are improvised in the multiplayer loop rather than
 authored as reusable configuration.
@@ -37,7 +37,7 @@ The system does not currently own:
 ```mermaid
 flowchart TB
     Client[Browser]
-    Binary[Single Scryer Go binary]
+    Binary[Single Gezerah Go binary]
     Migrations[Embedded SQL migrations]
     Static[Embedded Vite build]
     Postgres[(PostgreSQL)]
@@ -72,7 +72,7 @@ flowchart LR
 ```
 
 `./run.sh` builds and manages the Go process and starts Vite. PID files and
-logs live below ignored `.scryer/`. The frontend uses the same relative `/api`
+logs live below ignored `.gezerah/`. The frontend uses the same relative `/api`
 paths in both topologies.
 
 ## Architectural layers
@@ -408,7 +408,7 @@ clients reconnect with their last cursor.
 
 | Path                            | Responsibility                                                                   |
 | ------------------------------- | -------------------------------------------------------------------------------- |
-| `cmd/scryer/`                      | Executable entrypoint and process lifecycle.                                     |
+| `cmd/gezerah/`                      | Executable entrypoint and process lifecycle.                                     |
 | `internal/rules/`               | Pure graph/type validation, effective evaluation, and runtime transitions.       |
 | `internal/app/`                 | HTTP DTOs, handlers, authorization, SQL, and transactions.                       |
 | `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                              |

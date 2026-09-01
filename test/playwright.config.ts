@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const executablePath = process.env.SCRYER_E2E_BROWSER_EXECUTABLE;
-const diagnosticsEnabled = process.env.SCRYER_E2E_DIAGNOSTICS === "1";
+const executablePath = process.env.GEZERAH_E2E_BROWSER_EXECUTABLE;
+const diagnosticsEnabled = process.env.GEZERAH_E2E_DIAGNOSTICS === "1";
 
 export default defineConfig({
   testDir: "./specs",

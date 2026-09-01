@@ -260,7 +260,7 @@ to the intended area or opaque invite without storing a redirect target.
 The browser owns no durable identity credential in JavaScript. `fetch` sends
 the server's HttpOnly SameSite session cookie, while the CSRF token returned by
 signup, signin, `/api/me`, or password change lives only in module memory and
-is added to unsafe calls as `X-SCRYER-CSRF`. A global 401 boundary clears that
+is added to unsafe calls as `X-GEZERAH-CSRF`. A global 401 boundary clears that
 token and returns protected surfaces to the signin gate; each request captures
 its starting authentication token so a late 401 from an old session cannot
 tear down a newly established one. A `csrf_invalid` response caused by another

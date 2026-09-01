@@ -37,7 +37,7 @@ describe("deployment evidence", () => {
 
   test("writes an atomic private record beneath the ignored state directory", async () => {
     const temporaryRoot = await mkdtemp(
-      path.join(os.tmpdir(), "scryer-deploy-test-"),
+      path.join(os.tmpdir(), "gezerah-deploy-test-"),
     );
     try {
       const evidence = fixture();
@@ -46,7 +46,7 @@ describe("deployment evidence", () => {
         destination,
         path.join(
           temporaryRoot,
-          ".scryer",
+          ".gezerah",
           "deployments",
           `${deploymentID}.json`,
         ),
@@ -85,7 +85,7 @@ describe("deployment evidence", () => {
 function fixture(mode: "deploy" | "verify" = "deploy") {
   const project: RailwayProject = {
     id: "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    name: "Scryer",
+    name: "Gezerah",
     environments: [],
   };
   const environment: RailwayEnvironment = {
@@ -94,9 +94,9 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   };
   const web = service({
     id: "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    name: "scryer-web",
+    name: "gezerah-web",
     deploymentId: deploymentID,
-    url: "https://scryingorb.com",
+    url: "https://gezerah.com",
   });
   const database = service({
     id: "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
@@ -131,11 +131,11 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     database,
     deployment,
     localCommit: "a".repeat(40),
-    publicURL: "https://scryingorb.com",
+    publicURL: "https://gezerah.com",
     http: [
       {
         name: "health",
-        url: "https://scryingorb.com/api/health",
+        url: "https://gezerah.com/api/health",
         status: 200,
         contentType: "application/json",
         bytes: 57,
@@ -144,7 +144,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     ],
     browser: {
       skipped: false,
-      title: "Scryer",
+      title: "Gezerah",
       finalPath: "/play",
       authProbe: true,
       failureCount: 0,

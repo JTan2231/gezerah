@@ -15,7 +15,7 @@ import type {
 } from "../api/types";
 
 export function buildAgentStarterPrompt(playURL: string): string {
-  return `Be the Facilitator while I play this Scryer World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in Scryer. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
+  return `Be the Facilitator while I play this Gezerah World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in Gezerah. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
 }
 
 export function buildAgentLaunchURL(playURL: string, prompt: string): string {

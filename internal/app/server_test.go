@@ -14,7 +14,7 @@ import (
 func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 	staticFS := fstest.MapFS{
 		"index.html":    &fstest.MapFile{Data: []byte("<main>composer</main>")},
-		"assets/app.js": &fstest.MapFile{Data: []byte("console.log('Scryer')")},
+		"assets/app.js": &fstest.MapFile{Data: []byte("console.log('Gezerah')")},
 	}
 	server := NewServerWithStaticFS(nil, staticFS)
 
@@ -23,7 +23,7 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{path: "/assets/app.js", wantStatus: http.StatusOK, wantBody: "console.log('Scryer')"},
+		{path: "/assets/app.js", wantStatus: http.StatusOK, wantBody: "console.log('Gezerah')"},
 		{path: "/build/world-id/capacities", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
 		{path: "/assets/missing.js", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
 	}
@@ -138,7 +138,7 @@ func TestExportedAPIRouteRegistrationIsAuthenticatedByDefault(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/test/protected", nil)
-	request.Header.Set("X-Scryer-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
+	request.Header.Set("X-Gezerah-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != http.StatusUnauthorized {

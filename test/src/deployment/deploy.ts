@@ -323,26 +323,26 @@ async function runDeployment(
 function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
   return {
     expectedProjectId:
-      env.SCRYER_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
-    expectedProject: env.SCRYER_DEPLOY_PROJECT ?? "Scryer",
+      env.GEZERAH_DEPLOY_PROJECT_ID ?? "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    expectedProject: env.GEZERAH_DEPLOY_PROJECT ?? "Gezerah",
     expectedEnvironmentId:
-      env.SCRYER_DEPLOY_ENVIRONMENT_ID ??
+      env.GEZERAH_DEPLOY_ENVIRONMENT_ID ??
       "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
-    expectedEnvironment: env.SCRYER_DEPLOY_ENVIRONMENT ?? "production",
+    expectedEnvironment: env.GEZERAH_DEPLOY_ENVIRONMENT ?? "production",
     expectedWebId:
-      env.SCRYER_DEPLOY_WEB_SERVICE_ID ??
+      env.GEZERAH_DEPLOY_WEB_SERVICE_ID ??
       "73261ce4-d382-41a5-a7ac-64dd71c536ab",
-    expectedWeb: env.SCRYER_DEPLOY_WEB_SERVICE ?? "scryer-web",
+    expectedWeb: env.GEZERAH_DEPLOY_WEB_SERVICE ?? "gezerah-web",
     expectedDatabaseId:
-      env.SCRYER_DEPLOY_DATABASE_SERVICE_ID ??
+      env.GEZERAH_DEPLOY_DATABASE_SERVICE_ID ??
       "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
-    expectedDatabase: env.SCRYER_DEPLOY_DATABASE_SERVICE ?? "Postgres",
+    expectedDatabase: env.GEZERAH_DEPLOY_DATABASE_SERVICE ?? "Postgres",
     expectedDatabaseVolume:
-      env.SCRYER_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
+      env.GEZERAH_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
     publicURL: normalizePublicURL(
-      env.SCRYER_DEPLOY_URL ?? "https://scryingorb.com",
+      env.GEZERAH_DEPLOY_URL ?? "https://gezerah.com",
     ),
-    timeoutMs: readTimeout(env.SCRYER_DEPLOY_TIMEOUT_SECONDS),
+    timeoutMs: readTimeout(env.GEZERAH_DEPLOY_TIMEOUT_SECONDS),
   };
 }
 
@@ -351,7 +351,7 @@ function readTimeout(value: string | undefined): number {
   const seconds = Number(value);
   if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3_600) {
     throw new UsageError(
-      "SCRYER_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
+      "GEZERAH_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
     );
   }
   return seconds * 1_000;
@@ -402,7 +402,7 @@ async function uploadCommittedSource(options: {
   signal: AbortSignal;
 }): Promise<UploadedDeployment> {
   const temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "scryer-deploy-source-"),
+    path.join(os.tmpdir(), "gezerah-deploy-source-"),
   );
   const checkout = path.join(temporaryRoot, "source");
   let worktreeAdded = false;
@@ -489,7 +489,7 @@ function boundPublicURL(
   const discoveredURL = normalizePublicURL(requiredPublicURL(service));
   if (configuredURL !== undefined && configuredURL !== discoveredURL) {
     throw new Error(
-      `SCRYER_DEPLOY_URL is ${configuredURL}, but Railway service ${service.id} exposes ${discoveredURL}`,
+      `GEZERAH_DEPLOY_URL is ${configuredURL}, but Railway service ${service.id} exposes ${discoveredURL}`,
     );
   }
   return discoveredURL;

@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"scryer/internal/app"
-	"scryer/internal/migrations"
+	"gezerah/internal/app"
+	"gezerah/internal/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -23,7 +23,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: config.LogLevel})))
 
 	if err := run(config); err != nil {
-		slog.Error("Scryer stopped", "error", err)
+		slog.Error("Gezerah stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -63,7 +63,7 @@ func run(config app.Config) error {
 
 	serveErrors := make(chan error, 1)
 	go func() {
-		slog.Info("Scryer listening", "address", listener.Addr().String())
+		slog.Info("Gezerah listening", "address", listener.Addr().String())
 		serveErrors <- httpServer.Serve(listener)
 	}()
 

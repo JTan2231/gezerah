@@ -8,7 +8,7 @@ import (
 	"io"
 	"time"
 
-	"scryer/internal/rules"
+	"gezerah/internal/rules"
 )
 
 // decimalText is the HTTP representation of an exact decimal. Keeping it as

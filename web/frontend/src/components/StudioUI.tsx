@@ -12,7 +12,7 @@ export function Brand({ compact = false }: { compact?: boolean }) {
     <span
       className={compact ? "studio-brand studio-brand-compact" : "studio-brand"}
     >
-      <strong>Scryer</strong>
+      <strong>Gezerah</strong>
     </span>
   );
 }

@@ -12,7 +12,7 @@ import (
 	"sync"
 	"time"
 
-	"scryer/web"
+	"gezerah/web"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )

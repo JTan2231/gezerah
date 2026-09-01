@@ -6,7 +6,7 @@ import { artifactsDir, repoRoot, runtimePath } from "./paths";
 export default async function globalSetup(): Promise<() => Promise<void>> {
   await mkdir(artifactsDir, { recursive: true });
   await rm(runtimePath, { force: true });
-  const configuredBinary = process.env.SCRYER_E2E_APP_BINARY?.trim();
+  const configuredBinary = process.env.GEZERAH_E2E_APP_BINARY?.trim();
   const app = await startAppServer({
     repoRoot,
     artifactsDir,

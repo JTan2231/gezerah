@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"scryer/internal/rules"
+	"gezerah/internal/rules"
 )
 
 func TestConsequenceTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t *testing.T) {

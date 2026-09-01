@@ -1,13 +1,13 @@
 # Product glossary
 
-This glossary is the single authority for Scryer product and architecture
+This glossary is the single authority for Gezerah product and architecture
 vocabulary. The domain model and API reference define detailed behavior and
 transport shapes; this document defines what their terms mean and how the
 terms relate.
 
 ## Vocabulary ownership
 
-Scryer keeps three kinds of vocabulary separate:
+Gezerah keeps three kinds of vocabulary separate:
 
 | Kind | Authority | Contents |
 | ---- | --------- | -------- |

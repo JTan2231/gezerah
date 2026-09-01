@@ -12,7 +12,7 @@ const noop = () => undefined;
 describe("ChatGPTWorldStartView", () => {
   test("offers an honest, copyable route through Build", () => {
     const prompt = createChatGPTWorldStartPrompt(
-      "https://scryer.example/build",
+      "https://gezerah.example/build",
     );
     const chatGPTHref = createChatGPTWorldStartURL(prompt);
     const html = renderToStaticMarkup(
@@ -30,7 +30,7 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain(
       "A World is your world setting and continuing history.",
     );
-    expect(html).toContain("https://scryer.example/build");
+    expect(html).toContain("https://gezerah.example/build");
     expect(html).toContain("I will sign in and make each change myself.");
     expect(html).toContain("help me choose ChatGPT as Facilitator");
     expect(html).toContain("Start in ChatGPT");

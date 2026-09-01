@@ -24,7 +24,7 @@ func ValidateConfig(config Config) error {
 		return err
 	}
 	if origin != "" && !secure && !loopbackListenAddress(config.Addr) {
-		return fmt.Errorf("SCRYER_ADDR must bind to loopback when SCRYER_PUBLIC_ORIGIN uses HTTP")
+		return fmt.Errorf("GEZERAH_ADDR must bind to loopback when GEZERAH_PUBLIC_ORIGIN uses HTTP")
 	}
 	return nil
 }
@@ -36,24 +36,24 @@ func parsePublicOrigin(value string) (string, bool, error) {
 	}
 	parsed, err := url.Parse(value)
 	if err != nil {
-		return "", false, fmt.Errorf("SCRYER_PUBLIC_ORIGIN must be a valid http(s) origin: %w", err)
+		return "", false, fmt.Errorf("GEZERAH_PUBLIC_ORIGIN must be a valid http(s) origin: %w", err)
 	}
 	scheme := strings.ToLower(parsed.Scheme)
 	if parsed.Host == "" || (scheme != "http" && scheme != "https") ||
 		parsed.User != nil || parsed.Opaque != "" || (parsed.Path != "" && parsed.Path != "/") ||
 		parsed.RawPath != "" || parsed.RawQuery != "" || parsed.ForceQuery || parsed.Fragment != "" {
-		return "", false, fmt.Errorf("SCRYER_PUBLIC_ORIGIN must be an http(s) origin without credentials, a path, query, or fragment")
+		return "", false, fmt.Errorf("GEZERAH_PUBLIC_ORIGIN must be an http(s) origin without credentials, a path, query, or fragment")
 	}
 	hostname := strings.ToLower(parsed.Hostname())
 	if hostname == "" || strings.Contains(hostname, "%") {
-		return "", false, fmt.Errorf("SCRYER_PUBLIC_ORIGIN host is invalid")
+		return "", false, fmt.Errorf("GEZERAH_PUBLIC_ORIGIN host is invalid")
 	}
 	if scheme == "http" && !loopbackHostname(hostname) {
-		return "", false, fmt.Errorf("SCRYER_PUBLIC_ORIGIN may use HTTP only with a loopback host; use HTTPS for non-local origins")
+		return "", false, fmt.Errorf("GEZERAH_PUBLIC_ORIGIN may use HTTP only with a loopback host; use HTTPS for non-local origins")
 	}
 	for _, character := range hostname {
 		if character > 127 {
-			return "", false, fmt.Errorf("SCRYER_PUBLIC_ORIGIN host must use ASCII or an IDNA-encoded name")
+			return "", false, fmt.Errorf("GEZERAH_PUBLIC_ORIGIN host must use ASCII or an IDNA-encoded name")
 		}
 	}
 	if address := net.ParseIP(hostname); address != nil {
@@ -103,19 +103,19 @@ func loopbackRemoteAddress(address string) bool {
 func LoadConfig() Config {
 	return Config{
 		Addr: firstNonEmpty(
-			os.Getenv("SCRYER_ADDR"),
+			os.Getenv("GEZERAH_ADDR"),
 			addrFromPort(os.Getenv("PORT")),
 			":8080",
 		),
 		DatabaseURL: firstNonEmpty(
-			os.Getenv("SCRYER_DATABASE_URL"),
+			os.Getenv("GEZERAH_DATABASE_URL"),
 			os.Getenv("DATABASE_URL"),
-			"postgres://localhost:5432/scryer?sslmode=disable",
+			"postgres://localhost:5432/gezerah?sslmode=disable",
 		),
-		PublicOrigin:  strings.TrimSpace(os.Getenv("SCRYER_PUBLIC_ORIGIN")),
+		PublicOrigin:  strings.TrimSpace(os.Getenv("GEZERAH_PUBLIC_ORIGIN")),
 		OpenAIAPIKey:  strings.TrimSpace(os.Getenv("OPENAI_API_KEY")),
-		OpenAIBaseURL: strings.TrimSpace(os.Getenv("SCRYER_OPENAI_BASE_URL")),
-		LogLevel:      parseLogLevel(os.Getenv("SCRYER_LOG_LEVEL")),
+		OpenAIBaseURL: strings.TrimSpace(os.Getenv("GEZERAH_OPENAI_BASE_URL")),
+		LogLevel:      parseLogLevel(os.Getenv("GEZERAH_LOG_LEVEL")),
 	}
 }
 

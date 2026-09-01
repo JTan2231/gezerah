@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"scryer/internal/rules"
+	"gezerah/internal/rules"
 )
 
 func TestConsequenceOwnedStatusesWithSameNameRemainDistinct(t *testing.T) {

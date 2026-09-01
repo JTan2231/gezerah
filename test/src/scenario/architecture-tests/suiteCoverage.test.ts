@@ -191,7 +191,7 @@ describe("whole-suite scenario coverage", () => {
     );
     assert.equal(
       recordFor(goTrace!, {
-        goTestEvents: [{ ...goEvents[0]!, packageName: "scryer/wrong" }],
+        goTestEvents: [{ ...goEvents[0]!, packageName: "gezerah/wrong" }],
       }).result,
       "not-run",
     );
@@ -423,5 +423,5 @@ function userStep(
 }
 
 function expectedGoPackage(trace: ScenarioTrace): string {
-  return `scryer/${trace.ownerFile.slice(0, trace.ownerFile.lastIndexOf("/"))}`;
+  return `gezerah/${trace.ownerFile.slice(0, trace.ownerFile.lastIndexOf("/"))}`;
 }

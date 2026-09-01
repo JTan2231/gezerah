@@ -45,12 +45,12 @@ export async function startAppServer(options: {
       detached: process.platform !== "win32",
       env: {
         ...process.env,
-        SCRYER_ADDR: `127.0.0.1:${port}`,
-        SCRYER_DATABASE_URL: database.url,
-        SCRYER_LOG_LEVEL: "debug",
-        SCRYER_PUBLIC_ORIGIN: baseURL,
+        GEZERAH_ADDR: `127.0.0.1:${port}`,
+        GEZERAH_DATABASE_URL: database.url,
+        GEZERAH_LOG_LEVEL: "debug",
+        GEZERAH_PUBLIC_ORIGIN: baseURL,
         OPENAI_API_KEY: "e2e-model-key",
-        SCRYER_OPENAI_BASE_URL: openAIStubServer.baseURL,
+        GEZERAH_OPENAI_BASE_URL: openAIStubServer.baseURL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -135,8 +135,8 @@ async function prepareApplication(options: {
   });
   reportTiming("fallback frontend build", frontendStartedAt);
 
-  const buildDir = await mkdtemp(path.join(os.tmpdir(), "scryer-e2e-bin-"));
-  const binaryPath = path.join(buildDir, "scryer");
+  const buildDir = await mkdtemp(path.join(os.tmpdir(), "gezerah-e2e-bin-"));
+  const binaryPath = path.join(buildDir, "gezerah");
   try {
     process.stdout.write(
       "\n==> E2E: building application (direct-run fallback)\n",
@@ -144,7 +144,7 @@ async function prepareApplication(options: {
     const backendStartedAt = Date.now();
     await runCommand(
       "go",
-      ["build", "-trimpath", "-o", binaryPath, "./cmd/scryer"],
+      ["build", "-trimpath", "-o", binaryPath, "./cmd/gezerah"],
       {
         cwd: options.repoRoot,
       },

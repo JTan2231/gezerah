@@ -635,7 +635,7 @@ async function readDatabaseEnvironment(): Promise<NodeJS.ProcessEnv> {
     PGHOST: databaseURL.hostname,
     PGPORT: databaseURL.port || "5432",
     PGDATABASE: decodeURIComponent(databaseURL.pathname.slice(1)),
-    PGAPPNAME: "scryer-e2e-database-state",
+    PGAPPNAME: "gezerah-e2e-database-state",
   };
   if (databaseURL.username !== "") {
     environment.PGUSER = decodeURIComponent(databaseURL.username);

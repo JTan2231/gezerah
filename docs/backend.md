@@ -16,7 +16,7 @@ unavailable.
 
 ## Startup and shutdown
 
-`cmd/scryer/main.go`:
+`cmd/gezerah/main.go`:
 
 1. loads environment configuration;
 2. installs a JSON `slog` handler;
@@ -44,7 +44,7 @@ stalled write ends it, and clients reconnect with their last world-event cursor.
 
 ## Package map
 
-### `cmd/scryer`
+### `cmd/gezerah`
 
 Executable and process lifecycle only.
 
@@ -470,7 +470,7 @@ by resolution.
 Every product handler except health, signup, and signin requires an active
 opaque-cookie session. Route registration wraps protected handlers
 deny-by-default; unsafe requests additionally require an exact same-origin
-`Origin` and the session-bound `X-SCRYER-CSRF` token. Caller-supplied identity
+`Origin` and the session-bound `X-GEZERAH-CSRF` token. Caller-supplied identity
 headers are ignored. World handlers load an active membership for the session user.
 Owner/editor helpers grant durable configuration authority. A separate helper
 checks whether that exact membership is the currently designated human

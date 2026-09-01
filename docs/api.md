@@ -50,12 +50,12 @@ sets an opaque HttpOnly session cookie:
 }
 ```
 
-The cookie is `scryer_session` only for loopback HTTP development and
-`__Host-scryer_session` for an HTTPS public origin. Non-loopback configured origins
+The cookie is `gezerah_session` only for loopback HTTP development and
+`__Host-gezerah_session` for an HTTPS public origin. Non-loopback configured origins
 must use HTTPS. The cookie is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
-Clients must send the returned token as `X-SCRYER-CSRF` on authenticated methods
+Clients must send the returned token as `X-GEZERAH-CSRF` on authenticated methods
 other than GET, HEAD, and OPTIONS. Those requests must also have an `Origin`
-matching `SCRYER_PUBLIC_ORIGIN`, or the request's own origin when that setting is
+matching `GEZERAH_PUBLIC_ORIGIN`, or the request's own origin when that setting is
 empty. An unset origin permits plain HTTP authentication only when both the
 request host and network peer are loopback. The token is session-bound and
 changes when the password is changed.

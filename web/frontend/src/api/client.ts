@@ -63,7 +63,7 @@ async function requestAPI<T>(
   headers.set("Accept", "application/json");
   if (init.body !== undefined) headers.set("Content-Type", "application/json");
   if (csrfToken !== "" && isUnsafeMethod(init.method))
-    headers.set("X-SCRYER-CSRF", csrfToken);
+    headers.set("X-GEZERAH-CSRF", csrfToken);
 
   let response: Response;
   try {

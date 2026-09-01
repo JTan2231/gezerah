@@ -280,9 +280,9 @@ export async function verifyBrowser(
       );
     }
     const title = await page.title();
-    if (title !== "Scryer") {
+    if (title !== "Gezerah") {
       throw new Error(
-        `browser title was ${JSON.stringify(title)}, expected "Scryer"`,
+        `browser title was ${JSON.stringify(title)}, expected "Gezerah"`,
       );
     }
     await page
@@ -443,8 +443,8 @@ async function fetchWithTimeout(
 
 function requireHTMLShell(response: TextResponse): void {
   requireContentType(response, "text/html");
-  if (!/<title>Scryer<\/title>/i.test(response.body)) {
-    throw new Error(`${response.name} did not return the Scryer app shell`);
+  if (!/<title>Gezerah<\/title>/i.test(response.body)) {
+    throw new Error(`${response.name} did not return the Gezerah app shell`);
   }
 }
 

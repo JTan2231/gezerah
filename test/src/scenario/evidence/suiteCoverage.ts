@@ -654,7 +654,7 @@ function isSuccessfulBrowserTest(test: ScenarioTestResult): boolean {
 }
 
 function expectedGoPackage(ownerFile: string): string {
-  return `scryer/${posix.dirname(ownerFile)}`;
+  return `gezerah/${posix.dirname(ownerFile)}`;
 }
 
 function normalizeArchitectureOwner(file: string): string {
