@@ -14,12 +14,14 @@ export interface SettingsViewModel {
   draft: {
     name: string;
     description: string;
+    proseGuide: string;
   };
   dirty: boolean;
   busy: "saving" | "archiving" | null;
   issue: SettingsIssue | null;
   fieldIssues: {
     name?: string | undefined;
+    proseGuide?: string | undefined;
   };
   access: {
     role: "owner" | "editor";
@@ -34,6 +36,7 @@ export interface SettingsViewModel {
 export interface SettingsViewActions {
   changeName: (name: string) => void;
   changeDescription: (description: string) => void;
+  changeProseGuide: (proseGuide: string) => void;
   save: () => void;
   archive: () => void;
 }
@@ -77,7 +80,7 @@ export function SettingsView({
           </Field>
           <Field
             label="Description"
-            hint="Orient newly invited players and give Terra a world brief."
+            hint="Describe the World for its members and Facilitator."
           >
             <textarea
               value={model.draft.description}
@@ -85,6 +88,20 @@ export function SettingsView({
                 actions.changeDescription(event.currentTarget.value)
               }
               rows={4}
+              disabled={model.busy !== null}
+            />
+          </Field>
+          <Field
+            label="Prose guide"
+            hint="Describe how Problems and Consequences should sound: the narrator’s point of view, sentence rhythm, concrete details, and how in-world language should appear. This shapes the writing, not the World’s facts or rules."
+            error={model.fieldIssues.proseGuide}
+          >
+            <textarea
+              value={model.draft.proseGuide}
+              onChange={(event) =>
+                actions.changeProseGuide(event.currentTarget.value)
+              }
+              rows={8}
               disabled={model.busy !== null}
             />
           </Field>

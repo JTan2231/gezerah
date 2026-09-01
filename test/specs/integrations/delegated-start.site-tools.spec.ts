@@ -185,8 +185,9 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     sections: [{ topic: "narrative-presentation" }],
   });
   expect(handbook.handbook.sections[0]?.guidance).toMatch(
-    /same public Problem prompt and Consequence narrative/i,
+    /same public Problem and Consequence words/i,
   );
+  expect(handbook.handbook.sections[0]?.guidance).toMatch(/prose guide/i);
 
   const waiting = await invokeSiteTool<PlayInspection>(
     page,
@@ -239,7 +240,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     prompt: firstProblem.prompt,
     status: "open",
   });
-  expect(presented.next_step).toMatch(/lived scene/i);
+  expect(presented.next_step).toMatch(/directly as the scene/i);
   expect(presented.next_step).not.toMatch(/problem (?:created|presented)/i);
   await expect(page.getByText(firstProblem.prompt)).toBeVisible();
   await expect(
@@ -280,8 +281,10 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     interaction_id: presented.presented_interaction.id,
     narrative: resolutionNarrative,
   });
-  expect(resolved.next_step).toMatch(/lived consequence/i);
-  expect(resolved.next_step).toMatch(/without an approval recap|receipt/i);
+  expect(resolved.next_step).toMatch(/directly as the Consequence/i);
+  expect(resolved.next_step).toMatch(
+    /without an approval recap|report about the operation/i,
+  );
 
   const secondProblem = {
     title: `The corrected clock ${run}`,

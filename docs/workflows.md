@@ -12,8 +12,9 @@
    preference with ordinary language. Authentication is the only ordinary
    manual Gezerah operation.
 3. Once the Start site-tool surface is ready, ChatGPT inspects the three equal
-   starting templates, applies the play preference or makes a reasonable choice,
-   and copies one into a new independent World. The attached tab navigates to
+   starting templates, including their prose guides, applies a setting,
+   Character, tone, or other play preference or makes a reasonable choice, and
+   copies one into a new independent World. The attached tab navigates to
    `/play/{world_id}`.
 4. Once the Play site-tool surface is ready, ChatGPT inspects the World, chooses
    and claims one of its available Characters, and inspects the resulting ready
@@ -21,7 +22,7 @@
    static platform Play handbook for its authority, Play-loop, presentation,
    privacy, and recovery contract.
 5. ChatGPT improvises and presents the first Problem from the World description,
-   Mechanics, profiles, and logical state. The person responds with an
+   prose guide, Mechanics, profiles, and logical state. The person responds with an
    in-fiction Action in chat; ChatGPT records and resolves it and presents the
    next Problem.
 
@@ -57,8 +58,11 @@ version.
    and guiding this configuration; it is not delegated start, and every durable
    change remains the person's.
 2. Create a world from the Build library. The creator's owner membership is the
-   initial human facilitator. In **Settings**, write the world description;
-   Terra uses it as the world brief when later designated in Play.
+   initial human facilitator. In **Settings**, write the world description and,
+   optionally, a prose guide describing how model-authored Problems and
+   Consequences should sound. Terra uses the description as its world brief and
+   the guide for expression when later designated in Play. The guide shapes
+   writing, not facts, rules, privacy, or player decisions.
 3. Define the capacities that every entity may carry. Choose score or pool,
    then choose an input with default/bounds/step or a derived typed expression.
 4. Define capabilities the same way, using binary or rating scalar shape.
@@ -131,8 +135,8 @@ For a human facilitator:
 For Terra:
 
 1. While no interaction is unfinished, any ready current player clicks **Ask
-   Terra to continue**. Terra uses the world brief, current Entity sheets, and recent
-   history to create and present the problem.
+   Terra to continue**. Terra uses the world brief, current prose guide, current
+   Entity sheets, and recent history to create and present the problem.
 2. Every ready active member is in the audience, every ready non-spectator is a
    responder, and ready controlled entities are context.
 3. Each responder submits an Action or clicks **Pass**; pass is stored as the

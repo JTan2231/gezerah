@@ -1,19 +1,21 @@
 ---
 id: terms-of-the-city
-version: 1
+version: 2
 name: Terms of the City
 summary: Across present-day New York, unrelated words and media begin to seem personally addressed, and five ordinary people must decide what can actually be tested.
 setting: Contemporary New York mystery
+prose_guide: |-
+  Tell New York with alert, unsentimental precision. Use ordinary contemporary words, exact times and places, fragments of institutional language, and the friction of work, transit, devices, rent, and obligation. Quote what screens and recordings show. Distinguish observation from inference through the order of sentences rather than analytical labels. Keep the narrator calm. Let unease arise from repetition, timing, and contradiction rather than ominous declarations.
 world_description: |-
   New York, now. Trains run late, rents climb, screens promise convenience, and every institution speaks in polished instructions. Recently, unrelated language has begun to rhyme: transit notices, lower thirds, auto-captions, advertisements, receipts, push alerts, and recorded voices. The Characters are ordinary New Yorkers with unequal access and unequal credibility. Each has noticed something that feels addressed to them.
 
   Begin with The Line Beneath the Line at 6:42 p.m. in the Atlantic Avenue-Barclays Center concourse. Rain stripes commuters' coats; the air carries brake dust and cinnamon nuts. The Character's ordinary tether is due in fourteen minutes. Three unrelated screens refresh out of order. An advertisement ends with THANK YOU FOR REMAINING AVAILABLE. A service board repeats the same sentence where a delay estimate should be. A muted news caption briefly reads PEOPLE WHO KEEP LOOKING BECOME PART OF THE STORY, then corrects. During one black refresh, an advertisement footer resembles the Character's first name. A woman carrying groceries watches the Character rather than the screens and says, "Don't photograph the whole sentence." Their train arrives. Beneath one display, a service door has not latched.
 
-  There is no canonical hidden truth at setup. Do not decide in advance that the pattern is a conspiracy, a technical accident, a supernatural event, a Character's interpretation, or any combination. Truth begins unset and crystallizes only through explicit play. Narrate bounded observations: what a screen displays, what an artifact contains, what a named witness says, and what someone does. No voice, including the narrator, diagnoses a Character or declares what the pattern means. Witness certainty and denial remain testimony.
+  The truth has not been decided at setup. Do not decide in advance that the pattern is a conspiracy, a technical accident, a supernatural event, a Character's interpretation, or any combination. What becomes true should come from what the Character tests and discovers. Describe only what can be observed: what a screen displays, what an artifact contains, what a named witness says, and what someone does. No voice, including the narrator, diagnoses a Character or declares what the pattern means. Witness certainty and denial remain testimony.
 
   A failed capture proves only that the capture failed. Establish a fact only when the player deliberately names or enacts a test that could distinguish outcomes and accepts a meaningful cost or foreclosed opportunity. Resolve the observable result plainly, then establish only its narrow conclusion, such as "the caption file was altered upstream at 18:14." Never upgrade that conclusion automatically to "the conspiracy is real" or "it was in your head." Never retcon established public evidence; later facts may complicate it, not erase it.
 
-  Preserve progress without collapsing ambiguity. Durable discoveries may become modifier-free Statuses with concrete names such as Original Caption File in Hand, Independent Witness on Record, or Unresolved Capture Mismatch. Pressure may become a Status that changes Bandwidth, Standing, Access, or Exposure. Never create Perception, Sanity, Paranoia, Hallucinating, Vindicated, Being Watched, or Conspiracy Confirmed as privileged concepts. Treat Mechanics as pressure and opportunity, never as checks or arbiters of reality.
+  Preserve progress without collapsing ambiguity. Durable discoveries may become modifier-free Statuses with concrete names such as Original Caption File in Hand, Independent Witness on Record, or Unresolved Capture Mismatch. Pressure may become a Status that changes Bandwidth, Standing, Access, or Exposure. Do not introduce Perception, Sanity, Paranoia, Hallucinating, Vindicated, Being Watched, or Conspiracy Confirmed as Mechanics or Statuses that settle the truth. Treat Mechanics as pressure and opportunity, never as checks or arbiters of reality.
 mechanics:
   - key: bandwidth
     kind: capacity
@@ -186,7 +188,7 @@ entities:
 
 Contemporary New York already speaks through overlapping systems: public announcements, apartment notices, agency scripts, advertising, captions, receipts, alerts, and messages designed to sound personal at scale. In this World, unrelated language has started to rhyme in ways each Character finds difficult to dismiss. The mystery lives in the tension between concrete observation and interpretation, institutional opacity and ordinary technical failure, private attention and shared evidence.
 
-There is deliberately no answer hidden in the setup. The facilitator must not secretly decide that the city is targeting the Character or that the Character is inventing the pattern. Play creates facts through explicit investigation. This is not permission to dissolve every result into vagueness; a sound test should produce a definite, bounded discovery that remains true.
+There is deliberately no answer hidden in the setup. The facilitator must not secretly decide that the city is targeting the Character or that the Character is inventing the pattern. Play creates facts through explicit investigation. This is not permission to dissolve every result into vagueness; a sound test should produce a definite, limited discovery that remains true.
 
 ## Playable roster
 
@@ -216,10 +218,10 @@ The train, witness, source, and ordinary obligation create the decision. The pla
 - **The price of saying it:** An employer, official, journalist, or organizer offers access in exchange for originals, silence, attribution, or public certainty.
 - **The quiet-room test:** The player designs a controlled observation using an independent witness, isolated device, source feed, or precommitted prediction and accepts the cost of doing it properly.
 
-## Exact ambiguity and discovery protocol
+## How discovery works
 
-1. **Begin without a canonical truth.** Do not privately choose conspiracy, delusion, supernatural cause, mass persuasion, vendor defect, or a blended explanation.
-2. **Narrate bounded observations.** State what a display showed, what an artifact contains, what a named witness reports, and what a person does. Never narrate a diagnosis or omniscient explanation.
+1. **Begin without deciding the truth.** Do not privately choose conspiracy, delusion, supernatural cause, mass persuasion, vendor defect, or a blended explanation.
+2. **Describe only what can be observed.** State what a display showed, what an artifact contains, what a named witness reports, and what a person does. Never narrate a diagnosis or omniscient explanation.
 3. **Keep testimony as testimony.** Agreement, denial, confidence, and institutional assurance do not settle reality by themselves.
 4. **Treat capture failure narrowly.** A missing phrase in a recording proves only that the recording lacks the phrase under the conditions in which it was made.
 5. **Require explicit discovery.** The player must name or enact a test capable of distinguishing at least two outcomes and accept a meaningful cost, risk, delay, or foreclosed opportunity.

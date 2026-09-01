@@ -1,9 +1,11 @@
 ---
 id: the-courtesy-season
-version: 1
+version: 2
 name: The Courtesy Season
 summary: Bellwether has eliminated scarcity beautifully, but five privileged insiders are beginning to see whose sleep, memory, and civic future pay for their comfort.
 setting: Utopian/dystopian cyberpunk
+prose_guide: |-
+  Tell Bellwether in cool, exact prose. Stay close to bodies, rooms, clothing, weather, and small breaches of manners. Let the city speak in immaculate euphemisms through displays and officials, but let the narrator use ordinary words. A threat first appears as a pause, a hand withdrawn, a door that does not open. Keep the sentences controlled, shortening them when courtesy becomes danger. Trust the reader to understand the cruelty without explaining it.
 world_description: |-
   In 2189, Bellwether rises on pale terraces above a drowned delta. Upper-city life is genuinely extraordinary: silent transit, preventive medicine, fruiting gardens, reversible bodily alterations, and weather delivered by invitation.
 

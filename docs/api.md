@@ -169,11 +169,11 @@ An incorrect current password on the change endpoint is a field-specific
 | Method and path                                | Authority                                      | Request/response                                                                 |
 | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
 | `GET /api/worlds`                              | Authenticated user                             | Active memberships only; membership-role/count/activity and derived play fields. |
-| `POST /api/worlds`                             | Authenticated user                             | Name/description; creates World, owner membership, character-field/mechanic-graph roots, and event. |
-| `GET /api/world-templates`                     | Authenticated user                             | The three embedded starting templates as `id`, `version`, name, card description, setting, and Character count. |
+| `POST /api/worlds`                             | Authenticated user                             | Name, optional description, and optional prose guide; creates World, owner membership, character-field/mechanic-graph roots, and event. |
+| `GET /api/world-templates`                     | Authenticated user                             | The three embedded starting templates as `id`, `version`, name, card description, setting, prose guide, and Character count. |
 | `POST /api/world-templates/{template_id}/clone` | Authenticated user                            | `{id}` with a client-generated destination World UUID; atomically creates and returns an ordinary agent-facilitated World. |
 | `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
-| `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, and `expected_revision`.                             |
+| `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, nullable prose guide, and `expected_revision`.       |
 | `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
 | `POST /api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
 | `GET /api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
@@ -190,8 +190,18 @@ spectators return `ready` but stay read-only.
 controller changes. `rules_revision` protects the world mechanic graph; all
 three are returned on every `World` response.
 
+`prose_guide` is optional World-authored text for how model-authored public
+Problems and Consequences should sound. It shapes expression such as diction,
+rhythm, narrative distance, and imagery; it does not establish facts, change
+Mechanics, reveal restricted information, or choose a player's Action. World
+creation may omit it. On PATCH, omission preserves the current value and
+`null`, empty text, or whitespace-only text clears it. Non-empty input is
+trimmed and limited to 10,000 Unicode code points. It shares the World settings
+revision and changes only prose authored afterward.
+
 Template catalog content is embedded Markdown with strict YAML front matter.
-The catalog endpoint exposes selection metadata only. Clone materializes the
+The catalog endpoint exposes selection metadata, including each authored prose
+guide so a requested tone can inform selection. Clone materializes the
 selected template into the ordinary normalized World tables with fresh Mechanic,
 expression-node, Character-field, Entity, membership, and profile identities.
 File-local aliases never cross the HTTP or database boundary. The new owner is a
@@ -227,7 +237,9 @@ source, and it is open or adjudicating. That transaction
 withdraws the owner's submitted action if present, advances the interaction
 revision for that withdrawal, and lets the owner close/adjudicate as needed and
 finish with human-Facilitator commands.
-The world description is the world brief when Terra is designated.
+The world description is the world brief when Terra is designated. The prose
+guide separately governs Terra's public Problem and Consequence expression and
+is not supplied to Luna's mechanical compilation.
 
 ### Capacities and capabilities
 
@@ -853,6 +865,7 @@ to the Problem that created it.
 | Interaction private notes; Consequence narrative/private notes | 20,000 characters                            |
 | Character fields                                               | 50 active; label 200/guidance 2,000          |
 | Character-field value                                          | 20,000 characters                            |
+| World prose guide                                               | 10,000 Unicode code points                   |
 | Consequence effects                                            | No separate item cap; 1 MiB body cap applies |
 | Inline status description                                      | 2,000 characters                             |
 | World list; interaction feed                                   | 500 each                                     |

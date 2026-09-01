@@ -13,6 +13,7 @@ const templates = [
     id: "eldermead",
     name: "Banners at Eldermead",
     description: "War closes around a village.",
+    prose_guide: "Tell the village through work, weather, and obligation.",
     setting: "Medieval fantasy",
     character_count: 5,
   },
@@ -20,6 +21,7 @@ const templates = [
     id: "courtesy-season",
     name: "The Courtesy Season",
     description: "Perfect comfort exposes its costs.",
+    prose_guide: "Tell Bellwether in cool, exact prose.",
     setting: "Cyberpunk future",
     character_count: 5,
   },
@@ -27,6 +29,7 @@ const templates = [
     id: "terms-of-the-city",
     name: "Terms of the City",
     description: "New York words begin to rhyme.",
+    prose_guide: "Tell New York with alert, unsentimental precision.",
     setting: "New York today",
     character_count: 5,
   },
@@ -48,13 +51,18 @@ describe("delegated Start tools", () => {
       "copy_world_template",
     ]);
     expect(tools[0]?.description).toContain("single stated play preference");
+    expect(tools[0]?.description).toContain("tone");
     expect(tools[0]?.description).toContain("without asking setup questions");
     const result = (await tools[0]?.execute({})) as {
       world_templates: typeof templates;
       next_step: string;
     };
     expect(result.world_templates).toEqual(templates);
-    expect(result.next_step).toContain("recommend the best match");
+    expect(result.world_templates[1]?.prose_guide).toBe(
+      "Tell Bellwether in cool, exact prose.",
+    );
+    expect(result.next_step).toContain("prose guides");
+    expect(result.next_step).toContain("Recommend the best match");
     expect(result.next_step).toContain("Do not ask another setup question");
   });
 
@@ -81,6 +89,8 @@ describe("delegated Start tools", () => {
             id: "world-copy",
             name: "Banners at Eldermead",
             description: "War closes around a village.",
+            prose_guide:
+              "Tell the village through work, weather, and obligation.",
             status: "active",
             facilitator: { source: "agent" },
             current_play_role: "player",
@@ -102,6 +112,7 @@ describe("delegated Start tools", () => {
         id: string;
         name: string;
         description: string;
+        prose_guide: string;
         status: string;
         facilitator_source: string;
         current_play_role: string;
@@ -121,6 +132,7 @@ describe("delegated Start tools", () => {
       id: "world-copy",
       name: "Banners at Eldermead",
       description: "War closes around a village.",
+      prose_guide: "Tell the village through work, weather, and obligation.",
       status: "active",
       facilitator_source: "agent",
       current_play_role: "player",

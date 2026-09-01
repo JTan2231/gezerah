@@ -77,7 +77,7 @@ export function createWorldTemplateStartTools(
     {
       name: "inspect_world_templates",
       description:
-        "Read Gezerah's complete ready-made World catalog. Use the player's single stated play preference to recommend the closest match without asking setup questions or asking the participant to operate Gezerah.",
+        "Read Gezerah's complete ready-made World catalog, including how each World's scenes are written. Use the player's single stated play preference—setting, Character, tone, or difficult choices—to recommend the closest match without asking setup questions or asking the participant to operate Gezerah.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -92,7 +92,7 @@ export function createWorldTemplateStartTools(
         return {
           world_templates: worldTemplates,
           next_step:
-            "Use the player's single stated play preference to recommend the best match, then copy that World. Do not ask another setup question or ask the participant to operate Gezerah.",
+            "Compare the settings, Characters, descriptions, and prose guides against the player's single stated play preference. Recommend the best match, then copy that World. Do not ask another setup question or ask the participant to operate Gezerah.",
         };
       },
     },
@@ -138,6 +138,7 @@ export function createWorldTemplateStartTools(
             id: world.id,
             name: world.name,
             description: world.description,
+            prose_guide: world.prose_guide,
             status: world.status,
             facilitator_source: world.facilitator.source,
             current_play_role: world.current_play_role,

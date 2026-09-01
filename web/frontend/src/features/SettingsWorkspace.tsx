@@ -25,8 +25,9 @@ export function SettingsWorkspace({
     () => ({
       name: world.name,
       description: world.description ?? "",
+      proseGuide: world.prose_guide ?? "",
     }),
-    [world.description, world.name],
+    [world.description, world.name, world.prose_guide],
   );
   const draft = useDraft(source);
   const [saving, setSaving] = useState(false);
@@ -42,12 +43,14 @@ export function SettingsWorkspace({
         ...jsonBody({
           name: draft.draft.name.trim(),
           description: draft.draft.description.trim() || null,
+          prose_guide: draft.draft.proseGuide.trim() || null,
           expected_revision: world.revision,
         }),
       });
       draft.accept({
         name: saved.name,
         description: saved.description ?? "",
+        proseGuide: saved.prose_guide ?? "",
       });
       onWorldChanged();
     } catch (reason) {
@@ -97,6 +100,7 @@ export function SettingsWorkspace({
         issue: error === null ? null : toErrorNotice(error),
         fieldIssues: {
           name: error?.fields["name"],
+          proseGuide: error?.fields["prose_guide"],
         },
         access: {
           role: world.role === "owner" ? "owner" : "editor",
@@ -118,6 +122,8 @@ export function SettingsWorkspace({
           draft.setDraft((current) => ({ ...current, name })),
         changeDescription: (description) =>
           draft.setDraft((current) => ({ ...current, description })),
+        changeProseGuide: (proseGuide) =>
+          draft.setDraft((current) => ({ ...current, proseGuide })),
         save: () => void save(),
         archive: () => void archive(),
       }}

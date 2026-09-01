@@ -83,8 +83,9 @@ HTTP and persistence adapter:
 - route handlers perform validation, visibility filtering, and transaction
   orchestration;
 - the template loader validates exactly three Markdown artifacts, their strict
-  YAML front matter, file-local aliases, complete profiles, sparse overrides,
-  and complete typed Mechanic graphs before the server accepts traffic;
+  YAML front matter, required bounded prose guides, file-local aliases,
+  complete profiles, sparse overrides, and complete typed Mechanic graphs
+  before the server accepts traffic;
 - template clone uses one transaction to replace every alias with a fresh UUID
   and persist an ordinary agent-facilitated World without a parallel template
   store or continuing source relationship;
@@ -116,7 +117,8 @@ event invalidations; and
 `006_facilitator_assignment.sql` adds the designated human membership and
 human/Terra attribution on interactions, resolutions, and events; and
 `007_agent_facilitator.sql` extends the non-membership attribution shape to
-page agents. See
+page agents. `008_world_prose_guide.sql` adds optional bounded World-authored
+prose guidance. See
 [Database](database.md).
 
 ### `internal/openai`
@@ -361,13 +363,21 @@ evaluates the post-transition runtime snapshot.
 ## Model generation and Terra orchestration
 
 The application builds Terra and Luna context in one read-only `REPEATABLE READ`
-transaction. It includes the World description as world brief, all active
+transaction. Terra receives the World description as world brief and the
+optional prose guide, followed by all active
 Mechanic definitions, and every non-archived Entity with its facilitator-visible
 profile values and their authored character-field guidance plus generated sheet data (exact logical input values,
 intrinsic/effective values, and active Status instances), plus
 the latest three resolved Problem/Consequence pairs. Consequence calls add
 the adjudicating Problem and all submitted Actions. UUIDs are replaced with
 short request-local references before the snapshot leaves the process.
+
+Platform-owned instructions grant the prose guide bounded authority over the
+expression of Terra's public Problems and Consequences: diction, rhythm,
+narrative distance, and imagery. The guide remains untrusted for facts,
+Mechanics, privacy, facilitator authority, and player Actions. Luna's
+authoritative-context JSON omits the field entirely, and editing it affects
+only later generated prose.
 
 Terra's Problem and Consequence instructions ask for a small amount of concrete
 sensory and environmental texture, including otherwise innocuous details whose

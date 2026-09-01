@@ -94,7 +94,8 @@ unavailable when ChatGPT is Facilitator.
 2. The person signs in there if necessary. After authentication and successful
    registration of both Start tools, the Start site-tool surface becomes ready.
 3. ChatGPT inspects all three equal ready-made templates, applies the person's
-   play preference or makes a reasonable choice, and copies that template. The
+   play preference to their settings, Characters, descriptions, and prose
+   guides or makes a reasonable choice, and copies that template. The
    command navigates the same attached browser tab to the new ordinary
    `/play/{world_id}` page.
 4. When the Play site-tool surface becomes ready, ChatGPT inspects Play, chooses
@@ -102,7 +103,8 @@ unavailable when ChatGPT is Facilitator.
    profiles are complete, so a successful claim makes the current player ready.
    ChatGPT reads the static Play-handbook topics it needs before facilitating.
 5. ChatGPT inspects the newly ready Play state and presents the first improvised
-   Problem from the World description, Mechanics, profiles, and logical state.
+   Problem from the World description, prose guide, Mechanics, profiles, and
+   logical state.
 6. The person describes an in-fiction Action in chat. ChatGPT records the
    Action, resolves the Problem with public narrative and optional valid
    Effects, refreshes Play, and presents the next Problem.
@@ -114,8 +116,9 @@ The same ChatGPT conversation may continue while the attached browser tab
 remains open.
 
 There is no episode scheduler or authored encounter sequence. The World
-description, Mechanics, and available Entities set the stage; ChatGPT and the
-current player determine what happens.
+description, prose guide, Mechanics, and available Entities set the stage;
+ChatGPT and the current player determine what happens. The guide shapes how
+ChatGPT tells the scene, not what is true or what the player decides.
 
 The separate **Start a World with ChatGPT** material in the Build library remains
 general-purpose guidance for a custom World. It is not delegated start and is
@@ -143,8 +146,9 @@ The authenticated `/play/new` page exposes exactly the two delegated-start
 commands:
 
 - `inspect_world_templates` returns the complete three-template catalog with the
-  authored information needed to apply a play preference, and fails closed if
-  the API does not return exactly three templates.
+  authored information needed to apply a play preference, including each
+  template's prose guide, and fails closed if the API does not return exactly
+  three templates.
 - `copy_world_template` accepts one inspected `template_id`, creates an
   independent agent-facilitated World with a stable client destination UUID for
   safe retry, and navigates the same attached tab to `/play/{world_id}`.
@@ -160,9 +164,9 @@ uses the `agent` Facilitator and the signed-in membership is a current player.
 The membership's Play status and command-specific state still authorize each
 command independently, so registration never bypasses the server gates:
 
-- `inspect_play` returns the current-player-visible World, World mechanic graph,
-  roster, profiles, Entity sheets, active Problem, Actions, and recent
-  Resolutions.
+- `inspect_play` returns the current-player-visible World, including its prose
+  guide, World mechanic graph, roster, profiles, Entity sheets, active Problem,
+  Actions, and recent Resolutions.
 - `read_play_handbook` returns the static platform facilitation contract. It
   accepts `all` or one of `role-and-authority`, `play-loop`,
   `state-and-effects`, `narrative-presentation`, `fiction-and-privacy`, and
@@ -183,8 +187,8 @@ backend response and refreshed UI remain the source of truth.
 Tool discovery provides the handbook's topic index; `read_play_handbook` is the
 corresponding detailed read. The platform handbook owns general facilitation
 and presentation behavior. Dynamic `inspect_play` results and World-authored
-descriptions, profiles, Mechanics, Statuses, and Problem prose supply the
-particular setting and state; the handbook does not introduce a built-in
+descriptions, prose guides, profiles, Mechanics, Statuses, and Problem prose
+supply the particular setting and state; the handbook does not introduce a built-in
 ontology, privileged configured keys, or seed vocabulary. Command descriptions
 retain short local reminders at the point where an omission would be costly.
 
@@ -198,6 +202,15 @@ equipment, and other observable consequences, not through a receipt-shaped
 ledger inserted into every turn. Implicit means embodied rather than hidden: if
 the person asks for an exact Mechanic, Status, value, or other information their
 current-player view may reveal, ChatGPT answers directly and exactly.
+
+The latest inspected prose guide shapes each public Problem and Consequence
+throughout the passage, including word choice, sentence rhythm, narrative
+distance, imagery, and the distinction between narrator voice and language
+spoken by a person or shown by a display or document. It cannot change
+established facts, Mechanics, privacy, facilitator authority, or the player's
+Action. ChatGPT never quotes or mentions it as instructions. A changed guide
+wins over the voice of earlier prose for new writing without rewriting
+persisted history.
 
 The public Consequence prose passed to `resolve_problem` is the prose ChatGPT
 presents after the commit. After refreshing Play, the persisted next Problem is
@@ -286,5 +299,8 @@ Acceptance covers the complete boundary:
   decision;
 - three natural-language Actions are submitted and resolved, each transition
   presents its persisted Consequence and next Problem as continuous scene prose
-  without workflow chatter or a receipt-shaped state summary; and
+  without workflow chatter or a receipt-shaped state summary;
+- the copied World's prose guide remains recognizable across the three turns,
+  including its distinction between narrator language and attributed in-world
+  language, without being exposed as instructions; and
 - reloaded Play and durable history agree with the chat.

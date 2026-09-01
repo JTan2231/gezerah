@@ -34,6 +34,9 @@ unstructured account of what transpires and reviews Luna's compiled preview.
 Terra instead authors and compiles a Consequence, then commits its Resolution without
 exposing model output for human editing or approval. An apply-status Effect
 defines an inline status in that Problem and snapshots it onto each affected Entity.
+World Settings separately offers an optional prose guide for how Terra or
+ChatGPT should express new public Problems and Consequences. It is ordinary
+text, not a structured style selector or mechanical configuration.
 
 ## Stack and source layout
 
@@ -188,7 +191,8 @@ equivalent local semantic types. Mapping remains close to the feature that uses
 it.
 
 For example, `SettingsWorkspace` receives the authoritative `World` DTO and
-maps `name` and optional `description` into a settings draft. `SettingsView`
+maps `name`, optional `description`, and optional `prose_guide` into a settings
+draft. `SettingsView`
 edits that draft and emits save/archive intent while displaying the current Facilitator
 read-only. The controller adds `expected_revision`, accepts the returned
 `World` as the new draft baseline, refreshes the workspace resource, and
@@ -293,7 +297,8 @@ activity. The membership role remains available separately inside the World.
 
 `/play/new` loads the complete three-item catalog from
 `GET /api/world-templates`. Each authored option is visible with equal weight,
-but the page exposes no manual copy command. Its Start site-tool surface
+including the prose guide that lets a requested tone or voice inform ChatGPT's
+selection, but the page exposes no manual copy command. Its Start site-tool surface
 registers `inspect_world_templates` and `copy_world_template`. The copy handler
 generates the destination World UUID and reuses it when retrying
 `POST /api/world-templates/{template_id}/clone`, so an uncertain response cannot
@@ -342,6 +347,12 @@ human facilitator. Every published field is required; there is no per-field
 required toggle. Publishing uses the current character-field-set revision, preserves
 durable IDs, and warns when adding/removing character fields can change existing
 character readiness.
+
+Settings edits the World name, description, and optional prose guide against
+the shared World settings revision. Its helper text distinguishes the fields:
+the description says what the World is, while the guide describes how
+model-authored Problems and Consequences should sound. Empty prose-guide text
+clears the field, and the server enforces the 10,000-code-point limit.
 
 ## World memberships and invite links
 

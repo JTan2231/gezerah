@@ -362,7 +362,9 @@ The current ordered chain is `001_world_baseline.sql`,
 `002_mechanic_graph_status_instances.sql`,
 `003_interaction_audience_invalidations.sql`, `004_password_auth.sql`,
 `005_terra.sql`, `006_facilitator_assignment.sql`, and
-`007_agent_facilitator.sql`. Do not attach a database with a different
+`007_agent_facilitator.sql`, and `008_world_prose_guide.sql`. The `008`
+migration is the forward path for every preserved database already through
+`007`; do not edit an applied earlier file. Do not attach a database with a different
 migration history or unledgered application tables.
 
 For each migration applied to a deployed database:
