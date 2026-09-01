@@ -239,8 +239,8 @@ migration, exactly one ready volume of at least 5 GB mounted at
 `/var/lib/postgresql/data`.
 `GEZERAH_DEPLOY_URL` defaults to <https://gezerah.com> and can assert another
 credential-free exact HTTPS origin, but it must
-equal the URL Railway reports for the selected web service; it cannot redirect
-evidence to another host.
+be one of the domains Railway reports for the selected web service; it cannot
+redirect evidence to another host.
 `GEZERAH_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
 timeout and accepts 30 through 3600 seconds. Overrides select already-existing
 resources; they do not bootstrap them.

@@ -95,6 +95,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   const environment: RailwayEnvironment = {
     id: environmentID,
     name: "production",
+    serviceDomains: [],
   };
   const web = service({
     id: webServiceID,
