@@ -80,13 +80,17 @@ createdb gezerah
 Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-The public root page offers one **Open in ChatGPT** launch. It attaches the
-authenticated `/play/new` page, where the person signs up or signs in, and
+The public root page offers one **Open in ChatGPT** launch. It navigates the
+ordinary web browser to `chatgpt.com` with a starter prompt and a request to
+attach the authenticated `/play/new` page; it does not invoke the desktop app.
+On a supported ChatGPT surface, the person signs up or signs in there and
 ChatGPT performs delegated start through the Start and Play site-tool surfaces:
 it copies one of the three repository-backed World templates, claims a complete
 Character, and presents the first Problem. The person then supplies free-form
 Actions in ChatGPT while Gezerah remains the durable Play record. Accounts use a
-username and password; no email address is required.
+username and password; no email address is required. Automated CI and deployed
+smoke do not establish ChatGPT web Site-tool support; that boundary requires a
+dated model-in-the-loop acceptance run.
 
 The existing `/build` and `/play` routes remain directly addressable internal
 surfaces for authoring, administration, and validation, but the public entry

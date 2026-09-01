@@ -20,6 +20,11 @@ import {
   SiteToolUsageError,
   type SiteToolRegistrationState,
 } from "./siteTools";
+import {
+  isPlayHandbookTopic,
+  playHandbookTopics,
+  readPlayHandbook,
+} from "./agentPlayHandbook";
 
 interface AgentPlayToolsOptions {
   enabled: boolean;
@@ -257,6 +262,41 @@ export function createAgentPlayTools(
 
   return [
     {
+      name: "read_play_handbook",
+      description:
+        "Read the Gezerah Play handbook before facilitating, or revisit one topic when the next narrative or operational step is uncertain. This is the authoritative presentation and recovery guidance for the ChatGPT Facilitator; it does not change Play.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          topic: {
+            type: "string",
+            enum: playHandbookTopics,
+            description:
+              "Use all before the first turn, or select the most relevant topic later.",
+          },
+        },
+        required: ["topic"],
+        additionalProperties: false,
+      },
+      annotations: { readOnlyHint: true },
+      execute: (input) => {
+        const topic = requiredString(input, "topic", 100);
+        if (!isPlayHandbookTopic(topic))
+          throw new SiteToolUsageError(
+            `topic must be one of: ${playHandbookTopics.join(", ")}.`,
+          );
+        return Promise.resolve(
+          toolResult({
+            handbook: readPlayHandbook(topic),
+            next_step:
+              topic === "all"
+                ? "Inspect current Play and facilitate it using this handbook."
+                : "Return to current Play and apply this guidance without narrating the workflow.",
+          }),
+        );
+      },
+    },
+    {
       name: "inspect_play",
       description:
         "Read the current World and all Play context visible to the signed-in current player: Play status, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
@@ -462,7 +502,7 @@ export function createAgentPlayTools(
     },
     {
       name: "present_problem",
-      description: `As ChatGPT Facilitator, present the next fictional Problem to ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, commit the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt you commit is the prose you present in chat as the lived scene: do not add a receipt, lifecycle status, or second paraphrase around it. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -471,7 +511,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 10000,
             description:
-              "Public prose that presents a concrete Problem and invites the current player to act. Follow the character-attuned narration and privacy guidance in this tool's description.",
+              "The exact public prose to present as a concrete lived Problem that invites the current player to act. Follow the character-attuned narration and privacy guidance in this tool's description.",
           },
         },
         required: ["prompt"],
@@ -493,14 +533,14 @@ export function createAgentPlayTools(
         return toolResult({
           presented_interaction: interaction,
           next_step:
-            "Invite the current player to describe what their Character does.",
+            "Present the committed prompt directly as the lived scene, without a creation receipt or lifecycle status, then invite the current player to describe what their Character does.",
         });
       },
     },
     {
       name: "submit_action",
       description:
-        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem only after the player explicitly states or delegates that Action. Never infer or invent an Action from their setup preference. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities shown by the current Play inspection.",
+        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem only after the player explicitly states or delegates that Action. Never infer or invent an Action from their setup preference. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities shown by the current Play inspection. Do not announce submission or workflow status in the fiction; let the subsequent world response make the decision apparent.",
       inputSchema: {
         type: "object",
         properties: {
@@ -545,13 +585,13 @@ export function createAgentPlayTools(
         return toolResult({
           submitted_action: action,
           next_step:
-            "Refresh your view of Play. Once every responder has acted, resolve the Problem. Never submit another Action until the player explicitly states or delegates it.",
+            "Refresh your view of Play. Once every responder has acted, resolve the Problem. Do not announce Action submission or workflow status; continue through committed fiction. Never submit another Action until the player explicitly states or delegates it.",
         });
       },
     },
     {
       name: "resolve_problem",
-      description: `As ChatGPT Facilitator, resolve the current open or adjudicating Problem with public Consequence prose and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. Preserve the same character-attuned narration and privacy boundaries while describing what changes. An empty effects array is valid. ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, commit the current open or adjudicating Problem's public Consequence prose and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative you commit is the prose you present in chat as the lived consequence: do not add an approval recap, effect ledger, receipt, lifecycle status, or invented durable bridge. Make decisions and state apparent through their causal fictional consequences. An empty effects array is valid. ${characterAttunedNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -561,7 +601,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 20000,
             description:
-              "The public fictional Consequence of the Actions. Follow the character-attuned narration and privacy guidance in this tool's description.",
+              "The exact public fictional Consequence of the Actions to present in chat. Follow the character-attuned narration and privacy guidance in this tool's description.",
           },
           effects: {
             type: "array",
@@ -633,7 +673,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Describe the Consequence to the current player. Refresh your view of Play before presenting another Problem.",
+            "Present resolution.narrative directly as the lived Consequence without an approval recap, effect ledger, or lifecycle receipt. Refresh Play and commit the next Problem before presenting it; once committed, its prompt may flow from the Consequence as one continuous scene.",
         });
       },
     },
@@ -731,7 +771,8 @@ function nextPlayStep(
   interaction: Interaction | undefined,
 ): string {
   if (world.status === "archived") return "This world is read-only.";
-  if (interaction === undefined) return "Present the next Problem.";
+  if (interaction === undefined)
+    return "Commit the next Problem, then present its public prompt directly as lived fiction.";
   if (interaction.status === "adjudicating")
     return "Refresh your view of Play and the Entity sheets, then retry the pending Resolution.";
   if (interaction.status !== "open")
@@ -746,12 +787,12 @@ function nextPlayStep(
     interaction.eligible_responder_membership_ids.includes(viewer.id) &&
     !submittedMembershipIDs.has(viewer.id)
   )
-    return "Ask the current player what they do, then record their Action.";
+    return "Continue from the committed Problem as lived fiction and ask what the current player's Character does, then record only their explicit Action.";
   const allRespondersActed =
     interaction.eligible_responder_membership_ids.every((membershipID) =>
       submittedMembershipIDs.has(membershipID),
     );
   return allRespondersActed
-    ? "Resolve the Problem."
-    : "Wait for the remaining responders.";
+    ? "Resolve the Problem, then present its committed public Consequence directly as lived fiction."
+    : "Continue the lived scene without workflow commentary while waiting for the remaining responders.";
 }

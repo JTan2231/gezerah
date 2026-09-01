@@ -295,11 +295,19 @@ export async function verifyBrowser(
       throw new Error("browser homepage omitted the ChatGPT launch URL");
     }
     const launchURL = new URL(launchHref);
+    const launchPrompt = launchURL.searchParams.get("prompt");
     if (
-      launchURL.protocol !== "codex:" ||
-      launchURL.searchParams.get("browserUrl") !== `${normalized}/play/new`
+      launchURL.origin !== "https://chatgpt.com" ||
+      launchURL.searchParams.get("surface") !== "work" ||
+      launchURL.searchParams.get("browserUrl") !== `${normalized}/play/new` ||
+      launchPrompt === null ||
+      !launchPrompt.includes(`${normalized}/play/new`) ||
+      !launchPrompt.includes("read and apply Gezerah's Play handbook") ||
+      !launchPrompt.includes("My play preference: surprise me.")
     ) {
-      throw new Error("browser homepage did not attach the exact Start page");
+      throw new Error(
+        "browser homepage did not provide the expected ChatGPT web launch",
+      );
     }
     await page.goto(`${normalized}/play/new`);
     await page
