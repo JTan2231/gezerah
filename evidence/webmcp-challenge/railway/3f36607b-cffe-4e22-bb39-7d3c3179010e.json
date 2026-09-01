@@ -1,0 +1,115 @@
+{
+  "schemaVersion": 1,
+  "mode": "deploy",
+  "ci": "passed",
+  "project": {
+    "id": "0bc0c39c-c630-4898-b4af-d7f0ebe459db",
+    "name": "dnd"
+  },
+  "environment": {
+    "id": "9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08",
+    "name": "production"
+  },
+  "service": {
+    "id": "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+    "name": "dnd-web"
+  },
+  "localCommit": "aaa1d89000207ddd8e9678586601bce7facb3563",
+  "uploadedCommit": "aaa1d89000207ddd8e9678586601bce7facb3563",
+  "deployment": {
+    "id": "3f36607b-cffe-4e22-bb39-7d3c3179010e",
+    "status": "SUCCESS",
+    "createdAt": "2026-08-29T19:46:20.491Z",
+    "healthcheckPath": "/api/health",
+    "replicas": 1,
+    "drainingSeconds": 15
+  },
+  "publicURL": "https://dnd-web-production.up.railway.app",
+  "railway": {
+    "web": {
+      "id": "73261ce4-d382-41a5-a7ac-64dd71c536ab",
+      "name": "dnd-web",
+      "status": "SUCCESS",
+      "deploymentId": "3f36607b-cffe-4e22-bb39-7d3c3179010e",
+      "volumeMigrating": false,
+      "replicas": {
+        "configured": 1,
+        "running": 1,
+        "crashed": 0
+      },
+      "volumes": []
+    },
+    "database": {
+      "id": "beb083b4-4ca6-4b3d-b2df-c429e9746f44",
+      "name": "Postgres",
+      "status": "SUCCESS",
+      "deploymentId": "60602a29-ec07-4c29-8cbb-b46d051cb93a",
+      "volumeMigrating": false,
+      "replicas": {
+        "configured": 1,
+        "running": 1,
+        "crashed": 0
+      },
+      "volumes": [
+        {
+          "name": "postgres-volume",
+          "state": "READY",
+          "sizeMb": 5000,
+          "mountPath": "/var/lib/postgresql/data"
+        }
+      ]
+    }
+  },
+  "http": [
+    {
+      "name": "health",
+      "url": "https://dnd-web-production.up.railway.app/api/health",
+      "status": 200,
+      "contentType": "application/json",
+      "bytes": 57,
+      "durationMs": 187
+    },
+    {
+      "name": "homepage",
+      "url": "https://dnd-web-production.up.railway.app/",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 578,
+      "durationMs": 51
+    },
+    {
+      "name": "SPA deep link",
+      "url": "https://dnd-web-production.up.railway.app/play/deployment-smoke",
+      "status": 200,
+      "contentType": "text/html; charset=utf-8",
+      "bytes": 578,
+      "durationMs": 56
+    },
+    {
+      "name": "asset /assets/index-ku9AN6QR.js",
+      "url": "https://dnd-web-production.up.railway.app/assets/index-ku9AN6QR.js",
+      "status": 200,
+      "contentType": "text/javascript; charset=utf-8",
+      "bytes": 342058,
+      "durationMs": 283
+    },
+    {
+      "name": "asset /assets/index-DdfmqlVO.css",
+      "url": "https://dnd-web-production.up.railway.app/assets/index-DdfmqlVO.css",
+      "status": 200,
+      "contentType": "text/css; charset=utf-8",
+      "bytes": 64681,
+      "durationMs": 45
+    }
+  ],
+  "browser": {
+    "skipped": false,
+    "title": "dnd",
+    "finalPath": "/play",
+    "authProbe": true,
+    "failureCount": 0,
+    "durationMs": 776
+  },
+  "startedAt": "2026-08-29T19:45:47.743Z",
+  "completedAt": "2026-08-29T19:47:27.635Z"
+}

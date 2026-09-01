@@ -1,5 +1,15 @@
 # Gezerah
 
+> [!IMPORTANT]
+> **WebMCP Challenge judges:** Gezerah is a pre-existing product; only the
+> WebMCP extension added after the submission period opened is presented as
+> challenge work. The original 42-commit history is preserved here. Commit
+> `07e00eb` is the final pre-period snapshot, and its direct child `aaa1d89` is
+> the first WebMCP implementation. See
+> [WebMCP Challenge eligibility: before and during the submission period](WEBMCP_CHALLENGE_ELIGIBILITY.md)
+> for the exact boundary, archived history, bounded diff, and provider-reported
+> Railway deployment timestamps.
+
 Gezerah is a collaborative world editor and live play surface. Authors define
 the capacities and capabilities that matter in a world, create fictional
 Entities from that vocabulary, and invite World members with expiring links.
