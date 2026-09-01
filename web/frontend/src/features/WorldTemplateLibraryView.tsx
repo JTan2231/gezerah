@@ -7,6 +7,7 @@ import {
   LoadingState,
   type ErrorNotice,
 } from "../components/StudioUI";
+import type { SiteToolRegistrationState } from "./siteTools";
 
 interface WorldTemplateChoice {
   id: string;
@@ -24,38 +25,22 @@ export interface WorldTemplateLibraryViewModel {
   templates: readonly WorldTemplateChoice[];
   loading: boolean;
   catalogIssue: ErrorNotice | null;
-  copyingTemplateID?: string | undefined;
-  failedTemplateID?: string | undefined;
-  cloneIssue: ErrorNotice | null;
-}
-
-interface WorldTemplateLibraryViewActions {
-  returnHome: () => void;
-  returnToWorlds: () => void;
-  retryCatalog: () => void;
-  copyTemplate: (templateID: string) => void;
+  siteTools: SiteToolRegistrationState;
 }
 
 export function WorldTemplateLibraryView({
   model,
-  actions,
   accountControls,
 }: {
   model: WorldTemplateLibraryViewModel;
-  actions: WorldTemplateLibraryViewActions;
   accountControls: ReactNode;
 }) {
   return (
     <div className="library-page play-library-page world-template-library-page">
       <header className="library-topbar">
-        <button
-          className="library-brand-button"
-          type="button"
-          onClick={actions.returnHome}
-          aria-label="Return home"
-        >
+        <span className="library-brand-button" aria-label="Gezerah">
           <Brand compact />
-        </button>
+        </span>
         <div className="account-menu">
           <Avatar name={model.account.displayName} size="small" />
           <span className="account-copy">
@@ -67,46 +52,35 @@ export function WorldTemplateLibraryView({
       </header>
 
       <main className="library-main">
-        <button
-          className="template-library-back text-button"
-          type="button"
-          onClick={actions.returnToWorlds}
-        >
-          <span aria-hidden="true">←</span> All worlds
-        </button>
         <header className="library-heading template-library-heading">
           <div>
-            <h1>Choose a new world</h1>
+            <h1>Starting with ChatGPT</h1>
             <p>
-              We’ll make your own editable copy, then you’ll choose who to play.
+              This attached page is a reference for delegated start. ChatGPT
+              will recommend a World and Character, make your editable copy, and
+              begin Play.
             </p>
           </div>
         </header>
 
+        <section className="panel" aria-live="polite">
+          <h2>Start site-tool surface</h2>
+          <p>{siteToolStatus(model.siteTools)}</p>
+          {model.siteTools.status === "failed" ? (
+            <p>
+              Delegated start is unavailable because the complete Start tool
+              surface did not register.
+            </p>
+          ) : null}
+        </section>
+
         {model.loading ? <LoadingState label="Loading World choices" /> : null}
         {model.catalogIssue === null ? null : (
-          <ErrorMessage
-            error={model.catalogIssue}
-            onRetry={actions.retryCatalog}
-          />
-        )}
-        {model.cloneIssue === null ? null : (
-          <ErrorMessage
-            error={model.cloneIssue}
-            onRetry={() => {
-              if (model.failedTemplateID !== undefined)
-                actions.copyTemplate(model.failedTemplateID);
-            }}
-          />
+          <ErrorMessage error={model.catalogIssue} />
         )}
 
-        <div
-          className="world-template-grid"
-          aria-busy={model.copyingTemplateID !== undefined}
-        >
+        <div className="world-template-grid">
           {model.templates.map((template) => {
-            const copying = model.copyingTemplateID === template.id;
-            const failed = model.failedTemplateID === template.id;
             return (
               <article className="world-template-card" key={template.id}>
                 <header>
@@ -122,20 +96,6 @@ export function WorldTemplateLibraryView({
                   <h2>{template.name}</h2>
                   <p>{template.description}</p>
                 </div>
-                <footer>
-                  <button
-                    className="button button-play"
-                    type="button"
-                    disabled={model.copyingTemplateID !== undefined}
-                    onClick={() => actions.copyTemplate(template.id)}
-                  >
-                    {copying
-                      ? "Creating your copy…"
-                      : failed
-                        ? "Try again"
-                        : "Copy and play"}
-                  </button>
-                </footer>
               </article>
             );
           })}
@@ -143,4 +103,19 @@ export function WorldTemplateLibraryView({
       </main>
     </div>
   );
+}
+
+function siteToolStatus(siteTools: SiteToolRegistrationState): string {
+  switch (siteTools.status) {
+    case "unsupported":
+      return "Start site-tool surface is unsupported in this browser. Use ChatGPT desktop with Site tools.";
+    case "unavailable":
+      return "Start site-tool surface is unavailable on this page.";
+    case "registering":
+      return "Start site-tool surface is registering.";
+    case "ready":
+      return "Start site-tool surface is ready. ChatGPT can inspect the complete World catalog and start your copy.";
+    case "failed":
+      return `Start site-tool surface failed: ${siteTools.registeredToolNames.length} of 2 registrations succeeded before teardown; complete surface not ready.`;
+  }
 }

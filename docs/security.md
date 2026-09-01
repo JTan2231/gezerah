@@ -159,9 +159,9 @@ continues to decide what that user may do:
   that player—as the interaction, resolution, and event source;
 - agent Continue/Resolve likewise requires a ready current player and persists
   `agent`, while accepting only public prose and valid Effects from the
-  page tool; WebMCP itself is not treated as an authenticated identity;
-- facilitator handoff uses the world revision and normally rejects unfinished
-  interactions. The sole exception lets the owner take over one Terra-authored
+  site tool; WebMCP itself is not treated as an authenticated identity;
+- Facilitator reassignment uses the world revision and normally rejects unfinished
+  interactions. The sole exception is Facilitator recovery for one Terra-authored
   open or adjudicating interaction as themself, withdrawing their own submitted
   action before human adjudication continues;
 - referenced mechanic/entity/membership/action IDs are checked against the path
@@ -226,8 +226,8 @@ Focused application tests cover invitation-bearer redaction in ordinary request
 and panic logs. That scope does not prove absence from reverse-proxy, database,
 hosting-provider, or newly added diagnostic logs; those need separate review.
 
-The WebMCP contract's database-state trace is test-only, World-scoped,
-read-only diagnostic evidence. Its explicit projection excludes user and
+The Agent-facilitator command contract's database-state trace is test-only,
+World-scoped, read-only diagnostic evidence. Its explicit projection excludes user and
 session records, invitation data, private interaction/Resolution notes,
 character-field/profile prose, facilitator-only context labels, and Resolution
 idempotency keys. It can contain public generated World, Entity, mechanic,

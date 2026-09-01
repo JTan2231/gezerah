@@ -80,20 +80,21 @@ createdb gezerah
 Open `http://127.0.0.1:5173`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-The root page asks whether to enter **Play** or **Build**. Each area then asks
-the user to sign up or sign in when needed. Accounts use a username and
-password; no email address is required. **Build** defines input and
-derived capacities/capabilities, character fields, roster setup, memberships,
-invitations, and World settings. **Play** first offers saved Worlds or three
-repository-backed Markdown templates; choosing a template makes an independent
-World copy before Character selection. Play is the separate live surface: complete
-player onboarding, designate a human, Terra, or an agent as Facilitator
-between Problems, present an ad-hoc Problem, collect responder Actions, and commit
-an immutable Resolution with a resolution receipt. A human Facilitator authors the
-Consequence and may preview Luna-compiled Effects. When Terra is Facilitator, ready
-current players only pace Play; Terra creates and resolves the Interaction without a
-human edit or approval step. In agent mode, ChatGPT authors Problems and
-Consequences through the signed-in Play page.
+The public root page offers one **Open in ChatGPT** launch. It attaches the
+authenticated `/play/new` page, where the person signs up or signs in, and
+ChatGPT performs delegated start through the Start and Play site-tool surfaces:
+it copies one of the three repository-backed World templates, claims a complete
+Character, and presents the first Problem. The person then supplies free-form
+Actions in ChatGPT while Gezerah remains the durable Play record. Accounts use a
+username and password; no email address is required.
+
+The existing `/build` and `/play` routes remain directly addressable internal
+surfaces for authoring, administration, and validation, but the public entry
+does not expose custom Build, saved-World discovery, invites or multiplayer
+onboarding, or incomplete Character setup yet. Build defines input and derived
+capacities/capabilities, Character fields, roster setup, memberships,
+invitations, and World settings. Human- and Terra-facilitated Play also remains
+implemented behind those internal routes.
 
 Useful process commands:
 

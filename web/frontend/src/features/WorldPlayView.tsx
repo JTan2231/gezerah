@@ -70,7 +70,7 @@ export function WorldPlayView({
                 ))}
               </select>
               {model.facilitatorAssignment.changing ? (
-                <small role="status">Handing off…</small>
+                <small role="status">Reassigning…</small>
               ) : null}
             </label>
           ) : (
@@ -121,10 +121,7 @@ export function WorldPlayView({
       )}
 
       {model.agentMode === null ? null : (
-        <AgentModeNotice
-          model={model.agentMode}
-          onCopyPrompt={actions.copyAgentPrompt}
-        />
+        <AgentModeNotice model={model.agentMode} />
       )}
 
       <div className="play-grid">
@@ -138,7 +135,9 @@ export function WorldPlayView({
           {model.roster.issue === null ? null : (
             <ErrorMessage
               error={model.roster.issue}
-              onRetry={actions.retryRoster}
+              {...(model.agentMode === null
+                ? { onRetry: actions.retryRoster }
+                : {})}
             />
           )}
           <div className="roster-list">
@@ -196,7 +195,9 @@ export function WorldPlayView({
           {model.problems.issue === null ? null : (
             <ErrorMessage
               error={model.problems.issue}
-              onRetry={actions.retryProblems}
+              {...(model.agentMode === null
+                ? { onRetry: actions.retryProblems }
+                : {})}
             />
           )}
           {model.hasActiveProblem ? (
@@ -251,13 +252,15 @@ export function CharacterOnboardingView({
           <h1>{model.worldName}</h1>
           {model.waitingForCharacter ? (
             <p>
-              Choose your character, {model.currentUserName}. Meet the people
-              available to play in this World.
+              {model.agentMode === null
+                ? `Choose your character, ${model.currentUserName}. Meet the people available to play in this World.`
+                : "ChatGPT is choosing the best-fitting available Character from your play preference."}
             </p>
           ) : (
             <p>
-              {model.currentUserName}, complete all required fields for a
-              controlled character before entering Play.
+              {model.agentMode === null
+                ? `${model.currentUserName}, complete all required fields for a controlled character before entering Play.`
+                : "This Character requires setup, so delegated Play is unavailable."}
             </p>
           )}
           <p>Facilitator: {model.facilitatorName}</p>
@@ -289,7 +292,10 @@ export function CharacterOnboardingView({
         <LoadingState label="Loading character setup" />
       ) : null}
       {model.issue === null ? null : (
-        <ErrorMessage error={model.issue} onRetry={actions.retry} />
+        <ErrorMessage
+          error={model.issue}
+          {...(model.agentMode === null ? { onRetry: actions.retry } : {})}
+        />
       )}
       {!model.loading && model.characters.length === 0 ? (
         model.availableEntities.length === 0 ? (
@@ -311,7 +317,11 @@ export function CharacterOnboardingView({
           <section className="panel available-entities">
             <header>
               <h2>Meet the characters</h2>
-              <p>Choose one to make them your Character in this saved World.</p>
+              <p>
+                {model.agentMode === null
+                  ? "Choose one to make them your Character in this saved World."
+                  : "ChatGPT can inspect these Characters and claim the closest match."}
+              </p>
             </header>
             <div className="available-entity-list">
               {model.availableEntities.map((entity) => (
@@ -325,16 +335,18 @@ export function CharacterOnboardingView({
                       <p>{entity.summary}</p>
                     )}
                   </div>
-                  <button
-                    className="button button-play"
-                    type="button"
-                    disabled={model.claimingEntityId !== undefined}
-                    onClick={() => actions.claimEntity(entity.id)}
-                  >
-                    {model.claimingEntityId === entity.id
-                      ? `Choosing ${entity.name}…`
-                      : `Play as ${entity.name}`}
-                  </button>
+                  {model.agentMode === null ? (
+                    <button
+                      className="button button-play"
+                      type="button"
+                      disabled={model.claimingEntityId !== undefined}
+                      onClick={() => actions.claimEntity(entity.id)}
+                    >
+                      {model.claimingEntityId === entity.id
+                        ? `Choosing ${entity.name}…`
+                        : `Play as ${entity.name}`}
+                    </button>
+                  ) : null}
                 </article>
               ))}
             </div>
@@ -346,10 +358,7 @@ export function CharacterOnboardingView({
       ) : null}
 
       {model.agentMode === null ? null : (
-        <AgentModeNotice
-          model={model.agentMode}
-          onCopyPrompt={actions.copyAgentPrompt}
-        />
+        <AgentModeNotice model={model.agentMode} />
       )}
 
       {profile === null ? null : (
@@ -446,38 +455,32 @@ function IdlePlayView({
   );
 }
 
-function AgentModeNotice({
-  model,
-  onCopyPrompt,
-}: {
-  model: AgentModeViewModel;
-  onCopyPrompt: () => void;
-}) {
+function AgentModeNotice({ model }: { model: AgentModeViewModel }) {
   return (
     <aside className="agent-mode-notice" aria-label="ChatGPT Facilitator">
       <div>
         <strong>ChatGPT is Facilitator</strong>
-        <p>
-          {model.siteToolsAvailable
-            ? "ChatGPT is connected to this Play page. Keep it open; once the chat begins, you can continue the same chat on chatgpt.com."
-            : "Open in ChatGPT starts the chat in the desktop app with this Play page attached. Keep the page open; once the chat begins, you can continue the same chat on chatgpt.com."}
-        </p>
-        <code>{model.starterPrompt}</code>
-      </div>
-      <div className="agent-mode-actions">
-        <a className="button button-play" href={model.launchURL}>
-          Open in ChatGPT
-        </a>
-        <button
-          className="button button-quiet"
-          type="button"
-          onClick={onCopyPrompt}
-        >
-          {model.promptCopied ? "Prompt copied" : "Copy starter prompt"}
-        </button>
+        <p>{agentSiteToolStatus(model.siteTools)}</p>
       </div>
     </aside>
   );
+}
+
+function agentSiteToolStatus(
+  siteTools: AgentModeViewModel["siteTools"],
+): string {
+  switch (siteTools.status) {
+    case "unsupported":
+      return "Play site-tool surface is unsupported in this browser. Delegated Play is not ready.";
+    case "unavailable":
+      return "Play site-tool surface is unavailable for this page and current play role.";
+    case "registering":
+      return "Play site-tool surface is registering.";
+    case "ready":
+      return "Play site-tool surface is ready. ChatGPT can inspect and continue Play.";
+    case "failed":
+      return `Play site-tool surface failed: ${siteTools.registeredToolNames.length} of 5 registrations succeeded before teardown; complete surface not ready.`;
+  }
 }
 
 export function LiveInteractionView({

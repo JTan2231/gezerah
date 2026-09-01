@@ -199,7 +199,7 @@ The authoritative run can produce:
 | `go-test-results.jsonl`             | Structured Go test events used by lower-layer ownership. |
 | `scenario-architecture-results.xml` | Scenario architecture-test results.                      |
 | `scenario-coverage.json`            | Final 141-row ownership/result inventory.                |
-| `webmcp-database-trace.json`        | Safe World states at each WebMCP contract command.       |
+| `agent-facilitator-command-database-trace.json` | Safe World states at each Agent-facilitator command-contract boundary. |
 
 `evidence/suiteCoverage.ts` combines browser, Go, and architecture-test results.
 For each scenario it emits the primary tier, owner, execution/checkpoint ID,
@@ -244,7 +244,7 @@ When product behavior or coverage changes:
 4. Update this architecture and the code map when structure or ownership moves.
 5. Run `(cd test && bun test src/scenario/architecture-tests && bun run
 verify:scenarios)` and the relevant focused target.
-6. Run the authoritative repository validation before handoff.
+6. Run the authoritative repository validation before requesting review.
 
 Examples and fixtures remain run-local and user-authored. The scenario system
 must not introduce built-in entity classes, privileged configured keys,

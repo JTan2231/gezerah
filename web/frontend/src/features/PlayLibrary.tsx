@@ -2,7 +2,7 @@ import type { AuthenticatedSession, User, World } from "../api/types";
 import { toErrorNotice } from "../api/client";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { playNewWorldURL, playWorldURL, type Navigate } from "../worldRoutes";
+import { playWorldURL, type Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import { PlayLibraryView } from "./PlayLibraryView";
 
@@ -56,7 +56,6 @@ export function PlayLibrary({
         />
       }
       onReturnHome={() => navigate("/")}
-      onCreateWorld={() => navigate(playNewWorldURL())}
       onOpenWorld={(worldID) => navigate(playWorldURL(worldID))}
       onRetry={worlds.reload}
     />

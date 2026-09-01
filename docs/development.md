@@ -227,8 +227,8 @@ CGO_ENABLED=0 go build -trimpath -o out ./cmd/gezerah
 The Vite output is embedded at Go compile time. A binary compiled before
 `web/static/index.html` exists serves the API but returns 503 for SPA routes.
 For public ChatGPT acceptance, do not expose the normal managed development
-pair; follow the disposable HTTPS [ChatGPT web acceptance](testing.md#chatgpt-web-acceptance)
-procedure instead.
+pair; use the isolated HTTPS [acceptance environment](testing.md#acceptance-environment)
+instead.
 
 ## Normal change workflow
 
@@ -239,10 +239,12 @@ procedure instead.
 4. Add focused tests at the pure/domain layer first, then adapter/UI/E2E coverage
    in proportion to the behavior.
 5. Run a focused validator while iterating.
-6. Run the complete `./ci.sh` before handing off a cross-layer change.
-7. Review `git status`; generated `web/static`, dependencies, `.gezerah`, test
+6. For a ChatGPT launch, delegated-start, site-tool, or ChatGPT-visible narration
+   change, apply the [change-trigger matrix](testing.md#change-trigger-matrix).
+7. Run the complete `./ci.sh` before requesting review.
+8. Review `git status`; generated `web/static`, dependencies, `.gezerah`, test
    artifacts, and `out` should remain ignored.
-8. Stop services used for debugging.
+9. Stop services used for debugging.
 
 Validation details are in [Testing](testing.md).
 
@@ -386,6 +388,6 @@ failure.
 - Do not give configured vocabulary built-in semantics. Bundled World-template
   terms remain optional starting content and become editable, world-scoped data
   when copied.
-- Use `./ci.sh` as the handoff validator.
+- Use `./ci.sh` as the final repository validator.
 - Preserve unrelated work in a dirty checkout and avoid destructive source-
   control/database commands.

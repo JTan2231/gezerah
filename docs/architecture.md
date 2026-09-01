@@ -93,13 +93,15 @@ flowchart TD
 
 ### Browser layer
 
-The browser starts with a data-free template-Play quick start plus the choice
-between `/build` and `/play`. The quick start points to the authenticated
-`/play/new` chooser without duplicating its catalog. Build owns the owner/editor
-world library, custom-World ChatGPT prompt, and configuration. Play owns
-the admitted-World picker, player onboarding, and Play surface. Both areas
-share the authenticated account boundary, API types, fetch helpers, route
-helpers, and UI primitives.
+The browser starts with one data-free ChatGPT launch for delegated template
+Play. It attaches the authenticated `/play/new` Start site-tool page without
+duplicating the catalog at the root. After one template copy, the same attached
+browser tab navigates to `/play/{world_id}` and replaces the Start site-tool
+surface with the Play site-tool surface. The public root does not expose the
+internal `/build` or `/play` libraries in this first version. Those routes still
+own authoring, administration, saved-World, invitation, and broader Play
+behavior and share the same authenticated account boundary, API types, fetch
+helpers, route helpers, and UI primitives.
 
 Within the browser, operational dependencies point inward through feature
 controllers and stop at a semantic presentation contract:
@@ -237,17 +239,20 @@ scope; the World remains the sole configuration boundary.
 
 ```mermaid
 sequenceDiagram
-    participant UI as Play template chooser
+    participant Start as Start site-tool page
+    participant ChatGPT
     participant H as HTTP handler
     participant T as Embedded Markdown catalog
     participant DB as PostgreSQL
 
-    UI->>H: POST template clone + destination World UUID
+    ChatGPT->>Start: copy_world_template(template_id)
+    Start->>H: POST template clone + destination World UUID
     H->>T: Load validated template
     H->>DB: Materialize World, owner, Mechanics, fields, and Entities
     H->>DB: Persist profiles and logical-state overrides
     H->>DB: Commit one independent agent-facilitated World
-    H-->>UI: 201 World (or 200 idempotent replay)
+    H-->>Start: 201 World (or 200 idempotent replay)
+    Start-->>ChatGPT: Copied World; navigate same attached tab to Play
 ```
 
 The destination UUID makes an uncertain client retry idempotent. A replay is
@@ -370,7 +375,7 @@ transaction withdraws the owner's submitted action if present, changes the
 world assignment, and retains the interaction's original Terra source. The
 owner closes/adjudicates an open Problem as needed and then uses the human
 Consequence UI; the resulting Resolution is attributed to the human owner. All
-other handoffs remain between interactions.
+other Facilitator reassignments remain between interactions.
 
 ## Consistency and concurrency
 
@@ -412,11 +417,11 @@ and is projected for non-facilitators as
 `interaction-feed-invalidated`, retaining cursor/time metadata and clearing
 resource and human actor IDs. Autonomous Terra adjudication instead emits a
 full, unmarked Terra event and remains visible for progress, retry, or owner
-takeover. This preserves cursor progress without leaking restricted identifiers.
+Facilitator recovery. This preserves cursor progress without leaking restricted identifiers.
 
 Events distinguish `actor_source` from nullable human actor membership. Terra
 events never attribute the ready current player who pressed Continue or Decide as the
-author. Human handoff and emergency-takeover events carry the authenticated
+author. Human Facilitator-reassignment and Facilitator-recovery events carry the authenticated
 membership that performed them.
 
 There is no broker. A successful mutation broadcasts an in-process wakeup so

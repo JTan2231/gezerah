@@ -37,11 +37,17 @@ managed services, and focused change recipes.
    Focused targets are `./ci.sh frontend`, `./ci.sh backend`, and
    `./ci.sh e2e`.
 
-5. Stop any managed services used for debugging with `./run.sh stop`.
+5. If the change affects ChatGPT launch, delegated start, a Start or Play
+   site-tool surface, or ChatGPT-visible narration, follow the
+   [ChatGPT change-trigger matrix](docs/testing.md#change-trigger-matrix).
+6. Stop any managed services used for debugging with `./run.sh stop`.
 
 ## Pull requests
 
 Describe the user-visible outcome, important design choices, tests run, and any
-remaining limitations. Keep commits reviewable and avoid combining unrelated
-cleanup with the requested change. A pull request should leave documentation,
-tests, and implementation describing the same behavior.
+remaining limitations. For a change covered by the ChatGPT trigger matrix,
+report its acceptance state as `passed`, `failed`, `blocked`, or `not run`; do
+not imply that automated validation exercised ChatGPT. Keep commits reviewable
+and avoid combining unrelated cleanup with the requested change. A pull request
+should leave documentation, tests, and implementation describing the same
+behavior.

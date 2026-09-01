@@ -39,7 +39,7 @@ erDiagram
 A world is the single authorization, configuration, entity, live-play, and
 event boundary. It owns lifecycle and roster revisions. A World membership has
 an `owner`, `editor`, `player`, or `spectator` membership role. That membership role controls
-Build access and survives every facilitator handoff; it is not the membership's
+Build access and survives every Facilitator reassignment; it is not the membership's
 momentary current play role in Play.
 
 Exactly one facilitator assignment identifies the Facilitator. Its source
@@ -51,14 +51,14 @@ every other active non-spectator is a `player`, including owners and editors.
 Changing the assignment does not rewrite any durable membership role.
 
 The assignment is represented by its `facilitator_source` and, for a human,
-its membership. Handoff is a separate world-revisioned command, not an
-ordinary settings patch. An
-owner/editor or the current human facilitator may hand the Facilitator assignment to another
+its membership. Facilitator reassignment is a separate world-revisioned
+command, not an ordinary settings patch. An owner/editor or the current human
+facilitator may reassign the Facilitator assignment to another
 active non-spectator, Terra, or an agent, but only when no Interaction
 is draft, open, or adjudicating. The narrow recovery exception lets the owner
 assign themself when
-the sole unfinished interaction is authored by the currently assigned
-non-human source and is open or adjudicating;
+the sole unfinished interaction is authored by the currently assigned Terra
+source and is open or adjudicating;
 the owner's submitted action is withdrawn before they continue as human Facilitator. In
 Terra mode the world description also serves as the world
 brief supplied to generation; it remains ordinary user-authored prose rather
@@ -144,7 +144,7 @@ controlled-character setup is incomplete, and `ready` when it meets the current
 character fields. This `play_status` remains projected even while they are
 designated facilitator. A human
 facilitator bypasses the readiness gate to run Play but may still report the
-seat they will return to after handoff. Spectators report `ready` and remain
+seat they will return to after Facilitator reassignment. Spectators report `ready` and remain
 read-only.
 
 Profile prose is not mechanical state. It cannot change Mechanic applicability,
@@ -314,7 +314,7 @@ The world's `roster_revision` guards complete controller-set replacements. It
 advances when roster membership/control composition changes independently of
 the world settings revision.
 
-An agent-mode current player waiting for a Character has one additional narrow command: atomically
+In an agent-facilitated World, a current player waiting for a Character has one additional narrow command: atomically
 claim an active entity with no active non-spectator controller. The same world
 lock and `roster_revision` guard make the availability snapshot and claim race
 explicit without granting general controller-editing authority.
@@ -413,11 +413,11 @@ leaves Terra assigned. Play returns to idle; creating a replacement still
 requires a separate Continue command.
 
 A failed Terra decision may be retried while the interaction remains
-adjudicating. Alternatively, the owner-only recovery handoff above can recover
+adjudicating. Alternatively, the owner-only Facilitator recovery above can recover
 an open interaction waiting on a responder or an adjudicating interaction after
 a failed model call. It preserves the interaction's Terra authorship,
 withdraws the owner's own action if any, and lets the owner close/adjudicate as
-needed and author a human-attributed resolution. No other handoff may cross an
+needed and author a human-attributed resolution. No other Facilitator reassignment may cross an
 unfinished interaction.
 
 Effects execute in author order. A scalar Effect observes earlier scalar
@@ -457,9 +457,8 @@ Consequence and containing:
 - the exact rules revision used for evaluation;
 - affected Entity sheets after commit.
 
-Normally Interaction and Resolution sources agree. An owner takeover is the
-intentional exception: the Interaction remains attributed to its automated
-source and the
+Normally Interaction and Resolution sources agree. Facilitator recovery is the
+intentional exception: the Interaction remains attributed to its Terra source and the
 Resolution records the human owner, preserving both authorship facts.
 
 Resolution is unique per Interaction. A world-scoped idempotency key makes retry
@@ -487,7 +486,7 @@ replacements through the World roster, character-field sets, profiles, Entity
 logical state, Interactions, Actions, and the world mechanic graph. Each
 entity also has a status-set revision.
 The facilitator assignment shares the world revision and normally changes only
-between interactions; the owner recovery handoff is the single unfinished-state
+between interactions; Facilitator recovery is the single unfinished-state
 exception.
 Mechanic mutations advance the rules revision. Logical-state replacement,
 preview, and resolve carry `expected_rules_revision`; status modifiers authored

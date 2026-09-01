@@ -2,20 +2,52 @@ import { afterEach, describe, expect, test } from "bun:test";
 
 import { ApiError } from "../api/client";
 import {
-  buildAgentLaunchURL,
-  buildAgentStarterPrompt,
   createAgentPlayTools,
-  registerTools,
+  playSiteToolPageEligible,
 } from "./agentPlayTools";
+import { registerSiteTools } from "./siteTools";
 
 const originalFetch = globalThis.fetch;
+const playRecovery =
+  "Refresh your view of Play with current World and Entity-sheet data.";
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
 describe("ChatGPT play tools", () => {
-  test("registers the five page tools with abortable registrations", async () => {
+  test("makes the Play surface eligible only for an active current player", () => {
+    expect(
+      playSiteToolPageEligible({
+        status: "active",
+        facilitator: { source: "agent" },
+        current_play_role: "player",
+      }),
+    ).toBe(true);
+    expect(
+      playSiteToolPageEligible({
+        status: "active",
+        facilitator: { source: "agent" },
+        current_play_role: "spectator",
+      }),
+    ).toBe(false);
+    expect(
+      playSiteToolPageEligible({
+        status: "archived",
+        facilitator: { source: "agent" },
+        current_play_role: "player",
+      }),
+    ).toBe(false);
+    expect(
+      playSiteToolPageEligible({
+        status: "active",
+        facilitator: { source: "terra" },
+        current_play_role: "player",
+      }),
+    ).toBe(false);
+  });
+
+  test("registers the five Play site tools with abortable registrations", async () => {
     const controller = new AbortController();
     const registrations: Array<{
       tool: ModelContextTool;
@@ -27,10 +59,11 @@ describe("ChatGPT play tools", () => {
       },
     };
 
-    await registerTools(
+    await registerSiteTools(
       modelContext,
       createAgentPlayTools("world-1", () => undefined, controller.signal),
       controller.signal,
+      playRecovery,
     );
 
     expect(registrations.map(({ tool }) => tool.name)).toEqual([
@@ -43,16 +76,6 @@ describe("ChatGPT play tools", () => {
     expect(
       registrations.every(({ signal }) => signal === controller.signal),
     ).toBe(true);
-    const starterPrompt = buildAgentStarterPrompt(
-      "https://play.example/play/world-1",
-    );
-    expect(starterPrompt).toContain("https://play.example/play/world-1");
-    expect(starterPrompt).toContain("Keep lasting game state in Gezerah");
-    expect(starterPrompt).toContain("naturally notice or care about");
-    expect(starterPrompt).toContain("not private thoughts");
-    expect(starterPrompt).not.toContain("inspect_play");
-    expect(starterPrompt).not.toContain("Site Tools");
-    expect(starterPrompt).not.toContain("built-in browser");
     const inspectDescription = registrations.find(
       ({ tool }) => tool.name === "inspect_play",
     )?.tool.description;
@@ -62,6 +85,9 @@ describe("ChatGPT play tools", () => {
     const resolveDescription = registrations.find(
       ({ tool }) => tool.name === "resolve_problem",
     )?.tool.description;
+    const submitDescription = registrations.find(
+      ({ tool }) => tool.name === "submit_action",
+    )?.tool.description;
     expect(inspectDescription).toContain("visible profile prose");
     expect(inspectDescription).toContain("unexpressed private thoughts");
     expect(presentDescription).toContain("concrete environmental details");
@@ -70,11 +96,8 @@ describe("ChatGPT play tools", () => {
     expect(presentDescription).toContain("invent a Perception check");
     expect(resolveDescription).toContain("character-attuned narration");
     expect(resolveDescription).toContain("unexpressed thoughts");
-    expect(
-      buildAgentLaunchURL("https://play.example/play/world-1", "Inspect Play."),
-    ).toBe(
-      "codex://threads/new?prompt=Inspect+Play.&browserUrl=https%3A%2F%2Fplay.example%2Fplay%2Fworld-1",
-    );
+    expect(submitDescription).toContain("explicitly states or delegates");
+    expect(submitDescription).toContain("Never infer or invent an Action");
   });
 
   test("inspects setup-required characters without requesting claim choices", async () => {
@@ -159,6 +182,8 @@ describe("ChatGPT play tools", () => {
         current_play_role: string;
       };
       claimed_characters: Array<{ id: string }>;
+      ok: boolean;
+      error: { code: string };
       next_step: string;
     };
 
@@ -170,7 +195,12 @@ describe("ChatGPT play tools", () => {
     expect(payload.world.facilitator_source).toBe("agent");
     expect(payload.viewer.membership_role).toBe("owner");
     expect(payload.viewer.current_play_role).toBe("player");
-    expect(payload.next_step).toContain("required fields in the page");
+    expect(payload.ok).toBe(false);
+    expect(payload.error.code).toBe("character_setup_required");
+    expect(payload.next_step).toContain("delegated Play is unavailable");
+    expect(payload.next_step).toContain(
+      "Do not ask the participant to operate Gezerah",
+    );
   });
 
   test("inspects Play with canonical World, membership, and Interaction keys", async () => {
@@ -359,6 +389,64 @@ describe("ChatGPT play tools", () => {
     expect(payload.presented_interaction.context_entity_ids).toEqual(["ash"]);
   });
 
+  test("records only the explicit player Action represented by its input", async () => {
+    let submittedBody: unknown;
+    globalThis.fetch = Object.assign(
+      (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        const requestURL =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        const path = new URL(requestURL, "https://play.example").pathname;
+        if (path === "/api/worlds/world-1/interactions")
+          return Promise.resolve(
+            Response.json([
+              {
+                id: "problem-1",
+                revision: 6,
+                status: "open",
+                facilitator_source: "agent",
+              },
+            ]),
+          );
+        if (path === "/api/worlds/world-1/interactions/problem-1/actions") {
+          if (typeof init?.body === "string")
+            submittedBody = JSON.parse(init.body) as unknown;
+          return Promise.resolve(
+            Response.json({ id: "action-1", text: "I bar the gate." }),
+          );
+        }
+        return Promise.resolve(Response.json({}, { status: 404 }));
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    const submit = createAgentPlayTools(
+      "world-1",
+      () => undefined,
+      new AbortController().signal,
+    ).find((tool) => tool.name === "submit_action");
+
+    const payload = (await submit?.execute({
+      text: "I bar the gate.",
+      acting_entity_id: "ash",
+    })) as {
+      submitted_action: { id: string };
+      next_step: string;
+    };
+
+    expect(submittedBody).toEqual({
+      text: "I bar the gate.",
+      acting_entity_id: "ash",
+      expected_revision: 6,
+    });
+    expect(payload.submitted_action.id).toBe("action-1");
+    expect(payload.next_step).toContain(
+      "Never submit another Action until the player explicitly states or delegates it",
+    );
+  });
+
   test("returns API conflicts as useful tool results", async () => {
     const registrationController = new AbortController();
     const invocationController = new AbortController();
@@ -382,10 +470,11 @@ describe("ChatGPT play tools", () => {
       },
     };
 
-    await registerTools(
+    await registerSiteTools(
       modelContext,
       [failingTool],
       registrationController.signal,
+      playRecovery,
     );
     const payload = (await registered?.execute(
       {},
@@ -420,7 +509,12 @@ describe("ChatGPT play tools", () => {
     ).find((tool) => tool.name === "inspect_play");
     expect(inspect).toBeDefined();
 
-    await registerTools(modelContext, [inspect!], controller.signal);
+    await registerSiteTools(
+      modelContext,
+      [inspect!],
+      controller.signal,
+      playRecovery,
+    );
     const payload = (await registered?.execute(null)) as {
       ok: boolean;
       error: { code: string; message: string };

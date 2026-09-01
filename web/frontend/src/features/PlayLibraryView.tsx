@@ -40,14 +40,12 @@ export function PlayLibraryView({
   model,
   accountControls,
   onReturnHome,
-  onCreateWorld,
   onOpenWorld,
   onRetry,
 }: {
   model: PlayLibraryViewModel;
   accountControls: ReactNode;
   onReturnHome: () => void;
-  onCreateWorld: () => void;
   onOpenWorld: (worldID: string) => void;
   onRetry: () => void;
 }) {
@@ -76,17 +74,8 @@ export function PlayLibraryView({
         <header className="library-heading">
           <div>
             <h1>What world do you want to play?</h1>
-            <p>
-              Continue a saved World or start with one of three new settings.
-            </p>
+            <p>Continue a saved World.</p>
           </div>
-          <button
-            className="button button-primary"
-            type="button"
-            onClick={onCreateWorld}
-          >
-            New world
-          </button>
         </header>
 
         {model.loading ? <LoadingState label="Loading worlds" /> : null}
@@ -96,16 +85,7 @@ export function PlayLibraryView({
         {!model.loading && model.issue === null && model.worlds.length === 0 ? (
           <EmptyState
             title="No saved worlds yet"
-            description="Choose one of three complete settings to begin."
-            action={
-              <button
-                className="button button-play"
-                type="button"
-                onClick={onCreateWorld}
-              >
-                Choose a new world
-              </button>
-            }
+            description="Start from Home with ChatGPT to create your first saved World."
           />
         ) : null}
 

@@ -27,15 +27,9 @@ import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
 import { useResource } from "../hooks/useResource";
 import { useWorldEvents, type WorldEvent } from "../hooks/useWorldEvents";
-import { playWorldURL } from "../worldRoutes";
 import { EntityDetail } from "./EntityDetail";
 import { EntityProfilePanel } from "./EntityProfilePanel";
-import {
-  buildAgentLaunchURL,
-  buildAgentStarterPrompt,
-  siteToolsSupported,
-  useAgentPlayTools,
-} from "./agentPlayTools";
+import { playSiteToolPageEligible, useAgentPlayTools } from "./agentPlayTools";
 import {
   CharacterOnboardingView,
   LiveInteractionView,
@@ -96,17 +90,9 @@ export function WorldPlay({
     null,
   );
   const [profileRefreshToken, setProfileRefreshToken] = useState(0);
-  const [agentPromptCopied, setAgentPromptCopied] = useState(false);
   const [selectedEntityId, setSelectedEntityId] = useState<
     string | undefined
   >();
-  const agentStarterPrompt = buildAgentStarterPrompt(
-    new URL(playWorldURL(world.id), window.location.origin).href,
-  );
-  const agentLaunchURL = buildAgentLaunchURL(
-    new URL(playWorldURL(world.id), window.location.origin).href,
-    agentStarterPrompt,
-  );
   const reloadMembers = members.reload;
   const reloadEntities = entities.reload;
   const reloadInteractions = interactions.reload;
@@ -134,19 +120,12 @@ export function WorldPlay({
       reloadAvailableEntities,
     ],
   );
-  useAgentPlayTools({
-    enabled: world.status === "active" && world.facilitator.source === "agent",
+  const agentSiteTools = useAgentPlayTools({
+    enabled: playSiteToolPageEligible(world),
     worldId: world.id,
     onChanged: refresh,
   });
   useWorldEvents(playReady ? world.id : undefined, refresh);
-
-  function copyAgentPrompt() {
-    void navigator.clipboard
-      .writeText(agentStarterPrompt)
-      .then(() => setAgentPromptCopied(true))
-      .catch(() => setAgentPromptCopied(false));
-  }
 
   async function changeFacilitator(value: string) {
     const currentValue =
@@ -162,29 +141,29 @@ export function WorldPlay({
       (item) => item.id === world.membership_id,
     );
     const targetMember = members.items.find((item) => item.id === membershipID);
-    const emergencyTakeover =
+    const activeTerraRecovery =
       !automated &&
-      world.facilitator.source !== "human" &&
+      world.facilitator.source === "terra" &&
       membershipID === world.membership_id &&
       interactions.items.some((item) => item.status === "adjudicating");
-    const possibleAutomatedTakeover =
+    const possibleTerraRecovery =
       !automated &&
-      world.facilitator.source !== "human" &&
+      world.facilitator.source === "terra" &&
       membershipID === world.membership_id &&
       world.role === "owner";
     const returningToSeat =
       world.current_play_role === "facilitator"
         ? currentMember?.play_status === "ready"
-          ? " Your Play status is ready when the handoff completes."
-          : " You’ll enter character setup when the handoff completes."
+          ? " Your Play status is ready when the reassignment completes."
+          : " You’ll enter character setup when the reassignment completes."
         : "";
     const confirmation =
-      emergencyTakeover || possibleAutomatedTakeover
-        ? `Take over from ${world.facilitator.source === "agent" ? "ChatGPT" : "Terra"}? If a problem is active, your submitted action will be withdrawn and you will resolve the problem as Facilitator.`
+      activeTerraRecovery || possibleTerraRecovery
+        ? "Take over from Terra? If a problem is active, your submitted action will be withdrawn and you will resolve the problem as Facilitator."
         : terra
-          ? `Hand facilitation to Terra? Terra will author and resolve the next Problem.${returningToSeat}`
+          ? `Assign Terra as Facilitator? Terra will author and resolve the next Problem.${returningToSeat}`
           : agent
-            ? `Hand facilitation to ChatGPT? ChatGPT will use this signed-in Play page to author and resolve Problems.${returningToSeat}`
+            ? `Assign ChatGPT as Facilitator? ChatGPT will use this signed-in Play page to author and resolve Problems.${returningToSeat}`
             : `${targetMember?.display_name ?? "This member"} will become the Facilitator and their current play role will become facilitator.${returningToSeat}`;
     if (!window.confirm(confirmation)) return;
     setChangingFacilitator(true);
@@ -206,7 +185,7 @@ export function WorldPlay({
       setFacilitatorError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not hand off facilitation."),
+          : new ApiError(0, "unknown", "Could not reassign facilitation."),
       );
     } finally {
       setChangingFacilitator(false);
@@ -302,6 +281,7 @@ export function WorldPlay({
         }
         canBecomeFacilitator={
           world.status === "active" &&
+          world.facilitator.source !== "agent" &&
           (world.role === "owner" || world.role === "editor")
         }
         changingFacilitator={changingFacilitator}
@@ -311,15 +291,9 @@ export function WorldPlay({
         }
         agentMode={
           world.facilitator.source === "agent"
-            ? {
-                siteToolsAvailable: siteToolsSupported(),
-                starterPrompt: agentStarterPrompt,
-                launchURL: agentLaunchURL,
-                promptCopied: agentPromptCopied,
-              }
+            ? { siteTools: agentSiteTools }
             : null
         }
-        onCopyAgentPrompt={copyAgentPrompt}
         onChanged={refresh}
       />
     );
@@ -338,7 +312,9 @@ export function WorldPlay({
     return (
       <WorldPlayBoundaryView
         model={{ kind: "issue", issue: loadIssue }}
-        onRetry={() => refresh()}
+        {...(world.facilitator.source === "agent"
+          ? {}
+          : { onRetry: () => refresh() })}
       />
     );
 
@@ -398,18 +374,16 @@ export function WorldPlay({
       : `human:${world.facilitator.membership_id ?? ""}`;
   const canChangeFacilitator =
     world.status === "active" &&
+    world.facilitator.source !== "agent" &&
     active === undefined &&
     (world.role === "owner" || world.role === "editor" || facilitator);
   const canTakeOverFacilitation =
     world.status === "active" &&
     world.role === "owner" &&
-    world.facilitator.source !== "human" &&
+    world.facilitator.source === "terra" &&
     (active?.status === "open" || active?.status === "adjudicating");
   const facilitatorChoices = [
-    ...(world.facilitator.source !== "agent"
-      ? [{ value: "terra", name: "Terra" }]
-      : []),
-    { value: "agent", name: "ChatGPT" },
+    { value: "terra", name: "Terra" },
     ...members.items
       .filter((item) => item.status === "active" && item.role !== "spectator")
       .map((item) => ({
@@ -432,7 +406,10 @@ export function WorldPlay({
             : humanize(world.current_play_role),
         membershipRoleLabel: humanize(world.role),
         facilitator,
-        canCreateProblem: facilitator && world.status === "active",
+        canCreateProblem:
+          facilitator &&
+          world.facilitator.source !== "agent" &&
+          world.status === "active",
         hasActiveProblem: active !== undefined,
         facilitatorAssignment: {
           name: facilitatorName,
@@ -494,12 +471,7 @@ export function WorldPlay({
         ),
         agentMode:
           world.facilitator.source === "agent"
-            ? {
-                siteToolsAvailable: siteToolsSupported(),
-                starterPrompt: agentStarterPrompt,
-                launchURL: agentLaunchURL,
-                promptCopied: agentPromptCopied,
-              }
+            ? { siteTools: agentSiteTools }
             : null,
       }}
       actions={{
@@ -508,7 +480,6 @@ export function WorldPlay({
         takeOverFacilitation: () =>
           void changeFacilitator(`human:${world.membership_id}`),
         continueWithTerra: () => void continueWithTerra(),
-        copyAgentPrompt,
         retryRoster: entities.reload,
         retryProblems: interactions.reload,
         selectEntity: setSelectedEntityId,
@@ -524,7 +495,7 @@ export function WorldPlay({
               mechanics={mechanicItems}
               rulesRevision={rulesRevision}
               rulesReady={rulesReady}
-              facilitator={facilitator}
+              facilitator={facilitator && world.facilitator.source !== "agent"}
               onChanged={refresh}
             />
           ),
@@ -536,9 +507,10 @@ export function WorldPlay({
               mechanics={mechanicItems}
               rulesRevision={rulesRevision}
               mechanicsEditable={false}
-              controlledByCurrentMember={controlledEntityIDs.includes(
-                selectedEntity.id,
-              )}
+              controlledByCurrentMember={
+                world.facilitator.source !== "agent" &&
+                controlledEntityIDs.includes(selectedEntity.id)
+              }
               facilitator={false}
               world={world}
               profileRefreshToken={profileRefreshToken}
@@ -582,7 +554,6 @@ function CharacterOnboarding({
   facilitatorError,
   onBecomeFacilitator,
   agentMode,
-  onCopyAgentPrompt,
   onChanged,
 }: {
   world: World;
@@ -602,7 +573,6 @@ function CharacterOnboarding({
   facilitatorError: ApiError | null;
   onBecomeFacilitator: () => void;
   agentMode: AgentModeViewModel | null;
-  onCopyAgentPrompt: () => void;
   onChanged: () => void;
 }) {
   const available = entities.filter(
@@ -656,9 +626,7 @@ function CharacterOnboarding({
         facilitatorActionLabel:
           world.facilitator.source === "terra"
             ? "Take over from Terra"
-            : world.facilitator.source === "agent"
-              ? "Take over from ChatGPT"
-              : "Become Facilitator",
+            : "Become Facilitator",
         canBecomeFacilitator,
         changingFacilitator,
         facilitatorIssue: toPlayViewIssue(facilitatorError),
@@ -689,10 +657,9 @@ function CharacterOnboarding({
         selectCharacter: setSelectedID,
         becomeFacilitator: onBecomeFacilitator,
         claimEntity: (entityID) => void claimEntity(entityID),
-        copyAgentPrompt: onCopyAgentPrompt,
       }}
       profile={
-        selected === undefined ? null : (
+        selected === undefined || agentMode !== null ? null : (
           <EntityProfilePanel
             world={world}
             entity={selected}
@@ -857,10 +824,9 @@ function LiveInteraction({
   const [terraIdempotencyKey] = useState(() => crypto.randomUUID());
   const terraFacilitated = world.facilitator.source === "terra";
   const agentFacilitated = world.facilitator.source === "agent";
-  const automatedFacilitated = terraFacilitated || agentFacilitated;
   const canSkip =
     world.status === "active" &&
-    automatedFacilitated &&
+    terraFacilitated &&
     interaction.facilitator_source === world.facilitator.source &&
     (interaction.status === "open" || interaction.status === "adjudicating") &&
     world.current_play_role === "player" &&

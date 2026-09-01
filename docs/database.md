@@ -56,7 +56,7 @@ The current schema is installed by this ordered chain:
 | `004_password_auth.sql`                      | Case-insensitive usernames, Argon2id password hashes, account status, and opaque server sessions.      |
 | `005_terra.sql`                              | World-level human/Terra facilitator source selection.                                                  |
 | `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live Interactions, Resolution receipts, and World events. |
-| `007_agent_facilitator.sql`                  | Non-membership agent attribution for WebMCP-driven interactions, resolutions, and events.             |
+| `007_agent_facilitator.sql`                  | Non-membership agent attribution for agent-facilitated Interactions, Resolutions, and events.          |
 
 For a local database that already has a Gezerah migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
@@ -117,7 +117,7 @@ guards Controller-set and roster composition changes independently.
 `facilitator_source` is the assignment discriminator. `human` requires a
 `facilitator_membership_id` from the same world; `terra` and `agent` require it to be
 null. Membership role remains owner/editor/player/spectator and is not changed
-by assignment. Active/non-spectator eligibility and the narrow owner takeover
+by assignment. Active/non-spectator eligibility and the narrow Facilitator recovery
 from a Terra-authored open or adjudicating interaction are application
 lifecycle rules rather than SQL checks.
 
@@ -236,7 +236,7 @@ allows at most one selected action per interaction.
 `facilitator_source` snapshots who authored the interaction independently of
 the world's later assignment. Human rows require
 `created_by_membership_id`; Terra and agent rows require it to be null. The owner recovery
-path deliberately leaves an automated interaction's source unchanged even though a
+path deliberately leaves a Terra interaction's source unchanged even though a
 later human resolution concludes it.
 
 Action attribution stores a nullable `(acting_entity_id, acting_entity_name)`
@@ -273,7 +273,7 @@ by effect/entity, and explicit positions preserve execution order.
 
 Human committed Resolutions require creator/resolver memberships; Terra and agent
 Resolutions leave both human columns null. Resolution source can differ from
-interaction source only when a human owner takes over an automated
+interaction source only when a human owner takes over a Terra
 adjudication, preserving both facts rather than rewriting provenance.
 
 ### Events
@@ -285,7 +285,7 @@ adjudication, preserving both facts rather than rewriting provenance.
 Event IDs are generated `bigint` identities indexed by `(world_id, id)`. The
 payload is not a state snapshot. Event types cover world/membership changes,
 entity control/profile changes, character-field changes, interaction/action
-lifecycle, mechanic `rules-updated` publication, facilitator handoff, and
+lifecycle, mechanic `rules-updated` publication, Facilitator reassignment, and
 resolution application. `actor_source` is `human` with a required human
 membership; `terra` and `agent` have a null membership. A pacing current player's membership is
 therefore not stored as the actor on automated lifecycle events.
@@ -330,7 +330,7 @@ Revisions advance only for meaningful mutations where implemented. A direct
 SQL writer must not assume the timestamp trigger also increments a revision.
 `worlds.roster_revision` is separate from `worlds.revision` so controller changes
 do not conflict with unrelated settings or facilitator assignment drafts.
-`worlds.revision` also serializes handoff and owner takeover.
+`worlds.revision` also serializes Facilitator reassignment and Facilitator recovery.
 `world_mechanic_graphs.revision` is separate from both and versions the published
 mechanic-expression graph.
 Problem-authored Inline statuses do not publish configuration or advance it.

@@ -41,6 +41,7 @@ describe("workspace presentation", () => {
     const html = renderToStaticMarkup(
       <PlayWorkspaceView
         worldName="The Glass March"
+        agentMode={false}
         currentPlayRoleLabel="player"
         user={{ displayName: "River", username: "river.song" }}
         accountControls={<button type="button">Account</button>}
@@ -54,5 +55,26 @@ describe("workspace presentation", () => {
     expect(html).toContain("All worlds");
     expect(html).toContain("The Glass March");
     expect(html).toContain("Play surface fixture");
+  });
+
+  test("renders an agent-facilitated Play shell without site navigation", () => {
+    const html = renderToStaticMarkup(
+      <PlayWorkspaceView
+        worldName="The Glass March"
+        agentMode
+        currentPlayRoleLabel="player"
+        user={{ displayName: "River", username: "river.song" }}
+        accountControls={<button type="button">Account</button>}
+        onHome={() => undefined}
+        onWorldLibrary={() => undefined}
+      >
+        <p>Delegated Play reference</p>
+      </PlayWorkspaceView>,
+    );
+
+    expect(html).toContain("Attached World");
+    expect(html).not.toContain("All worlds");
+    expect(html).not.toContain("Return home");
+    expect(html).toContain("Delegated Play reference");
   });
 });

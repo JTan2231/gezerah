@@ -2749,25 +2749,9 @@ textarea {
 }
 
 .agent-mode-notice p {
-  margin: 0.2rem 0 0.55rem;
+  margin: 0.2rem 0 0;
   color: var(--muted);
   font-size: 0.7rem;
-}
-
-.agent-mode-notice code {
-  display: block;
-  max-width: 100%;
-  color: var(--ink-soft);
-  font-size: 0.64rem;
-  overflow-wrap: anywhere;
-  white-space: normal;
-}
-
-.agent-mode-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 0.5rem;
 }
 
 .play-header {
@@ -4256,8 +4240,7 @@ textarea {
   .action-composer-actions,
   .consequence-actions-footer,
   .adjudicate-callout,
-  .agent-mode-notice,
-  .agent-mode-actions {
+  .agent-mode-notice {
     align-items: stretch;
     flex-direction: column;
   }

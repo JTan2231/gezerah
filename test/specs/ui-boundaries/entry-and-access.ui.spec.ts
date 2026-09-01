@@ -60,24 +60,19 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("heading", { name: "Play or Build" }),
+      page.getByRole("heading", { name: "Play Gezerah with ChatGPT" }),
     ).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("link", { name: "Start in ChatGPT" }),
+      page.getByRole("link", { name: "Open in ChatGPT" }),
     ).toBeFocused();
-    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("link", { name: "Open in ChatGPT" }),
+    ).toHaveAttribute("href", /^codex:\/\/threads\/new\?/);
+    await expect(page.getByRole("link")).toHaveCount(1);
     await expect(
       page.getByRole("button", { name: "Copy starter prompt" }),
-    ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("link", { name: "Choose a World yourself" }),
-    ).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(
-      page.getByRole("link", { name: "Play", exact: true }),
-    ).toBeFocused();
+    ).toHaveCount(0);
   });
 
   await test.step("NAV-V01/non-editor-build-boundary", async () => {

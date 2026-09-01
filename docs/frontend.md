@@ -2,17 +2,18 @@
 
 ## Product surface
 
-The React application presents two deliberately separate product areas over the
-same World model. `/play` is the Play area and `/build` is the configuration area.
-The root route keeps both choices and also presents the recommended, data-free
-**Start playing with ChatGPT** quick start. Its copyable prompt asks ChatGPT to
-help the person choose among the three complete World templates and their
-Characters, then begin Play. The primary action opens that prompt in ChatGPT
-Work on the web; copying it remains available, and the manual action enters the
-authoritative `/play/new` chooser. The Build library separately presents
-**Start a World with ChatGPT** for shaping and configuring a custom World. A
-signed-in account sees only worlds it owns or has joined. Authors configure three
-user-authored lists:
+The React application retains two internal product areas over the same World
+model: `/play` is the Play area and `/build` is the configuration area. The
+public root does not expose either library. It presents one data-free **Open in
+ChatGPT** launch with `/play/new` attached and no prompt-only or manual-template
+fallback. After authentication, ChatGPT uses the Start site-tool surface to
+inspect and copy one of three complete World templates, then the Play site-tool
+surface to claim a complete Character and begin Play. The same conversation and
+attached browser tab continue across that route change.
+
+The internal Build and Play routes remain directly addressable for authoring,
+administration, and validation. A signed-in account sees only Worlds it owns or
+has joined. Authors configure three user-authored lists:
 
 - **capacities**: numeric input or derived scores/pools carried by every entity;
 - **capabilities**: Boolean/numeric input or derived ratings carried by every Entity;
@@ -48,14 +49,15 @@ component framework, or service worker.
 | `src/components/StudioUI.tsx`               | Brand, fields, modal, notices, loading/empty states, avatars, and role labels.   |
 | `src/**/*View.tsx`                          | Backend-independent markup, layout, accessibility, and local UI interaction.     |
 | `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
-| `src/features/HomeChoice.tsx`               | Data-free root navigation controller for Play and Build.                         |
-| `src/features/ChatGPTWorldStartView.tsx`     | Template-Play and custom-Build ChatGPT handoff view.                              |
-| `src/features/useChatGPTWorldStart.ts`       | Template-Play and custom-Build prompt construction and clipboard status.          |
+| `src/features/HomeChoice.tsx`               | Data-free public delegated-start launch controller.                               |
+| `src/features/ChatGPTWorldStartView.tsx`     | Template-Play launch and internal custom-Build assistance view.                    |
+| `src/features/useChatGPTWorldStart.ts`       | Attached launch-prompt construction plus internal Build fallback state.            |
 | `src/features/IdentityGate.tsx`             | Username/password authentication command controller.                             |
 | `src/features/AccountControls.tsx`          | Password and server-side signout command controller.                             |
 | `src/features/BuildLibrary.tsx`             | Build-world collection and creation controller.                                  |
 | `src/features/PlayLibrary.tsx`              | Membership-filtered world collection controller.                                 |
-| `src/features/WorldTemplateLibrary.tsx`     | Three-template catalog and idempotent World-copy controller.                      |
+| `src/features/WorldTemplateLibrary.tsx`     | Authenticated Start-page catalog and site-tool readiness controller.              |
+| `src/features/worldTemplateStartTools.ts`   | Start site-tool registration, catalog inspection, and idempotent copy commands.   |
 | `src/features/BuildWorkspace.tsx`           | Owner/editor gate, world resource, and Build navigation controller.              |
 | `src/features/PlayWorkspace.tsx`            | Play-world resource and shell composition controller.                            |
 | `src/features/RosterWorkspace.tsx`          | Entity, member, mechanic, selection, and refresh controller.                     |
@@ -188,7 +190,7 @@ maps `name` and optional `description` into a settings draft. `SettingsView`
 edits that draft and emits save/archive intent while displaying the current Facilitator
 read-only. The controller adds `expected_revision`, accepts the returned
 `World` as the new draft baseline, refreshes the workspace resource, and
-performs archive navigation. Facilitator handoff is a separate Play command. The view
+performs archive navigation. Facilitator reassignment is a separate Play command. The view
 never sees the world ID, revision, endpoint, HTTP method, or response DTO.
 
 ### Errors, permissions, and server authority
@@ -211,7 +213,7 @@ serialization.
 Live Play has several independent command lifecycles, so it uses multiple view
 contracts rather than one universal props object. The root controller owns the
 member/entity/mechanic/interaction resources, polling, SSE reconnect, and rules
-revision synchronization. Facilitator handoff, human problem creation, player
+revision synchronization. Facilitator reassignment, human problem creation, player
 action composition, human adjudication/resolution, Terra pacing, compiled-effect
 preview, and history are separate presentation islands. Command payload
 construction, exact revisions, idempotency, and post-event authoritative reloads
@@ -233,9 +235,9 @@ Routes are parsed without an external router:
 
 | URL                                             | Surface                                       |
 | ----------------------------------------------- | --------------------------------------------- |
-| `/`                                             | ChatGPT template-Play quick start plus Play/Build; no API load. |
+| `/`                                             | Sole public ChatGPT launch for delegated start; no API load. |
 | `/play`                                         | Current account's World list for Play.        |
-| `/play/new`                                     | Three bundled World templates available to copy. |
+| `/play/new`                                     | Authenticated Start site-tool page; catalog is visible but copied only through ChatGPT. |
 | `/play/{world-id}`                              | Onboarding or Play.                           |
 | `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
 | `/build`                                        | Editable-world list and world creation.       |
@@ -252,9 +254,10 @@ A bare Build world path canonicalizes to capacities. A player or spectator
 cannot cause Play to render under a Build URL; Build shows an explicit
 access boundary and offers a deliberate transition to Play.
 
-The root quick start and area choices remain data-free. Its assisted and manual
-template actions point to `/play/new`; the requested route survives the account
-gate and only then loads the authenticated catalog. On entering Play, Build, or an invite URL,
+The root ChatGPT launch remains data-free. Its attached browser destination is
+the exact `/play/new` URL; that route survives the account gate and only then
+loads the authenticated catalog and registers the complete Start site-tool
+surface. On entering Play, Build, or an invite URL,
 the application bootstraps with `GET /api/me`. An anonymous browser sees a
 username/password gate; signup asks for username, display name, and a password
 of at least 8 characters with confirmation, while signin asks only for username
@@ -279,21 +282,22 @@ revoking the account's other sessions.
 
 ## World library
 
-Both libraries request `GET /api/worlds`. The Build library filters to
-owner/editor memberships, offers both the custom-World ChatGPT prompt and manual
-world creation, and
-opens the capacity editor. The Play library asks which World the person wants
-to play, shows every admitted saved World, and always offers **New world**.
+Both internal libraries request `GET /api/worlds`. The Build library filters to
+owner/editor memberships, offers both custom-World assistance and manual World
+creation, and opens the capacity editor. The internal Play library shows every
+admitted saved World but does not expose a manual template-start route.
 Saved cards emphasize the current play role, Play status, roster size, and last
 activity. The membership role remains available separately inside the World.
 
 `/play/new` loads the complete three-item catalog from
-`GET /api/world-templates`. Each choice has equal visual weight and an explicit
-**Copy and play** command. The client generates the destination World UUID and
-reuses it when retrying `POST /api/world-templates/{template_id}/clone`, so an
-uncertain response cannot create a second copy. A successful command replaces
-the catalog URL with `/play/{world-id}` and enters ordinary Character
-onboarding. An incomplete catalog is treated as unavailable rather than
+`GET /api/world-templates`. Each authored option is visible with equal weight,
+but the page exposes no manual copy command. Its Start site-tool surface
+registers `inspect_world_templates` and `copy_world_template`. The copy handler
+generates the destination World UUID and reuses it when retrying
+`POST /api/world-templates/{template_id}/clone`, so an uncertain response cannot
+create a second copy. A successful command replaces the catalog URL with
+`/play/{world-id}`, unregisters the Start surface, and lets the Play page
+register its own surface. An incomplete catalog is unavailable rather than
 silently offering fewer than three choices.
 
 ## Static configuration
@@ -391,7 +395,7 @@ archived Play controls remain read-only.
 
 `play_status` remains the underlying player-seat readiness while that
 membership is facilitator. The facilitator can enter Play regardless, and a
-handoff confirmation warns whether they will return to a ready seat or to
+reassignment confirmation warns whether they will return to a ready seat or to
 character setup. Spectators are always ready and read-only.
 
 The Play header names the current Facilitator, the viewer's current play

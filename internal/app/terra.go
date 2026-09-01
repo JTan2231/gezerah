@@ -299,7 +299,7 @@ func (s *Server) createAndPresentAutomatedInteraction(
 	}
 	defer rollbackTx(ctx, tx)
 	// The world lock serializes concurrent Continue requests and prevents a
-	// facilitator handoff between the final assignment check and commit.
+	// Facilitator reassignment between the final assignment check and commit.
 	var lockedWorldID string
 	if err := tx.QueryRow(ctx, `select id::text from worlds where id = $1 for update`, worldID).Scan(&lockedWorldID); err != nil {
 		return "", err

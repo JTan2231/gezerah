@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import type { SiteToolRegistrationState } from "./siteTools";
+
 export interface PlayViewIssue {
   kind: "connection" | "request";
   message: string;
@@ -75,7 +77,6 @@ export interface WorldPlayViewActions {
   changeFacilitator: (value: string) => void;
   takeOverFacilitation: () => void;
   continueWithTerra: () => void;
-  copyAgentPrompt: () => void;
   retryRoster: () => void;
   retryProblems: () => void;
   selectEntity: (id: string) => void;
@@ -96,10 +97,7 @@ export interface AvailableEntityViewModel {
 }
 
 export interface AgentModeViewModel {
-  siteToolsAvailable: boolean;
-  starterPrompt: string;
-  launchURL: string;
-  promptCopied: boolean;
+  siteTools: SiteToolRegistrationState;
 }
 
 export interface CharacterOnboardingViewModel {
@@ -126,7 +124,6 @@ export interface CharacterOnboardingViewActions {
   selectCharacter: (id: string) => void;
   becomeFacilitator: () => void;
   claimEntity: (id: string) => void;
-  copyAgentPrompt: () => void;
 }
 
 export interface NewProblemDraftViewModel {

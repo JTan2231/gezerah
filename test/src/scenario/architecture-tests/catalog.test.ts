@@ -162,9 +162,9 @@ describe("scenario catalog", () => {
     assert.throws(
       () =>
         validateLifecycleSpineSource(
-          source.replace("identity.enter-builder", "world.create"),
+          source.replace("identity.enter-internal-builder", "world.create"),
         ),
-      /behavior calls mismatch.*identity\.enter-builder.*world\.create/,
+      /behavior calls mismatch.*identity\.enter-internal-builder.*world\.create/,
     );
     assert.throws(
       () =>

@@ -486,7 +486,7 @@ manufacturing a membership. Current players—including owners/editors when they
 are not the facilitator—must satisfy controlled-character readiness before live
 interaction/event access and before skipping a Terra-authored open or
 adjudicating Interaction. `play_status` is still derived for a designated
-human facilitator so a later handoff knows the seat they return to, but the
+human facilitator so a later Facilitator reassignment knows the seat they return to, but the
 facilitator bypasses that readiness gate while assigned. Spectators report
 ready and remain audience-only.
 
@@ -507,7 +507,7 @@ facilitator even when that membership is neither an editor nor controller.
 
 Facilitator assignment accepts an active non-spectator target and is available
 to owner/editor memberships or the current human facilitator. It locks the
-world revision and normally rejects a meaningful handoff while any interaction
+world revision and normally rejects a meaningful Facilitator reassignment while any interaction
 is unfinished. One transactional exception lets the owner assign themself from
 Terra while the sole unfinished interaction is Terra-authored and open or
 adjudicating. It locks that interaction, withdraws the owner's submitted action
@@ -522,7 +522,7 @@ remaining authority.
 Non-facilitator interaction visibility is enforced in SQL/response loading.
 Adjudication of a human-authored interaction is private; a Terra-authored
 interaction remains visible to its audience for progress/retry, including
-after an owner takeover. Presented cancelled interactions remain audience
+after Facilitator recovery. Presented cancelled interactions remain audience
 history, while cancelled drafts remain facilitator-only. Private notes and
 restricted profile text are omitted server-side. Every ID in a command is
 revalidated against `world_id`; frontend checks are affordances, not
