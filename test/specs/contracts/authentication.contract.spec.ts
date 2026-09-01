@@ -311,6 +311,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
       expect(after.idleExpiresAtMicros).toBe(before.idleExpiresAtMicros);
     } finally {
       controller.abort();
+      await stream.body?.cancel().catch(() => undefined);
     }
   });
 

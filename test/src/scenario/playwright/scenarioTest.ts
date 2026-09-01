@@ -28,6 +28,10 @@ import {
   type SpineBehaviorId,
   type SpineBehaviorInput,
 } from "./spineBehaviors";
+import {
+  parseCompleteWorldEvents,
+  type ProjectedWorldEvent,
+} from "./worldEventStream";
 
 export type ScenarioActorId = "owner" | "editor" | "player" | "spectator";
 
@@ -834,22 +838,11 @@ function isStaticAsset(request: Request): boolean {
   );
 }
 
-interface ProjectedWorldEvent {
-  readonly id: number;
-  readonly type: string;
-  readonly interaction_id?: string;
-  readonly action_id?: string;
-  readonly resolution_id?: string;
-  readonly actor_membership_id?: string;
-  readonly actor_source?: string;
-  readonly created_at?: string;
-}
-
 async function readAvailableWorldEvents(
   page: Page,
   worldId: string,
 ): Promise<readonly ProjectedWorldEvent[]> {
-  return page.evaluate(async (targetWorldId) => {
+  const chunks = await page.evaluate(async (targetWorldId) => {
     const controller = new AbortController();
     const response = await fetch(
       `/api/worlds/${targetWorldId}/events?after=0`,
@@ -861,6 +854,7 @@ async function readAvailableWorldEvents(
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
+    const chunks: string[] = [];
     let source = "";
     try {
       for (let reads = 0; reads < 8; reads += 1) {
@@ -871,25 +865,26 @@ async function readAvailableWorldEvents(
           ),
         ]);
         if (result.kind === "idle" || result.value.done) break;
-        source += decoder.decode(result.value.value, { stream: true });
-        if (source.includes('"type":"resolution-committed"')) break;
+        const chunk = decoder.decode(result.value.value, { stream: true });
+        chunks.push(chunk);
+        source += chunk;
+        const resolutionStart = source.indexOf('"type":"resolution-committed"');
+        if (
+          resolutionStart !== -1 &&
+          ["\n\n", "\r\n\r\n", "\r\r"].some(
+            (delimiter) => source.indexOf(delimiter, resolutionStart) !== -1,
+          )
+        ) {
+          break;
+        }
       }
     } finally {
       controller.abort();
       await reader.cancel().catch(() => undefined);
     }
-    return source.split("\n\n").flatMap((block): ProjectedWorldEvent[] => {
-      const data = block
-        .split("\n")
-        .find((line) => line.startsWith("data: "))
-        ?.slice("data: ".length);
-      if (data === undefined) return [];
-      const parsed: unknown = JSON.parse(data);
-      return typeof parsed === "object" && parsed !== null
-        ? [parsed as ProjectedWorldEvent]
-        : [];
-    });
+    return chunks;
   }, worldId);
+  return parseCompleteWorldEvents(chunks);
 }
 
 export const test = base.extend<ScenarioFixtures>({
