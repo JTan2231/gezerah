@@ -635,7 +635,7 @@ function CharacterOnboarding({
       setClaimError(
         reason instanceof ApiError
           ? reason
-          : new ApiError(0, "unknown", "Could not claim that character."),
+          : new ApiError(0, "unknown", "Could not choose that character."),
       );
     } finally {
       setClaimingEntityID(undefined);
@@ -647,6 +647,7 @@ function CharacterOnboarding({
       model={{
         worldName: world.name,
         currentUserName: user.display_name,
+        waitingForCharacter: world.play_status === "waiting-for-character",
         facilitatorName,
         statusLabel:
           world.play_status === "waiting-for-character"

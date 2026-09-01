@@ -249,10 +249,17 @@ export function CharacterOnboardingView({
       <header className="play-header onboarding-header">
         <div>
           <h1>{model.worldName}</h1>
-          <p>
-            {model.currentUserName}, complete all required fields for a
-            controlled character before entering Play.
-          </p>
+          {model.waitingForCharacter ? (
+            <p>
+              Choose your character, {model.currentUserName}. Meet the people
+              available to play in this World.
+            </p>
+          ) : (
+            <p>
+              {model.currentUserName}, complete all required fields for a
+              controlled character before entering Play.
+            </p>
+          )}
           <p>Facilitator: {model.facilitatorName}</p>
         </div>
         <div className="play-header-actions">
@@ -291,23 +298,20 @@ export function CharacterOnboardingView({
               title={
                 model.agentMode === null
                   ? "No character assigned"
-                  : "No entity available"
+                  : "No character available"
               }
               description={
                 model.agentMode === null
                   ? "An owner or editor must create an entity and assign you as a controller."
-                  : "There are no uncontrolled entities available in this world."
+                  : "There are no unclaimed characters available in this World."
               }
             />
           </div>
         ) : (
           <section className="panel available-entities">
             <header>
-              <h2>Choose an entity</h2>
-              <p>
-                Choose an available entity. Once claimed, it becomes your
-                character.
-              </p>
+              <h2>Meet the characters</h2>
+              <p>Choose one to make them your Character in this saved World.</p>
             </header>
             <div className="available-entity-list">
               {model.availableEntities.map((entity) => (
@@ -328,8 +332,8 @@ export function CharacterOnboardingView({
                     onClick={() => actions.claimEntity(entity.id)}
                   >
                     {model.claimingEntityId === entity.id
-                      ? "Claiming…"
-                      : "Choose entity"}
+                      ? `Choosing ${entity.name}…`
+                      : `Play as ${entity.name}`}
                   </button>
                 </article>
               ))}

@@ -17,6 +17,7 @@ export type BuildSection =
 type AppLocation =
   | { type: "home" }
   | { type: "play-library" }
+  | { type: "play-new-world" }
   | { type: "play-world"; worldId: string }
   | { type: "build-library" }
   | {
@@ -44,6 +45,8 @@ export function readLocation(pathname = window.location.pathname): AppLocation {
 
   if (parts[0] === "play") {
     if (parts.length === 1) return { type: "play-library" };
+    if (parts[1] === "new" && parts.length === 2)
+      return { type: "play-new-world" };
     if (parts[1] === "invite" && parts[2] !== undefined && parts.length === 3)
       return { type: "invite", area: "play", token: parts[2] };
     if (parts[1] !== undefined && parts.length === 2)
@@ -85,6 +88,10 @@ export function readLocation(pathname = window.location.pathname): AppLocation {
 
 export function playWorldURL(worldId: string): string {
   return `/play/${encodeURIComponent(worldId)}`;
+}
+
+export function playNewWorldURL(): string {
+  return "/play/new";
 }
 
 export function buildWorldURL(

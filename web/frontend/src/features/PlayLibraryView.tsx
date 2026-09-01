@@ -3,14 +3,11 @@ import type { ReactNode } from "react";
 import {
   Avatar,
   Brand,
+  EmptyState,
   ErrorMessage,
   LoadingState,
   RolePill,
 } from "../components/StudioUI";
-import {
-  ChatGPTWorldStartView,
-  type ChatGPTWorldStartViewProps,
-} from "./ChatGPTWorldStartView";
 
 interface PlayLibraryIssue {
   kind: "connection" | "request";
@@ -43,16 +40,16 @@ export function PlayLibraryView({
   model,
   accountControls,
   onReturnHome,
+  onCreateWorld,
   onOpenWorld,
   onRetry,
-  worldStart,
 }: {
   model: PlayLibraryViewModel;
   accountControls: ReactNode;
   onReturnHome: () => void;
+  onCreateWorld: () => void;
   onOpenWorld: (worldID: string) => void;
   onRetry: () => void;
-  worldStart: ChatGPTWorldStartViewProps;
 }) {
   return (
     <div className="library-page play-library-page">
@@ -78,9 +75,18 @@ export function PlayLibraryView({
       <main className="library-main">
         <header className="library-heading">
           <div>
-            <h1>Worlds</h1>
-            <p>Worlds you can play in.</p>
+            <h1>What world do you want to play?</h1>
+            <p>
+              Continue a saved World or start with one of three new settings.
+            </p>
           </div>
+          <button
+            className="button button-primary"
+            type="button"
+            onClick={onCreateWorld}
+          >
+            New world
+          </button>
         </header>
 
         {model.loading ? <LoadingState label="Loading worlds" /> : null}
@@ -88,9 +94,24 @@ export function PlayLibraryView({
           <ErrorMessage error={model.issue} onRetry={onRetry} />
         )}
         {!model.loading && model.issue === null && model.worlds.length === 0 ? (
-          <ChatGPTWorldStartView {...worldStart} />
+          <EmptyState
+            title="No saved worlds yet"
+            description="Choose one of three complete settings to begin."
+            action={
+              <button
+                className="button button-play"
+                type="button"
+                onClick={onCreateWorld}
+              >
+                Choose a new world
+              </button>
+            }
+          />
         ) : null}
 
+        {model.worlds.length === 0 ? null : (
+          <h2 className="library-section-title">Saved worlds</h2>
+        )}
         <div className="world-grid">
           {model.worlds.map((world) => (
             <article className="world-card play-world-card" key={world.id}>

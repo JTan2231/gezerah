@@ -2,10 +2,11 @@
 
 ## Stack and process model
 
-The backend is a Go 1.25.14 application with two direct runtime dependencies:
-`github.com/jackc/pgx/v5` and `golang.org/x/crypto` for Argon2id. It uses the standard-library HTTP server and
+The backend is a Go 1.25.14 application with three direct runtime dependencies:
+`github.com/jackc/pgx/v5`, `golang.org/x/crypto` for Argon2id, and
+`gopkg.in/yaml.v3` for strict embedded-template front matter. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
-the PostgreSQL schema and production frontend.
+the PostgreSQL schema, production frontend, and three Markdown World templates.
 
 One process owns connection pooling, startup migrations, JSON/SSE routes,
 embedded SPA serving, and signal-driven shutdown. There is no ORM, worker,
@@ -81,6 +82,12 @@ HTTP and persistence adapter:
 - authorization helpers derive one world membership from that authenticated actor;
 - route handlers perform validation, visibility filtering, and transaction
   orchestration;
+- the template loader validates exactly three Markdown artifacts, their strict
+  YAML front matter, file-local aliases, complete profiles, sparse overrides,
+  and complete typed Mechanic graphs before the server accepts traffic;
+- template clone uses one transaction to replace every alias with a fresh UUID
+  and persist an ordinary agent-facilitated World without a parallel template
+  store or continuing source relationship;
 - SQL loaders/savers use `world_id` on every scoped aggregate;
 - mechanic publication locks the rules revision and validates the
   proposed complete graph before writing normalized rows;
@@ -564,6 +571,8 @@ attribution without changing the interaction's Terra source.
 - `NewServerWithStaticFS` tests API/static behavior without a Vite build.
 - The small `queryer` interface lets helpers use pools or transactions.
 - DTO tests cover strict scalar unions and exact numbers.
+- Template-loader tests cover strict front matter, readable Markdown, alias
+  references, complete profiles, and the embedded three-item catalog.
 - Playwright supplies clean-PostgreSQL handler integration and multi-user flow.
 - Route tests require unknown API URLs to return `404 endpoint_not_found`.
 

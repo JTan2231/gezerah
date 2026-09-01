@@ -141,6 +141,7 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
+          waitingForCharacter: false,
           facilitatorName: "Terra",
           statusLabel: "Setup required",
           facilitatorActionLabel: "Take over from Terra",
@@ -195,6 +196,7 @@ describe("WorldPlayView", () => {
         model={{
           worldName: "The Glass Coast",
           currentUserName: "Mara Vale",
+          waitingForCharacter: true,
           facilitatorName: "ChatGPT",
           statusLabel: "Waiting for a character",
           facilitatorActionLabel: "Take over from ChatGPT",
@@ -233,8 +235,9 @@ describe("WorldPlayView", () => {
     );
 
     expect(html).toContain("Facilitator: ChatGPT");
-    expect(html).toContain("Choose an entity");
-    expect(html).toContain("Once claimed, it becomes your character.");
+    expect(html).toContain("Choose your character");
+    expect(html).toContain("Meet the characters");
+    expect(html).toContain("Play as Ash");
     expect(html).toContain("A courier who knows the flooded roads.");
     expect(html).toContain("Open in ChatGPT");
     expect(html).toContain("ChatGPT is connected to this Play page");

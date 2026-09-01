@@ -15,7 +15,8 @@ World authors define input and derived Mechanics connected in the world
 mechanic graph; facilitators author persistent Status instances inside Problem
 Consequences during Play. Status modifiers are snapshotted onto Entity-specific
 instances and transform intrinsic values into effective values. The engine has no built-in
-world ontology, entity classes, privileged configured keys, or seed vocabulary.
+world ontology, entity classes, or privileged configured vocabulary. Optional
+template terms become ordinary editable World data when copied.
 User accounts and World memberships are separate from the fictional subjects they
 control. Durable owner/editor/player/spectator membership roles and derived
 facilitator/player/spectator current play roles are separate: handing the Facilitator
@@ -29,6 +30,13 @@ the comprehensive system documentation starts at
 [`docs/README.md`](docs/README.md). It covers architecture, domain semantics,
 workflows, the complete HTTP API, backend and frontend internals, the database,
 development, testing, operations, and security.
+
+The three bundled starter Worlds are also readable source documents:
+[Banners at Eldermead](internal/app/world_templates/banners-at-eldermead.md),
+[The Courtesy Season](internal/app/world_templates/the-courtesy-season.md), and
+[Terms of the City](internal/app/world_templates/terms-of-the-city.md). Each file
+contains the complete reproducible manifest followed by its premise, roster,
+opening seed, hooks, and facilitation guidance.
 
 ## Project status and community
 
@@ -66,7 +74,9 @@ The root page asks whether to enter **Play** or **Build**. Each area then asks
 the user to sign up or sign in when needed. Accounts use a username and
 password; no email address is required. **Build** defines input and
 derived capacities/capabilities, character fields, roster setup, memberships,
-invitations, and World settings. **Play** is the separate live surface: complete
+invitations, and World settings. **Play** first offers saved Worlds or three
+repository-backed Markdown templates; choosing a template makes an independent
+World copy before Character selection. Play is the separate live surface: complete
 player onboarding, designate a human, Terra, or an agent as Facilitator
 between Problems, present an ad-hoc Problem, collect responder Actions, and commit
 an immutable Resolution with a resolution receipt. A human Facilitator authors the

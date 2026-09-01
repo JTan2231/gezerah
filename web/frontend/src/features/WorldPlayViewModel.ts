@@ -105,6 +105,7 @@ export interface AgentModeViewModel {
 export interface CharacterOnboardingViewModel {
   worldName: string;
   currentUserName: string;
+  waitingForCharacter: boolean;
   facilitatorName: string;
   statusLabel: string;
   facilitatorActionLabel: string;

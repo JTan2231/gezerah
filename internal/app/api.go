@@ -96,6 +96,19 @@ type createWorldRequest struct {
 	Description *string `json:"description,omitempty"`
 }
 
+type worldTemplateResponse struct {
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Setting        string `json:"setting"`
+	CharacterCount int    `json:"character_count"`
+	Version        int    `json:"version"`
+}
+
+type cloneWorldTemplateRequest struct {
+	ID string `json:"id"`
+}
+
 type updateWorldRequest struct {
 	Name             *string                `json:"name,omitempty"`
 	Description      optionalNullableString `json:"description"`
