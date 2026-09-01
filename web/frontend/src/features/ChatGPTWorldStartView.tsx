@@ -12,6 +12,7 @@ export interface ChatGPTWorldStartViewProps {
   manualHref?: string;
   onStartManually?: () => void;
   footnote?: string;
+  promptFallback?: boolean;
 }
 
 export function ChatGPTWorldStartView({
@@ -23,6 +24,7 @@ export function ChatGPTWorldStartView({
   manualHref,
   onStartManually,
   footnote,
+  promptFallback = true,
 }: ChatGPTWorldStartViewProps) {
   const titleID = useId();
   const copyStatusID = useId();
@@ -40,8 +42,9 @@ export function ChatGPTWorldStartView({
           definition:
             "Choose one of three complete World templates, then play as one of its Characters.",
           description:
-            "Start in ChatGPT or copy the prompt below. It will help you choose a setting and Character, make your own editable copy, and begin Play.",
+            "Open ChatGPT, sign in on the attached Gezerah page, optionally replace the prefilled play preference, then send the prompt. ChatGPT will recommend a World and Character, make your copy, and begin Play.",
           manualLabel: "Choose a World yourself",
+          actionLabel: "Open in ChatGPT",
         }
       : {
           eyebrow: "Custom World",
@@ -50,6 +53,7 @@ export function ChatGPTWorldStartView({
           description:
             "Start in ChatGPT or copy the prompt below. It will help shape your idea, then guide you while you create the World in Build.",
           manualLabel: "Create manually",
+          actionLabel: "Start in ChatGPT",
         };
 
   return (
@@ -58,29 +62,30 @@ export function ChatGPTWorldStartView({
       <h2 id={titleID}>{content.title}</h2>
       <p className="chatgpt-world-start-definition">{content.definition}</p>
       <p>{content.description}</p>
-      <blockquote className="chatgpt-world-start-prompt">
-        <p>{prompt}</p>
-      </blockquote>
+      {promptFallback ? (
+        <blockquote className="chatgpt-world-start-prompt">
+          <p>{prompt}</p>
+        </blockquote>
+      ) : null}
       <div className="chatgpt-world-start-actions">
-        <a
-          className="button button-primary"
-          href={chatGPTHref}
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Start in ChatGPT
+        <a className="button button-primary" href={chatGPTHref}>
+          {content.actionLabel}
         </a>
-        <button
-          className="button button-quiet"
-          type="button"
-          onClick={onCopyPrompt}
-          aria-describedby={copyStatusID}
-        >
-          {copyStatus === "copied"
-            ? "Starter prompt copied"
-            : "Copy starter prompt"}
-        </button>
-        {manualHref === undefined || onStartManually === undefined ? null : (
+        {promptFallback ? (
+          <button
+            className="button button-quiet"
+            type="button"
+            onClick={onCopyPrompt}
+            aria-describedby={copyStatusID}
+          >
+            {copyStatus === "copied"
+              ? "Starter prompt copied"
+              : "Copy starter prompt"}
+          </button>
+        ) : null}
+        {!promptFallback ||
+        manualHref === undefined ||
+        onStartManually === undefined ? null : (
           <a
             className="button button-quiet"
             href={manualHref}
@@ -93,14 +98,16 @@ export function ChatGPTWorldStartView({
           </a>
         )}
       </div>
-      <p
-        className="chatgpt-world-start-status"
-        id={copyStatusID}
-        role="status"
-        aria-live="polite"
-      >
-        {copyMessage}
-      </p>
+      {promptFallback ? (
+        <p
+          className="chatgpt-world-start-status"
+          id={copyStatusID}
+          role="status"
+          aria-live="polite"
+        >
+          {copyMessage}
+        </p>
+      ) : null}
       {footnote === undefined ? null : (
         <p className="chatgpt-world-start-footnote">{footnote}</p>
       )}

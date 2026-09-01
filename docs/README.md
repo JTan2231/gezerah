@@ -30,10 +30,10 @@ constraints.
 | [World templates](../internal/app/world_templates/) | The three complete Markdown starter Worlds and their reproducible manifests.                         |
 | [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, Resolution receipts, and immutability. |
 | [Development](development.md)   | Prerequisites, local setup, managed services, change workflows, and troubleshooting.                  |
-| [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |
+| [Testing](testing.md)           | Validation targets, test-layer vocabulary, ChatGPT acceptance, disposable database tests, browser tests, and deployed smoke checks. |
 | [Operations](operations.md)     | Production build, configuration, scripted Railway deployment and verification, health, backups, and recovery. |
 | [Security](security.md)         | Current trust boundary, authorization rules, visibility filtering, known gaps, and hardening path.    |
-| [ChatGPT/WebMCP](webmcp.md)     | ChatGPT Facilitator journey, page-tool boundary, same-origin session model, commands, and release checks.       |
+| [ChatGPT/WebMCP](webmcp.md)     | Delegated start, Start and Play site-tool surfaces, attached browser tab trust boundary, commands, and acceptance. |
 | [Deployment readiness](deployment-readiness/README.md) | Audits, blockers, decisions, and exit criteria for trusted staging and public release. |
 
 ## System at a glance
@@ -62,11 +62,11 @@ route. During development, Vite serves the frontend on port `5173` and proxies
 A world author defines input and derived capacities/capabilities, generates
 sheets for stateful subjects, admits user accounts by invite link, and runs
 improvised Problems during Play. The membership role stays separate from
-the current play role, so an authorized membership can hand the Facilitator responsibility to
+the current play role, so an authorized membership can reassign the Facilitator responsibility to
 another non-spectator, Terra, or an agent, normally between
 Problems. A human Facilitator authors one prose Consequence and may preview Luna's
 compiled Effects. Terra instead creates and resolves its own Interactions
-autonomously. In agent mode, ChatGPT authors the
+autonomously. When ChatGPT is Facilitator, it authors the
 Problem and Consequence through the signed-in Play page while the person's current
 play role remains `player`. Logical-state changes, Status-instance lifecycle changes,
 effective changes, and the World event commit in the Resolution transaction.

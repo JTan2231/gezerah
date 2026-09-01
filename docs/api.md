@@ -181,7 +181,7 @@ An incorrect current password on the change endpoint is a field-specific
 World creation is transactional and returns membership role `owner`; that owner
 is also the initial human facilitator. The contextual `role` field remains one of
 `owner`/`editor`/`player`/`spectator`. `current_play_role` is derived separately
-as `facilitator`, `player`, or `spectator`, so a handoff never rewrites access.
+as `facilitator`, `player`, or `spectator`, so Facilitator reassignment never rewrites access.
 `play_status` remains the non-spectator membership's player-seat readiness even
 while it is the facilitator; facilitators bypass that gate while assigned, and
 spectators return `ready` but stay read-only.
@@ -218,12 +218,12 @@ assignment command accepts exactly one of:
 ```
 
 The human target must be an active non-spectator in the world. A meaningful
-handoff advances the world revision and emits `facilitator-changed`; an
+Facilitator reassignment advances the world revision and emits `facilitator-changed`; an
 unchanged assignment is idempotent. Any draft, open, or adjudicating
 interaction normally returns `409 interactions_unfinished`. The only exception
 is an owner assigning the facilitator to their own membership when exactly one
 unfinished Interaction exists, it is authored by the currently assigned Terra
-or agent source, and it is open or adjudicating. That transaction
+source, and it is open or adjudicating. That transaction
 withdraws the owner's submitted action if present, advances the interaction
 revision for that withdrawal, and lets the owner close/adjudicate as needed and
 finish with human-Facilitator commands.
@@ -540,7 +540,7 @@ the response.
 The response returns `entity_id`, the normalized controller membership IDs,
 and the new `roster_revision`.
 
-Agent-mode available-Entity selection is deliberately narrower than Controller
+Available-Entity selection in an agent-facilitated World is deliberately narrower than Controller
 replacement. `GET .../available-entities` returns only `id`, `display_name`,
 an optional world-visible `profile_summary`, and the world `roster_revision`.
 `POST .../entities/{entity_id}/claim` accepts only `expected_roster_revision`.
@@ -616,7 +616,7 @@ Every Interaction includes `facilitator_source`. A human-authored row includes
 `created_by_membership_id`; Terra- and agent-authored rows omit it. A returned
 resolution has its own `facilitator_source` and includes
 `resolved_by_membership_id` only for a human resolution. After the owner
-recovery path, the interaction correctly retains its automated source while
+recovery path, the interaction correctly retains its Terra source while
 its resolution is human-attributed.
 
 In an `agent` World, `POST .../agent/continue` accepts an optional `title`
@@ -705,7 +705,7 @@ idempotency key. An equivalent successful replay returns `replayed:true`;
 different reuse conflicts. Luna may return no Effects for a narrative-only
 Consequence. The pacing current player's membership is not persisted as Terra's creator,
 resolver, or Continue/Decide event actor. Alternatively, the owner may use the
-narrow facilitator takeover above; their own action is withdrawn before the
+narrow Facilitator recovery above; their own Action is withdrawn before the
 human Consequence path opens.
 
 ### Action and Consequence

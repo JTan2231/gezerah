@@ -299,7 +299,11 @@ preparing for broader public use:
 9. Keep an SSE connection open beyond 130 seconds; verify prompt session
    revocation, cursor recovery without event loss, and one safe
    revision-guarded command.
-10. Establish monitoring and a staffed release window only if the target and
+10. If the target will advertise public delegated start, run the stable
+    [ChatGPT acceptance scenario](testing.md#chatgpt-acceptance) against the
+    exact deployed candidate. CI and deployed smoke do not substitute for its
+    dated acceptance record.
+11. Establish monitoring and a staffed release window only if the target and
     its concerned parties actually require them.
 
 ## Other hosting environments

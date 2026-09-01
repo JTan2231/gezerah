@@ -350,16 +350,17 @@ func (s *Server) handleUpdateFacilitator(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	rows.Close()
-	emergencyTakeover := len(unfinished) == 1 &&
+	facilitatorRecovery := len(unfinished) == 1 &&
 		(unfinished[0].status == "open" || unfinished[0].status == "adjudicating") &&
-		isAutomatedFacilitatorSource(unfinished[0].facilitatorSource) &&
-		currentSource == unfinished[0].facilitatorSource && request.Source == "human" &&
+		unfinished[0].facilitatorSource == terraFacilitatorSource &&
+		currentSource == terraFacilitatorSource &&
+		request.Source == "human" &&
 		nextMembershipID != nil && *nextMembershipID == member.ID && membershipRole == "owner"
-	if len(unfinished) > 0 && !emergencyTakeover {
+	if len(unfinished) > 0 && !facilitatorRecovery {
 		handleAppError(w, &statusError{Status: http.StatusConflict, Code: "interactions_unfinished", Message: "resolve or cancel active interactions before changing facilitator"})
 		return
 	}
-	if emergencyTakeover {
+	if facilitatorRecovery {
 		interactionID := unfinished[0].id
 		var actionID string
 		err := tx.QueryRow(r.Context(), `

@@ -1,6 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-import { api, ApiError, jsonBody, worldPath } from "../api/client";
+import { api, jsonBody, worldPath } from "../api/client";
 import type {
   AvailableEntities,
   EntityClaimResult,
@@ -13,15 +13,13 @@ import type {
   WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
-
-export function buildAgentStarterPrompt(playURL: string): string {
-  return `Be the Facilitator while I play this Gezerah World: ${playURL}. Help me choose a Character if needed, then begin. Keep lasting game state in Gezerah. Include concrete environmental details shaped by what my Character would naturally notice or care about. Describe attention, not private thoughts, and do not reveal hidden information.`;
-}
-
-export function buildAgentLaunchURL(playURL: string, prompt: string): string {
-  const query = new URLSearchParams({ prompt, browserUrl: playURL });
-  return `codex://threads/new?${query.toString()}`;
-}
+import {
+  completeSiteToolRegistration,
+  registerSiteTools,
+  siteToolsSupported,
+  SiteToolUsageError,
+  type SiteToolRegistrationState,
+} from "./siteTools";
 
 interface AgentPlayToolsOptions {
   enabled: boolean;
@@ -29,7 +27,15 @@ interface AgentPlayToolsOptions {
   onChanged: () => void;
 }
 
-class AgentToolUsageError extends Error {}
+export function playSiteToolPageEligible(
+  world: Pick<World, "status" | "facilitator" | "current_play_role">,
+): boolean {
+  return (
+    world.status === "active" &&
+    world.facilitator.source === "agent" &&
+    world.current_play_role === "player"
+  );
+}
 
 const emptyInputSchema = {
   type: "object",
@@ -169,32 +175,77 @@ const effectSchema = {
   ],
 } as const;
 
-export function siteToolsSupported(): boolean {
-  return (
-    typeof document !== "undefined" &&
-    typeof document.modelContext?.registerTool === "function"
-  );
-}
-
 export function useAgentPlayTools({
   enabled,
   worldId,
   onChanged,
-}: AgentPlayToolsOptions): void {
+}: AgentPlayToolsOptions): SiteToolRegistrationState {
+  const supported = siteToolsSupported();
+  const [registration, setRegistration] = useState<SiteToolRegistrationState>(
+    supported && enabled
+      ? {
+          status: "registering",
+          registeredToolNames: [],
+          failedToolNames: [],
+        }
+      : supported
+        ? {
+            status: "unavailable",
+            registeredToolNames: [],
+            failedToolNames: [],
+          }
+        : {
+            status: "unsupported",
+            registeredToolNames: [],
+            failedToolNames: [],
+          },
+  );
   useEffect(() => {
     if (typeof document === "undefined") return undefined;
     const modelContext = document.modelContext;
-    if (!enabled || typeof modelContext?.registerTool !== "function")
+    if (typeof modelContext?.registerTool !== "function") {
+      setRegistration({
+        status: "unsupported",
+        registeredToolNames: [],
+        failedToolNames: [],
+      });
       return undefined;
+    }
+    if (!enabled) {
+      setRegistration({
+        status: "unavailable",
+        registeredToolNames: [],
+        failedToolNames: [],
+      });
+      return undefined;
+    }
 
     const controller = new AbortController();
     const tools = createAgentPlayTools(worldId, onChanged, controller.signal);
-    void registerTools(modelContext, tools, controller.signal);
+    setRegistration({
+      status: "registering",
+      registeredToolNames: [],
+      failedToolNames: [],
+    });
+    void registerSiteTools(
+      modelContext,
+      tools,
+      controller.signal,
+      "Reinspect the current Play state and retry with current World and Entity-sheet data. Do not ask the participant to operate Gezerah.",
+    ).then((result) => {
+      const completed = completeSiteToolRegistration(
+        controller,
+        result,
+        tools.length,
+      );
+      if (completed !== null) setRegistration(completed);
+    });
 
     return () => {
       controller.abort();
     };
   }, [enabled, onChanged, worldId]);
+  return registration;
 }
 
 export function createAgentPlayTools(
@@ -245,7 +296,7 @@ export function createAgentPlayTools(
               available_entities: available.entities,
               roster_revision: available.roster_revision,
               next_step:
-                "Ask the current player which available Entity they want as their Character, then claim that choice.",
+                "Use the player's single stated play preference to choose and claim the best-fitting available Character. Do not ask another setup question or ask the participant to operate Gezerah.",
             });
           }
           const controlledEntities = entities.filter((entity) =>
@@ -260,6 +311,12 @@ export function createAgentPlayTools(
             ),
           );
           return toolResult({
+            ok: false,
+            error: {
+              code: "character_setup_required",
+              message:
+                "The claimed Character is incomplete, so delegated Play cannot continue.",
+            },
             world: worldSummary(world),
             viewer: viewerSummary(viewer, world),
             claimed_characters: controlledEntities.map((entity) => {
@@ -275,7 +332,7 @@ export function createAgentPlayTools(
               };
             }),
             next_step:
-              "Ask the current player to complete the claimed Character's required fields in the page.",
+              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Gezerah.",
           });
         }
 
@@ -343,7 +400,7 @@ export function createAgentPlayTools(
     {
       name: "claim_entity",
       description:
-        "Claim one currently available Entity for the signed-in current player. Choose an entity_id from the available Entities in the current Play inspection. Claiming it makes the Entity the current player's Character and advances the World roster.",
+        "Claim one currently available Entity for the signed-in current player. Use the player's single stated play preference to choose the best-fitting entity_id from the current Play inspection without asking another setup question. Claiming it makes the Entity the current player's Character and advances the World roster.",
       inputSchema: {
         type: "object",
         properties: {
@@ -366,7 +423,7 @@ export function createAgentPlayTools(
           (candidate) => candidate.id === entityID,
         );
         if (entity === undefined)
-          throw new AgentToolUsageError(
+          throw new SiteToolUsageError(
             "That entity is no longer available to claim.",
           );
         const result = await api<EntityClaimResult>(
@@ -380,14 +437,26 @@ export function createAgentPlayTools(
           },
         );
         onChanged();
+        if (result.play_status !== "ready")
+          return toolResult({
+            ok: false,
+            error: {
+              code: "character_setup_required",
+              message:
+                "The claimed Character is incomplete, so delegated Play cannot continue.",
+            },
+            claimed_character: entity,
+            play_status: result.play_status,
+            roster_revision: result.roster_revision,
+            next_step:
+              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Gezerah.",
+          });
         return toolResult({
           claimed_character: entity,
           play_status: result.play_status,
           roster_revision: result.roster_revision,
           next_step:
-            result.play_status === "ready"
-              ? "Refresh your view of Play, then present the first Problem."
-              : "Ask the current player to complete the claimed Character's required fields in the page.",
+            "Refresh your view of Play, then present the first Problem without asking another setup question.",
         });
       },
     },
@@ -431,7 +500,7 @@ export function createAgentPlayTools(
     {
       name: "submit_action",
       description:
-        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities shown by the current Play inspection.",
+        "Record the signed-in current player's Action for the current open ChatGPT-authored Problem only after the player explicitly states or delegates that Action. Never infer or invent an Action from their setup preference. Use acting_entity_id only when the Action is attributed to one of their ready controlled Entities shown by the current Play inspection.",
       inputSchema: {
         type: "object",
         properties: {
@@ -455,7 +524,7 @@ export function createAgentPlayTools(
             candidate.facilitator_source === "agent",
         );
         if (interaction === undefined)
-          throw new AgentToolUsageError(
+          throw new SiteToolUsageError(
             "There is no open ChatGPT-authored problem.",
           );
         const action = await api<InteractionAction>(
@@ -476,7 +545,7 @@ export function createAgentPlayTools(
         return toolResult({
           submitted_action: action,
           next_step:
-            "Refresh your view of Play. Once every responder has acted, resolve the Problem.",
+            "Refresh your view of Play. Once every responder has acted, resolve the Problem. Never submit another Action until the player explicitly states or delegates it.",
         });
       },
     },
@@ -515,7 +584,7 @@ export function createAgentPlayTools(
         );
         const actionSummary = optionalString(values, "action_summary", 10000);
         if (!Array.isArray(values["effects"]))
-          throw new AgentToolUsageError("effects must be an array.");
+          throw new SiteToolUsageError("effects must be an array.");
         const effects: unknown[] = values["effects"];
         const [interactions, mechanics] = await Promise.all([
           api<Interaction[]>(worldPath(worldId, "interactions"), {
@@ -532,7 +601,7 @@ export function createAgentPlayTools(
             candidate.facilitator_source === "agent",
         );
         if (interaction === undefined)
-          throw new AgentToolUsageError(
+          throw new SiteToolUsageError(
             "There is no pending ChatGPT-authored problem to resolve.",
           );
         let idempotencyKey = resolutionKeys.get(interaction.id);
@@ -571,70 +640,9 @@ export function createAgentPlayTools(
   ];
 }
 
-export async function registerTools(
-  modelContext: ModelContext,
-  tools: ModelContextTool[],
-  signal: AbortSignal,
-): Promise<void> {
-  for (const tool of tools) {
-    if (signal.aborted) return;
-    try {
-      await modelContext.registerTool(
-        {
-          ...tool,
-          execute: async (input, options) => {
-            if (toolCallAborted(signal, options?.signal))
-              throw new DOMException("The Play page changed.", "AbortError");
-            try {
-              return await tool.execute(input, options);
-            } catch (reason) {
-              if (toolCallAborted(signal, options?.signal))
-                throw new DOMException(
-                  "The tool call was cancelled.",
-                  "AbortError",
-                );
-              if (reason instanceof ApiError) {
-                return toolResult({
-                  ok: false,
-                  error: {
-                    code: reason.code,
-                    message: reason.message,
-                    fields: reason.fields,
-                  },
-                  next_step:
-                    "Refresh your view of Play, then retry with current World and Entity-sheet data.",
-                });
-              }
-              if (reason instanceof AgentToolUsageError) {
-                return toolResult({
-                  ok: false,
-                  error: { code: "tool_usage_error", message: reason.message },
-                  next_step:
-                    "Refresh your view of Play, then retry with current World and Entity-sheet data.",
-                });
-              }
-              throw reason;
-            }
-          },
-        },
-        { signal },
-      );
-    } catch {
-      // Registration is optional enhancement; the ordinary page remains usable.
-    }
-  }
-}
-
-function toolCallAborted(
-  registrationSignal: AbortSignal,
-  invocationSignal: AbortSignal | undefined,
-): boolean {
-  return registrationSignal.aborted || invocationSignal?.aborted === true;
-}
-
 function requireObject(value: unknown): Record<string, unknown> {
   if (typeof value !== "object" || value === null || Array.isArray(value))
-    throw new AgentToolUsageError("Tool input must be an object.");
+    throw new SiteToolUsageError("Tool input must be an object.");
   return value as Record<string, unknown>;
 }
 
@@ -646,10 +654,10 @@ function requiredString(
   const object = requireObject(value);
   const candidate = object[key];
   if (typeof candidate !== "string" || candidate.trim() === "")
-    throw new AgentToolUsageError(`${key} is required.`);
+    throw new SiteToolUsageError(`${key} is required.`);
   const result = candidate.trim();
   if ([...result].length > maximumLength)
-    throw new AgentToolUsageError(
+    throw new SiteToolUsageError(
       `${key} must be at most ${maximumLength} characters.`,
     );
   return result;
@@ -664,11 +672,11 @@ function optionalString(
   const candidate = object[key];
   if (candidate === undefined) return undefined;
   if (typeof candidate !== "string")
-    throw new AgentToolUsageError(`${key} must be a string.`);
+    throw new SiteToolUsageError(`${key} must be a string.`);
   const result = candidate.trim();
   if (result === "") return undefined;
   if ([...result].length > maximumLength)
-    throw new AgentToolUsageError(
+    throw new SiteToolUsageError(
       `${key} must be at most ${maximumLength} characters.`,
     );
   return result;

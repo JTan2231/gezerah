@@ -43,6 +43,7 @@ export function PlayWorkspace({
   return (
     <PlayWorkspaceView
       worldName={world.name}
+      agentMode={world.facilitator.source === "agent"}
       currentPlayRoleLabel={
         world.current_play_role === "facilitator"
           ? "Facilitator"

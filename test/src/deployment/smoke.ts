@@ -286,10 +286,22 @@ export async function verifyBrowser(
       );
     }
     await page
-      .getByRole("heading", { name: "Play or Build" })
+      .getByRole("heading", { name: "Play Gezerah with ChatGPT" })
       .waitFor({ state: "visible" });
-    await page.getByRole("link", { name: /Play/ }).click();
-    await page.waitForURL(`${normalized}/play`);
+    const launchHref = await page
+      .getByRole("link", { name: "Open in ChatGPT" })
+      .getAttribute("href");
+    if (launchHref === null) {
+      throw new Error("browser homepage omitted the ChatGPT launch URL");
+    }
+    const launchURL = new URL(launchHref);
+    if (
+      launchURL.protocol !== "codex:" ||
+      launchURL.searchParams.get("browserUrl") !== `${normalized}/play/new`
+    ) {
+      throw new Error("browser homepage did not attach the exact Start page");
+    }
+    await page.goto(`${normalized}/play/new`);
     await page
       .getByRole("heading", { name: "Sign in" })
       .waitFor({ state: "visible" });

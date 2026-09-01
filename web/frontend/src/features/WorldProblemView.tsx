@@ -153,7 +153,9 @@ export function OpenProblemView({
           ))}
         </div>
       ) : null}
-      {!model.facilitator && model.eligibleResponder ? (
+      {!model.facilitator &&
+      !model.agentFacilitated &&
+      model.eligibleResponder ? (
         !model.actionSubmitted ? (
           <form
             className="action-composer"
@@ -341,9 +343,8 @@ export function AgentDecisionPendingView() {
     <section className="agent-decision-pending" aria-live="polite">
       <h3>ChatGPT resolution pending</h3>
       <p>
-        Return to ChatGPT and ask it to refresh Play, then retry resolving this
-        problem. The submitted actions remain locked until it succeeds or you
-        skip the problem.
+        ChatGPT can reinspect the current durable Play state and retry this
+        Resolution. Submitted Actions remain locked until it succeeds.
       </p>
     </section>
   );

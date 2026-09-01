@@ -1,32 +1,50 @@
 # Workflows
 
-## Start from a World template
+## Delegate a ready-made start to ChatGPT
 
-1. From Home, choose **Start playing with ChatGPT** and follow its prompt, or
-   open **Play** and choose **New World**. Both routes lead to `/play/new` after
-   sign-in.
-2. Choose any one of the three equal starting templates. Each card describes
-   its setting and shows the number of available Characters.
-3. The server atomically copies that template into a new, independent World.
-   The signed-in person becomes its owner and current player, while the
-   Facilitator source is `agent`.
-4. Choose one of the five uncontrolled Entities as the Character. Every
-   template profile is already complete, so a successful claim enters Play
-   immediately.
-5. ChatGPT inspects the newly materialized World and improvises the first
-   Problem from its description, Mechanics, profiles, and logical state.
+1. From Home, choose **Open in ChatGPT**. The ChatGPT launch opens one
+   conversation with the exact `/play/new` Start site-tool page in an attached
+   browser tab.
+2. Sign in there if necessary. Send the prefilled starter prompt, leaving its
+   final `My play preference: surprise me.` line unchanged or replacing that
+   preference with ordinary language. Authentication is the only ordinary
+   manual Gezerah operation.
+3. Once the Start site-tool surface is ready, ChatGPT inspects the three equal
+   starting templates, applies the play preference or makes a reasonable choice,
+   and copies one into a new independent World. The attached tab navigates to
+   `/play/{world_id}`.
+4. Once the Play site-tool surface is ready, ChatGPT inspects the World, chooses
+   and claims one of its available Characters, and inspects the resulting ready
+   Play state. Every bundled template profile is complete.
+5. ChatGPT improvises and presents the first Problem from the World description,
+   Mechanics, profiles, and logical state. The person responds with an
+   in-fiction Action in chat; ChatGPT records and resolves it and presents the
+   next Problem.
+
+After sign-in, ChatGPT performs these application operations through site tools
+and never makes a browser-control request. If the person says to choose, asks for
+a surprise, or supplies no preference, ChatGPT does not require a setup
+questionnaire.
+
+This first public delegated-start path covers only the bundled ready-made World
+templates and complete Characters. Custom Build, saved-World discovery,
+invitation and multiplayer onboarding, and incomplete profile completion remain
+ordinary Gezerah workflows rather than ChatGPT entry capabilities.
 
 Templates are versioned Markdown in the application release, but a selected
 copy is ordinary relational World data. Later template edits never alter an
 existing World. The copy contains no pre-authored Problem, live Status instance,
-or pre-authored play history beyond its ordinary `world-created` event.
+or pre-authored Play history beyond its ordinary `world-created` event. There
+is no exposed manual template-copy or Character-claim workflow in this public
+version.
 
 ## Create and configure a world
 
-1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a
+1. Open internal `/build`, then sign up or sign in. Signup requires a
    username, display name, and password but no email address. The Build library
-   offers a copyable **Start a World with ChatGPT** prompt for shaping the idea
-   and guiding this configuration; every durable change remains the person's.
+   offers copyable **Start a World with ChatGPT** guidance for shaping the idea
+   and guiding this configuration; it is not delegated start, and every durable
+   change remains the person's.
 2. Create a world from the Build library. The creator's owner membership is the
    initial human facilitator. In **Settings**, write the world description;
    Terra uses it as the world brief when later designated in Play.
@@ -75,11 +93,13 @@ authenticated account, and redemption binds the membership to that account.
 Problems are runtime moments, never authored configuration.
 
 First enter the world through `/play` and inspect the Facilitator shown in
-the header. Between problems, an owner/editor or the current human facilitator
-may assign any active non-spectator, Terra, or an agent. A replaced human facilitator
-immediately returns to current play role `player`; their membership role does not
-change, and their persistent `play_status` determines whether they return to a
-ready seat or character setup.
+the header. Between Problems, an owner/editor or the current human Facilitator
+may assign any active non-spectator or Terra. Delegated template copy establishes
+the agent assignment before the attached tab enters Play; the ordinary Play
+picker does not start agent facilitation. A replaced human Facilitator
+immediately returns to current play role `player`; their membership role does
+not change, and their persistent `play_status` determines whether they return to
+a ready seat or character setup.
 
 For a human facilitator:
 
@@ -123,7 +143,7 @@ only when that Terra-authored open/adjudicating problem is the sole unfinished
 interaction and assigns the owner as human facilitator. The owner's own
 Action, if any, is withdrawn; other Actions remain. For an open
 problem the owner closes and adjudicates manually; for an adjudicating problem
-the owner goes directly to the human Consequence UI. No other handoff is allowed
+the owner goes directly to the human Consequence UI. No other Facilitator reassignment is allowed
 while an interaction is unfinished.
 
 Luna may compile a narrative-only Consequence with no effects. A human

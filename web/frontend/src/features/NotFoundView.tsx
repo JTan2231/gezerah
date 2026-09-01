@@ -6,7 +6,7 @@ export function NotFoundView({ onReturnHome }: { onReturnHome: () => void }) {
       <Brand />
       <EmptyState
         title="Page not found"
-        description="Return home to choose Play or Build."
+        description="Return home to start playing with ChatGPT."
         action={
           <button
             className="button button-ink"

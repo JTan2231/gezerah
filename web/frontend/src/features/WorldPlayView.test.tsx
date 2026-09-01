@@ -112,7 +112,6 @@ describe("WorldPlayView", () => {
           changeFacilitator: noop,
           takeOverFacilitation: noop,
           continueWithTerra: noop,
-          copyAgentPrompt: noop,
           retryRoster: noop,
           retryProblems: noop,
           selectEntity: noop,
@@ -175,7 +174,6 @@ describe("WorldPlayView", () => {
           selectCharacter: noop,
           becomeFacilitator: noop,
           claimEntity: noop,
-          copyAgentPrompt: noop,
         }}
         profile={<form aria-label="Entity profile">Profile fixture</form>}
       />,
@@ -190,7 +188,7 @@ describe("WorldPlayView", () => {
     expect(html).toContain("Profile fixture");
   });
 
-  test("renders ChatGPT launch guidance and atomic entity choices", () => {
+  test("renders agent Play as readiness and reference only", () => {
     const html = renderToStaticMarkup(
       <CharacterOnboardingView
         model={{
@@ -199,7 +197,7 @@ describe("WorldPlayView", () => {
           waitingForCharacter: true,
           facilitatorName: "ChatGPT",
           statusLabel: "Waiting for a character",
-          facilitatorActionLabel: "Take over from ChatGPT",
+          facilitatorActionLabel: "Become Facilitator",
           canBecomeFacilitator: false,
           changingFacilitator: false,
           facilitatorIssue: null,
@@ -215,12 +213,17 @@ describe("WorldPlayView", () => {
           ],
           claimIssue: null,
           agentMode: {
-            siteToolsAvailable: true,
-            starterPrompt:
-              "Use https://game.example/play/world-1 as the Play page.",
-            launchURL:
-              "codex://threads/new?prompt=fixture&browserUrl=https%3A%2F%2Fgame.example%2Fplay%2Fworld-1",
-            promptCopied: false,
+            siteTools: {
+              status: "ready",
+              registeredToolNames: [
+                "inspect_play",
+                "claim_entity",
+                "present_problem",
+                "submit_action",
+                "resolve_problem",
+              ],
+              failedToolNames: [],
+            },
           },
         }}
         actions={{
@@ -228,23 +231,19 @@ describe("WorldPlayView", () => {
           selectCharacter: noop,
           becomeFacilitator: noop,
           claimEntity: noop,
-          copyAgentPrompt: noop,
         }}
         profile={null}
       />,
     );
 
     expect(html).toContain("Facilitator: ChatGPT");
-    expect(html).toContain("Choose your character");
+    expect(html).toContain("ChatGPT is choosing");
     expect(html).toContain("Meet the characters");
-    expect(html).toContain("Play as Ash");
     expect(html).toContain("A courier who knows the flooded roads.");
-    expect(html).toContain("Open in ChatGPT");
-    expect(html).toContain("ChatGPT is connected to this Play page");
-    expect(html).toContain("continue the same chat on chatgpt.com");
-    expect(html).not.toContain("Site Tools");
-    expect(html).toContain("codex://threads/new?");
-    expect(html).toContain("https://game.example/play/world-1");
+    expect(html).toContain("Play site-tool surface is ready");
+    expect(html).not.toContain("Play as Ash");
+    expect(html).not.toContain("Open in ChatGPT");
+    expect(html).not.toContain("Copy starter prompt");
   });
 
   test("renders Problem creation and Action entry states", () => {
@@ -360,7 +359,6 @@ describe("WorldPlayView", () => {
           changeFacilitator: noop,
           takeOverFacilitation: noop,
           continueWithTerra: noop,
-          copyAgentPrompt: noop,
           retryRoster: noop,
           retryProblems: noop,
           selectEntity: noop,
@@ -534,7 +532,9 @@ describe("WorldPlayView", () => {
     expect(consequenceHtml).toContain("Refreshing the current rules");
     expect(consequenceHtml).toContain("Interpreting…");
     expect(terraRetryHtml).toContain("Retry Terra");
-    expect(agentPendingHtml).toContain("ask it to refresh Play");
+    expect(agentPendingHtml).toContain("reinspect the current durable Play");
+    expect(agentPendingHtml).not.toContain("ask it to");
+    expect(agentPendingHtml).not.toContain("skip");
     expect(agentPendingHtml).not.toContain("inspect_play");
   });
 });

@@ -1,23 +1,10 @@
-import { useRef, useState } from "react";
-
-import { api, ApiError, jsonBody, toErrorNotice } from "../api/client";
-import type {
-  AuthenticatedSession,
-  User,
-  World,
-  WorldTemplate,
-} from "../api/types";
+import { toErrorNotice } from "../api/client";
+import type { AuthenticatedSession, User, WorldTemplate } from "../api/types";
 import { useCollection } from "../hooks/useCollection";
-import { playWorldURL, type Navigate } from "../worldRoutes";
+import type { Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import { WorldTemplateLibraryView } from "./WorldTemplateLibraryView";
-
-interface CloneAttempt {
-  templateID: string;
-  destinationWorldID: string;
-  saving: boolean;
-  error: ApiError | null;
-}
+import { useWorldTemplateStartTools } from "./worldTemplateStartTools";
 
 export function WorldTemplateLibrary({
   user,
@@ -33,8 +20,7 @@ export function WorldTemplateLibrary({
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const templates = useCollection<WorldTemplate>("/api/world-templates");
-  const [cloneAttempt, setCloneAttempt] = useState<CloneAttempt | null>(null);
-  const cloneAttemptRef = useRef<CloneAttempt | null>(null);
+  const siteTools = useWorldTemplateStartTools(navigate);
   const invalidCatalog =
     !templates.loading &&
     templates.error === null &&
@@ -48,43 +34,6 @@ export function WorldTemplateLibrary({
           }
         : null
       : toErrorNotice(templates.error);
-
-  async function cloneTemplate(templateID: string) {
-    if (cloneAttemptRef.current?.saving === true) return;
-    const previous = cloneAttemptRef.current;
-    const attempt: CloneAttempt = {
-      templateID,
-      destinationWorldID:
-        previous?.templateID === templateID
-          ? previous.destinationWorldID
-          : window.crypto.randomUUID(),
-      saving: true,
-      error: null,
-    };
-    cloneAttemptRef.current = attempt;
-    setCloneAttempt(attempt);
-    try {
-      const world = await api<World>(
-        `/api/world-templates/${encodeURIComponent(templateID)}/clone`,
-        {
-          method: "POST",
-          ...jsonBody({ id: attempt.destinationWorldID }),
-        },
-      );
-      navigate(playWorldURL(world.id), { replace: true });
-    } catch (reason) {
-      const failedAttempt = {
-        ...attempt,
-        saving: false,
-        error:
-          reason instanceof ApiError
-            ? reason
-            : new ApiError(0, "unknown", "Could not create your World."),
-      };
-      cloneAttemptRef.current = failedAttempt;
-      setCloneAttempt(failedAttempt);
-    }
-  }
 
   return (
     <WorldTemplateLibraryView
@@ -104,16 +53,7 @@ export function WorldTemplateLibrary({
             })),
         loading: templates.loading,
         catalogIssue,
-        copyingTemplateID:
-          cloneAttempt?.saving === true ? cloneAttempt.templateID : undefined,
-        failedTemplateID:
-          cloneAttempt?.error === null || cloneAttempt === null
-            ? undefined
-            : cloneAttempt.templateID,
-        cloneIssue:
-          cloneAttempt?.error === null || cloneAttempt === null
-            ? null
-            : toErrorNotice(cloneAttempt.error),
+        siteTools,
       }}
       accountControls={
         <AccountControls
@@ -123,12 +63,6 @@ export function WorldTemplateLibrary({
           onSessionChanged={onSessionChanged}
         />
       }
-      actions={{
-        returnHome: () => navigate("/"),
-        returnToWorlds: () => navigate("/play"),
-        retryCatalog: templates.reload,
-        copyTemplate: (templateID) => void cloneTemplate(templateID),
-      }}
     />
   );
 }

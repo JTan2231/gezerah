@@ -38,6 +38,8 @@ its terms are ordinary data belonging only to the new World.
 | **World membership** | A user account's durable relationship to one World. |
 | **Membership role** | A World membership's durable access level: owner, editor, player, or spectator. It governs World and Build authority. |
 | **Facilitator assignment** | The World's designation of exactly one facilitator source: a human World membership, Terra, or an agent. |
+| **Facilitator reassignment** | A revision-guarded command that replaces the facilitator assignment, normally only between Problems. It is not a ChatGPT launch. |
+| **Facilitator recovery** | The owner-only **Take over** command for the sole unfinished Terra-authored open or adjudicating Problem. It assigns the owner as human Facilitator and preserves the command's defined Action-withdrawal behavior. It is not a browser-control request. |
 | **Facilitator source** | The authorial source selected by the facilitator assignment: human, Terra, or agent. |
 | **Facilitator** | The product label and domain authority for the source that authors and adjudicates Problems. A human facilitator is an assigned active non-spectator membership; Terra and an agent are non-membership facilitator sources. |
 | **Current play role** | A membership's derived responsibility in Play: facilitator, player, or spectator. It does not change the membership role. |
@@ -126,3 +128,30 @@ for its immutable audit record.
 | **Terra** | A non-membership facilitator source that authors Problems and Consequences through server-side model calls and resolves them autonomously. |
 | **Agent** | A non-membership facilitator source that accepts Problem and Consequence authorship from an authenticated page agent while the signed-in membership remains a current player. |
 | **Luna** | The compiler that converts Consequence narrative into optional selected-Action metadata and ordered Effects. Luna is not a facilitator source and does not commit Resolutions. |
+
+## ChatGPT and site-tool Play
+
+| Term | Meaning |
+| ---- | ------- |
+| **ChatGPT** | The product-facing agent Facilitator. In the domain and persistence model it remains facilitator source `agent`; it is not a user account or World membership. |
+| **ChatGPT launch** | The user action that opens a new ChatGPT conversation with ordinary-language starter instructions and a Gezerah page attached. It is not a Facilitator reassignment. |
+| **Attached browser tab** | The top-level Gezerah tab attached to the ChatGPT conversation. Its authenticated application state remains authoritative, and its currently registered site tools disappear when the tab closes or leaves their page. |
+| **Site tool** | A command registered by a supported top-level Gezerah page through the browser's WebMCP API. A site tool uses the page's authenticated same-origin API client; WebMCP is not a separate identity or server. |
+| **Start site-tool page** | The `/play/new` top-level page attached by the public ChatGPT launch. It may first show the separate authentication boundary; its site-tool surface is available only after authentication. |
+| **Start site-tool surface** | The Start page's ready-made-World inspection and copy commands. It is limited to delegated start from bundled World templates. |
+| **Play site-tool page** | An authenticated `/play/{world_id}` page for an active agent-facilitated World viewed by a current player. |
+| **Play site-tool surface** | The Play page's inspection, Character claim, Problem presentation, Action submission, and Resolution commands. |
+| **Site-tool support** | Availability of the browser API required for a top-level page to register site tools. Support is a property of the current browser surface, not of a World or account. |
+| **Site-tool readiness** | The state in which every tool expected from the current mounted, supported, authenticated page has registered successfully. Data loading and command-specific validation remain separate and fail closed. Support alone does not imply readiness. |
+| **Delegated start** | The complete ChatGPT-led path from ChatGPT launch, through the separate authentication boundary when needed, to selection and copying of a ready-made World, Character claim, and presentation of the first Problem. After authentication, ChatGPT performs application operations through the Start and Play site-tool surfaces. |
+| **Play preference** | Ordinary-language guidance from the person about the setting, Character, tone, or difficult choices they want. ChatGPT uses it to select among the available authored options; it is not stored World configuration. |
+| **Browser-control request** | An assistant-authored request for the person to click, navigate, copy, select, or otherwise operate Gezerah instead of using a ready site tool. Delegated start and site-tool Play must not make one. Authentication and platform-owned safety UI remain separate boundaries. |
+
+Use **ChatGPT launch**, not “handoff,” for opening ChatGPT with an attached page;
+use **Facilitator reassignment** for a change to the facilitator assignment.
+Use **attached
+browser tab**, not “session,” for the attached page; **session** remains the
+authenticated account session. In testing prose, **journey** remains the
+UI-authentic lifecycle-test term. Use **browser-control request**, not
+“takeover”; **Take over** remains the Facilitator recovery command for a
+Terra-authored Problem.

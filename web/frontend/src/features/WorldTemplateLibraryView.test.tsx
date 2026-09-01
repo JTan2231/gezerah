@@ -6,13 +6,6 @@ import {
   type WorldTemplateLibraryViewModel,
 } from "./WorldTemplateLibraryView";
 
-const noop = () => undefined;
-const actions = {
-  returnHome: noop,
-  returnToWorlds: noop,
-  retryCatalog: noop,
-  copyTemplate: noop,
-};
 const readyModel: WorldTemplateLibraryViewModel = {
   account: { displayName: "Rowan Vale", username: "rowan" },
   templates: [
@@ -40,50 +33,48 @@ const readyModel: WorldTemplateLibraryViewModel = {
   ],
   loading: false,
   catalogIssue: null,
-  cloneIssue: null,
+  siteTools: {
+    status: "ready",
+    registeredToolNames: ["inspect_world_templates", "copy_world_template"],
+    failedToolNames: [],
+  },
 };
 
 describe("WorldTemplateLibraryView", () => {
-  test("renders exactly three equal choices without ranking one", () => {
+  test("renders exactly three reference choices and a ready Start surface", () => {
     const html = renderToStaticMarkup(
-      <WorldTemplateLibraryView
-        model={readyModel}
-        actions={actions}
-        accountControls={null}
-      />,
+      <WorldTemplateLibraryView model={readyModel} accountControls={null} />,
     );
 
-    expect(html).toContain("Choose a new world");
-    expect(html.match(/Copy and play/g)).toHaveLength(3);
+    expect(html).toContain("Starting with ChatGPT");
+    expect(html).toContain("Start site-tool surface is ready");
     expect(html).toContain("Banners at Eldermead");
     expect(html).toContain("The Courtesy Season");
     expect(html).toContain("Terms of the City");
     expect(html).not.toContain("Recommended");
+    expect(html).not.toContain("Copy and play");
+    expect(html).not.toContain("<button");
   });
 
-  test("makes the selected copy busy and keeps retry context visible", () => {
-    const copying = renderToStaticMarkup(
-      <WorldTemplateLibraryView
-        model={{ ...readyModel, copyingTemplateID: "eldermead" }}
-        actions={actions}
-        accountControls={null}
-      />,
-    );
-    expect(copying).toContain("Creating your copy…");
-    expect(copying).toContain('aria-busy="true"');
-
+  test("reports incomplete registration without offering manual recovery", () => {
     const failed = renderToStaticMarkup(
       <WorldTemplateLibraryView
         model={{
           ...readyModel,
-          failedTemplateID: "eldermead",
-          cloneIssue: { kind: "connection", message: "Could not confirm." },
+          siteTools: {
+            status: "failed",
+            registeredToolNames: ["inspect_world_templates"],
+            failedToolNames: ["copy_world_template"],
+          },
         }}
-        actions={actions}
         accountControls={null}
       />,
     );
-    expect(failed).toContain("Could not confirm.");
-    expect(failed).toContain("Try again");
+
+    expect(failed).toContain(
+      "Start site-tool surface failed: 1 of 2 registrations succeeded before teardown; complete surface not ready.",
+    );
+    expect(failed).toContain("Delegated start is unavailable");
+    expect(failed).not.toContain("Try again");
   });
 });

@@ -187,7 +187,7 @@ The scenario evidence set is:
 | `scenario-coverage.json`            | Final 141-record coverage inventory.                      |
 | `app-server.log`                    | Disposable application diagnostics.                       |
 | `playwright/` and `report/`         | Playwright results, failure screenshots, and HTML report. |
-| `webmcp-database-trace.json`        | Per-command World states from the WebMCP contract.        |
+| `agent-facilitator-command-database-trace.json` | Per-command World states from the Agent-facilitator command contract. |
 
 The generated coverage record includes owner and execution IDs, evidence tier,
 named cases, checkpoint, observed surfaces, behavior/contract/validator IDs
@@ -226,7 +226,7 @@ When behavior changes:
 6. Run `(cd test && bun test src/scenario/architecture-tests && bun run
 verify:scenarios)` during development.
 7. Run the relevant focused target and the repository's authoritative
-   validation before handoff.
+   validation before requesting review.
 
 Do not turn transport operations into business scenarios, claim incidental
 execution as coverage, hide an uncovered ID, recycle a retired ID, or introduce

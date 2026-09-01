@@ -16,18 +16,21 @@ export function createChatGPTWorldStartPrompt(buildURL: string): string {
 
 export function createChatGPTTemplateStartPrompt(templateURL: string): string {
   return [
-    `Help me start playing one of Gezerah's three ready-made Worlds at ${templateURL}.`,
-    "Ask what kind of setting, Character, and difficult choices I enjoy, then help me choose a World and Character from the options there.",
-    "I will sign in and make the choices in Gezerah.",
-    "Then guide me into Play, help me open that World with ChatGPT as Facilitator, and begin. Keep lasting game state in Gezerah.",
+    `Help me start playing Gezerah using the attached page at ${templateURL}.`,
+    "If the page requires authentication, wait while I sign in, then continue autonomously.",
+    "Treat the final line of this prompt as my only setup input. Do not ask setup questions, ask me to take control of the browser, or ask me to click, navigate, copy, paste, select, or edit anything in Gezerah.",
+    "Use the page's site tools to inspect the three ready-made Worlds, recommend and copy the best match, choose and claim the best-fitting available Character, and present the first Problem.",
+    "Briefly tell me which World and Character you chose and why. Preserve my agency over my Character's Actions: never invent or submit an Action until I tell you what I do. Keep lasting game state in Gezerah.",
+    "My play preference: surprise me.",
   ].join(" ");
 }
 
-export function createChatGPTWorldStartURL(prompt: string): string {
-  const url = new URL("https://chatgpt.com/");
-  url.searchParams.set("surface", "work");
-  url.searchParams.set("prompt", prompt);
-  return url.toString();
+export function createChatGPTLaunchURL(
+  browserURL: string,
+  prompt: string,
+): string {
+  const query = new URLSearchParams({ prompt, browserUrl: browserURL });
+  return `codex://threads/new?${query.toString()}`;
 }
 
 export function useChatGPTWorldStart(
@@ -43,7 +46,7 @@ export function useChatGPTWorldStart(
     variant === "template"
       ? createChatGPTTemplateStartPrompt(destinationURL)
       : createChatGPTWorldStartPrompt(destinationURL);
-  const chatGPTHref = createChatGPTWorldStartURL(prompt);
+  const chatGPTHref = createChatGPTLaunchURL(destinationURL, prompt);
 
   async function copyPrompt() {
     try {

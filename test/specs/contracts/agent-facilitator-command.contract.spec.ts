@@ -8,7 +8,7 @@ import {
 } from "@playwright/test";
 
 import {
-  webMCPDatabaseTracePath,
+  agentFacilitatorCommandDatabaseTracePath,
   WorldDatabaseTrace,
 } from "../../src/databaseState";
 import { readBaseURL } from "../../src/runtime";
@@ -148,7 +148,7 @@ interface EntitySheetResponse {
 type MechanicValue =
   { kind: "number"; value: string } | { kind: "boolean"; value: boolean };
 
-test("contract: Agent facilitation uses current-player authority without impersonating a membership", async ({
+test("Agent-facilitator command contract: current-player authority is used without impersonating a membership", async ({
   request,
 }, testInfo) => {
   const baseURL = await readBaseURL();
@@ -427,6 +427,21 @@ test("contract: Agent facilitation uses current-player authority without imperso
     }),
   );
 
+  await expectAPIError(
+    await putAs(
+      request,
+      `${baseURL}/api/worlds/${world.id}/facilitator`,
+      {
+        source: "human",
+        membership_id: world.membership_id,
+        expected_revision: agentWorld.revision,
+      },
+      owner.id,
+    ),
+    409,
+    "interactions_unfinished",
+  );
+
   const action = await postJSON<InteractionActionResponse>(
     request,
     `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/actions`,
@@ -591,8 +606,8 @@ test("contract: Agent facilitation uses current-player authority without imperso
   expect(replayDatabaseState.changed_tables).toEqual([]);
   expect(replayDatabaseState.state).toEqual(resolutionDatabaseState.state);
 
-  await testInfo.attach("webmcp-database-trace", {
-    path: webMCPDatabaseTracePath,
+  await testInfo.attach("agent-facilitator-command-database-trace", {
+    path: agentFacilitatorCommandDatabaseTracePath,
     contentType: "application/json",
   });
 

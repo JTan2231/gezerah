@@ -24,6 +24,46 @@ alongside a checksum-verified full-history Gitleaks scan. Pull requests that
 change dependencies also run GitHub's dependency review, and Dependabot checks
 the Go, Bun, and GitHub Actions ecosystems weekly.
 
+## ChatGPT validation vocabulary and ownership
+
+The ChatGPT integration has four distinct evidence boundaries:
+
+| Term | Boundary |
+| ---- | -------- |
+| **Agent-facilitator command contract** | Automated HTTP and PostgreSQL evidence for current-player authority, agent attribution, revisions, idempotency, and durable Play transitions. It does not invoke ChatGPT or WebMCP registration. |
+| **Site-tool registration test** | Automated frontend evidence for site-tool names, schemas, registration, command adaptation, route changes, refresh, and recoverable errors through a controlled `document.modelContext`. It does not invoke ChatGPT. |
+| **Site-tool page integration** | Automated browser evidence that the Start or Play page exposes the intended surface when site-tool support and application state make it ready. It does not evaluate model behavior. |
+| **ChatGPT acceptance scenario** | The stable, normative model-in-the-loop scenario below. A **ChatGPT acceptance run** executes it against one exact source or deployed candidate in an **acceptance environment**. A **ChatGPT acceptance record** is the dated result of that run. |
+
+Use **journey** only for the repository's UI-authentic lifecycle test; an
+automated site-tool check and a ChatGPT acceptance scenario are not journeys.
+Use **ChatGPT launch**, not “handoff,” for opening the conversation and attached
+browser tab. Authentication **session**, **Facilitator reassignment**, and
+**Facilitator recovery** retain their distinct product meanings.
+
+The repository owns the stable acceptance scenario, trigger matrix, and pass
+criteria. Dated acceptance records are operational state and do not belong in
+canonical documentation. A separately operated external handbook may own those
+records, but it does not redefine the scenario, establish product truth, or
+replace repository validation. No handbook implementation is assumed here.
+
+### Change-trigger matrix
+
+Every code change still requires the complete `./ci.sh` repository check. Apply the
+additional expectations below when ChatGPT behavior is in scope:
+
+| Changed boundary | Focused iteration | External acceptance expectation |
+| ---------------- | ----------------- | ------------------------------- |
+| ChatGPT launch URL, attached-page target, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
+| Start or Play site-tool registration, name, schema, description, command adapter, navigation, refresh, or recovery behavior | Site-tool registration and page-integration tests, the Agent-facilitator command contract as applicable, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
+| Agent-facilitator command authority, attribution, concurrency, idempotency, or persistence with no ChatGPT-visible behavior change | Focused backend/contract coverage, then `./ci.sh` | Not required unless the public ChatGPT interaction or acceptance oracle changed. |
+| ChatGPT-visible Problem, Consequence, privacy, attention, or decision guidance | Focused frontend/contract coverage, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
+| Unrelated product or infrastructure behavior | Applicable focused validator, then `./ci.sh` | Not required. |
+
+An unperformed or blocked acceptance run does not make automated validation
+fail, but it must be reported as such and cannot support a claim that the
+candidate's ChatGPT experience passed acceptance.
+
 ## Isolated worktree behavior
 
 On first invocation, `ci.sh`:
@@ -151,9 +191,11 @@ Gezerah app shell at `/`, the same shell at a direct SPA route, and every
 same-origin JavaScript and stylesheet discovered from the returned HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
-homepage, validates its title and entry heading, navigates to Play, and submits
-an intentionally unknown randomized username. It requires the expected 401 and
-generic credential error and fails on page exceptions, console warnings/errors,
+homepage, validates its title and delegated-start heading, verifies that the
+sole public ChatGPT launch attaches the exact `/play/new` URL, then opens that
+same Start-page authentication boundary directly and submits an intentionally
+unknown randomized username. It requires the expected 401 and generic
+credential error and fails on page exceptions, console warnings/errors,
 same-origin request failures, or unexpected same-origin 4xx/5xx responses. The
 probe creates no account or other durable application fixture. Chrome's generic
 console noise is tolerated only when accounted for by the expected anonymous
@@ -169,84 +211,110 @@ permissions. Deploy mode reserves `.gezerah/deployments/<deployment-id>.json`; v
 mode writes a distinct `<deployment-id>.verify.<run-id>.json` record so it cannot
 replace deploy provenance.
 
-### ChatGPT web acceptance
+### ChatGPT acceptance
 
-Changes to the ChatGPT handoff, page-tool registration, or agent narration
-should receive one human-operated acceptance loop in the signed-in ChatGPT web
-app before that revision is described as manually accepted. CI, the direct
-WebMCP contract, and deployed smoke do not substitute for this boundary. Manual
-acceptance is not a source-publication gate and does not turn source publication
-into a hosted deployment.
+CI, the Agent-facilitator command contract, site-tool registration tests,
+site-tool page integration, and deployed smoke do not substitute for a model-in-the-loop run in the signed-
+in ChatGPT product. The following scenario is the sole normative first-version
+acceptance case for public delegated start.
 
-**Current publication candidate (2026-08-31):** its manual WebMCP acceptance
-attempt was stopped before completion because this operator process needs
-refactoring. The attempt supplies no passing acceptance evidence for the current
-revision. Source publication may proceed without claiming that it passed this
-boundary; rerun a refactored procedure before making that claim or promoting
-the revision to public production.
+#### Acceptance environment
 
-1. Build the production frontend and Go artifact from the exact source under
-   test. Create a uniquely named disposable PostgreSQL database and synthetic
-   account; do not reuse development or hosted data.
-2. Put an official, checksum-verified `cloudflared` binary in a unique temporary
-   directory. Run
-   `cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8080` in the
-   foreground and record its random HTTPS origin. Treat that origin as public
-   while the process is alive.
-3. Start the standalone artifact on `127.0.0.1:8080` with the disposable
-   database and `GEZERAH_PUBLIC_ORIGIN` set to that exact HTTPS origin. Do not use
-   normal `./run.sh`: its Vite UI is on port 5173 and its public origin is
-   loopback. Require `GET /api/health` through the public origin to return
-   `ok:true`.
-4. In an ordinary browser, open the public Home page and choose **Start playing
-   with ChatGPT**. Continue as a person would: use the prompt in ChatGPT, answer
-   its short questions, sign up, choose and copy one of the three World
-   templates, and choose a Character only through visible Gezerah controls. Do
-   not call APIs, edit storage, or name page tools.
-5. From Play, choose **Open in ChatGPT**. If ChatGPT requires its built-in
-   browser to attach the authenticated Play page, use it only for that signin
-   and attachment step and keep it open. Open the same conversation at
-   `chatgpt.com` and perform the actual play turn there.
-6. Ask ChatGPT to begin, respond naturally to the first Problem, and continue
-   until ChatGPT resolves the Action and presents the next decision. Confirm
-   that its location prose includes concrete, innocuous details filtered
-   through the Character without private thoughts or hidden facts, and that the
-   stakes and tradeoffs are clear.
-7. Reload Play and require its durable history to agree with the chat: the same
-   Problem, current-player Action, committed Resolution and Effects, and next
-   playable state.
-8. Record the source identity, date, World and Character names, resolved
-   Problem, next Problem, and whether the transcript was reviewed. Do not
-   publish the transcript or record the password, session cookie, CSRF token,
-   database URL, or transient tunnel URL.
-9. End exposure first: stop `cloudflared`, then stop the standalone app. Confirm
-   port 8080 has no listener, drop only the exact disposable database, and
-   remove only the exact temporary directory. A Quick Tunnel creates no
-   account-owned DNS or tunnel resource to delete.
+The run must identify one exact clean source artifact or deployed candidate and
+use:
 
-Cloudflare Quick Tunnels do not support SSE and have no uptime guarantee. This
-procedure proves a single-player ChatGPT tool loop because each page-tool
-mutation reloads Play; it is not evidence for SSE delivery or multi-player
-freshness.
+- its production frontend and Go artifact at one exact HTTPS public origin;
+- an isolated synthetic Gezerah account and disposable data boundary;
+- a fresh or deliberately cleared ChatGPT conversation with site-tool support;
+- the top-level attached browser tab, not an iframe; and
+- an operator-controlled cleanup path that cannot remove broader development or
+  hosted data.
 
-#### Historical acceptance record — 2026-08-30
+A disposable local candidate may be built from the exact source, run on
+`127.0.0.1:8080` against a uniquely named PostgreSQL database, and exposed with
+an official checksum-verified `cloudflared tunnel --no-autoupdate --url
+http://127.0.0.1:8080`. Set `GEZERAH_PUBLIC_ORIGIN` to the resulting HTTPS
+origin, treat it as public while alive, and require `/api/health` through that
+origin to return `ok:true`. Do not expose the normal `./run.sh` Vite/backend pair
+or reuse development or hosted data.
 
-This record applies only to source artifact `63a0ec3`; it is not acceptance
-evidence for later revisions or the current publication candidate.
+#### Stable scenario
 
-- Source artifact: `63a0ec3`.
-- Runtime: disposable standalone production artifact, synthetic
-  database/account, and Cloudflare Quick Tunnel. Railway was not used as
-  acceptance evidence.
-- World: **The Quiet Bell**. Character: **Silas Vale**.
-- Observed loop: ChatGPT presented **The Bell Without a Clapper**, resolved the
-  player's natural-language Action, persisted the Resolution, and continued
-  with **Three Strides to the Gallery**.
-- Transcript: reviewed during acceptance; intentionally not published with the
-  repository.
-- Cleanup: the public tunnel and standalone app were stopped, the synthetic
-  database/account was removed, and the temporary runtime directory was
-  deleted.
+The acceptance participant performs only these actions:
+
+1. Open the candidate's Home page and choose **Open in ChatGPT**.
+2. Sign in to Gezerah in the attached browser tab if required.
+3. Send the prefilled starter prompt with its final
+   `My play preference: surprise me.` line unchanged. A run may separately
+   exercise a replacement preference, but the normative case requires no setup
+   choice.
+4. After ChatGPT presents the first Problem, answer with one natural-language
+   in-fiction Action.
+
+ChatGPT must perform the remaining application sequence without participant
+browser operation:
+
+1. use the ready Start surface to call `inspect_world_templates`, choose from the
+   complete three-template catalog, and call `copy_world_template`;
+2. continue in the same conversation while the same attached tab navigates to
+   `/play/{world_id}` and the Play surface becomes ready;
+3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again, and
+   `present_problem`;
+4. record the participant's response with `submit_action`, resolve it with
+   `resolve_problem`, refresh Play, and present the next Problem.
+
+#### Pass and failure criteria
+
+A run passes only when all of the following are observed:
+
+- ChatGPT launch attaches the exact Start page in one conversation;
+- authentication is the participant's only manual Gezerah operation;
+- site-tool support and readiness are established on both Start and Play pages;
+- ChatGPT makes zero browser-control requests and asks zero setup questions
+  after the prefilled play preference is sent;
+- Start-to-Play navigation happens in the same attached browser tab;
+- the first Problem establishes concrete, innocuous details filtered through
+  visible Character information without private thoughts, hidden facts,
+  invented privileged Mechanics, or exhaustive suggested Actions;
+- the submitted Action and durable history faithfully represent the
+  participant's stated or explicitly delegated fictional decision without
+  adding another decision or Action on the participant's behalf;
+- the Action, committed Resolution and Effects, and next Problem are coherent;
+  and
+- reloaded Play and durable history agree with the chat.
+
+Any assistant-authored request to click, navigate, copy, select, take control,
+or otherwise operate Gezerah is a failure. A platform-owned authentication or
+safety control is not an assistant-authored browser-control request. Classify a
+run as blocked rather than failed only when the acceptance environment or
+external ChatGPT availability prevents the scenario from reaching the behavior
+under test.
+
+#### Acceptance record
+
+The dated record must identify the exact source or deployment candidate, date,
+acceptance-environment kind, ChatGPT surface, stated play preference, result
+(`passed`, `failed`, or `blocked`), World and Character, first and next Problems,
+the participant's Action, the persisted submitted Action, whether the transcript
+was reviewed, browser-control-request count, and cleanup result. It also records
+the conversation count, setup-question count, and any platform-owned
+confirmation count separately. A failed or blocked record must state the
+observed reason.
+
+Do not publish the transcript or record the password, session cookie, CSRF token,
+database URL, invitation secret, or transient tunnel URL. An external handbook
+may retain the dated record; canonical repository documentation retains only
+this stable scenario and its criteria.
+
+For a disposable Quick Tunnel run, end exposure first: stop `cloudflared`, then
+stop the standalone application. Confirm port 8080 has no listener, drop only
+the exact disposable database, and remove only the exact temporary directory.
+A Quick Tunnel creates no account-owned DNS or tunnel resource to delete.
+
+Quick Tunnels do not support SSE and have no uptime guarantee. This scenario
+proves the single-player delegated-start and Play command loop because each
+site-tool mutation refreshes the authoritative page state; it is not evidence
+for SSE delivery or multiplayer freshness.
 
 ## Test layers
 
@@ -329,7 +397,12 @@ API adapter, and backend-independent view rendering:
   round trips and unknown-route rejection;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
-  current-versus-superseded 401 authentication teardown.
+  current-versus-superseded 401 authentication teardown;
+- ChatGPT launch URL and starter-instruction construction, including the sole
+  play-preference input and prohibition on browser-control requests; and
+- Start and Play site-tool registration outcomes, schemas, API adaptation,
+  idempotent retry state, route replacement, and recoverable errors through a
+  controlled `document.modelContext`.
 
 Backend-independent `*View.tsx` components also have fixture-driven rendering
 tests. They use `react-dom/server`'s `renderToStaticMarkup`, which is already
@@ -397,6 +470,10 @@ journey:
   cross-world matrices, archived/incomplete resources, and atomic rejection;
 - `concurrency-and-status-instance-matrices.contract.spec.ts` covers named Status-instance targets
   and Resolution race/replay matrices;
+- `agent-facilitator-command.contract.spec.ts` covers current-player authority,
+  agent attribution, Character claim, Problem/Action/Resolution transitions,
+  exact mechanical changes, and idempotent replay with a World-scoped database
+  trace; and
 - `direct-gap-closures.contract.spec.ts` owns the remaining small authority,
   lifecycle, cancellation, projection, and no-audience contracts.
 
@@ -406,6 +483,15 @@ signup/signin/logout/reload, dirty-draft and stale-screen recovery,
 authored-profile/control workflows, and event-stream reconnection. They use
 ordinary HTTP fixture setup and do not
 claim lifecycle-journey evidence.
+
+`test/specs/integrations/delegated-start.site-tools.spec.ts` is the automated
+site-tool page integration. It installs a controlled browser WebMCP harness,
+starts from authenticated `/play/new`, invokes the complete Start surface,
+requires same-tab navigation, invokes the Play inspect/claim/inspect/present/
+submit/resolve sequence, presents the next Problem, reloads, and checks durable
+agreement. It also proves that no trusted setup controls were clicked. It does
+not invoke ChatGPT, exercise the separate authentication boundary, or supply a
+ChatGPT acceptance record.
 
 The dependency-free runtime under `test/src/scenario/` owns the 141-ID/five-tier
 registry, required named cases, behavior/outcome contracts, checkpoint and
@@ -478,25 +564,26 @@ assertions remain world- or exact-resource-scoped.
 
 On E2E runs, inspect:
 
-| Path                                               | Content                                                         |
-| -------------------------------------------------- | --------------------------------------------------------------- |
-| `test/artifacts/app-server.log`                    | Application stdout/stderr for the disposable server.            |
-| `test/artifacts/go-test-results.jsonl`             | Machine-readable `go test -json` output.                        |
-| `test/artifacts/scenario-architecture-results.xml` | JUnit output from scenario-runtime architecture tests.          |
-| `test/artifacts/playwright/`                       | Per-test results and screenshots captured on failure.           |
-| `test/artifacts/report/`                           | HTML report.                                                    |
-| `test/artifacts/scenario-test-results.json`        | Exact Playwright owner results and durations.                   |
-| `test/artifacts/scenario-coverage.json`            | Final 141-row scenario inventory; root E2E requires all passed. |
-| `test/artifacts/webmcp-database-trace.json`        | Per-command World database states for the WebMCP contract.      |
+| Path | Content |
+| ---- | ------- |
+| `test/artifacts/app-server.log` | Application stdout/stderr for the disposable server. |
+| `test/artifacts/go-test-results.jsonl` | Machine-readable `go test -json` output. |
+| `test/artifacts/scenario-architecture-results.xml` | JUnit output from scenario-runtime architecture tests. |
+| `test/artifacts/playwright/` | Per-test results and screenshots captured on failure. |
+| `test/artifacts/report/` | HTML report. |
+| `test/artifacts/scenario-test-results.json` | Exact Playwright owner results and durations. |
+| `test/artifacts/scenario-coverage.json` | Final 141-row scenario inventory; root E2E requires all passed. |
+| `test/artifacts/agent-facilitator-command-database-trace.json` | Per-command World database states for the Agent-facilitator command contract. |
 
-The WebMCP database trace is a mode-`0600`, test-only JSON sidecar. It records a
-baseline, the state after every mutating tool-equivalent command, the changed
-tables at each boundary, and an idempotent replay. Capture uses one read-only,
-repeatable-read transaction per state and an explicit World-scoped projection.
+The agent-facilitator command database trace is a mode-`0600`, test-only JSON
+sidecar. It records a baseline, the state after every mutating tool-equivalent
+command, the changed tables at each boundary, and an idempotent replay. Capture
+uses one read-only, repeatable-read transaction per state and an explicit
+World-scoped projection.
 Identity/authentication rows, invitation secrets, private notes, restricted
 profile prose, and idempotency keys are excluded. The trace is attached to the
-Playwright result as `webmcp-database-trace` as well as written at the path
-above.
+Playwright result as `agent-facilitator-command-database-trace` as well as
+written at the path above.
 
 Deployment verification records are separate from test artifacts. They live at
 `.gezerah/deployments/`, are ignored by Git, and contain only allowlisted
@@ -513,10 +600,11 @@ The active checkout usually receives no artifacts when invoked through root
 removed afterward. To preserve artifacts for interactive debugging, run the
 test project directly in the working checkout after installing dependencies.
 A direct run also rebuilds ignored production output under `web/static` in that
-checkout. Run the WebMCP contract directly to preserve its database sidecar:
+checkout. Run the Agent-facilitator command contract directly to preserve its database
+sidecar:
 
 ```sh
-(cd test && bunx playwright test specs/contracts/webmcp-agent.contract.spec.ts --workers=1)
+(cd test && bunx playwright test specs/contracts/agent-facilitator-command.contract.spec.ts --workers=1)
 ```
 
 Passing required runs do not record trace or video. Set
@@ -525,8 +613,8 @@ the root performance-gated target deliberately keeps them off.
 
 ## Fast local iteration
 
-The authoritative handoff check remains `./ci.sh`, but focused direct commands
-can shorten a debugging loop:
+The authoritative final repository check remains `./ci.sh`, but focused direct
+commands can shorten a debugging loop:
 
 ```sh
 go test ./internal/rules
@@ -534,6 +622,7 @@ go test ./internal/app
 (cd web/frontend && bun test)
 (cd web/frontend && bun run check)
 (cd test && bun run verify:scenarios)
+(cd test && bunx playwright test specs/integrations/delegated-start.site-tools.spec.ts --workers=1)
 ```
 
 For browser work, the root E2E target is safest because it verifies all layers.

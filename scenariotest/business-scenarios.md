@@ -534,7 +534,7 @@ Section 6.
 
 | ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                    | Priority | Scopes and tags                                        |
 | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------ |
-| `IDN-001` | **Neutral area choice.** A visitor at the product entry chooses Play or Build and reaches that area's authentication boundary without the neutral choice itself loading protected user/world data.                                                              | P1       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
+| `IDN-001` | **Public delegated entry.** A visitor at the product entry sees one ChatGPT launch for ready-made delegated start. The entry loads no protected user or World data, and its attached browser destination is the authenticated Start site-tool page.                    | P1       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
 | `IDN-003` | **Resume requested destination after authentication (version 2).** A visitor opens an area, world, or invitation destination first, authenticates, and returns to the same semantic destination. Invitation metadata remains hidden until then.                 | P0       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`, `invite` |
 | `IDN-004` | **Create a password account.** A visitor authors a unique username, display name, and confirmed password. The server creates the account and establishes an opaque cookie session without requiring email.                                                      | P0       | `UI`, `HTTP`, `DB`; `happy`, `identity`                |
 | `IDN-005` | **Sign in and retain the session.** An existing account submits its username and password, resumes the protected destination, and remains authenticated through navigation and reload.                                                                          | P0       | `UI`, `HTTP`, `RUNTIME`; `happy`, `identity`           |
@@ -661,7 +661,7 @@ compose it.
 
 | ID        | Behavior, precondition, and expected outcome                                                                                                                                                                                                                  | Priority | Scopes and tags                                              |
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------ |
-| `NAV-001` | **Follow canonical Play/Build navigation and deep links.** Users move deliberately between the neutral choice, libraries, World sections, Play, and area-scoped invitation destinations; a bare Build-World destination resolves to its default section.       | P1       | `UI`, `A11Y`, `RUNTIME`; `happy`, `identity`                 |
+| `NAV-001` | **Follow canonical public and internal routes.** The product entry exposes only delegated start, while explicitly addressed internal Play, Build, World-section, and area-scoped invitation destinations still resolve correctly; a bare Build-World destination resolves to its default section. | P1       | `UI`, `A11Y`, `RUNTIME`; `happy`, `identity`                 |
 | `NAV-002` | **Recover deliberately from an unknown route.** An unsupported destination renders a not-found state with a comprehensible route back instead of silently opening unrelated content.                                                                          | P2       | `UI`, `A11Y`, `RUNTIME`; `recovery`                          |
 | `NAV-003` | **Protect dirty author drafts during navigation.** An unsaved mechanic/configuration draft warns before in-app or browser departure; save/discard choices have unambiguous outcomes and a saved draft can be reopened.                                        | P1       | `UI`, `A11Y`, `RUNTIME`; `recovery`, `keyboard`              |
 | `NAV-004` | **Complete core journeys at narrow viewport.** Identity/invite, configuration, onboarding, and Play tasks reflow to a usable single-column presentation without horizontal-page dependence or lost controls.                                                   | P1       | `UI`, `A11Y`, `RUNTIME`; `responsive`                        |
@@ -946,7 +946,7 @@ When product behavior changes:
 4. Update the behavior catalog/driver and validation adapters described in
    [architecture.md](architecture.md).
 5. Run the smallest affected selection during development and the repository's
-   authoritative validation before handoff.
+   authoritative validation before requesting review.
 
 A scenario review asks:
 

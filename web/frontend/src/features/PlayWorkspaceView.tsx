@@ -11,6 +11,7 @@ import {
 
 export function PlayWorkspaceView({
   worldName,
+  agentMode,
   currentPlayRoleLabel,
   user,
   accountControls,
@@ -19,6 +20,7 @@ export function PlayWorkspaceView({
   children,
 }: {
   worldName: string;
+  agentMode: boolean;
   currentPlayRoleLabel: string;
   user: { displayName: string; username: string };
   accountControls: ReactNode;
@@ -32,25 +34,40 @@ export function PlayWorkspaceView({
         Skip to content
       </a>
       <header className="play-app-bar">
-        <button
-          className="play-brand-button"
-          type="button"
-          onClick={onHome}
-          aria-label="Return home"
-        >
-          <Brand compact />
-        </button>
-        <button
-          className="play-world-return"
-          type="button"
-          onClick={onWorldLibrary}
-        >
-          <span aria-hidden="true">←</span>
-          <span>
-            <small>All worlds</small>
-            <strong>{worldName}</strong>
+        {agentMode ? (
+          <span className="play-brand-button" aria-label="Gezerah">
+            <Brand compact />
           </span>
-        </button>
+        ) : (
+          <button
+            className="play-brand-button"
+            type="button"
+            onClick={onHome}
+            aria-label="Return home"
+          >
+            <Brand compact />
+          </button>
+        )}
+        {agentMode ? (
+          <div className="play-world-return">
+            <span>
+              <small>Attached World</small>
+              <strong>{worldName}</strong>
+            </span>
+          </div>
+        ) : (
+          <button
+            className="play-world-return"
+            type="button"
+            onClick={onWorldLibrary}
+          >
+            <span aria-hidden="true">←</span>
+            <span>
+              <small>All worlds</small>
+              <strong>{worldName}</strong>
+            </span>
+          </button>
+        )}
         <div className="play-app-account">
           <RolePill role={currentPlayRoleLabel} />
           <Avatar name={user.displayName} size="small" />

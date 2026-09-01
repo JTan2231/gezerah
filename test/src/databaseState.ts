@@ -445,14 +445,14 @@ export interface WorldDatabaseTraceStep {
 export interface WorldDatabaseTraceDocument {
   readonly schema_version: 1;
   readonly world_id: string;
-  readonly scope: "world-scoped WebMCP persistence tables";
+  readonly scope: "world-scoped agent-facilitator command persistence tables";
   readonly excluded: readonly string[];
   readonly steps: readonly WorldDatabaseTraceStep[];
 }
 
-export const webMCPDatabaseTracePath = path.join(
+export const agentFacilitatorCommandDatabaseTracePath = path.join(
   artifactsDir,
-  "webmcp-database-trace.json",
+  "agent-facilitator-command-database-trace.json",
 );
 
 export class WorldDatabaseTrace {
@@ -500,7 +500,8 @@ export class WorldDatabaseTrace {
     return Object.freeze({
       schema_version: 1 as const,
       world_id: this.worldID,
-      scope: "world-scoped WebMCP persistence tables" as const,
+      scope:
+        "world-scoped agent-facilitator command persistence tables" as const,
       excluded: Object.freeze([
         "users and auth_sessions",
         "World invite tokens and redemptions",
@@ -515,11 +516,11 @@ export class WorldDatabaseTrace {
   async #write(): Promise<void> {
     await mkdir(artifactsDir, { recursive: true });
     await writeFile(
-      webMCPDatabaseTracePath,
+      agentFacilitatorCommandDatabaseTracePath,
       `${JSON.stringify(this.document(), null, 2)}\n`,
       { encoding: "utf8", mode: 0o600 },
     );
-    await chmod(webMCPDatabaseTracePath, 0o600);
+    await chmod(agentFacilitatorCommandDatabaseTracePath, 0o600);
   }
 }
 

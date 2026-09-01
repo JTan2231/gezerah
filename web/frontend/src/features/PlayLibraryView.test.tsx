@@ -12,24 +12,24 @@ const emptyLibrary: PlayLibraryViewModel = {
 };
 
 describe("PlayLibraryView", () => {
-  test("always offers a new World when the library is empty", () => {
+  test("sends an empty library back to the ChatGPT-first Home flow", () => {
     const html = renderToStaticMarkup(
       <PlayLibraryView
         model={emptyLibrary}
         accountControls={null}
         onReturnHome={noop}
-        onCreateWorld={noop}
         onOpenWorld={noop}
         onRetry={noop}
       />,
     );
 
     expect(html).toContain("What world do you want to play?");
-    expect(html).toContain("New world");
     expect(html).toContain("No saved worlds yet");
+    expect(html).toContain("Start from Home with ChatGPT");
+    expect(html).not.toContain("New world");
   });
 
-  test("shows saved Worlds alongside the new-World choice", () => {
+  test("shows saved Worlds without a manual new-World affordance", () => {
     const html = renderToStaticMarkup(
       <PlayLibraryView
         model={{
@@ -50,7 +50,6 @@ describe("PlayLibraryView", () => {
         }}
         accountControls={null}
         onReturnHome={noop}
-        onCreateWorld={noop}
         onOpenWorld={noop}
         onRetry={noop}
       />,
@@ -58,7 +57,7 @@ describe("PlayLibraryView", () => {
 
     expect(html).toContain("Glass Harbor");
     expect(html).toContain("Saved worlds");
-    expect(html).toContain("New world");
+    expect(html).not.toContain("New world");
     expect(html).toContain("Open");
   });
 });

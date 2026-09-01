@@ -32,6 +32,25 @@ The active preview proves that the checked-in Railway configuration can produce
 a healthy hosted process. It does not by itself make the target safe for an
 unrestricted audience or durable real-user data.
 
+### ChatGPT delegated-start readiness
+
+A target must not describe its public ChatGPT launch or delegated-start path as
+accepted until the stable [ChatGPT acceptance scenario](../testing.md#chatgpt-acceptance)
+passes against that exact deployed candidate. Repository CI, the
+Agent-facilitator command contract, site-tool page integration, and the
+non-persisting deployed smoke do
+not exercise the signed-in ChatGPT product and cannot supply that record.
+
+This readiness statement covers only the first-version public scope: choosing
+and copying one bundled ready-made World, claiming one complete Character, and
+beginning Play through the Start and Play site-tool surfaces. Custom Build,
+saved-World discovery, invites and multiplayer onboarding, and incomplete
+profile completion must not be claimed as accepted ChatGPT entry behavior.
+
+The repository owns the stable scenario and pass criteria. A separately operated
+external handbook may own a dated acceptance record for an exact candidate; it
+does not change the gate definition or replace repository evidence.
+
 ## Audit index
 
 - [Identity, users, memberships, invitations, and onboarding](identity-access.md)
@@ -49,7 +68,9 @@ local development:
 3. distributed/proxy-aware abuse controls and external security review;
 4. Railway configuration, deployment verification, and rollback evidence;
 5. the no-email password-loss and account-support policy, plus any future MFA
-   requirement.
+   requirement; and
+6. a passing ChatGPT acceptance record for the exact candidate if public
+   delegated start is offered.
 
 If a public release is proposed, its release gate begins closed and opens only
 after its target-specific blockers are resolved and the resulting behavior is

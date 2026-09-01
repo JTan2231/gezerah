@@ -1,156 +1,232 @@
 # ChatGPT play through WebMCP
 
-The ChatGPT play surface is an authenticated top-level Play page. ChatGPT is
-the Facilitator, the signed-in person remains a current player, and the page remains
-the canonical Play surface: it displays the current Problem, current-player Action,
-Resolution history, Entity sheets, and logical state.
+The public ChatGPT launch opens one conversation with the `/play/new` Start
+site-tool page in an attached browser tab. Delegated start
+uses that page and the later `/play/{world_id}` Play site-tool page to choose and
+copy a ready-made World, claim a Character, and begin Play. ChatGPT is the
+Facilitator, while the signed-in person remains a current player.
+
+The attached pages remain the canonical application surfaces. They display the
+available authored choices, current Problem, current-player Action, Resolution
+history, Entity sheets, and logical state. ChatGPT changes durable state only
+through their site tools, which reuse the existing same-origin API.
 
 This integration uses the browser's imperative WebMCP API. It is not a remote
-MCP server and it does not add a second authentication system.
+MCP server and does not add a second authentication system.
 
-## Session and trust boundary
+## Delegated-start contract
 
-- The current player opens the exact `/play/{world_id}` page in ChatGPT's built-in
-  browser and signs in to this application there. ChatGPT's browser profile is
-  separate from an ordinary Safari or Chrome profile, so an existing session
-  is not assumed to carry over.
-- Page tools call the existing same-origin API client. The host-only HttpOnly
-  session cookie, exact-origin check, session-derived CSRF token, world
+Delegated start is intentionally smaller than general Gezerah onboarding. Its
+first public version covers only the three release-bundled World templates and
+their complete, ready-made Characters.
+
+The person may state a play preference about setting, Character, tone, or
+difficult choices. ChatGPT applies that preference to the authored options. If
+the person says to choose, asks for a surprise, or gives no preference, ChatGPT
+chooses without running a setup questionnaire. Once the first Problem is
+presented, the person's ordinary required decision is the in-fiction Action;
+ChatGPT records and resolves it unless the person explicitly delegates that
+fictional decision too.
+
+The launch supplies the complete delegated-start instructions as a prefilled
+starter prompt. Its final line, `My play preference: surprise me.`, is the sole
+setup input: the person may send it unchanged or replace that preference. The
+instructions require ChatGPT to preserve the person's agency over later
+in-fiction Actions.
+
+After authentication, ChatGPT must use the ready Start and Play site tools for
+application operations. It must never make a browser-control request. In
+particular, it must not ask the person to click a template, copy a World, choose
+a Character in Gezerah, navigate between Gezerah pages, name a site tool, or
+take control of the attached browser tab. If state changes or a command fails,
+ChatGPT inspects current state and retries only when safe. If site-tool readiness
+cannot be established, it reports that delegated start is unavailable without
+turning manual browser operation into the nominal ChatGPT flow.
+
+Signing in is the sole ordinary manual application boundary. Authentication
+controls and platform-owned safety UI are not browser-control requests from the
+assistant.
+
+Custom Build guidance, saved-World discovery, invitation and multiplayer
+onboarding, and completion of an incomplete Character profile remain ordinary
+implemented Gezerah capabilities. They are outside the first public delegated-
+start entry and must not be presented as if ChatGPT can complete them through
+the Start site-tool surface.
+
+## Authentication and trust boundary
+
+- ChatGPT launch attaches the exact `/play/new` page. If the attached browser
+  profile is signed out, the person signs in to Gezerah in that tab. An existing
+  Safari or Chrome login is not assumed to carry over.
+- Site tools call the existing same-origin API client. The host-only HttpOnly
+  session cookie, exact-origin check, session-derived CSRF token, World
   authorization, optimistic revisions, idempotency, and input validation remain
   authoritative.
 - WebMCP does not provide a cryptographic ChatGPT principal. The server permits
-  agent commands because the request comes from an authenticated, ready
-  current player in a World whose facilitator source is explicitly
-  `agent`. A client header or claimed agent name is never trusted.
-- Password entry, signup, signin, invites, account changes, unrestricted entity
-  control, and world authoring are not page tools.
+  agent commands because they come from an authenticated, ready current player
+  in a World whose facilitator source is explicitly `agent`. A client header or
+  claimed agent name is never trusted.
+- Password entry, signup, signin, invites, account changes, unrestricted Entity
+  control, and World authoring are not site tools.
 - No cross-origin API allowance, JavaScript-readable session credential, OAuth
   connection to ChatGPT, iframe exception, or server-side OpenAI key is needed.
 
-The `agent` facilitator is a non-membership source, like Terra, but it never
+The `agent` Facilitator is a non-membership source, like Terra, but it never
 calls an OpenAI model from the server. It lets the same authenticated membership
-retain current play role `player` and records agent-authored Interactions, Resolutions, and
-World events with `agent` attribution. Terra's Continue and Decide commands continue
-to require a Terra-facilitated World and are unavailable in agent mode.
+retain current play role `player` and records agent-authored Interactions,
+Resolutions, and World events with `agent` attribution. Terra's Continue and
+Decide commands continue to require a Terra-facilitated World and are
+unavailable when ChatGPT is Facilitator.
 
-## Current-player journey
+## Delegated start and Play
 
-1. From Home, choose **Start playing with ChatGPT** to begin an assisted
-   template choice, or choose **Play** to see saved Worlds alongside **New
-   world**. Both new-World paths enter `/play/new` after sign-in.
-2. **New world** offers the three bundled settings without ranking them. **Copy
-   and play** creates an independent, agent-facilitated World, then opens
-   Character selection. A saved World resumes without being copied or reset.
-3. If the current player has no Character, the page and its Entity-selection tool
-   expose only eligible, unclaimed Entities. Choosing **Play as _name_** is an
-   atomic server command that makes the Entity the current player's Character
-   rather than granting unrestricted Controller editing.
-4. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
-   starter prompt. Copying the prompt remains available as a fallback. Its
-   user-visible prose describes the desired play outcome without naming browser
-   plumbing or page-tool identifiers. The current player opens Play in ChatGPT's
-   top-level built-in browser and signs in. Once that attached chat has started,
-   the same conversation can be continued from `chatgpt.com` while the desktop
-   Play page remains open.
-5. ChatGPT inspects Play, presents an improvised Problem, records the current player's
-   chosen Action, and resolves the
-   Problem with a narrative and optional valid Effects.
-6. The page refreshes after each command. Closing or navigating away from the
-   page removes its tools; reopening the authenticated Play page restores them
-   from current durable state.
+1. From Home, the person chooses **Open in ChatGPT**. ChatGPT launch
+   opens one conversation and attaches `/play/new` in its top-level browser tab.
+2. The person signs in there if necessary. After authentication and successful
+   registration of both Start tools, the Start site-tool surface becomes ready.
+3. ChatGPT inspects all three equal ready-made templates, applies the person's
+   play preference or makes a reasonable choice, and copies that template. The
+   command navigates the same attached browser tab to the new ordinary
+   `/play/{world_id}` page.
+4. When the Play site-tool surface becomes ready, ChatGPT inspects Play, chooses
+   an available Character using the same preference, and claims it. Template
+   profiles are complete, so a successful claim makes the current player ready.
+5. ChatGPT inspects the newly ready Play state and presents the first improvised
+   Problem from the World description, Mechanics, profiles, and logical state.
+6. The person describes an in-fiction Action in chat. ChatGPT records the
+   Action, resolves the Problem with public narrative and optional valid
+   Effects, refreshes Play, and presents the next Problem.
 
-There is no episode scheduler or authored encounter sequence. The World description,
-Mechanics, and available Entities set the stage; ChatGPT and the current player determine
-what happens.
+The attached page refreshes its authoritative state after each mutation.
+Closing its tab or navigating away removes its site tools; reopening the
+authenticated page restores the relevant surface from current durable state.
+The same ChatGPT conversation may continue while the attached browser tab
+remains open.
 
-The Home-page **Start playing with ChatGPT** path is the assisted entry to the
-three-template chooser. The separate **Start a World with ChatGPT** prompt in
-the Build library remains the general-purpose authoring route for a custom
-World.
+There is no episode scheduler or authored encounter sequence. The World
+description, Mechanics, and available Entities set the stage; ChatGPT and the
+current player determine what happens.
 
-## Page tools
+The separate **Start a World with ChatGPT** material in the Build library remains
+general-purpose guidance for a custom World. It is not delegated start and is
+not the public ChatGPT Play entry.
 
-The Play page registers tools only when `document.modelContext` is available,
-the World uses the `agent` facilitator, and the signed-in membership has the
-required current play role and Play status. Registrations use an `AbortController`, so stale callbacks
-are removed whenever the React view changes or unmounts.
+## Site-tool pages and surfaces
 
-- `inspect_play` returns the current-player-visible World, world mechanic graph,
-  roster, profiles, Entity sheets, active Problem, Actions, and recent Resolutions.
+Site-tool support means the top-level browser exposes
+`document.modelContext.registerTool`. Site-tool readiness additionally requires
+every tool expected from the current mounted, authenticated page to register
+successfully. Catalog and World data loading remains separate; commands fail
+closed when their required authoritative data is unavailable or invalid. A
+supported but signed-out, partially registered, or ineligible page is not ready.
+Registered handlers remain closed until the complete surface succeeds, and a
+partial failure tears down every registration from that attempt.
+
+Registrations use an `AbortController`, so callbacks from a prior route or state
+are removed whenever the React view changes or unmounts. Navigation from Start
+to Play therefore replaces the Start surface with the Play surface in the same
+attached browser tab.
+
+### Start site-tool page
+
+The authenticated `/play/new` page exposes exactly the delegated-start commands:
+
+- `inspect_world_templates` returns the complete three-template catalog with the
+  authored information needed to apply a play preference, and fails closed if
+  the API does not return exactly three templates.
+- `copy_world_template` accepts one inspected `template_id`, creates an
+  independent agent-facilitated World with a stable client destination UUID for
+  safe retry, and navigates the same attached tab to `/play/{world_id}`.
+
+These commands do not expose custom Build, saved Worlds, invitations, multiplayer
+setup, or arbitrary World authoring.
+
+### Play site-tool page
+
+An active `/play/{world_id}` page registers the Play surface only when the World
+uses the `agent` Facilitator and the signed-in membership is a current player.
+The membership's Play status and command-specific state still authorize each
+command independently, so registration never bypasses the server gates:
+
+- `inspect_play` returns the current-player-visible World, World mechanic graph,
+  roster, profiles, Entity sheets, active Problem, Actions, and recent
+  Resolutions.
 - `claim_entity` atomically claims one currently available Entity while the
   membership is waiting for a Character.
 - `present_problem` creates and immediately presents one Problem to the ready
   Play audience. The server rejects a second unfinished Problem.
-- `submit_action` records the signed-in current player's Action against the active
-  Problem, using an Entity controlled by that membership.
+- `submit_action` records the signed-in current player's Action against the
+  active Problem, using an Entity controlled by that membership.
 - `resolve_problem` begins agent adjudication and applies a Consequence with
   optional concrete Effects under revision and idempotency protection.
 
-The tool handlers reuse the frontend API adapter and refresh the Play surface
-after mutations. Tool results are concise structured text for ChatGPT; the
-backend response and reloaded UI are the source of truth.
+Tool handlers reuse the frontend API adapter and refresh the authoritative page
+state after mutations. Results are concise structured data for ChatGPT; the
+backend response and refreshed UI remain the source of truth.
 
-The registered inspection, presentation, and resolution contracts tell ChatGPT
-to establish materially changed locations with a small handful of concrete
-details, including innocuous texture filtered through visible profile prose,
-effective Mechanics, active Statuses, equipment, and demonstrated temperament.
-They describe observable attention rather than private thoughts, never promote
-a user-authored Perception-like label into a privileged key or invented check,
-and keep suggested Actions non-exhaustive. These instructions live in the page
-tool contracts so the person-facing starter and recovery copy can stay in
-ordinary language.
+The inspection, presentation, and Resolution contracts tell ChatGPT to
+establish materially changed locations with a small handful of concrete details,
+including innocuous texture filtered through visible profile prose, effective
+Mechanics, active Statuses, equipment, and demonstrated temperament. They
+describe observable attention rather than private thoughts, never promote a
+user-authored Perception-like label into a privileged key or invented check, and
+keep suggested Actions non-exhaustive. These instructions live in site-tool
+contracts so person-facing starter and recovery copy can remain ordinary
+language.
 
-### Database-state companion
+## Agent-facilitator command contract companion
 
-The direct WebMCP contract writes
-`test/artifacts/webmcp-database-trace.json` as a diagnostic companion to its
-replayed conversation. The trace contains a baseline plus the state after
-`claim_entity`, `present_problem`, `submit_action`, `resolve_problem`, and an
-idempotent `resolve_problem` replay. Each step records its operation and durable
-references, the tables changed since the preceding step, and the complete safe
-World-scoped projection at that boundary.
+The automated Agent-facilitator command contract writes
+`test/artifacts/agent-facilitator-command-database-trace.json` as a diagnostic
+companion to its replayed Play commands. The trace contains a baseline plus
+state after `claim_entity`, `present_problem`, `submit_action`,
+`resolve_problem`, and an idempotent `resolve_problem` replay. Each step records
+its operation and durable references, the tables changed since the preceding
+step, and the complete safe World-scoped projection at that boundary.
 
 Every state is observed in a read-only, repeatable-read transaction. The
 projection uses explicit columns and stable ordering; it omits identities,
-authentication and invite secrets, restricted profile prose, facilitator-only
-notes, and idempotency keys. It is test evidence, not canonical product storage
-or a production export endpoint.
+authentication and invitation secrets, restricted profile prose,
+Facilitator-only notes, and idempotency keys. It is test evidence, not canonical
+product storage or a production export endpoint.
 
 Run the contract directly when the ignored artifact needs to remain in the
 working checkout:
 
 ```sh
-(cd test && bunx playwright test specs/contracts/webmcp-agent.contract.spec.ts --workers=1)
+(cd test && bunx playwright test specs/contracts/agent-facilitator-command.contract.spec.ts --workers=1)
 ```
 
-The generated values describe the disposable contract replay. A completed
-ChatGPT conversation cannot be given exact historical physical snapshots from
-the final database alone: World events are invalidation cursors rather than an
-audit log. Exact snapshots for a manual run must be captured at its mutation
-boundaries while that run is in progress or recreated by replaying it.
+The generated values describe a disposable contract replay. A completed ChatGPT
+acceptance run cannot be given exact historical physical snapshots from the
+final database alone: World events are invalidation cursors rather than an audit
+log. Exact snapshots for a run must be captured at its mutation boundaries or
+recreated by replaying it.
 
-## Availability and testing
+## Availability and acceptance
 
 WebMCP support is experimental and rollout-dependent. OpenAI's current Site
-tools documentation describes support in ChatGPT's built-in browser and
-requires JavaScript registration from the top-level page; iframe and
-declarative registrations are not currently discovered there. See
+tools documentation describes support in ChatGPT's top-level built-in browser;
+iframe and declarative registrations are not discovered there. See
 <https://learn.chatgpt.com/docs/webmcp>.
 
-Run the human-operated [ChatGPT web acceptance](testing.md#chatgpt-web-acceptance)
-before describing a handoff, registration, or agent-narration revision as
-manually accepted or promoting it to public production. Automated page-tool
-contracts do not exercise the signed-in ChatGPT web UI. Source publication may
-proceed without that claim; the current manual procedure is being refactored.
+Automated Agent-facilitator command, site-tool registration, site-tool page
+integration, and deployed-smoke checks do not exercise the signed-in ChatGPT
+product and model. Run the stable
+[ChatGPT acceptance scenario](testing.md#chatgpt-acceptance) when required by
+the change-trigger matrix. A passing run is required before a changed ChatGPT
+entry or site-tool experience is described as accepted or promoted as the
+public delegated-start path.
 
-Release validation should cover:
+Acceptance covers the complete boundary:
 
-- a fresh ChatGPT browser profile signing in on the Play page;
-- exact-origin mutations and CSRF refresh after reload;
-- anonymous, spectator, unready, wrong-world, stale-revision, and duplicate
-  command failures;
-- two simultaneous claims for one Entity producing exactly one winner;
-- a World with facilitator source `agent` leaving the membership's current play role as `player`;
-- Terra routes and provider calls remaining unavailable in agent mode;
-- a full inspect, claim, present, submit, resolve, reload, and inspect loop in
-  ChatGPT with the page and durable history agreeing.
+- ChatGPT launch opens one conversation with the exact `/play/new` page attached;
+- authentication is the only ordinary manual Gezerah operation;
+- the Start surface becomes ready and ChatGPT inspects and copies one template;
+- the same attached tab navigates to Play, where ChatGPT inspects, claims,
+  re-inspects, and presents the first Problem;
+- ChatGPT makes no browser-control request and asks for no redundant setup
+  decision;
+- one natural-language Action is submitted and resolved, and the next Problem
+  is presented; and
+- reloaded Play and durable history agree with the chat.
