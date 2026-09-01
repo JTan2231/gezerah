@@ -90,7 +90,7 @@ sessions for the account, pruning least-recently-seen sessions first.
 | 400    | `invalid_json`, `invalid_id`, `invalid_cursor`                                  | Transport, path, or query syntax is malformed.                      |
 | 401    | `authentication_required`, `invalid_credentials`                                | Session is absent/expired/revoked, or signin credentials are wrong. |
 | 403    | `csrf_invalid`, origin/authority/forbidden/readiness codes                      | Browser-integrity check or resource authority failed.               |
-| 404    | `not_found`, `invite_not_found`, `endpoint_not_found`                           | Resource, invite, or endpoint is absent or hidden.                  |
+| 404    | `not_found`, `invite_not_found`, `world_template_not_found`, `endpoint_not_found` | Resource, invite, template, or endpoint is absent or hidden.      |
 | 409    | `revision_conflict`, `conflict`, `world_archived`, `interactions_unfinished`, `responses_incomplete`, lifecycle/idempotency errors | Current state conflicts with the command. |
 | 422    | `validation_failed`, `invalid_reference`, `transition_failed`                   | Structurally readable JSON violates a domain/database rule.         |
 | 429    | `rate_limited`                                                                  | Authentication attempt/work limit was reached; honor `Retry-After`. |
@@ -170,6 +170,8 @@ An incorrect current password on the change endpoint is a field-specific
 | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
 | `GET /api/worlds`                              | Authenticated user                             | Active memberships only; membership-role/count/activity and derived play fields. |
 | `POST /api/worlds`                             | Authenticated user                             | Name/description; creates World, owner membership, character-field/mechanic-graph roots, and event. |
+| `GET /api/world-templates`                     | Authenticated user                             | The three embedded starting templates as `id`, `version`, name, card description, setting, and Character count. |
+| `POST /api/world-templates/{template_id}/clone` | Authenticated user                            | `{id}` with a client-generated destination World UUID; atomically creates and returns an ordinary agent-facilitated World. |
 | `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
 | `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, and `expected_revision`.                             |
 | `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
@@ -187,6 +189,21 @@ spectators return `ready` but stay read-only.
 `revision` protects world settings/archive. `roster_revision` protects
 controller changes. `rules_revision` protects the world mechanic graph; all
 three are returned on every `World` response.
+
+Template catalog content is embedded Markdown with strict YAML front matter.
+The catalog endpoint exposes selection metadata only. Clone materializes the
+selected template into the ordinary normalized World tables with fresh Mechanic,
+expression-node, Character-field, Entity, membership, and profile identities.
+File-local aliases never cross the HTTP or database boundary. The new owner is a
+current player, the Facilitator source is `agent`, all five Entities begin
+uncontrolled and ready to claim, and no Interaction or other live history is
+created.
+
+The caller-generated destination `id` is also the retry key. First success
+returns `201` and `Location: /api/worlds/{id}`. An equivalent retry by the same
+owner returns the existing World with `200`; a reused ID whose World does not
+match the selected template returns `409 idempotency_conflict`. Existing copies
+do not change when an embedded template version changes.
 
 Every World returns one `facilitator` object. For a human assignment it
 contains `source:"human"`,

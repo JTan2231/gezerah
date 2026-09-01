@@ -21,6 +21,7 @@ type Server struct {
 	db                 *pgxpool.Pool
 	api                *http.ServeMux
 	models             modelProvider
+	worldTemplates     worldTemplateCatalog
 	static             http.Handler
 	staticFS           fs.FS
 	publicOrigin       string
@@ -62,6 +63,7 @@ func newServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
 	server := &Server{
 		db:             db,
 		api:            http.NewServeMux(),
+		worldTemplates: embeddedWorldTemplateCatalog,
 		static:         http.FileServer(http.FS(staticFS)),
 		staticFS:       staticFS,
 		authThrottle:   newAuthThrottle(),

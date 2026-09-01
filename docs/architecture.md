@@ -24,7 +24,7 @@ The world is the sole product and data boundary. It owns:
 The system does not currently own:
 
 - email addresses, password recovery, MFA, or a federated identity provider;
-- built-in entity classes, mechanic names, or seeded vocabulary;
+- built-in entity classes, privileged mechanic names, or global vocabulary;
 - cross-world inheritance or resource sharing;
 - matchmaking, chat, files, maps, dice, or turn scheduling;
 - background jobs or an external event broker;
@@ -201,6 +201,13 @@ modifier snapshots, final Resolution receipts, and World-event rows.
 
 JSON is a transport format, not canonical storage.
 
+Three repository-owned Markdown World templates provide optional starting
+content for Play. The server embeds and validates those release artifacts, then
+materializes a selected template into the same normalized relational tables as
+an authored World. Every copied resource receives a fresh UUID. No template ID
+or file-local reference survives as a privileged database key, and there is no
+runtime inheritance back to the template file.
+
 ## Major data flows
 
 ### Creating a world
@@ -223,6 +230,27 @@ sequenceDiagram
 
 The revision roots contain no vocabulary and do not create another product
 scope; the World remains the sole configuration boundary.
+
+### Copying a World template
+
+```mermaid
+sequenceDiagram
+    participant UI as Play template chooser
+    participant H as HTTP handler
+    participant T as Embedded Markdown catalog
+    participant DB as PostgreSQL
+
+    UI->>H: POST template clone + destination World UUID
+    H->>T: Load validated template
+    H->>DB: Materialize World, owner, Mechanics, fields, and Entities
+    H->>DB: Persist profiles and logical-state overrides
+    H->>DB: Commit one independent agent-facilitated World
+    H-->>UI: 201 World (or 200 idempotent replay)
+```
+
+The destination UUID makes an uncertain client retry idempotent. A replay is
+accepted only for the same account and template copy; unrelated existing
+Worlds remain conflicts.
 
 ### Authoring a mechanic
 

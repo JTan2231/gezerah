@@ -956,6 +956,91 @@ textarea {
   color: var(--muted);
 }
 
+.library-section-title {
+  margin: 2rem 0 1rem;
+  font-size: 1rem;
+}
+
+.template-library-back {
+  display: inline-flex;
+  margin-bottom: 1.5rem;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+}
+
+.template-library-heading {
+  margin-bottom: 1.5rem;
+}
+
+.world-template-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: stretch;
+  gap: 1rem;
+}
+
+.world-template-card {
+  display: flex;
+  min-height: 390px;
+  padding: 1.35rem;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.world-template-card > header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 0.8rem;
+}
+
+.world-template-setting {
+  color: var(--ember-dark);
+  font-size: 0.68rem;
+  font-weight: 760;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.world-template-character-count {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.world-template-copy {
+  display: grid;
+  padding: 2.2rem 0;
+  gap: 0.8rem;
+}
+
+.world-template-copy h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  line-height: 1.1;
+}
+
+.world-template-copy p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.6;
+}
+
+.world-template-card > footer {
+  display: flex;
+  margin-top: auto;
+  padding-top: 1rem;
+  border-top: 1px solid var(--line);
+}
+
+.world-template-card > footer .button {
+  width: 100%;
+}
+
 .world-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -3997,6 +4082,14 @@ textarea {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .world-template-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .world-template-card {
+    min-height: 280px;
+  }
+
   .onboarding-layout {
     grid-template-columns: 1fr;
   }
@@ -4083,6 +4176,15 @@ textarea {
   .world-card > footer > div,
   .world-card > footer .button {
     flex: 1;
+  }
+
+  .world-template-card {
+    min-height: auto;
+    padding: 1.1rem;
+  }
+
+  .world-template-copy {
+    padding: 1.5rem 0;
   }
 
   .world-content {

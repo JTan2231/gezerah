@@ -88,6 +88,15 @@ the authorization context rather than becoming the persisted author.
 The schema contains no alternate configuration container, secondary live
 container, reusable simulation aggregate, or alternate profile storage.
 
+The three optional starting templates do not add database tables or seed rows.
+They are versioned Markdown release assets. Selecting one creates a new ordinary
+World transactionally in the normalized tables described below; PostgreSQL is
+then authoritative for that independent copy. Every file-local Mechanic,
+expression, Character-field, and Entity alias is replaced with a fresh UUID.
+Only initial configuration, profiles, and sparse logical input overrides are
+materialized—memberships other than the new owner, Controllers, invites,
+Interactions, Status instances, Resolutions, and history are never copied.
+
 ## Logical schema
 
 ### Worlds, users, and membership

@@ -1,5 +1,24 @@
 # Workflows
 
+## Start from a World template
+
+1. Open **Play** and choose **New World**.
+2. Choose any one of the three equal starting templates. Each card describes
+   its setting and shows the number of available Characters.
+3. The server atomically copies that template into a new, independent World.
+   The signed-in person becomes its owner and current player, while the
+   Facilitator source is `agent`.
+4. Choose one of the five uncontrolled Entities as the Character. Every
+   template profile is already complete, so a successful claim enters Play
+   immediately.
+5. ChatGPT inspects the newly materialized World and improvises the first
+   Problem from its description, Mechanics, profiles, and logical state.
+
+Templates are versioned Markdown in the application release, but a selected
+copy is ordinary relational World data. Later template edits never alter an
+existing World. The copy contains no pre-authored Problem, live Status instance,
+or pre-authored play history beyond its ordinary `world-created` event.
+
 ## Create and configure a world
 
 1. Open `/`, choose **Build**, then sign up or sign in. Signup requires a

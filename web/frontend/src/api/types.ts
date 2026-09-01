@@ -31,6 +31,15 @@ export interface World {
   last_interaction_at?: string | undefined;
 }
 
+export interface WorldTemplate {
+  id: string;
+  name: string;
+  description: string;
+  setting: string;
+  character_count: number;
+  version: number;
+}
+
 export interface WorldMember {
   id: string;
   user_id: string;

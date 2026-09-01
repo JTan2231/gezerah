@@ -47,12 +47,13 @@ component framework, or service worker.
 | `src/**/*View.tsx`                          | Backend-independent markup, layout, accessibility, and local UI interaction.     |
 | `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
 | `src/features/HomeChoice.tsx`               | Data-free root navigation controller for Play and Build.                         |
-| `src/features/ChatGPTWorldStartView.tsx`     | Shared ChatGPT Work and copyable World-start surface for Home and an empty Play library. |
+| `src/features/ChatGPTWorldStartView.tsx`     | ChatGPT Work and copyable World-start surface for Home.                                 |
 | `src/features/useChatGPTWorldStart.ts`       | Friendly Build-guide prompt construction and clipboard status.                   |
 | `src/features/IdentityGate.tsx`             | Username/password authentication command controller.                             |
 | `src/features/AccountControls.tsx`          | Password and server-side signout command controller.                             |
 | `src/features/BuildLibrary.tsx`             | Build-world collection and creation controller.                                  |
 | `src/features/PlayLibrary.tsx`              | Membership-filtered world collection controller.                                 |
+| `src/features/WorldTemplateLibrary.tsx`     | Three-template catalog and idempotent World-copy controller.                      |
 | `src/features/BuildWorkspace.tsx`           | Owner/editor gate, world resource, and Build navigation controller.              |
 | `src/features/PlayWorkspace.tsx`            | Play-world resource and shell composition controller.                            |
 | `src/features/RosterWorkspace.tsx`          | Entity, member, mechanic, selection, and refresh controller.                     |
@@ -232,6 +233,7 @@ Routes are parsed without an external router:
 | ----------------------------------------------- | --------------------------------------------- |
 | `/`                                             | ChatGPT World quick start plus Play/Build; no API load. |
 | `/play`                                         | Current account's World list for Play.        |
+| `/play/new`                                     | Three bundled World templates available to copy. |
 | `/play/{world-id}`                              | Onboarding or Play.                           |
 | `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
 | `/build`                                        | Editable-world list and world creation.       |
@@ -275,12 +277,19 @@ revoking the account's other sessions.
 
 Both libraries request `GET /api/worlds`. The Build library filters to
 owner/editor memberships, offers world creation, and
-opens the capacity editor. The Play library shows every admitted world and
-emphasizes the current play role, Play status, roster size, and last
+opens the capacity editor. The Play library asks which World the person wants
+to play, shows every admitted saved World, and always offers **New world**.
+Saved cards emphasize the current play role, Play status, roster size, and last
 activity. The membership role remains available separately inside the World.
-When the Play library is empty, it replaces the invitation-only empty state
-with the same ChatGPT quick start and a deliberate secondary transition to
-Build; populated libraries remain focused on their own area.
+
+`/play/new` loads the complete three-item catalog from
+`GET /api/world-templates`. Each choice has equal visual weight and an explicit
+**Copy and play** command. The client generates the destination World UUID and
+reuses it when retrying `POST /api/world-templates/{template_id}/clone`, so an
+uncertain response cannot create a second copy. A successful command replaces
+the catalog URL with `/play/{world-id}` and enters ordinary Character
+onboarding. An incomplete catalog is treated as unavailable rather than
+silently offering fewer than three choices.
 
 ## Static configuration
 

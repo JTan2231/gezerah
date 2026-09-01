@@ -35,24 +35,22 @@ to require a Terra-facilitated World and are unavailable in agent mode.
 
 ## Current-player journey
 
-1. From Home, **Start a World with ChatGPT** exposes a copyable, ordinary-language
-   prompt and opens it directly in ChatGPT Work on the web. ChatGPT asks a few
-   setup questions and guides the person through Build one step at a time; the
-   person signs in and makes every durable World change through the normal UI.
-2. An owner authors a World and a starting roster through Build, adding Mechanics
-   and character fields when they matter, then
-   assigns ChatGPT as Facilitator.
-3. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
+1. From Home, choose **Play** and sign in. `/play` asks which World to play and
+   shows saved Worlds alongside **New world**.
+2. **New world** offers the three bundled settings without ranking them. **Copy
+   and play** creates an independent, agent-facilitated World, then opens
+   Character selection. A saved World resumes without being copied or reset.
+3. If the current player has no Character, the page and its Entity-selection tool
+   expose only eligible, unclaimed Entities. Choosing **Play as _name_** is an
+   atomic server command that makes the Entity the current player's Character
+   rather than granting unrestricted Controller editing.
+4. **Open in ChatGPT** launches the desktop app with the exact Play URL and a
    starter prompt. Copying the prompt remains available as a fallback. Its
    user-visible prose describes the desired play outcome without naming browser
    plumbing or page-tool identifiers. The current player opens Play in ChatGPT's
    top-level built-in browser and signs in. Once that attached chat has started,
    the same conversation can be continued from `chatgpt.com` while the desktop
    Play page remains open.
-4. If the current player has no Character, the page and its Entity-selection tool
-   expose only eligible, unclaimed Entities. Claiming one is an atomic server
-   command that makes it the current player's Character rather than granting unrestricted
-   Controller editing.
 5. ChatGPT inspects Play, presents an improvised Problem, records the current player's
    chosen Action, and resolves the
    Problem with a narrative and optional valid Effects.
@@ -63,6 +61,10 @@ to require a Terra-facilitated World and are unavailable in agent mode.
 There is no episode scheduler or authored encounter sequence. The World description,
 Mechanics, and available Entities set the stage; ChatGPT and the current player determine
 what happens.
+
+The Home-page **Start a World with ChatGPT** path remains the general-purpose
+authoring route for a custom World. The three-template chooser is the bounded
+new-World route inside Play.
 
 ## Page tools
 

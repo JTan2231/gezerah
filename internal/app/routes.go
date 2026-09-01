@@ -12,6 +12,8 @@ func (s *Server) registerResourceRoutes() {
 
 	s.authenticatedAPIFunc("GET /api/worlds", s.handleListWorlds)
 	s.authenticatedAPIFunc("POST /api/worlds", s.handleCreateWorld)
+	s.authenticatedAPIFunc("GET /api/world-templates", s.handleListWorldTemplates)
+	s.authenticatedAPIFunc("POST /api/world-templates/{template_id}/clone", s.handleCloneWorldTemplate)
 	s.authenticatedAPIFunc("GET /api/worlds/{world_id}", s.handleGetWorld)
 	s.authenticatedAPIFunc("PATCH /api/worlds/{world_id}", s.handleUpdateWorld)
 	s.authenticatedAPIFunc("PUT /api/worlds/{world_id}/facilitator", s.handleUpdateFacilitator)

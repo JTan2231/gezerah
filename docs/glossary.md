@@ -12,19 +12,22 @@ Gezerah keeps three kinds of vocabulary separate:
 | Kind | Authority | Contents |
 | ---- | --------- | -------- |
 | Platform terminology | Defined by the product and this glossary. | Concepts such as World, Mechanic, Entity, Problem, Interaction, Consequence, and Resolution. |
-| World-authored vocabulary | Defined by a world's authors and scoped to that World. | World and Entity names, Mechanic names, character-field labels and guidance, profile prose, and the World description. |
+| World-authored vocabulary | Defined or adopted by a world's authors and scoped to that World. | World and Entity names, Mechanic names, character-field labels and guidance, profile prose, and the World description. |
 | Problem-authored vocabulary | Defined during one live Problem and its Consequence. | Problem prose, Action text, Consequence narrative and selected-Action summary, and inline status names, descriptions, and literal modifier values. |
 
 World-authored and problem-authored terms are data, not built-in product
 classes or privileged keys. The platform supplies their structure and
-validation but does not seed their content.
+validation but does not give any configured term engine-level meaning. A
+bundled World template is optional authored starting content; after adoption,
+its terms are ordinary data belonging only to the new World.
 
 ## Scope, identity, and authority
 
 | Term | Meaning |
 | ---- | ------- |
 | **World** | The sole authorization, configuration, entity, live-play, history, and event boundary. |
-| **World configuration** | Durable user-authored setup belonging to one World, including Mechanics and character fields. Problems and status catalogs are not configuration. |
+| **World template** | A release-bundled Markdown blueprint for starting Play. Copying one creates an independent ordinary World with fresh resource IDs; the template is not a runtime parent, shared scope, or source of privileged semantics. |
+| **World configuration** | Durable authored or adopted setup belonging to one World, including Mechanics and character fields. Problems and status catalogs are not configuration. |
 | **World description** | World-authored prose that orients invited members and serves as Terra's world brief. It does not define mechanical behavior. |
 | **World mechanic graph** | The World's complete Mechanic definitions and the dependency references among derived Mechanics. It is one aggregate within the World, not another product scope. |
 | **Revision** | An optimistic concurrency version for one mutable aggregate. A command supplies the revision it observed and conflicts if that aggregate has advanced. |

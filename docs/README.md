@@ -9,8 +9,9 @@ designated Facilitator: a human facilitator, Terra, or an agent such as
 ChatGPT.
 
 The application intentionally has no built-in entity classes, privileged
-configured keys, seed vocabulary, or canonical JSON document model. World
-authors supply Mechanic vocabulary through World configuration, while
+configured keys, global vocabulary, or canonical JSON document model. Optional
+Markdown-template terms become ordinary world-scoped relational data when
+copied. World authors supply Mechanic vocabulary through World configuration, while
 facilitators name Inline statuses in live Consequences. The server
 stores both in relational, world-scoped structures and enforces their declared
 constraints.
@@ -26,6 +27,7 @@ constraints.
 | [API reference](api.md)         | HTTP conventions, sessions/CSRF, payloads, errors, concurrency guards, SSE, and every route.           |
 | [Backend](backend.md)           | Go server construction, application packages, rules engine, persistence adapters, and transactions.   |
 | [Frontend](frontend.md)         | React application structure, screens, state management, API integration, and styling.                 |
+| [World templates](../internal/app/world_templates/) | The three complete Markdown starter Worlds and their reproducible manifests.                         |
 | [Database](database.md)         | PostgreSQL schema, migration model, table groups, constraints, Resolution receipts, and immutability. |
 | [Development](development.md)   | Prerequisites, local setup, managed services, change workflows, and troubleshooting.                  |
 | [Testing](testing.md)           | Validation targets, unit/integration coverage, disposable database tests, browser tests, and deployed smoke checks. |

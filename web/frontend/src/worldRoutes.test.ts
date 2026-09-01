@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildWorldURL,
   inviteURL,
+  playNewWorldURL,
   playWorldURL,
   readLocation,
 } from "./worldRoutes";
@@ -21,6 +22,11 @@ describe("application routes", () => {
       type: "play-world",
       worldId: "world/1",
     });
+  });
+
+  test("reserves the new-world route before world identifiers", () => {
+    expect(playNewWorldURL()).toBe("/play/new");
+    expect(readLocation("/play/new")).toEqual({ type: "play-new-world" });
   });
 
   test("round-trips a selected builder mechanic", () => {

@@ -383,7 +383,9 @@ failure.
 - Do not add built-in entity classes.
 - Do not make a configured name privileged.
 - Do not introduce canonical JSON storage for authored aggregates or logical state.
-- Do not seed vocabulary; configuration remains user-authored and world-scoped.
+- Do not give configured vocabulary built-in semantics. Bundled World-template
+  terms remain optional starting content and become editable, world-scoped data
+  when copied.
 - Use `./ci.sh` as the handoff validator.
 - Preserve unrelated work in a dirty checkout and avoid destructive source-
   control/database commands.

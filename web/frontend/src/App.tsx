@@ -16,6 +16,7 @@ import { InvitePage } from "./features/InvitePage";
 import { NotFoundPage } from "./features/NotFoundPage";
 import { PlayLibrary } from "./features/PlayLibrary";
 import { PlayWorkspace } from "./features/PlayWorkspace";
+import { WorldTemplateLibrary } from "./features/WorldTemplateLibrary";
 import { BuildLibrary } from "./features/BuildLibrary";
 import { BuildWorkspace } from "./features/BuildWorkspace";
 import { readLocation, type Navigate } from "./worldRoutes";
@@ -188,6 +189,10 @@ export default function App() {
         {...accountProps}
       />
     );
+  }
+
+  if (location.type === "play-new-world") {
+    return <WorldTemplateLibrary navigate={navigate} {...accountProps} />;
   }
 
   if (location.type === "build-world") {

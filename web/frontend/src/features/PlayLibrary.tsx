@@ -2,10 +2,9 @@ import type { AuthenticatedSession, User, World } from "../api/types";
 import { toErrorNotice } from "../api/client";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { playWorldURL, type Navigate } from "../worldRoutes";
+import { playNewWorldURL, playWorldURL, type Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import { PlayLibraryView } from "./PlayLibraryView";
-import { useChatGPTWorldStart } from "./useChatGPTWorldStart";
 
 export function PlayLibrary({
   user,
@@ -21,8 +20,6 @@ export function PlayLibrary({
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
   const worlds = useCollection<World>("/api/worlds");
-  const buildHref = "/build";
-  const worldStart = useChatGPTWorldStart(buildHref);
 
   return (
     <PlayLibraryView
@@ -59,17 +56,9 @@ export function PlayLibrary({
         />
       }
       onReturnHome={() => navigate("/")}
+      onCreateWorld={() => navigate(playNewWorldURL())}
       onOpenWorld={(worldID) => navigate(playWorldURL(worldID))}
       onRetry={worlds.reload}
-      worldStart={{
-        prompt: worldStart.prompt,
-        chatGPTHref: worldStart.chatGPTHref,
-        copyStatus: worldStart.copyStatus,
-        buildHref,
-        onCopyPrompt: () => void worldStart.copyPrompt(),
-        onStartBuild: () => navigate(buildHref),
-        footnote: "Already invited? Open the invitation link you received.",
-      }}
     />
   );
 }
