@@ -7,8 +7,17 @@ issues must follow [SECURITY.md](SECURITY.md).
 
 ## Before changing code
 
-Start with the [product glossary](docs/glossary.md) and the relevant document
-under [`docs/`](docs/README.md). In particular:
+Use the installed `semantics.repository.explore` contract and query the
+registered Semantics repository `gezerah`, then read the relevant document
+under [`docs/`](docs/README.md):
+
+```sh
+/Users/joey/.local/bin/chancery show semantics.repository.explore
+/Users/joey/.local/bin/semantics repository show gezerah
+```
+
+The repository defines project terminology; code, tests, and product documents
+remain authoritative for actual behavior. In particular:
 
 - configuration and vocabulary are user-authored and World-scoped;
 - do not add built-in Entity classes, privileged configured keys, canonical

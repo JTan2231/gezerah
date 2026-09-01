@@ -35,9 +35,11 @@ responsibility without changing access.
 
 ## Documentation
 
-The authoritative vocabulary is in [`docs/glossary.md`](docs/glossary.md), and
-the comprehensive system documentation starts at
-[`docs/README.md`](docs/README.md). It covers architecture, domain semantics,
+The registered Semantics repository `gezerah` is authoritative for project
+terminology; discover it through `semantics.repository.explore` and query it
+with `semantics repository show gezerah`. The comprehensive system
+documentation starts at [`docs/README.md`](docs/README.md) and remains
+authoritative for actual behavior. It covers architecture, domain semantics,
 workflows, the complete HTTP API, backend and frontend internals, the database,
 development, testing, operations, and security.
 

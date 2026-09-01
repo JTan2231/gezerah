@@ -15,9 +15,9 @@ world, mechanic, field, entity, problem, and status names used by a test are
 run-local, user-authored examples. They are never built-in vocabulary, entity
 classes, privileged keys, or seeded definitions.
 
-The product baseline for this catalog is the current
-[product glossary](../docs/glossary.md), [workflow guide](../docs/workflows.md),
-[domain model](../docs/domain-model.md),
+Project terminology comes from the registered Semantics repository `gezerah`,
+discovered through `semantics.repository.explore`. The behavior baseline for
+this catalog is the current [workflow guide](../docs/workflows.md), [domain model](../docs/domain-model.md),
 [frontend guide](../docs/frontend.md), [security boundary](../docs/security.md),
 and [testing guide](../docs/testing.md). If implemented behavior and this catalog
 diverge, reconcile the product decision and update this catalog before silently
@@ -58,9 +58,10 @@ evidence.
 
 ## 2. Scenario notation
 
-Product terms in this catalog have the meanings established by the
-[product glossary](../docs/glossary.md). This section defines only
-scenario-test actors, identifiers, priorities, evidence scopes, and tags.
+Product terms in this catalog have the meanings established by the registered
+Semantics repository `gezerah`. This section defines only scenario-test actors,
+identifiers, priorities, evidence scopes, and tags; code, tests, and product
+documents remain authoritative for actual behavior.
 
 ### 2.1 Actors
 
