@@ -5,8 +5,10 @@
 The React application retains two internal product areas over the same World
 model: `/play` is the Play area and `/build` is the configuration area. The
 public root does not expose either library. It presents one data-free **Open in
-ChatGPT** launch with `/play/new` attached and no prompt-only or manual-template
-fallback. After authentication, ChatGPT uses the Start site-tool surface to
+ChatGPT** launch that navigates the ordinary browser to `chatgpt.com` with a
+starter prompt and a request to attach the exact `/play/new` page. It has no
+prompt-only or manual-template fallback. When a supported ChatGPT surface honors
+that request, ChatGPT uses the Start site-tool surface after authentication to
 inspect and copy one of three complete World templates, then the Play site-tool
 surface to claim a complete Character and begin Play. The same conversation and
 attached browser tab continue across that route change.
@@ -51,7 +53,7 @@ component framework, or service worker.
 | `src/**/*ViewModel.{ts,tsx}`                | Backend-independent semantic presentation contracts.                             |
 | `src/features/HomeChoice.tsx`               | Data-free public delegated-start launch controller.                               |
 | `src/features/ChatGPTWorldStartView.tsx`     | Template-Play launch and internal custom-Build assistance view.                    |
-| `src/features/useChatGPTWorldStart.ts`       | Attached launch-prompt construction plus internal Build fallback state.            |
+| `src/features/useChatGPTWorldStart.ts`       | ChatGPT web-launch and prompt construction plus internal Build fallback state.       |
 | `src/features/IdentityGate.tsx`             | Username/password authentication command controller.                             |
 | `src/features/AccountControls.tsx`          | Password and server-side signout command controller.                             |
 | `src/features/BuildLibrary.tsx`             | Build-world collection and creation controller.                                  |
@@ -254,10 +256,10 @@ A bare Build world path canonicalizes to capacities. A player or spectator
 cannot cause Play to render under a Build URL; Build shows an explicit
 access boundary and offers a deliberate transition to Play.
 
-The root ChatGPT launch remains data-free. Its attached browser destination is
-the exact `/play/new` URL; that route survives the account gate and only then
-loads the authenticated catalog and registers the complete Start site-tool
-surface. On entering Play, Build, or an invite URL,
+The root ChatGPT launch remains data-free. Its requested attachment destination
+is the exact `/play/new` URL; if ChatGPT honors the request, that route survives
+the account gate and only then loads the authenticated catalog and registers the
+complete Start site-tool surface. On entering Play, Build, or an invite URL,
 the application bootstraps with `GET /api/me`. An anonymous browser sees a
 username/password gate; signup asks for username, display name, and a password
 of at least 8 characters with confirmation, while signin asks only for username

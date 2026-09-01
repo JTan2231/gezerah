@@ -17,7 +17,7 @@ export function HomeChoice({ navigate }: { navigate: Navigate }) {
         onCopyPrompt: () => void worldStart.copyPrompt(),
         promptFallback: false,
         footnote:
-          "Requires ChatGPT desktop with Site tools. The prompt ends with “My play preference: surprise me.” Replace that phrase in ChatGPT if desired.",
+          "Opens ChatGPT on the web and requests that Gezerah be attached. The prompt ends with “My play preference: surprise me.” Replace that phrase in ChatGPT if desired.",
       }}
     />
   );

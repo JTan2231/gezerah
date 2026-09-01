@@ -5,13 +5,14 @@ import { HomeChoiceView } from "./HomeChoiceView";
 
 const noop = () => undefined;
 
-test("makes ChatGPT desktop the sole public interface", () => {
+test("makes ChatGPT on the web the sole public interface", () => {
   const html = renderToStaticMarkup(
     <HomeChoiceView
       worldStart={{
         variant: "template",
         prompt: "Starter prompt fixture",
-        chatGPTHref: "codex://threads/new?prompt=Starter+prompt+fixture",
+        chatGPTHref:
+          "https://chatgpt.com/?surface=work&prompt=Starter+prompt+fixture",
         copyStatus: "idle",
         onCopyPrompt: noop,
         promptFallback: false,

@@ -68,7 +68,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await expect(
       page.getByRole("link", { name: "Open in ChatGPT" }),
-    ).toHaveAttribute("href", /^codex:\/\/threads\/new\?/);
+    ).toHaveAttribute("href", /^https:\/\/chatgpt\.com\/\?surface=work&/);
     await expect(page.getByRole("link")).toHaveCount(1);
     await expect(
       page.getByRole("button", { name: "Copy starter prompt" }),

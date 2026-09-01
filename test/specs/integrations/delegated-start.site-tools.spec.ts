@@ -73,6 +73,7 @@ interface ClaimedCharacterResult {
 
 interface PresentedProblemResult {
   presented_interaction: Interaction;
+  next_step: string;
 }
 
 interface SubmittedActionResult {
@@ -81,12 +82,21 @@ interface SubmittedActionResult {
     text: string;
     status: "submitted";
   };
+  next_step: string;
 }
 
 interface ResolvedProblemResult {
   resolution: {
     interaction_id: string;
     narrative: string;
+  };
+  next_step: string;
+}
+
+interface PlayHandbookResult {
+  handbook: {
+    topic: string;
+    sections: Array<{ topic: string; guidance: string }>;
   };
 }
 
@@ -151,6 +161,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   expect(page.context().pages()[0]).toBe(page);
 
   await waitForSiteTools(page, [
+    "read_play_handbook",
     "inspect_play",
     "claim_entity",
     "present_problem",
@@ -163,6 +174,19 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   const playToolNames = await registeredSiteToolNames(page);
   expect(playToolNames).not.toContain("inspect_world_templates");
   expect(playToolNames).not.toContain("copy_world_template");
+
+  const handbook = await invokeSiteTool<PlayHandbookResult>(
+    page,
+    "read_play_handbook",
+    { topic: "narrative-presentation" },
+  );
+  expect(handbook.handbook).toMatchObject({
+    topic: "narrative-presentation",
+    sections: [{ topic: "narrative-presentation" }],
+  });
+  expect(handbook.handbook.sections[0]?.guidance).toMatch(
+    /same public Problem prompt and Consequence narrative/i,
+  );
 
   const waiting = await invokeSiteTool<PlayInspection>(
     page,
@@ -215,6 +239,8 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     prompt: firstProblem.prompt,
     status: "open",
   });
+  expect(presented.next_step).toMatch(/lived scene/i);
+  expect(presented.next_step).not.toMatch(/problem (?:created|presented)/i);
   await expect(page.getByText(firstProblem.prompt)).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "What do you do?" }),
@@ -237,6 +263,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     text: actionText,
     status: "submitted",
   });
+  expect(submitted.next_step).toMatch(/do not announce action submission/i);
 
   const resolutionNarrative = `The copied lines differ by one time stamp, narrowing what can be tested ${run}.`;
   const resolved = await invokeSiteTool<ResolvedProblemResult>(
@@ -253,6 +280,8 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     interaction_id: presented.presented_interaction.id,
     narrative: resolutionNarrative,
   });
+  expect(resolved.next_step).toMatch(/lived consequence/i);
+  expect(resolved.next_step).toMatch(/without an approval recap|receipt/i);
 
   const secondProblem = {
     title: `The corrected clock ${run}`,

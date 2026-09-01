@@ -1,15 +1,20 @@
 # ChatGPT play through WebMCP
 
-The public ChatGPT launch opens one conversation with the `/play/new` Start
-site-tool page in an attached browser tab. Delegated start
-uses that page and the later `/play/{world_id}` Play site-tool page to choose and
-copy a ready-made World, claim a Character, and begin Play. ChatGPT is the
+The public ChatGPT launch navigates the person's ordinary web browser to
+`chatgpt.com` with a prefilled starter prompt and a request to attach the exact
+`/play/new` Start site-tool page. It does not invoke the ChatGPT desktop app or
+a desktop custom scheme. On a supported ChatGPT surface, delegated start uses
+that page and the later `/play/{world_id}` Play site-tool page to choose and copy
+a ready-made World, claim a Character, and begin Play. ChatGPT is the
 Facilitator, while the signed-in person remains a current player.
 
 The attached pages remain the canonical application surfaces. They display the
 available authored choices, current Problem, current-player Action, Resolution
 history, Entity sheets, and logical state. ChatGPT changes durable state only
-through their site tools, which reuse the existing same-origin API.
+through their site tools, which reuse the existing same-origin API. Chat is the
+lived scene, not a second state store: it presents the same public Consequence
+and next-Problem prose that Gezerah persists while the exact record remains in
+Gezerah.
 
 This integration uses the browser's imperative WebMCP API. It is not a remote
 MCP server and does not add a second authentication system.
@@ -32,7 +37,9 @@ The launch supplies the complete delegated-start instructions as a prefilled
 starter prompt. Its final line, `My play preference: surprise me.`, is the sole
 setup input: the person may send it unchanged or replace that preference. The
 instructions require ChatGPT to preserve the person's agency over later
-in-fiction Actions.
+in-fiction Actions. Home encodes `surface=work`, the prompt, and the absolute
+`/play/new` URL as ordinary `https://chatgpt.com/` query parameters; those
+parameters request the conversation and attachment but do not prove support.
 
 After authentication, ChatGPT must use the ready Start and Play site tools for
 application operations. It must never make a browser-control request. In
@@ -55,9 +62,9 @@ the Start site-tool surface.
 
 ## Authentication and trust boundary
 
-- ChatGPT launch attaches the exact `/play/new` page. If the attached browser
-  profile is signed out, the person signs in to Gezerah in that tab. An existing
-  Safari or Chrome login is not assumed to carry over.
+- A successful supported ChatGPT launch attaches the exact `/play/new` page. If
+  the attached browser profile is signed out, the person signs in to Gezerah in
+  that tab. An existing Safari or Chrome login is not assumed to carry over.
 - Site tools call the existing same-origin API client. The host-only HttpOnly
   session cookie, exact-origin check, session-derived CSRF token, World
   authorization, optimistic revisions, idempotency, and input validation remain
@@ -80,8 +87,10 @@ unavailable when ChatGPT is Facilitator.
 
 ## Delegated start and Play
 
-1. From Home, the person chooses **Open in ChatGPT**. ChatGPT launch
-   opens one conversation and attaches `/play/new` in its top-level browser tab.
+1. From Home, the person chooses **Open in ChatGPT**. The ordinary browser
+   navigates to `chatgpt.com` with the starter prompt and exact `/play/new`
+   attachment request. A successful supported launch opens one conversation
+   with that page in a top-level attached browser tab.
 2. The person signs in there if necessary. After authentication and successful
    registration of both Start tools, the Start site-tool surface becomes ready.
 3. ChatGPT inspects all three equal ready-made templates, applies the person's
@@ -91,6 +100,7 @@ unavailable when ChatGPT is Facilitator.
 4. When the Play site-tool surface becomes ready, ChatGPT inspects Play, chooses
    an available Character using the same preference, and claims it. Template
    profiles are complete, so a successful claim makes the current player ready.
+   ChatGPT reads the static Play-handbook topics it needs before facilitating.
 5. ChatGPT inspects the newly ready Play state and presents the first improvised
    Problem from the World description, Mechanics, profiles, and logical state.
 6. The person describes an in-fiction Action in chat. ChatGPT records the
@@ -129,7 +139,8 @@ attached browser tab.
 
 ### Start site-tool page
 
-The authenticated `/play/new` page exposes exactly the delegated-start commands:
+The authenticated `/play/new` page exposes exactly the two delegated-start
+commands:
 
 - `inspect_world_templates` returns the complete three-template catalog with the
   authored information needed to apply a play preference, and fails closed if
@@ -143,7 +154,8 @@ setup, or arbitrary World authoring.
 
 ### Play site-tool page
 
-An active `/play/{world_id}` page registers the Play surface only when the World
+An active `/play/{world_id}` page registers the six-command Play surface only
+when the World
 uses the `agent` Facilitator and the signed-in membership is a current player.
 The membership's Play status and command-specific state still authorize each
 command independently, so registration never bypasses the server gates:
@@ -151,6 +163,10 @@ command independently, so registration never bypasses the server gates:
 - `inspect_play` returns the current-player-visible World, World mechanic graph,
   roster, profiles, Entity sheets, active Problem, Actions, and recent
   Resolutions.
+- `read_play_handbook` returns the static platform facilitation contract. It
+  accepts `all` or one of `role-and-authority`, `play-loop`,
+  `state-and-effects`, `narrative-presentation`, `fiction-and-privacy`, and
+  `failure-and-recovery`. It is read-only and returns no live World state.
 - `claim_entity` atomically claims one currently available Entity while the
   membership is waiting for a Character.
 - `present_problem` creates and immediately presents one Problem to the ready
@@ -164,15 +180,47 @@ Tool handlers reuse the frontend API adapter and refresh the authoritative page
 state after mutations. Results are concise structured data for ChatGPT; the
 backend response and refreshed UI remain the source of truth.
 
-The inspection, presentation, and Resolution contracts tell ChatGPT to
-establish materially changed locations with a small handful of concrete details,
-including innocuous texture filtered through visible profile prose, effective
-Mechanics, active Statuses, equipment, and demonstrated temperament. They
-describe observable attention rather than private thoughts, never promote a
-user-authored Perception-like label into a privileged key or invented check, and
-keep suggested Actions non-exhaustive. These instructions live in site-tool
-contracts so person-facing starter and recovery copy can remain ordinary
-language.
+Tool discovery provides the handbook's topic index; `read_play_handbook` is the
+corresponding detailed read. The platform handbook owns general facilitation
+and presentation behavior. Dynamic `inspect_play` results and World-authored
+descriptions, profiles, Mechanics, Statuses, and Problem prose supply the
+particular setting and state; the handbook does not introduce a built-in
+ontology, privileged configured keys, or seed vocabulary. Command descriptions
+retain short local reminders at the point where an omission would be costly.
+
+### Narrative presentation contract
+
+ChatGPT presents Play as meaningful continuous prose. A person's decision is
+apparent through what their Character attempts and the world's causal response,
+not through a repeated approval or an `Action submitted` announcement. State is
+apparent through changed conditions, access, treatment, pressure, injury,
+equipment, and other observable consequences, not through a receipt-shaped
+ledger inserted into every turn. Implicit means embodied rather than hidden: if
+the person asks for an exact Mechanic, Status, value, or other information their
+current-player view may reveal, ChatGPT answers directly and exactly.
+
+The public Consequence prose passed to `resolve_problem` is the prose ChatGPT
+presents after the commit. After refreshing Play, the persisted next Problem is
+the next movement of the same scene. ChatGPT does not generate a second summary
+of Applications and effective changes, or an unpersisted narrative bridge
+between the Consequence and Problem. Gezerah retains the exact Action,
+Consequence, Effects, Resolution receipt, Entity sheets, and history for audit
+and direct inspection.
+
+When establishing or materially changing a location, ChatGPT uses a small
+handful of concrete details, including innocuous texture filtered through
+world-visible profile prose, effective Mechanics, active Statuses, equipment,
+and demonstrated temperament. It describes observable attention rather than
+private thoughts, never promotes a user-authored Perception-like label into a
+privileged key or invented check, and keeps suggested Actions non-exhaustive.
+Restricted prose and hidden facts remain private.
+
+A failed mutation is never converted into a fictional success or consequence.
+ChatGPT explains the operational failure plainly, refreshes authoritative state,
+and retries only when the command contract makes that safe. Ordinary scene prose
+does not expose site-tool names, registration, revisions, idempotency, lifecycle
+status, or other control-plane details unless they are needed to explain an
+actual failure.
 
 ## Agent-facilitator command contract companion
 
@@ -205,10 +253,18 @@ recreated by replaying it.
 
 ## Availability and acceptance
 
-WebMCP support is experimental and rollout-dependent. OpenAI's current Site
-tools documentation describes support in ChatGPT's top-level built-in browser;
-iframe and declarative registrations are not discovered there. See
+WebMCP support is experimental and rollout-dependent. Home intentionally
+launches `chatgpt.com`, but the launch target and query parameters do not by
+themselves establish that the ChatGPT web surface honored the page attachment
+or can register its tools. OpenAI's current Site tools documentation describes
+support in ChatGPT's top-level built-in browser; iframe and declarative
+registrations are not discovered there. See
 <https://learn.chatgpt.com/docs/webmcp>.
+
+If the web launch opens ChatGPT but the requested page is not attached or the
+Start surface cannot become ready, acceptance is blocked by the current ChatGPT
+surface. Do not silently fall back to a desktop custom scheme or turn manual
+browser operation into delegated start.
 
 Automated Agent-facilitator command, site-tool registration, site-tool page
 integration, and deployed-smoke checks do not exercise the signed-in ChatGPT
@@ -220,13 +276,15 @@ public delegated-start path.
 
 Acceptance covers the complete boundary:
 
-- ChatGPT launch opens one conversation with the exact `/play/new` page attached;
+- the Home launch navigates to `chatgpt.com`, and one conversation opens with
+  the exact `/play/new` page attached;
 - authentication is the only ordinary manual Gezerah operation;
 - the Start surface becomes ready and ChatGPT inspects and copies one template;
 - the same attached tab navigates to Play, where ChatGPT inspects, claims,
   re-inspects, and presents the first Problem;
 - ChatGPT makes no browser-control request and asks for no redundant setup
   decision;
-- one natural-language Action is submitted and resolved, and the next Problem
-  is presented; and
+- three natural-language Actions are submitted and resolved, each transition
+  presents its persisted Consequence and next Problem as continuous scene prose
+  without workflow chatter or a receipt-shaped state summary; and
 - reloaded Play and durable history agree with the chat.

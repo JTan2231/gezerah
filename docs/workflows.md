@@ -2,9 +2,11 @@
 
 ## Delegate a ready-made start to ChatGPT
 
-1. From Home, choose **Open in ChatGPT**. The ChatGPT launch opens one
-   conversation with the exact `/play/new` Start site-tool page in an attached
-   browser tab.
+1. From Home, choose **Open in ChatGPT**. The ordinary web browser navigates to
+   `chatgpt.com` with a starter prompt and a request to attach the exact
+   `/play/new` Start site-tool page. It does not invoke the desktop app. On a
+   supported ChatGPT surface, one conversation opens with that page in a
+   top-level attached browser tab.
 2. Sign in there if necessary. Send the prefilled starter prompt, leaving its
    final `My play preference: surprise me.` line unchanged or replacing that
    preference with ordinary language. Authentication is the only ordinary
@@ -15,7 +17,9 @@
    `/play/{world_id}`.
 4. Once the Play site-tool surface is ready, ChatGPT inspects the World, chooses
    and claims one of its available Characters, and inspects the resulting ready
-   Play state. Every bundled template profile is complete.
+   Play state. Every bundled template profile is complete. ChatGPT reads the
+   static platform Play handbook for its authority, Play-loop, presentation,
+   privacy, and recovery contract.
 5. ChatGPT improvises and presents the first Problem from the World description,
    Mechanics, profiles, and logical state. The person responds with an
    in-fiction Action in chat; ChatGPT records and resolves it and presents the
@@ -25,6 +29,13 @@ After sign-in, ChatGPT performs these application operations through site tools
 and never makes a browser-control request. If the person says to choose, asks for
 a surprise, or supplies no preference, ChatGPT does not require a setup
 questionnaire.
+
+During Play, chat is the lived scene and Gezerah is the exact durable record.
+ChatGPT embodies decisions and state through causal, observable prose, presents
+the persisted public Consequence followed by the persisted next Problem, and
+does not insert a separate workflow acknowledgement, Resolution-receipt summary,
+or unpersisted bridge. It answers exact visible mechanical questions directly.
+A failed mutation is reported operationally and is never fictionalized.
 
 This first public delegated-start path covers only the bundled ready-made World
 templates and complete Characters. Custom Build, saved-World discovery,

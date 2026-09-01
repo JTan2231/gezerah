@@ -47,7 +47,7 @@ describe("ChatGPT play tools", () => {
     ).toBe(false);
   });
 
-  test("registers the five Play site tools with abortable registrations", async () => {
+  test("registers the six Play site tools with abortable registrations", async () => {
     const controller = new AbortController();
     const registrations: Array<{
       tool: ModelContextTool;
@@ -67,6 +67,7 @@ describe("ChatGPT play tools", () => {
     );
 
     expect(registrations.map(({ tool }) => tool.name)).toEqual([
+      "read_play_handbook",
       "inspect_play",
       "claim_entity",
       "present_problem",
@@ -76,6 +77,9 @@ describe("ChatGPT play tools", () => {
     expect(
       registrations.every(({ signal }) => signal === controller.signal),
     ).toBe(true);
+    const handbookTool = registrations.find(
+      ({ tool }) => tool.name === "read_play_handbook",
+    )?.tool;
     const inspectDescription = registrations.find(
       ({ tool }) => tool.name === "inspect_play",
     )?.tool.description;
@@ -90,14 +94,71 @@ describe("ChatGPT play tools", () => {
     )?.tool.description;
     expect(inspectDescription).toContain("visible profile prose");
     expect(inspectDescription).toContain("unexpressed private thoughts");
+    expect(handbookTool?.annotations?.readOnlyHint).toBe(true);
+    expect(handbookTool?.description).toContain("presentation and recovery");
     expect(presentDescription).toContain("concrete environmental details");
     expect(presentDescription).toContain("effective Mechanics");
     expect(presentDescription).toContain("Details need not be clues");
     expect(presentDescription).toContain("invent a Perception check");
-    expect(resolveDescription).toContain("character-attuned narration");
+    expect(presentDescription).toContain("lived scene");
+    expect(presentDescription).toContain("receipt");
+    expect(resolveDescription).toContain("causal fictional consequences");
+    expect(resolveDescription).toContain("effect ledger");
     expect(resolveDescription).toContain("unexpressed thoughts");
     expect(submitDescription).toContain("explicitly states or delegates");
     expect(submitDescription).toContain("Never infer or invent an Action");
+    expect(submitDescription).toContain("Do not announce submission");
+  });
+
+  test("reads the complete Play handbook or one validated topic", async () => {
+    const readHandbook = createAgentPlayTools(
+      "world-1",
+      () => undefined,
+      new AbortController().signal,
+    ).find((tool) => tool.name === "read_play_handbook");
+    expect(readHandbook).toBeDefined();
+
+    const complete = (await readHandbook!.execute({ topic: "all" })) as {
+      handbook: {
+        topic: string;
+        sections: Array<{ topic: string; guidance: string }>;
+      };
+    };
+    expect(complete.handbook.topic).toBe("all");
+    expect(complete.handbook.sections.map(({ topic }) => topic)).toEqual([
+      "role-and-authority",
+      "play-loop",
+      "state-and-effects",
+      "narrative-presentation",
+      "fiction-and-privacy",
+      "failure-and-recovery",
+    ]);
+    expect(
+      complete.handbook.sections.find(
+        ({ topic }) => topic === "narrative-presentation",
+      )?.guidance,
+    ).toContain("same public Problem prompt and Consequence narrative");
+
+    const presentation = (await readHandbook!.execute({
+      topic: "narrative-presentation",
+    })) as {
+      handbook: { topic: string; sections: Array<{ topic: string }> };
+    };
+    expect(presentation.handbook).toMatchObject({
+      topic: "narrative-presentation",
+      sections: [{ topic: "narrative-presentation" }],
+    });
+
+    let invalidTopicError: unknown;
+    try {
+      await readHandbook!.execute({ topic: "unwritten-house-rule" });
+    } catch (error) {
+      invalidTopicError = error;
+    }
+    expect(invalidTopicError).toBeInstanceOf(Error);
+    expect((invalidTopicError as Error).message).toContain(
+      "topic must be one of",
+    );
   });
 
   test("inspects setup-required characters without requesting claim choices", async () => {
@@ -383,10 +444,13 @@ describe("ChatGPT play tools", () => {
 
     const payload = (await present?.execute({ prompt: "A door opens." })) as {
       presented_interaction: { id: string; context_entity_ids: string[] };
+      next_step: string;
     };
 
     expect(payload.presented_interaction.id).toBe("interaction-1");
     expect(payload.presented_interaction.context_entity_ids).toEqual(["ash"]);
+    expect(payload.next_step).toContain("committed prompt directly");
+    expect(payload.next_step).toContain("without a creation receipt");
   });
 
   test("records only the explicit player Action represented by its input", async () => {
@@ -445,6 +509,7 @@ describe("ChatGPT play tools", () => {
     expect(payload.next_step).toContain(
       "Never submit another Action until the player explicitly states or delegates it",
     );
+    expect(payload.next_step).toContain("Do not announce Action submission");
   });
 
   test("returns API conflicts as useful tool results", async () => {

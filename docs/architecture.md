@@ -93,15 +93,16 @@ flowchart TD
 
 ### Browser layer
 
-The browser starts with one data-free ChatGPT launch for delegated template
-Play. It attaches the authenticated `/play/new` Start site-tool page without
-duplicating the catalog at the root. After one template copy, the same attached
-browser tab navigates to `/play/{world_id}` and replaces the Start site-tool
-surface with the Play site-tool surface. The public root does not expose the
-internal `/build` or `/play` libraries in this first version. Those routes still
-own authoring, administration, saved-World, invitation, and broader Play
-behavior and share the same authenticated account boundary, API types, fetch
-helpers, route helpers, and UI primitives.
+The browser starts with one data-free ChatGPT web launch for delegated template
+Play. It navigates to `chatgpt.com` with a starter prompt and a request to attach
+the authenticated `/play/new` Start site-tool page, without duplicating the
+catalog at the root. When a supported ChatGPT surface honors that request, one
+template copy navigates the same attached browser tab to `/play/{world_id}` and
+replaces the Start site-tool surface with the Play site-tool surface. The public
+root does not expose the internal `/build` or `/play` libraries in this first
+version. Those routes still own authoring, administration, saved-World,
+invitation, and broader Play behavior and share the same authenticated account
+boundary, API types, fetch helpers, route helpers, and UI primitives.
 
 Within the browser, operational dependencies point inward through feature
 controllers and stop at a semantic presentation contract:

@@ -37,7 +37,7 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("I will sign in and make each change myself.");
     expect(html).toContain("help me choose ChatGPT as Facilitator");
     expect(html).toContain("Start in ChatGPT");
-    expect(html).toContain("codex://threads/new?prompt=");
+    expect(html).toContain("https://chatgpt.com/?surface=work&amp;prompt=");
     expect(html).toContain("browserUrl=https%3A%2F%2Fgezerah.example%2Fbuild");
     expect(html).toContain("Copy starter prompt");
     expect(html).not.toContain("Choose a World yourself");
@@ -70,6 +70,12 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("Keep lasting game state in Gezerah");
     expect(html).toContain("My play preference: surprise me.");
     expect(html).toContain("never invent or submit an Action");
+    expect(html).toContain("read and apply Gezerah&#x27;s Play handbook");
+    expect(html).toContain("begin directly with the first Problem");
+    expect(html).toContain(
+      "Make the chosen World and Character apparent through the opening",
+    );
+    expect(html).not.toContain("tell me which World and Character you chose");
     expect(html).toContain("Choose a World yourself");
     expect(html).toContain('href="/play/new"');
   });
@@ -101,23 +107,23 @@ describe("ChatGPTWorldStartView", () => {
     expect(failed).toContain('role="status"');
   });
 
-  test("builds one desktop launch with the prompt and attached page", () => {
+  test("builds one web launch with the prompt and attached page", () => {
     expect(
       createChatGPTLaunchURL(
         "https://gezerah.example/play/new",
         "Start a World & ask me questions.",
       ),
     ).toBe(
-      "codex://threads/new?prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fgezerah.example%2Fplay%2Fnew",
+      "https://chatgpt.com/?surface=work&prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fgezerah.example%2Fplay%2Fnew",
     );
   });
 
-  test("can expose only the desktop launch without a prompt fallback", () => {
+  test("can expose only the web launch without a prompt fallback", () => {
     const html = renderToStaticMarkup(
       <ChatGPTWorldStartView
         variant="template"
         prompt="Hidden prompt"
-        chatGPTHref="codex://threads/new?prompt=Hidden"
+        chatGPTHref="https://chatgpt.com/?surface=work&prompt=Hidden"
         copyStatus="idle"
         onCopyPrompt={noop}
         promptFallback={false}

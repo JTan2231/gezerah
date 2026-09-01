@@ -216,6 +216,7 @@ describe("WorldPlayView", () => {
             siteTools: {
               status: "ready",
               registeredToolNames: [
+                "read_play_handbook",
                 "inspect_play",
                 "claim_entity",
                 "present_problem",

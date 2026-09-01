@@ -42,10 +42,12 @@ browser tab. Authentication **session**, **Facilitator reassignment**, and
 **Facilitator recovery** retain their distinct product meanings.
 
 The repository owns the stable acceptance scenario, trigger matrix, and pass
-criteria. Dated acceptance records are operational state and do not belong in
-canonical documentation. A separately operated external handbook may own those
-records, but it does not redefine the scenario, establish product truth, or
-replace repository validation. No handbook implementation is assumed here.
+criteria. The static platform Play handbook exposed by `read_play_handbook`
+owns model-facing facilitation and presentation guidance; it does not store
+acceptance evidence or redefine product state. Dated acceptance records are
+operational state and do not belong in canonical documentation. A separately
+operated external handbook may retain those records, but it does not redefine
+the scenario, establish product truth, or replace repository validation.
 
 ### Change-trigger matrix
 
@@ -54,10 +56,10 @@ additional expectations below when ChatGPT behavior is in scope:
 
 | Changed boundary | Focused iteration | External acceptance expectation |
 | ---------------- | ----------------- | ------------------------------- |
-| ChatGPT launch URL, attached-page target, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
+| ChatGPT web-launch URL, attached-page request, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
 | Start or Play site-tool registration, name, schema, description, command adapter, navigation, refresh, or recovery behavior | Site-tool registration and page-integration tests, the Agent-facilitator command contract as applicable, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
 | Agent-facilitator command authority, attribution, concurrency, idempotency, or persistence with no ChatGPT-visible behavior change | Focused backend/contract coverage, then `./ci.sh` | Not required unless the public ChatGPT interaction or acceptance oracle changed. |
-| ChatGPT-visible Problem, Consequence, privacy, attention, or decision guidance | Focused frontend/contract coverage, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
+| Play-handbook topic/content, or ChatGPT-visible Problem, Consequence, state, privacy, attention, decision, or failure guidance | Focused frontend/contract coverage, then `./ci.sh` | Run all three turns of the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
 | Unrelated product or infrastructure behavior | Applicable focused validator, then `./ci.sh` | Not required. |
 
 An unperformed or blocked acceptance run does not make automated validation
@@ -191,16 +193,18 @@ Gezerah app shell at `/`, the same shell at a direct SPA route, and every
 same-origin JavaScript and stylesheet discovered from the returned HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
-homepage, validates its title and delegated-start heading, verifies that the
-sole public ChatGPT launch attaches the exact `/play/new` URL, then opens that
-same Start-page authentication boundary directly and submits an intentionally
-unknown randomized username. It requires the expected 401 and generic
-credential error and fails on page exceptions, console warnings/errors,
-same-origin request failures, or unexpected same-origin 4xx/5xx responses. The
-probe creates no account or other durable application fixture. Chrome's generic
-console noise is tolerated only when accounted for by the expected anonymous
-`GET /api/me` and invalid-signin `POST /api/auth/signin` 401 responses; those UI
-and response boundaries are asserted directly.
+homepage, validates its title and delegated-start heading, and verifies that the
+sole public ChatGPT launch targets `https://chatgpt.com/` with its starter prompt
+and exact `/play/new` attachment request. It then opens that Start-page
+authentication boundary directly and submits an intentionally unknown
+randomized username. It requires the expected 401 and generic credential error
+and fails on page exceptions, console warnings/errors, same-origin request
+failures, or unexpected same-origin 4xx/5xx responses. The probe creates no
+account or other durable application fixture. Chrome's generic console noise is
+tolerated only when accounted for by the expected anonymous `GET /api/me` and
+invalid-signin `POST /api/auth/signin` 401 responses; those UI and response
+boundaries are asserted directly. This proves the launch URL construction, not
+that ChatGPT web honored the attachment request or exposed Site tools.
 
 This smoke test deliberately does not replay the 141-scenario suite against the
 hosted database. `./ci.sh` owns broad, deterministic product behavior against a
@@ -214,9 +218,10 @@ replace deploy provenance.
 ### ChatGPT acceptance
 
 CI, the Agent-facilitator command contract, site-tool registration tests,
-site-tool page integration, and deployed smoke do not substitute for a model-in-the-loop run in the signed-
-in ChatGPT product. The following scenario is the sole normative first-version
-acceptance case for public delegated start.
+site-tool page integration, and deployed smoke do not substitute for a
+model-in-the-loop run in the signed-in ChatGPT product. The following
+three-turn scenario is the sole normative acceptance case for public delegated
+start and narrative presentation.
 
 #### Acceptance environment
 
@@ -225,7 +230,8 @@ use:
 
 - its production frontend and Go artifact at one exact HTTPS public origin;
 - an isolated synthetic Gezerah account and disposable data boundary;
-- a fresh or deliberately cleared ChatGPT conversation with site-tool support;
+- a fresh or deliberately cleared ChatGPT web conversation with site-tool
+  support;
 - the top-level attached browser tab, not an iframe; and
 - an operator-controlled cleanup path that cannot remove broader development or
   hosted data.
@@ -249,7 +255,8 @@ The acceptance participant performs only these actions:
    exercise a replacement preference, but the normative case requires no setup
    choice.
 4. After ChatGPT presents the first Problem, answer with one natural-language
-   in-fiction Action.
+   in-fiction Action. Answer each of the next two Problems the same way, for
+   exactly three completed player turns.
 
 ChatGPT must perform the remaining application sequence without participant
 browser operation:
@@ -258,16 +265,18 @@ browser operation:
    complete three-template catalog, and call `copy_world_template`;
 2. continue in the same conversation while the same attached tab navigates to
    `/play/{world_id}` and the Play surface becomes ready;
-3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again, and
-   `present_problem`;
-4. record the participant's response with `submit_action`, resolve it with
-   `resolve_problem`, refresh Play, and present the next Problem.
+3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again,
+   read the relevant `read_play_handbook` topics, and `present_problem`;
+4. for each of the three participant responses, record it with `submit_action`,
+   resolve it with `resolve_problem`, refresh Play, and present the next
+   Problem.
 
 #### Pass and failure criteria
 
 A run passes only when all of the following are observed:
 
-- ChatGPT launch attaches the exact Start page in one conversation;
+- the Home launch navigates to `chatgpt.com`, and the exact Start page is
+  attached in one conversation;
 - authentication is the participant's only manual Gezerah operation;
 - site-tool support and readiness are established on both Start and Play pages;
 - ChatGPT makes zero browser-control requests and asks zero setup questions
@@ -276,12 +285,31 @@ A run passes only when all of the following are observed:
 - the first Problem establishes concrete, innocuous details filtered through
   visible Character information without private thoughts, hidden facts,
   invented privileged Mechanics, or exhaustive suggested Actions;
-- the submitted Action and durable history faithfully represent the
+- each submitted Action and durable history faithfully represents the
   participant's stated or explicitly delegated fictional decision without
-  adding another decision or Action on the participant's behalf;
-- the Action, committed Resolution and Effects, and next Problem are coherent;
-  and
+  adding another decision or Action on the participant's behalf, and the
+  world's causal response makes that decision apparent without a repeated
+  approval or workflow acknowledgement;
+- each public Problem prompt and Consequence narrative presented in chat agrees
+  with the persisted public prose, and each committed Consequence flows into the
+  persisted next Problem without a second receipt-shaped Effect, Application,
+  or effective-change summary and without an unpersisted bridge;
+- durable changes are embodied in observable conditions, access, treatment,
+  pressure, injury, equipment, or similarly meaningful prose rather than a
+  routine state ledger; exact current-player-visible Mechanics, Statuses, and
+  values are still answered directly if asked;
+- ordinary scene prose exposes no site-tool names, registration/readiness,
+  revisions, idempotency, Interaction lifecycle, or other control-plane state;
+- a mutation failure, if one occurs, is reported as an operational failure and
+  is never presented as fictional success;
+- all three Actions, committed Resolutions and Effects, and following Problems
+  are coherent; and
 - reloaded Play and durable history agree with the chat.
+
+If `chatgpt.com` opens but does not honor the attachment request or expose the
+required Site-tool support, record the run as blocked at that boundary. Do not
+substitute the desktop app or a participant-operated Gezerah flow for the web
+acceptance candidate.
 
 Any assistant-authored request to click, navigate, copy, select, take control,
 or otherwise operate Gezerah is a failure. A platform-owned authentication or
@@ -294,12 +322,13 @@ under test.
 
 The dated record must identify the exact source or deployment candidate, date,
 acceptance-environment kind, ChatGPT surface, stated play preference, result
-(`passed`, `failed`, or `blocked`), World and Character, first and next Problems,
-the participant's Action, the persisted submitted Action, whether the transcript
-was reviewed, browser-control-request count, and cleanup result. It also records
-the conversation count, setup-question count, and any platform-owned
-confirmation count separately. A failed or blocked record must state the
-observed reason.
+(`passed`, `failed`, or `blocked`), browser-control-request count, and cleanup
+result. For every step reached, it records the World and Character, participant
+Actions and persisted submitted Actions, public Consequences and following
+Problems, and whether the transcript was reviewed for presentation and
+control-plane leakage. It also records the conversation count, setup-question
+count, and any platform-owned confirmation count separately. A failed or
+blocked record must state the observed reason.
 
 Do not publish the transcript or record the password, session cookie, CSRF token,
 database URL, invitation secret, or transient tunnel URL. An external handbook
@@ -398,11 +427,12 @@ API adapter, and backend-independent view rendering:
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown;
-- ChatGPT launch URL and starter-instruction construction, including the sole
-  play-preference input and prohibition on browser-control requests; and
-- Start and Play site-tool registration outcomes, schemas, API adaptation,
-  idempotent retry state, route replacement, and recoverable errors through a
-  controlled `document.modelContext`.
+- ChatGPT web-launch URL and starter-instruction construction, including the
+  sole play-preference input and prohibition on browser-control requests; and
+- Start and six-command Play site-tool registration outcomes, schemas, static
+  Play-handbook topics and presentation contract, API adaptation, idempotent
+  retry state, route replacement, and recoverable errors through a controlled
+  `document.modelContext`.
 
 Backend-independent `*View.tsx` components also have fixture-driven rendering
 tests. They use `react-dom/server`'s `renderToStaticMarkup`, which is already
@@ -487,11 +517,12 @@ claim lifecycle-journey evidence.
 `test/specs/integrations/delegated-start.site-tools.spec.ts` is the automated
 site-tool page integration. It installs a controlled browser WebMCP harness,
 starts from authenticated `/play/new`, invokes the complete Start surface,
-requires same-tab navigation, invokes the Play inspect/claim/inspect/present/
-submit/resolve sequence, presents the next Problem, reloads, and checks durable
-agreement. It also proves that no trusted setup controls were clicked. It does
-not invoke ChatGPT, exercise the separate authentication boundary, or supply a
-ChatGPT acceptance record.
+requires same-tab navigation, invokes the Play
+inspect/claim/inspect/read-handbook/present/submit/resolve sequence, presents the
+next Problem, reloads, and checks durable agreement. It also proves that no
+trusted setup controls were clicked. It does not invoke ChatGPT, exercise the
+separate authentication boundary, evaluate three turns of model presentation,
+or supply a ChatGPT acceptance record.
 
 The dependency-free runtime under `test/src/scenario/` owns the 141-ID/five-tier
 registry, required named cases, behavior/outcome contracts, checkpoint and

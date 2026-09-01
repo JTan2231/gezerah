@@ -20,7 +20,7 @@ export function createChatGPTTemplateStartPrompt(templateURL: string): string {
     "If the page requires authentication, wait while I sign in, then continue autonomously.",
     "Treat the final line of this prompt as my only setup input. Do not ask setup questions, ask me to take control of the browser, or ask me to click, navigate, copy, paste, select, or edit anything in Gezerah.",
     "Use the page's site tools to inspect the three ready-made Worlds, recommend and copy the best match, choose and claim the best-fitting available Character, and present the first Problem.",
-    "Briefly tell me which World and Character you chose and why. Preserve my agency over my Character's Actions: never invent or submit an Action until I tell you what I do. Keep lasting game state in Gezerah.",
+    "Once in Play, read and apply Gezerah's Play handbook, then begin directly with the first Problem. Make the chosen World and Character apparent through the opening rather than reporting your selections or setup. Preserve my agency over my Character's Actions: never invent or submit an Action until I tell you what I do. Keep lasting game state in Gezerah.",
     "My play preference: surprise me.",
   ].join(" ");
 }
@@ -29,8 +29,12 @@ export function createChatGPTLaunchURL(
   browserURL: string,
   prompt: string,
 ): string {
-  const query = new URLSearchParams({ prompt, browserUrl: browserURL });
-  return `codex://threads/new?${query.toString()}`;
+  const query = new URLSearchParams({
+    surface: "work",
+    prompt,
+    browserUrl: browserURL,
+  });
+  return `https://chatgpt.com/?${query.toString()}`;
 }
 
 export function useChatGPTWorldStart(

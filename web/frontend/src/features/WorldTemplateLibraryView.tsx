@@ -108,7 +108,7 @@ export function WorldTemplateLibraryView({
 function siteToolStatus(siteTools: SiteToolRegistrationState): string {
   switch (siteTools.status) {
     case "unsupported":
-      return "Start site-tool surface is unsupported in this browser. Use ChatGPT desktop with Site tools.";
+      return "Start site-tool surface is unsupported in this browser, so delegated start is unavailable here.";
     case "unavailable":
       return "Start site-tool surface is unavailable on this page.";
     case "registering":

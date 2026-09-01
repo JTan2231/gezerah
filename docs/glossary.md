@@ -134,13 +134,14 @@ for its immutable audit record.
 | Term | Meaning |
 | ---- | ------- |
 | **ChatGPT** | The product-facing agent Facilitator. In the domain and persistence model it remains facilitator source `agent`; it is not a user account or World membership. |
-| **ChatGPT launch** | The user action that opens a new ChatGPT conversation with ordinary-language starter instructions and a Gezerah page attached. It is not a Facilitator reassignment. |
+| **ChatGPT launch** | The user action that navigates an ordinary web browser to `chatgpt.com` with ordinary-language starter instructions and a request to attach an exact Gezerah page. It does not invoke a desktop-app custom scheme and is not a Facilitator reassignment. |
 | **Attached browser tab** | The top-level Gezerah tab attached to the ChatGPT conversation. Its authenticated application state remains authoritative, and its currently registered site tools disappear when the tab closes or leaves their page. |
 | **Site tool** | A command registered by a supported top-level Gezerah page through the browser's WebMCP API. A site tool uses the page's authenticated same-origin API client; WebMCP is not a separate identity or server. |
 | **Start site-tool page** | The `/play/new` top-level page attached by the public ChatGPT launch. It may first show the separate authentication boundary; its site-tool surface is available only after authentication. |
 | **Start site-tool surface** | The Start page's ready-made-World inspection and copy commands. It is limited to delegated start from bundled World templates. |
 | **Play site-tool page** | An authenticated `/play/{world_id}` page for an active agent-facilitated World viewed by a current player. |
-| **Play site-tool surface** | The Play page's inspection, Character claim, Problem presentation, Action submission, and Resolution commands. |
+| **Play site-tool surface** | The Play page's Play inspection, static Play-handbook inspection, Character claim, Problem presentation, Action submission, and Resolution commands. |
+| **Play handbook** | The static, platform-authored facilitation and presentation contract exposed through `read_play_handbook`. It explains how ChatGPT uses its authority, the Play loop, durable state, public prose, privacy, and failures; it contains no World-authored vocabulary or live Play state. |
 | **Site-tool support** | Availability of the browser API required for a top-level page to register site tools. Support is a property of the current browser surface, not of a World or account. |
 | **Site-tool readiness** | The state in which every tool expected from the current mounted, supported, authenticated page has registered successfully. Data loading and command-specific validation remain separate and fail closed. Support alone does not imply readiness. |
 | **Delegated start** | The complete ChatGPT-led path from ChatGPT launch, through the separate authentication boundary when needed, to selection and copying of a ready-made World, Character claim, and presentation of the first Problem. After authentication, ChatGPT performs application operations through the Start and Play site-tool surfaces. |
