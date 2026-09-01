@@ -1,5 +1,7 @@
 # Working agreement
 
+Semantics-Project: gezerah
+
 Use `./ci.sh` to validate code changes. Focused targets are available with
 `./ci.sh frontend`, `./ci.sh backend`, and `./ci.sh e2e`.
 
@@ -18,11 +20,18 @@ and Vite frontend in the background and exits. Use `./run.sh status`,
 services when debugging is complete.
 
 Do not add built-in entity classes, privileged configured keys, canonical JSON
-storage, or seed vocabulary. Configuration is user-authored and world-scoped.
+storage, or runtime/world seed vocabulary. Configuration is user-authored and
+world-scoped. The project-level terminology metadata maintained by Semantics is
+documentation state; it must not become built-in runtime vocabulary or give
+world-authored or problem-authored terms engine-level meaning.
 
 We do not have active users. Please do not consider them in your design considerations.
 
-Always consult `docs/glossary.md` before answering questions about the product
-or architecture.
+The registered Semantics repository for project `gezerah` is authoritative for
+maintained platform and product terminology and its semantic history. Before
+answering questions about the product or architecture, use Chancery contract
+`semantics.repository.explore` to query it. Do not read or edit Semantics state
+directly. Code, tests, and product documentation remain authoritative for
+behavior and implementation facts.
 
 Please refer `docs/` before making any code changes or considerations.

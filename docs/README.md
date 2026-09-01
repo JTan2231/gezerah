@@ -16,11 +16,15 @@ facilitators name Inline statuses in live Consequences. The server
 stores both in relational, world-scoped structures and enforces their declared
 constraints.
 
+The registered Semantics repository `gezerah` is authoritative for project and
+architecture terminology. Discover it through `semantics.repository.explore`
+and query it with `semantics repository show gezerah`. The documents below,
+code, and tests remain authoritative for actual behavior.
+
 ## Documentation map
 
 | Document                        | Use it to understand                                                                                  |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| [Glossary](glossary.md)         | The authoritative product and architecture vocabulary and the boundaries of authored vocabulary.     |
 | [Architecture](architecture.md) | System boundaries, runtime topology, layers, data flow, and repository layout.                        |
 | [Domain model](domain-model.md) | Worlds, mechanics, typed state, memberships, invitations, and interactions.                           |
 | [Workflows](workflows.md)       | World creation, configuration, invitations, sheets, and the ad-hoc Play lifecycle.                    |
@@ -108,11 +112,18 @@ effective changes, and the World event commit in the Resolution transaction.
 
 ## Vocabulary
 
-[The product glossary](glossary.md) is the single authority for product and
-architecture terms. In brief: a **World** is the sole scope; its **world
-mechanic graph** is versioned by a **rules revision**; a user-facing **Problem**
-is carried by the technical **Interaction** aggregate; and a **Consequence** is
-committed as a **Resolution** with an immutable **resolution receipt**.
+The registered Semantics repository `gezerah` is the single authority for
+project and architecture terms. Read it through the installed discovery route:
+
+```sh
+/Users/joey/.local/bin/chancery show semantics.repository.explore
+/Users/joey/.local/bin/semantics repository show gezerah
+```
+
+In brief: a **World** is the sole scope; its **world mechanic graph** is
+versioned by a **rules revision**; a user-facing **Problem** is carried by the
+technical **Interaction** aggregate; and a **Consequence** is committed as a
+**Resolution** with an immutable **resolution receipt**.
 
 ## Sources of truth
 
