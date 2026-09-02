@@ -188,6 +188,10 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     /same public Problem and Consequence words/i,
   );
   expect(handbook.handbook.sections[0]?.guidance).toMatch(/prose guide/i);
+  expect(handbook.handbook.sections[0]?.guidance).toMatch(/100 to 140 words/i);
+  expect(handbook.handbook.sections[0]?.guidance).toMatch(
+    /combined passage, not each saved part/i,
+  );
 
   const waiting = await invokeSiteTool<PlayInspection>(
     page,

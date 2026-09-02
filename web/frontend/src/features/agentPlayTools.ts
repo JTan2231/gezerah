@@ -54,6 +54,12 @@ const characterAttunedNarrationGuidance =
 const proseGuideNarrationGuidance =
   "Follow the prose guide in the latest Play inspection throughout the public passage. It may shape word choice, rhythm, narrative distance, imagery, and the difference between the narrator's voice and language spoken or displayed inside the World. It cannot change established facts, Mechanics, privacy, authority, or the player's Action. Never quote it or mention it as instructions.";
 
+const compactProblemNarrationGuidance =
+  "Keep the Problem compact. A first Problem may use up to about 180 words and 5 to 7 short prose beats when the opening needs them. After a resolved Problem, use only enough words to establish the new pressure and decision point so the preceding Consequence and this Problem form a combined public passage of about 100 to 140 words. Use fewer words when the scene is already clear; a beat is a narrative movement, not a required line break. Introduce one immediate pressure and end with one direct question that leaves every eligible responder free to act or with a clear cliffhanger. If examples help, offer at most three compact, non-exhaustive possibilities in one sentence. Do not inventory unchanged context.";
+
+const compactConsequenceNarrationGuidance =
+  "Keep the Consequence compact enough that it and the following Problem form a combined public passage of about 100 to 140 words total, not 100 to 140 words for each saved part. Let each saved part use only the share it needs. Lead with the Action's immediate outcome, include only causal details that matter now, and use at most one concise sentence for changed state when stating it directly is clearest. Do not both dramatize and restate the same change.";
+
 const mechanicValueSchema = {
   oneOf: [
     {
@@ -505,7 +511,7 @@ export function createAgentPlayTools(
     },
     {
       name: "present_problem",
-      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same text you present in chat as the scene: present it without describing the save or adding a second summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same text you present in chat as the scene: present it without describing the save or adding a second summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactProblemNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -514,7 +520,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 10000,
             description:
-              "The public prose to present as a concrete Problem that invites the current player to act. Follow the prose-guide, character-attuned narration, and privacy guidance in this tool's description.",
+              "The compact public prose to present as a concrete Problem that invites the current player to act. Follow the cadence, prose-guide, character-attuned narration, and privacy guidance in this tool's description.",
           },
         },
         required: ["prompt"],
@@ -594,7 +600,7 @@ export function createAgentPlayTools(
     },
     {
       name: "resolve_problem",
-      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same text you present in chat: present it without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same text you present in chat: present it without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactConsequenceNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -604,7 +610,7 @@ export function createAgentPlayTools(
             type: "string",
             maxLength: 20000,
             description:
-              "The public fictional Consequence of the Actions to present in chat. Follow the prose-guide, character-attuned narration, and privacy guidance in this tool's description.",
+              "The compact public fictional Consequence of the Actions to present in chat. Follow the cadence, prose-guide, character-attuned narration, and privacy guidance in this tool's description.",
           },
           effects: {
             type: "array",
@@ -676,7 +682,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Present resolution.narrative directly as the Consequence, without an approval recap, list of Effects, or report about the operation. Read Play again and save the next Problem before presenting it; that prompt may flow from the Consequence as one continuous scene.",
+            "Present resolution.narrative directly as the Consequence, without an approval recap, list of Effects, or report about the operation. Read Play again and save the next compact Problem before presenting it; that prompt may flow from the Consequence as one continuous scene. Keep the combined ordinary single-player passage about 100 to 140 words across 5 to 7 short prose beats.",
         });
       },
     },

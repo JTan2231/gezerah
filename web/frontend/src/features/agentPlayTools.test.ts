@@ -110,10 +110,14 @@ describe("ChatGPT play tools", () => {
     expect(presentDescription).toContain("Never quote it");
     expect(presentDescription).toContain("same text you present");
     expect(presentDescription).not.toContain("receipt");
+    expect(presentDescription).toMatch(/up to about 180 words/i);
+    expect(presentDescription).toMatch(/combined public passage.+100 to 140/i);
     expect(resolveDescription).toContain("Show decisions and changed state");
     expect(resolveDescription).toContain("report about the operation");
     expect(resolveDescription).toContain("Follow the prose guide");
     expect(resolveDescription).toContain("unexpressed thoughts");
+    expect(resolveDescription).toMatch(/100 to 140 words total/i);
+    expect(resolveDescription).toMatch(/not 100 to 140 words for each/i);
     expect(submitDescription).toContain("explicitly states or delegates");
     expect(submitDescription).toContain("Never infer or invent an Action");
     expect(submitDescription).toContain("Do not announce submission");
@@ -155,6 +159,17 @@ describe("ChatGPT play tools", () => {
     );
     expect(narrativeGuidance).toContain("cannot change established facts");
     expect(narrativeGuidance).toContain("Never quote it");
+    expect(narrativeGuidance).toMatch(/100 to 140 words/i);
+    expect(narrativeGuidance).toMatch(/180 words or fewer/i);
+    expect(narrativeGuidance).toMatch(/5 to 7 short prose beats/i);
+    expect(narrativeGuidance).toMatch(/combined passage, not each saved part/i);
+    expect(narrativeGuidance).toMatch(
+      /at most one concise sentence on changed state/i,
+    );
+    expect(narrativeGuidance).toMatch(/direct question.+clear cliffhanger/i);
+    expect(narrativeGuidance).toContain(
+      "Never pad, truncate, or paraphrase saved prose",
+    );
     expect(narrativeGuidance).not.toContain("control-plane");
     expect(narrativeGuidance).not.toContain("receipt-shaped");
 

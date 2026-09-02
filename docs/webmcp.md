@@ -220,6 +220,33 @@ between the Consequence and Problem. Gezerah retains the exact Action,
 Consequence, Effects, Resolution receipt, Entity sheets, and history for audit
 and direct inspection.
 
+Ordinary scene passages use a compact cadence. The first Problem uses up to
+about 180 words across five to seven short narrative beats when the opening
+needs them, and fewer when it does not. Thereafter, the saved Consequence and
+saved next Problem appear together in about 100–140 words across five to seven
+beats. That combined target applies once to the Consequence-plus-Problem
+passage, not separately to each saved part; each uses only the share it needs. A
+beat is a movement of action or perception, not a required line break. ChatGPT
+writes to the target before saving and never pads, truncates, or paraphrases
+persisted prose afterward.
+
+Compression comes from selection rather than flattening the prose guide.
+ChatGPT leads with the immediate situation or causal outcome, keeps only details
+that establish the result, meaningful changed state, new pressure, and the
+responders' opening, and avoids inventorying unchanged context. When one brief
+sentence can orient the responders to changed state, one is enough; ChatGPT does
+not both dramatize and restate the same change. A Problem ends at one decision
+point: a direct question that leaves every eligible responder free to act or a
+clear cliffhanger. If examples help, ChatGPT offers at most three compact,
+non-exhaustive possibilities in one sentence.
+
+These are presentation targets rather than server validation, storage limits,
+or quotas. ChatGPT uses fewer words when the scene is already clear and only the
+extra space needed for multiple Actions, accessibility, or causal clarity. A
+participant-requested level of detail, a direct answer about visible state, and
+an operational-failure explanation are outside the ordinary scene target. The
+next ordinary scene passage returns to the compact cadence.
+
 When establishing or materially changing a location, ChatGPT uses a small
 handful of concrete details, including innocuous texture filtered through
 world-visible profile prose, effective Mechanics, active Statuses, equipment,
@@ -297,9 +324,10 @@ Acceptance covers the complete boundary:
   re-inspects, and presents the first Problem;
 - ChatGPT makes no browser-control request and asks for no redundant setup
   decision;
-- three natural-language Actions are submitted and resolved, each transition
-  presents its persisted Consequence and next Problem as continuous scene prose
-  without workflow chatter or a receipt-shaped state summary;
+- three natural-language Actions are submitted and resolved; the first Problem
+  and every Consequence-plus-next-Problem passage use the ordinary compact
+  cadence, and each transition presents its persisted prose continuously without
+  workflow chatter or a receipt-shaped state summary;
 - the copied World's prose guide remains recognizable across the three turns,
   including its distinction between narrator language and attributed in-world
   language, without being exposed as instructions; and

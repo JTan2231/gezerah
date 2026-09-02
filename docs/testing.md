@@ -293,6 +293,22 @@ A run passes only when all of the following are observed:
   display, document, or other in-world source when the guide calls for that
   distinction; the narrator otherwise uses the guide's ordinary human register
   rather than turning facilitation rules or application concepts into labels;
+- the first Problem uses up to about 180 presented words across five to seven
+  short narrative beats when the opening needs them, and fewer when it does not;
+  each whole Consequence-plus-next-Problem passage normally contains 100–140
+  presented words across five to seven beats, with the range applying once to
+  the combined passage rather than separately to each saved part;
+- each ordinary scene passage selects rather than inventories detail, uses at
+  most one brief state-orientation sentence when that is sufficient, does not
+  both dramatize and restate the same change, and ends the persisted Problem at
+  one decision point: a direct question that leaves every eligible responder
+  free to act or a clear cliffhanger; any examples are at most three compact,
+  non-exhaustive possibilities in one sentence;
+- direct exact-state answers, operational-failure explanations, and
+  participant-requested detail are outside the ordinary scene target; if
+  multiple Actions, accessibility, or causal clarity require more space, the
+  excess is no greater than necessary, the dated record states why, and the next
+  ordinary passage returns to the compact cadence;
 - each submitted Action and durable history faithfully represents the
   participant's stated or explicitly delegated fictional decision without
   adding another decision or Action on the participant's behalf, and the
@@ -338,10 +354,11 @@ acceptance-environment kind, ChatGPT surface, stated play preference, result
 (`passed`, `failed`, or `blocked`), browser-control-request count, and cleanup
 result. For every step reached, it records the World and Character, participant
 Actions and persisted submitted Actions, public Consequences and following
-Problems, and whether the transcript was reviewed for presentation and
-control-plane leakage. It also records the conversation count, setup-question
-count, and any platform-owned confirmation count separately. A failed or
-blocked record must state the observed reason.
+Problems, each scene passage's presented word and beat counts, any cadence
+exception rationale, and whether the transcript was reviewed for presentation
+and control-plane leakage. It also records the conversation count, setup-
+question count, and any platform-owned confirmation count separately. A failed
+or blocked record must state the observed reason.
 
 Do not publish the transcript or record the password, session cookie, CSRF token,
 database URL, invitation secret, or transient tunnel URL. An external handbook
