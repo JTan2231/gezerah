@@ -104,7 +104,9 @@ unavailable when ChatGPT is Facilitator.
    ChatGPT reads the static Play-handbook topics it needs before facilitating.
 5. ChatGPT inspects the newly ready Play state and presents the first improvised
    Problem from the World description, prose guide, Mechanics, profiles, and
-   logical state.
+   logical state. That first Problem alone opens with a short expositional
+   statement saying who the selected Character is and what they are currently
+   doing; later Problems do not repeat that introduction.
 6. The person describes an in-fiction Action in chat. ChatGPT records the
    Action, resolves the Problem with public narrative and optional valid
    Effects, refreshes Play, and presents the next Problem.

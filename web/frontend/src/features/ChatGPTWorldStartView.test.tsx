@@ -73,8 +73,12 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("read and apply Gezerah&#x27;s Play handbook");
     expect(html).toContain("begin directly with the first Problem");
     expect(html).toContain(
-      "Make the chosen World and Character apparent through the opening",
+      "In that first Problem only, open with a short expositional statement",
     );
+    expect(html).toContain(
+      "who my Character is and what they are currently doing",
+    );
+    expect(html).toContain("Make the chosen World apparent through the scene");
     expect(html).not.toContain("tell me which World and Character you chose");
     expect(html).toContain("Choose a World yourself");
     expect(html).toContain('href="/play/new"');

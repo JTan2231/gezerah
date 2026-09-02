@@ -282,9 +282,12 @@ A run passes only when all of the following are observed:
 - ChatGPT makes zero browser-control requests and asks zero setup questions
   after the prefilled play preference is sent;
 - Start-to-Play navigation happens in the same attached browser tab;
-- the first Problem establishes concrete, innocuous details filtered through
-  visible Character information without private thoughts, hidden facts,
-  invented privileged Mechanics, or exhaustive suggested Actions;
+- the first Problem opens with a short expositional statement saying who the
+  selected Character is and what they are currently doing, without repeating
+  that introduction in later Problems, then establishes concrete, innocuous
+  details filtered through visible Character information without private
+  thoughts, hidden facts, invented privileged Mechanics, or exhaustive
+  suggested Actions;
 - the copied template's current prose guide is recognizable across Problems and
   Consequences through diction, rhythm, narrative distance, imagery, and the
   handling of in-world language, without being quoted or mentioned as an
