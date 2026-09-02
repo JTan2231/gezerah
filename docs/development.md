@@ -63,7 +63,7 @@ Migrations run automatically when the backend starts. The current chain is
 `001_world_baseline.sql`, `002_mechanic_graph_status_instances.sql`,
 `003_interaction_audience_invalidations.sql`, `004_password_auth.sql`,
 `005_terra.sql`, `006_facilitator_assignment.sql`, and
-`007_agent_facilitator.sql`. The repository has no seed step; create all
+`007_agent_facilitator.sql`, followed by `008_world_prose_guide.sql`. The repository has no seed step; create all
 world-authored vocabulary through the application or API.
 
 ## Resetting local data
@@ -294,10 +294,18 @@ Update together:
 
 ### Database change
 
-Before active users, rewrite the existing migration chain to express the one
-current schema directly; do not add compatibility or cutover migrations. Update
-domain, mapping, persistence, constraints, clean-database E2E coverage, and
-[Database](database.md). Exercise the chain against an explicitly disposable database.
+An unreleased schema change may be folded into the clean baseline only while
+every target database can be discarded and rebuilt and no migration file being
+edited is recorded in a database whose state must be preserved. Once a
+development, staging, or deployed database has applied a migration, keep that
+file immutable and add the next forward migration even before there are active
+users. In particular, databases already through `007_agent_facilitator.sql`
+receive the World prose-guide column through `008_world_prose_guide.sql`.
+
+Avoid compatibility and dual-read/dual-write paths. Update domain, mapping,
+persistence, constraints, clean-database E2E coverage, and
+[Database](database.md), then exercise the chain against an explicitly
+disposable database.
 
 ### New Play command
 

@@ -59,7 +59,7 @@ additional expectations below when ChatGPT behavior is in scope:
 | ChatGPT web-launch URL, attached-page request, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
 | Start or Play site-tool registration, name, schema, description, command adapter, navigation, refresh, or recovery behavior | Site-tool registration and page-integration tests, the Agent-facilitator command contract as applicable, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
 | Agent-facilitator command authority, attribution, concurrency, idempotency, or persistence with no ChatGPT-visible behavior change | Focused backend/contract coverage, then `./ci.sh` | Not required unless the public ChatGPT interaction or acceptance oracle changed. |
-| Play-handbook topic/content, or ChatGPT-visible Problem, Consequence, state, privacy, attention, decision, or failure guidance | Focused frontend/contract coverage, then `./ci.sh` | Run all three turns of the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
+| World prose-guide transport, Play-handbook topic/content, or ChatGPT-visible Problem, Consequence, state, privacy, attention, decision, voice, or failure guidance | Focused frontend/contract coverage, then `./ci.sh` | Run all three turns of the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
 | Unrelated product or infrastructure behavior | Applicable focused validator, then `./ci.sh` | Not required. |
 
 An unperformed or blocked acceptance run does not make automated validation
@@ -285,6 +285,30 @@ A run passes only when all of the following are observed:
 - the first Problem establishes concrete, innocuous details filtered through
   visible Character information without private thoughts, hidden facts,
   invented privileged Mechanics, or exhaustive suggested Actions;
+- the copied template's current prose guide is recognizable across Problems and
+  Consequences through diction, rhythm, narrative distance, imagery, and the
+  handling of in-world language, without being quoted or mentioned as an
+  instruction;
+- specialized institutional or technical language belongs clearly to a person,
+  display, document, or other in-world source when the guide calls for that
+  distinction; the narrator otherwise uses the guide's ordinary human register
+  rather than turning facilitation rules or application concepts into labels;
+- the first Problem uses up to about 180 presented words across five to seven
+  short narrative beats when the opening needs them, and fewer when it does not;
+  each whole Consequence-plus-next-Problem passage normally contains 100–140
+  presented words across five to seven beats, with the range applying once to
+  the combined passage rather than separately to each saved part;
+- each ordinary scene passage selects rather than inventories detail, uses at
+  most one brief state-orientation sentence when that is sufficient, does not
+  both dramatize and restate the same change, and ends the persisted Problem at
+  one decision point: a direct question that leaves every eligible responder
+  free to act or a clear cliffhanger; any examples are at most three compact,
+  non-exhaustive possibilities in one sentence;
+- direct exact-state answers, operational-failure explanations, and
+  participant-requested detail are outside the ordinary scene target; if
+  multiple Actions, accessibility, or causal clarity require more space, the
+  excess is no greater than necessary, the dated record states why, and the next
+  ordinary passage returns to the compact cadence;
 - each submitted Action and durable history faithfully represents the
   participant's stated or explicitly delegated fictional decision without
   adding another decision or Action on the participant's behalf, and the
@@ -306,6 +330,11 @@ A run passes only when all of the following are observed:
   are coherent; and
 - reloaded Play and durable history agree with the chat.
 
+Voice review is a human judgment over each complete passage and the three-turn
+sequence. Automated coverage proves that the guide reaches the intended writer
+and stays out of Luna's context; acceptance does not use a growing forbidden-
+word list as a substitute for literary consistency.
+
 If `chatgpt.com` opens but does not honor the attachment request or expose the
 required Site-tool support, record the run as blocked at that boundary. Do not
 substitute the desktop app or a participant-operated Gezerah flow for the web
@@ -325,10 +354,11 @@ acceptance-environment kind, ChatGPT surface, stated play preference, result
 (`passed`, `failed`, or `blocked`), browser-control-request count, and cleanup
 result. For every step reached, it records the World and Character, participant
 Actions and persisted submitted Actions, public Consequences and following
-Problems, and whether the transcript was reviewed for presentation and
-control-plane leakage. It also records the conversation count, setup-question
-count, and any platform-owned confirmation count separately. A failed or
-blocked record must state the observed reason.
+Problems, each scene passage's presented word and beat counts, any cadence
+exception rationale, and whether the transcript was reviewed for presentation
+and control-plane leakage. It also records the conversation count, setup-
+question count, and any platform-owned confirmation count separately. A failed
+or blocked record must state the observed reason.
 
 Do not publish the transcript or record the password, session cookie, CSRF token,
 database URL, invitation secret, or transient tunnel URL. An external handbook
@@ -400,6 +430,7 @@ resolution-owned inline status modifiers, status source-provenance columns,
 expanded Resolution-receipt tables, immutable Resolution-receipt triggers, constrained audience
 invalidation, normalized usernames/Argon2id/session-token digests, and the
 human/Terra/agent facilitator assignment and attribution shapes. They assert
+the nullable, bounded World prose-guide column and
 that Status authoring rows are owned by the
 resolution rather than world configuration. For authentication, the static
 migration contract requires the password-hash/token-digest columns and shape
@@ -429,7 +460,9 @@ API adapter, and backend-independent view rendering:
   current-versus-superseded 401 authentication teardown;
 - ChatGPT web-launch URL and starter-instruction construction, including the
   sole play-preference input and prohibition on browser-control requests; and
-- Start and six-command Play site-tool registration outcomes, schemas, static
+- World-settings prose-guide editing and clearing; and
+- Start and six-command Play site-tool registration outcomes, schemas, prose-guide
+  transport and bounded authority, static
   Play-handbook topics and presentation contract, API adaptation, idempotent
   retry state, route replacement, and recoverable errors through a controlled
   `document.modelContext`.
@@ -504,6 +537,9 @@ journey:
   agent attribution, Character claim, Problem/Action/Resolution transitions,
   exact mechanical changes, and idempotent replay with a World-scoped database
   trace; and
+- `world-templates.contract.spec.ts` covers the complete three-item catalog,
+  versioned prose guides, and exact guide materialization into independent
+  copied Worlds; and
 - `direct-gap-closures.contract.spec.ts` owns the remaining small authority,
   lifecycle, cancellation, projection, and no-audience contracts.
 

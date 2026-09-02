@@ -13,6 +13,7 @@ export interface World {
   id: string;
   name: string;
   description?: string | undefined;
+  prose_guide?: string | undefined;
   status: WorldStatus;
   revision: number;
   role: MembershipRole;
@@ -35,6 +36,7 @@ export interface WorldTemplate {
   id: string;
   name: string;
   description: string;
+  prose_guide: string;
   setting: string;
   character_count: number;
   version: number;

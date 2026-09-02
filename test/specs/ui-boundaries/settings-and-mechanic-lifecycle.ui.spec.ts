@@ -16,6 +16,7 @@ import {
   joinWorld,
   openAuthenticated,
   postJSON,
+  readWorld,
   type Interaction,
 } from "./support";
 
@@ -38,6 +39,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
     entity: `Archive Witness ${unique}`,
     history: `A retained resolution ${unique}`,
   };
+  const initialProseGuide = `Begin with ordinary work and weather ${unique}`;
   const editorContext = await browser.newContext({ reducedMotion: "reduce" });
   const editorPage = await editorContext.newPage();
 
@@ -46,7 +48,13 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       createActor(request, baseURL, labels.owner),
       createActor(request, baseURL, labels.editor),
     ]);
-    const world = await createWorld(request, baseURL, owner.id, labels.world);
+    const world = await createWorld(
+      request,
+      baseURL,
+      owner.id,
+      labels.world,
+      initialProseGuide,
+    );
     await joinWorld(request, baseURL, world.id, owner.id, editor.id, "editor");
     const independent = await createInputMechanic(
       request,
@@ -140,12 +148,23 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         "Hand off Facilitator responsibility from Play between Problems.",
       );
       await expect(editorPage.getByLabel("Facilitator source")).toHaveCount(0);
+      await expect(ownerPage.getByLabel("Prose guide")).toHaveValue(
+        initialProseGuide,
+      );
+      await expect(editorPage.getByLabel("Prose guide")).toHaveValue(
+        initialProseGuide,
+      );
 
       await ownerPage
         .getByLabel("Description")
         .fill(`Owner stale description ${unique}`);
+      await ownerPage
+        .getByLabel("Prose guide")
+        .fill(`Owner stale prose guide ${unique}`);
       const editorDescription = `Editor winning description ${unique}`;
+      const editorProseGuide = `Editor winning prose guide ${unique}`;
       await editorPage.getByLabel("Description").fill(editorDescription);
+      await editorPage.getByLabel("Prose guide").fill(editorProseGuide);
       await editorPage.getByRole("button", { name: "Save details" }).click();
       await expect(editorPage.getByText("Up to date")).toBeVisible();
 
@@ -163,17 +182,29 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         editorDescription,
       );
+      await expect(ownerPage.getByLabel("Prose guide")).toHaveValue(
+        editorProseGuide,
+      );
       await expect(
         ownerPage.locator(".settings-facilitator-note"),
       ).toContainText(labels.owner);
 
       const retriedDescription = `Owner intentional retry ${unique}`;
       await ownerPage.getByLabel("Description").fill(retriedDescription);
+      await ownerPage.getByLabel("Prose guide").fill("");
       await ownerPage.getByRole("button", { name: "Save details" }).click();
       await expect(ownerPage.getByText("Up to date")).toBeVisible();
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         retriedDescription,
       );
+      await expect(ownerPage.getByLabel("Prose guide")).toHaveValue("");
+      const clearedWorld = await readWorld(
+        request,
+        baseURL,
+        world.id,
+        owner.id,
+      );
+      expect(clearedWorld.prose_guide).toBeUndefined();
     });
 
     await test.step("NAV-003/dirty-draft-save-and-discard", async () => {

@@ -210,6 +210,13 @@ is a mechanical class.
 Profile text cannot grant control, mutate mechanical state, or become an effect
 target.
 
+The optional World prose guide is likewise ordinary nonsecret settings text.
+It is supplied only to the model surfaces that author public Problems and
+Consequences, under platform instructions that limit it to expression. It
+cannot establish facts, change Mechanics or authorization, reveal restricted
+information, direct tools, or choose a player's Action. Luna's mechanical
+compiler context omits the field.
+
 ### Private data
 
 Facilitator-private interaction/Consequence notes and restricted character

@@ -150,7 +150,12 @@ func (s *Server) handleDecideTerraInteraction(w http.ResponseWriter, r *http.Req
 		handleAppError(w, invalidModelOutput("generated consequence is invalid", fields))
 		return
 	}
-	structured, err := s.models.CompileConsequence(r.Context(), contextJSON, narrative)
+	lunaContextJSON, err := marshalLunaModelContext(snapshot)
+	if err != nil {
+		handleAppError(w, err)
+		return
+	}
+	structured, err := s.models.CompileConsequence(r.Context(), lunaContextJSON, narrative)
 	if err != nil {
 		handleAppError(w, modelCallFailed(err))
 		return

@@ -18,6 +18,7 @@ export interface IdentifiedResource {
 
 export interface World extends IdentifiedResource {
   name: string;
+  prose_guide?: string;
   revision: number;
   rules_revision: number;
   roster_revision: number;
@@ -97,8 +98,14 @@ export async function createWorld(
   baseURL: string,
   ownerID: string,
   name: string,
+  proseGuide?: string,
 ): Promise<World> {
-  return postJSON<World>(request, `${baseURL}/api/worlds`, { name }, ownerID);
+  return postJSON<World>(
+    request,
+    `${baseURL}/api/worlds`,
+    { name, ...(proseGuide === undefined ? {} : { prose_guide: proseGuide }) },
+    ownerID,
+  );
 }
 
 export async function createInvite(

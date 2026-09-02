@@ -94,7 +94,9 @@ func TestModelContextUsesCanonicalVocabulary(t *testing.T) {
 	t.Parallel()
 
 	helpText := "Describe the ordinary details this character tends to notice."
+	proseGuide := "Tell the story in plain, concrete language."
 	snapshot := modelContext{
+		World: modelWorldContext{Name: "Glass Sea", ProseGuide: &proseGuide},
 		Entities: []modelEntityContext{{
 			Ref: "e1", AuthoredDefaultInputMechanicRefs: []string{"m1"},
 			Profile: []modelCharacterFieldValue{{
@@ -134,6 +136,20 @@ func TestModelContextUsesCanonicalVocabulary(t *testing.T) {
 	}
 	if len(decoded.Recent) != 1 || decoded.Recent[0].Problem != "The gate is barred." {
 		t.Fatalf("recent history = %#v", decoded.Recent)
+	}
+	if !strings.Contains(string(payload), `"prose_guide":"Tell the story in plain, concrete language."`) {
+		t.Fatalf("Terra model context lacks prose guide: %s", payload)
+	}
+
+	lunaPayload, err := marshalLunaModelContext(snapshot)
+	if err != nil {
+		t.Fatalf("marshal Luna model context: %v", err)
+	}
+	if strings.Contains(string(lunaPayload), "prose_guide") || strings.Contains(string(lunaPayload), proseGuide) {
+		t.Fatalf("Luna model context received prose guide: %s", lunaPayload)
+	}
+	if snapshot.World.ProseGuide == nil || *snapshot.World.ProseGuide != proseGuide {
+		t.Fatalf("marshalling Luna context mutated source snapshot: %#v", snapshot.World.ProseGuide)
 	}
 }
 
@@ -544,6 +560,9 @@ func TestOpenAIModelProviderUsesConfiguredModelsAndImmutableNarrative(t *testing
 	problemInstructions := modelStringField(t, problemRequest, "instructions")
 	for _, contract := range []string{
 		"plain public prose",
+		"world.prose_guide",
+		"authority is limited to expression",
+		"Only prose_guide has the narrow expressive role",
 		"otherwise innocuous",
 		"naturally notice or care about",
 		"attention and observable cues, not private thoughts",
@@ -567,6 +586,9 @@ func TestOpenAIModelProviderUsesConfiguredModelsAndImmutableNarrative(t *testing
 	consequenceInstructions := modelStringField(t, consequenceRequest, "instructions")
 	for _, contract := range []string{
 		"public fictional Consequence",
+		"world.prose_guide",
+		"authority is limited to expression",
+		"Only prose_guide has the narrow expressive role",
 		"costs, foreclosed opportunities, and changed pressure",
 		"otherwise innocuous",
 		"naturally notice or care about",

@@ -26,6 +26,7 @@ interface WorldTemplateResponse {
   name: string;
   description: string;
   setting: string;
+  prose_guide: string;
   character_count: number;
   version: number;
 }
@@ -34,6 +35,7 @@ interface WorldResponse {
   id: string;
   name: string;
   description?: string;
+  prose_guide?: string;
   facilitator: {
     source: "human" | "terra" | "agent";
     membership_id?: string;
@@ -168,6 +170,7 @@ interface ExpectedTemplate {
   name: string;
   description: string;
   setting: string;
+  proseGuide: string;
   description_marker: string;
   mechanics: ExpectedMechanic[];
   fields: Array<{
@@ -184,6 +187,8 @@ const templates: ExpectedTemplate[] = [
     description:
       "War is closing around a village outside a vital trade city, and the reputations of five ordinary villagers may decide whom their neighbors trust.",
     setting: "Medieval fantasy",
+    proseGuide:
+      "Tell Eldermead in plain, grave language, with the weight of an old tale and the closeness of village life. Favor work, weather, food, animals, roads, tools, faces, and what people owe one another. Let large politics enter through specific demands made on households. Keep wonder spare and matter-of-fact. Avoid heroic bombast and decorative archaic speech. Let the cost of a choice reveal its meaning.",
     description_marker: "The Writ at Sundown",
     mechanics: [
       inputMechanic("Vigor", "capacity", "pool", true, "0", "5", "3"),
@@ -270,6 +275,8 @@ const templates: ExpectedTemplate[] = [
     description:
       "Bellwether has eliminated scarcity beautifully, but five privileged insiders are beginning to see whose sleep, memory, and civic future pay for their comfort.",
     setting: "Utopian/dystopian cyberpunk",
+    proseGuide:
+      "Tell Bellwether in cool, exact prose. Stay close to bodies, rooms, clothing, weather, and small breaches of manners. Let the city speak in immaculate euphemisms through displays and officials, but let the narrator use ordinary words. A threat first appears as a pause, a hand withdrawn, a door that does not open. Keep the sentences controlled, shortening them when courtesy becomes danger. Trust the reader to understand the cruelty without explaining it.",
     description_marker: "Season's First Supper",
     mechanics: [
       inputMechanic("Favors", "capacity", "pool", true, "0", "6", "3"),
@@ -316,6 +323,8 @@ const templates: ExpectedTemplate[] = [
     description:
       "Across present-day New York, unrelated words and media begin to seem personally addressed, and five ordinary people must decide what can actually be tested.",
     setting: "Contemporary New York mystery",
+    proseGuide:
+      "Tell New York with alert, unsentimental precision. Use ordinary contemporary words, exact times and places, fragments of institutional language, and the friction of work, transit, devices, rent, and obligation. Quote what screens and recordings show. Distinguish observation from inference through the order of sentences rather than analytical labels. Keep the narrator calm. Let unease arise from repetition, timing, and contradiction rather than ominous declarations.",
     description_marker: "The Line Beneath the Line",
     mechanics: [
       inputMechanic("Bandwidth", "capacity", "pool", true, "0", "5", "3"),
@@ -359,13 +368,14 @@ test("contract: the three World templates clone atomically into complete, playab
     expect(catalog).toHaveLength(3);
     expect([...catalog].sort(byID)).toEqual(
       templates
-        .map(({ id, name, description, setting }) => ({
+        .map(({ id, name, description, setting, proseGuide }) => ({
           id,
           name,
           description,
           setting,
+          prose_guide: proseGuide,
           character_count: 5,
-          version: 1,
+          version: 2,
         }))
         .sort(byID),
     );
@@ -391,6 +401,7 @@ test("contract: the three World templates clone atomically into complete, playab
       expect(world).toMatchObject({
         id: destinationID,
         name: expected.name,
+        prose_guide: expected.proseGuide,
         facilitator: { source: "agent" },
         current_play_role: "player",
         status: "active",
@@ -415,6 +426,7 @@ test("contract: the three World templates clone atomically into complete, playab
       );
       expect(replay).toMatchObject({
         id: world.id,
+        prose_guide: expected.proseGuide,
         membership_id: world.membership_id,
         rules_revision: world.rules_revision,
         roster_revision: world.roster_revision,

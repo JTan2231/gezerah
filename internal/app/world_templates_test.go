@@ -19,8 +19,11 @@ func TestEmbeddedWorldTemplateCatalogIsCompleteAndValidated(t *testing.T) {
 		if wantName, exists := want[template.ID]; !exists || template.Name != wantName {
 			t.Errorf("unexpected catalog item %q (%q)", template.ID, template.Name)
 		}
-		if template.Version < 1 || len(template.Entities) != 5 {
-			t.Errorf("template %q version/entities = %d/%d, want positive/5", template.ID, template.Version, len(template.Entities))
+		if template.Version < 1 || template.ProseGuide == "" || len(template.Entities) != 5 {
+			t.Errorf(
+				"template %q version/prose-guide/entities = %d/%t/%d, want positive/non-empty/5",
+				template.ID, template.Version, template.ProseGuide != "", len(template.Entities),
+			)
 		}
 		for _, mechanic := range template.Mechanics {
 			if validID(mechanic.Key) {
@@ -39,7 +42,8 @@ func TestLoadWorldTemplateUsesStrictYAMLAndNarrativeMarkdown(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadWorldTemplate() error = %v", err)
 	}
-	if template.ID != "example" || template.CharacterFields[0].Visibility != "world" {
+	if template.ID != "example" || template.ProseGuide != "Tell the story in plain, concrete language." ||
+		template.CharacterFields[0].Visibility != "world" {
 		t.Fatalf("loaded template = %#v", template)
 	}
 
@@ -72,6 +76,35 @@ func TestLoadWorldTemplateRejectsUnknownAliasesAndIncompleteProfiles(t *testing.
 	}
 }
 
+func TestLoadWorldTemplateRequiresBoundedProseGuide(t *testing.T) {
+	t.Parallel()
+
+	valid := validWorldTemplateMarkdown("prose-guide")
+	missing := strings.Replace(
+		valid,
+		"prose_guide: >-\n  Tell the story in plain, concrete language.\n",
+		"",
+		1,
+	)
+	files := fstest.MapFS{
+		"world_templates/missing.md": &fstest.MapFile{Data: []byte(missing)},
+	}
+	if _, err := loadWorldTemplate(files, "world_templates/missing.md"); err == nil || !strings.Contains(err.Error(), "prose_guide is required") {
+		t.Fatalf("missing prose guide error = %v", err)
+	}
+
+	tooLong := strings.Replace(
+		valid,
+		"prose_guide: >-\n  Tell the story in plain, concrete language.",
+		"prose_guide: "+strings.Repeat("x", maxWorldProseGuideLength+1),
+		1,
+	)
+	files["world_templates/too-long.md"] = &fstest.MapFile{Data: []byte(tooLong)}
+	if _, err := loadWorldTemplate(files, "world_templates/too-long.md"); err == nil || !strings.Contains(err.Error(), "metadata exceeds") {
+		t.Fatalf("long prose guide error = %v", err)
+	}
+}
+
 func TestSplitWorldTemplateMarkdownAcceptsCRLF(t *testing.T) {
 	t.Parallel()
 	manifest, narrative, err := splitWorldTemplateMarkdown(strings.ReplaceAll(validWorldTemplateMarkdown("crlf"), "\n", "\r\n"))
@@ -92,6 +125,8 @@ summary: A concise selection-card summary.
 setting: Example setting
 world_description: >-
   A complete World description that gives the Facilitator enough concrete material to begin play without a reusable Problem.
+prose_guide: >-
+  Tell the story in plain, concrete language.
 mechanics:
   - key: resolve
     kind: capacity

@@ -41,6 +41,7 @@ type worldTemplate struct {
 	Summary          string                        `yaml:"summary"`
 	Setting          string                        `yaml:"setting"`
 	WorldDescription string                        `yaml:"world_description"`
+	ProseGuide       string                        `yaml:"prose_guide"`
 	Mechanics        []worldTemplateMechanic       `yaml:"mechanics"`
 	CharacterFields  []worldTemplateCharacterField `yaml:"character_fields"`
 	Entities         []worldTemplateEntity         `yaml:"entities"`
@@ -176,12 +177,14 @@ func validateWorldTemplate(template *worldTemplate) error {
 	template.Summary = strings.TrimSpace(template.Summary)
 	template.Setting = strings.TrimSpace(template.Setting)
 	template.WorldDescription = strings.TrimSpace(template.WorldDescription)
+	template.ProseGuide = strings.TrimSpace(template.ProseGuide)
 	if !templateAliasPattern.MatchString(template.ID) {
 		return errors.New("id must be a lowercase file-local slug")
 	}
 	for path, value := range map[string]string{
 		"name": template.Name, "summary": template.Summary,
 		"setting": template.Setting, "world_description": template.WorldDescription,
+		"prose_guide": template.ProseGuide,
 	} {
 		if value == "" {
 			return fmt.Errorf("%s is required", path)
@@ -192,7 +195,8 @@ func validateWorldTemplate(template *worldTemplate) error {
 	}
 	if len([]rune(template.Name)) > 200 ||
 		len([]rune(template.Summary)) > 1000 || len([]rune(template.Setting)) > 200 ||
-		len([]rune(template.WorldDescription)) > 20000 {
+		len([]rune(template.WorldDescription)) > 20000 ||
+		len([]rune(template.ProseGuide)) > maxWorldProseGuideLength {
 		return errors.New("template metadata exceeds its supported length")
 	}
 	if len(template.Mechanics) == 0 || len(template.Mechanics) > 100 {
@@ -430,7 +434,8 @@ func (s *Server) handleListWorldTemplates(w http.ResponseWriter, r *http.Request
 	for index, template := range s.worldTemplates.items {
 		items[index] = worldTemplateResponse{
 			ID: template.ID, Name: template.Name, Description: template.Summary,
-			Setting: template.Setting, CharacterCount: len(template.Entities), Version: template.Version,
+			Setting: template.Setting, ProseGuide: template.ProseGuide,
+			CharacterCount: len(template.Entities), Version: template.Version,
 		}
 	}
 	writeJSON(w, http.StatusOK, items)
@@ -491,14 +496,18 @@ func (s *Server) cloneWorldTemplate(ctx context.Context, userID, worldID string,
 		return false, err
 	}
 	var createdByUserID, existingName, existingFacilitatorSource string
-	var existingDescription *string
+	var existingDescription, existingProseGuide *string
 	err = tx.QueryRow(ctx, `
-		select created_by_user_id::text, name, description, facilitator_source
+		select created_by_user_id::text, name, description, prose_guide, facilitator_source
 		from worlds where id = $1`, worldID,
-	).Scan(&createdByUserID, &existingName, &existingDescription, &existingFacilitatorSource)
+	).Scan(
+		&createdByUserID, &existingName, &existingDescription, &existingProseGuide,
+		&existingFacilitatorSource,
+	)
 	if err == nil {
 		if createdByUserID != userID || existingName != template.Name || existingDescription == nil ||
-			*existingDescription != template.WorldDescription || existingFacilitatorSource != "agent" {
+			*existingDescription != template.WorldDescription || existingProseGuide == nil ||
+			*existingProseGuide != template.ProseGuide || existingFacilitatorSource != "agent" {
 			return false, &statusError{Status: http.StatusConflict, Code: "idempotency_conflict", Message: "destination World ID is already in use"}
 		}
 		var ownsWorld bool
@@ -539,9 +548,11 @@ func (s *Server) cloneWorldTemplate(ctx context.Context, userID, worldID string,
 	}
 
 	if _, err := tx.Exec(ctx, `
-		insert into worlds (id, name, description, created_by_user_id, facilitator_source, facilitator_membership_id)
-		values ($1, $2, $3, $4, 'agent', null)`,
-		worldID, template.Name, template.WorldDescription, userID); err != nil {
+		insert into worlds (
+			id, name, description, prose_guide, created_by_user_id,
+			facilitator_source, facilitator_membership_id
+		) values ($1, $2, $3, $4, $5, 'agent', null)`,
+		worldID, template.Name, template.WorldDescription, template.ProseGuide, userID); err != nil {
 		return false, err
 	}
 	if _, err := tx.Exec(ctx, `

@@ -93,18 +93,31 @@ describe("ChatGPT play tools", () => {
       ({ tool }) => tool.name === "submit_action",
     )?.tool.description;
     expect(inspectDescription).toContain("visible profile prose");
+    expect(inspectDescription).toContain("prose guide");
+    expect(inspectDescription).toContain("not what is true");
     expect(inspectDescription).toContain("unexpressed private thoughts");
     expect(handbookTool?.annotations?.readOnlyHint).toBe(true);
-    expect(handbookTool?.description).toContain("presentation and recovery");
+    expect(handbookTool?.description).toContain("presenting scenes");
+    expect(handbookTool?.description).toContain("recovering from failures");
     expect(presentDescription).toContain("concrete environmental details");
     expect(presentDescription).toContain("effective Mechanics");
     expect(presentDescription).toContain("Details need not be clues");
     expect(presentDescription).toContain("invent a Perception check");
-    expect(presentDescription).toContain("lived scene");
-    expect(presentDescription).toContain("receipt");
-    expect(resolveDescription).toContain("causal fictional consequences");
-    expect(resolveDescription).toContain("effect ledger");
+    expect(presentDescription).toContain(
+      "Follow the prose guide in the latest Play inspection",
+    );
+    expect(presentDescription).toContain("cannot change established facts");
+    expect(presentDescription).toContain("Never quote it");
+    expect(presentDescription).toContain("same text you present");
+    expect(presentDescription).not.toContain("receipt");
+    expect(presentDescription).toMatch(/up to about 180 words/i);
+    expect(presentDescription).toMatch(/combined public passage.+100 to 140/i);
+    expect(resolveDescription).toContain("Show decisions and changed state");
+    expect(resolveDescription).toContain("report about the operation");
+    expect(resolveDescription).toContain("Follow the prose guide");
     expect(resolveDescription).toContain("unexpressed thoughts");
+    expect(resolveDescription).toMatch(/100 to 140 words total/i);
+    expect(resolveDescription).toMatch(/not 100 to 140 words for each/i);
     expect(submitDescription).toContain("explicitly states or delegates");
     expect(submitDescription).toContain("Never infer or invent an Action");
     expect(submitDescription).toContain("Do not announce submission");
@@ -137,7 +150,28 @@ describe("ChatGPT play tools", () => {
       complete.handbook.sections.find(
         ({ topic }) => topic === "narrative-presentation",
       )?.guidance,
-    ).toContain("same public Problem prompt and Consequence narrative");
+    ).toContain("same public Problem and Consequence words");
+    const narrativeGuidance = complete.handbook.sections.find(
+      ({ topic }) => topic === "narrative-presentation",
+    )?.guidance;
+    expect(narrativeGuidance).toContain(
+      "Follow the inspected World's prose guide",
+    );
+    expect(narrativeGuidance).toContain("cannot change established facts");
+    expect(narrativeGuidance).toContain("Never quote it");
+    expect(narrativeGuidance).toMatch(/100 to 140 words/i);
+    expect(narrativeGuidance).toMatch(/180 words or fewer/i);
+    expect(narrativeGuidance).toMatch(/5 to 7 short prose beats/i);
+    expect(narrativeGuidance).toMatch(/combined passage, not each saved part/i);
+    expect(narrativeGuidance).toMatch(
+      /at most one concise sentence on changed state/i,
+    );
+    expect(narrativeGuidance).toMatch(/direct question.+clear cliffhanger/i);
+    expect(narrativeGuidance).toContain(
+      "Never pad, truncate, or paraphrase saved prose",
+    );
+    expect(narrativeGuidance).not.toContain("control-plane");
+    expect(narrativeGuidance).not.toContain("receipt-shaped");
 
     const presentation = (await readHandbook!.execute({
       topic: "narrative-presentation",
@@ -279,6 +313,7 @@ describe("ChatGPT play tools", () => {
             Response.json({
               id: "world-1",
               name: "The Glass Coast",
+              prose_guide: "Keep the language spare and salt-stung.",
               status: "active",
               facilitator: { source: "agent" },
               membership_id: "member-1",
@@ -330,7 +365,7 @@ describe("ChatGPT play tools", () => {
     ).find((tool) => tool.name === "inspect_play");
 
     const payload = (await inspect?.execute({})) as {
-      world: { facilitator_source: string };
+      world: { facilitator_source: string; prose_guide: string };
       viewer: {
         membership_role: string;
         current_play_role: string;
@@ -340,6 +375,9 @@ describe("ChatGPT play tools", () => {
     };
 
     expect(payload.world.facilitator_source).toBe("agent");
+    expect(payload.world.prose_guide).toBe(
+      "Keep the language spare and salt-stung.",
+    );
     expect(payload.viewer.membership_role).toBe("owner");
     expect(payload.viewer.current_play_role).toBe("player");
     expect(payload.members[0]?.current_play_role).toBe("player");
@@ -449,8 +487,10 @@ describe("ChatGPT play tools", () => {
 
     expect(payload.presented_interaction.id).toBe("interaction-1");
     expect(payload.presented_interaction.context_entity_ids).toEqual(["ash"]);
-    expect(payload.next_step).toContain("committed prompt directly");
-    expect(payload.next_step).toContain("without a creation receipt");
+    expect(payload.next_step).toContain(
+      "presented_interaction.prompt directly as the scene",
+    );
+    expect(payload.next_step).toContain("without saying it was saved");
   });
 
   test("records only the explicit player Action represented by its input", async () => {

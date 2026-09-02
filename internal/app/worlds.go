@@ -14,6 +14,8 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+const maxWorldProseGuideLength = 10000
+
 func (s *Server) handleListWorlds(w http.ResponseWriter, r *http.Request) {
 	userID, err := requireKnownActor(r.Context(), s.db, r)
 	if err != nil {
@@ -72,11 +74,13 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		fields["id"] = "must be a UUID"
 	}
 	validateRequired(fields, "name", request.Name, 200)
+	request.Description = cleanOptional(request.Description)
+	request.ProseGuide = cleanOptional(request.ProseGuide)
+	validateWorldProseGuide(fields, request.ProseGuide)
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", fields)
 		return
 	}
-	request.Description = cleanOptional(request.Description)
 	worldID := request.ID
 	if worldID == "" {
 		worldID, err = newID()
@@ -97,8 +101,9 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 	}
 	defer rollbackTx(r.Context(), tx)
 	if _, err := tx.Exec(r.Context(), `
-		insert into worlds (id, name, description, created_by_user_id, facilitator_membership_id)
-		values ($1, $2, $3, $4, $5)`, worldID, strings.TrimSpace(request.Name), request.Description, userID, membershipID); err != nil {
+		insert into worlds (id, name, description, prose_guide, created_by_user_id, facilitator_membership_id)
+		values ($1, $2, $3, $4, $5, $6)`,
+		worldID, strings.TrimSpace(request.Name), request.Description, request.ProseGuide, userID, membershipID); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -159,9 +164,11 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var currentName string
-	var currentDescription *string
+	var currentDescription, currentProseGuide *string
 	var actual int64
-	if err := s.db.QueryRow(r.Context(), `select name, description, revision from worlds where id = $1`, member.WorldID).Scan(&currentName, &currentDescription, &actual); err != nil {
+	if err := s.db.QueryRow(r.Context(), `
+		select name, description, prose_guide, revision from worlds where id = $1`, member.WorldID,
+	).Scan(&currentName, &currentDescription, &currentProseGuide, &actual); err != nil {
 		handleAppError(w, err)
 		return
 	}
@@ -175,15 +182,20 @@ func (s *Server) handleUpdateWorld(w http.ResponseWriter, r *http.Request) {
 	if request.Description.Set {
 		currentDescription = cleanOptional(request.Description.Value)
 	}
+	if request.ProseGuide.Set {
+		currentProseGuide = cleanOptional(request.ProseGuide.Value)
+	}
 	fields := map[string]string{}
 	validateRequired(fields, "name", currentName, 200)
+	validateWorldProseGuide(fields, currentProseGuide)
 	if len(fields) > 0 {
 		writeError(w, http.StatusUnprocessableEntity, "validation_failed", "world is invalid", fields)
 		return
 	}
 	command, err := s.db.Exec(r.Context(), `
-		update worlds set name = $2, description = $3, revision = revision + 1
-		where id = $1 and revision = $4`, member.WorldID, currentName, currentDescription, actual)
+		update worlds set name = $2, description = $3, prose_guide = $4, revision = revision + 1
+		where id = $1 and revision = $5`,
+		member.WorldID, currentName, currentDescription, currentProseGuide, actual)
 	if err != nil {
 		handleAppError(w, err)
 		return
@@ -499,7 +511,8 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	var membershipStatus string
 	var facilitatorSource string
 	err := db.QueryRow(ctx, `
-		select world.id::text, world.name, world.description, world.facilitator_source, world.status,
+		select world.id::text, world.name, world.description, world.prose_guide,
+			world.facilitator_source, world.status,
 			world.facilitator_membership_id::text, facilitator_user.display_name,
 			world.revision, world.roster_revision, membership.role, membership.id::text,
 			membership.status,
@@ -518,7 +531,8 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 		left join users facilitator_user on facilitator_user.id = facilitator.user_id
 		where world.id = $1`, worldID, userID,
 	).Scan(
-		&item.ID, &item.Name, &item.Description, &facilitatorSource, &item.Status,
+		&item.ID, &item.Name, &item.Description, &item.ProseGuide,
+		&facilitatorSource, &item.Status,
 		&item.Facilitator.MembershipID, &item.Facilitator.DisplayName,
 		&item.Revision, &item.RosterRevision, &item.Role, &item.MembershipID,
 		&membershipStatus, &item.MemberCount, &item.CapacityCount, &item.CapabilityCount,
@@ -536,6 +550,12 @@ func loadWorldResponse(ctx context.Context, db queryer, worldID, userID string) 
 	)
 	item.PlayStatus, err = membershipPlayStatus(ctx, db, worldID, item.MembershipID, item.Role, membershipStatus)
 	return item, err
+}
+
+func validateWorldProseGuide(fields map[string]string, proseGuide *string) {
+	if proseGuide != nil && len([]rune(*proseGuide)) > maxWorldProseGuideLength {
+		fields["prose_guide"] = fmt.Sprintf("must be at most %d characters", maxWorldProseGuideLength)
+	}
 }
 
 func (s *Server) handleListWorldMembers(w http.ResponseWriter, r *http.Request) {

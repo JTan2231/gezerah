@@ -66,6 +66,7 @@ type worldResponse struct {
 	ID                  string              `json:"id"`
 	Name                string              `json:"name"`
 	Description         *string             `json:"description,omitempty"`
+	ProseGuide          *string             `json:"prose_guide,omitempty"`
 	Facilitator         facilitatorResponse `json:"facilitator"`
 	CurrentPlayRole     string              `json:"current_play_role"`
 	Status              string              `json:"status"`
@@ -94,6 +95,7 @@ type createWorldRequest struct {
 	ID          string  `json:"id,omitempty"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
+	ProseGuide  *string `json:"prose_guide,omitempty"`
 }
 
 type worldTemplateResponse struct {
@@ -101,6 +103,7 @@ type worldTemplateResponse struct {
 	Name           string `json:"name"`
 	Description    string `json:"description"`
 	Setting        string `json:"setting"`
+	ProseGuide     string `json:"prose_guide"`
 	CharacterCount int    `json:"character_count"`
 	Version        int    `json:"version"`
 }
@@ -112,6 +115,7 @@ type cloneWorldTemplateRequest struct {
 type updateWorldRequest struct {
 	Name             *string                `json:"name,omitempty"`
 	Description      optionalNullableString `json:"description"`
+	ProseGuide       optionalNullableString `json:"prose_guide"`
 	ExpectedRevision *int64                 `json:"expected_revision"`
 }
 

@@ -10,6 +10,7 @@ import {
 const actions: SettingsViewActions = {
   changeName: () => undefined,
   changeDescription: () => undefined,
+  changeProseGuide: () => undefined,
   save: () => undefined,
   archive: () => undefined,
 };
@@ -18,6 +19,8 @@ const ownerDraft: SettingsViewModel = {
   draft: {
     name: "The Verdant Reach",
     description: "A frontier beneath a restless canopy.",
+    proseGuide:
+      "Tell the Reach through work, weather, and what neighbors owe one another.",
   },
   dirty: true,
   busy: null,
@@ -42,7 +45,14 @@ describe("SettingsView", () => {
     expect(html).toContain("The Verdant Reach");
     expect(html).toContain("Terra");
     expect(html).toContain(
-      "Orient newly invited players and give Terra a world brief.",
+      "Describe the World for its members and Facilitator.",
+    );
+    expect(html).toContain("Prose guide");
+    expect(html).toContain(
+      "This shapes the writing, not the World’s facts or rules.",
+    );
+    expect(html).toContain(
+      "Tell the Reach through work, weather, and what neighbors owe one another.",
     );
     expect(html).toContain(
       "Hand off Facilitator responsibility from Play between Problems.",
@@ -63,13 +73,17 @@ describe("SettingsView", () => {
             kind: "request",
             message: "Check the highlighted fields.",
           },
-          fieldIssues: { name: "must not be empty" },
+          fieldIssues: {
+            name: "must not be empty",
+            proseGuide: "must be at most 10000 characters",
+          },
         }}
         actions={actions}
       />,
     );
 
     expect(html).toContain("must not be empty");
+    expect(html).toContain("must be at most 10000 characters");
     expect(html).toContain("Check the highlighted fields.");
     expect(html).toContain("Saving…");
   });

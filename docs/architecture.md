@@ -12,6 +12,8 @@ The world is the sole product and data boundary. It owns:
 - owner/editor/player/spectator memberships and expiring bearer invitations;
 - one human-membership, Terra, or agent facilitator assignment, from which current
   facilitator/player/spectator current play roles are derived;
+- an optional nonmechanical prose guide for model-authored public Problems and
+  Consequences;
 - numeric/Boolean input and derived capacity/capability definitions plus their
   typed dependency graph;
 - problem-authored persistent status instances with immutable modifier
@@ -249,7 +251,7 @@ sequenceDiagram
     ChatGPT->>Start: copy_world_template(template_id)
     Start->>H: POST template clone + destination World UUID
     H->>T: Load validated template
-    H->>DB: Materialize World, owner, Mechanics, fields, and Entities
+    H->>DB: Materialize World, prose guide, owner, Mechanics, fields, and Entities
     H->>DB: Persist profiles and logical-state overrides
     H->>DB: Commit one independent agent-facilitated World
     H-->>Start: 201 World (or 200 idempotent replay)
@@ -349,15 +351,22 @@ Terra uses `gpt-5.6-terra` for plain text. Luna uses `gpt-5.6-luna` with a
 strict JSON Schema for the mechanical interpretation. Both one-shot Responses
 API calls set `reasoning.effort` to `none` and `store` to `false`.
 
-Each call receives a read-only `REPEATABLE READ` snapshot containing the world
-description as world brief, all active Mechanics with their exact authored
-constraints and expressions, every non-archived Entity with its
+Terra calls receive a read-only `REPEATABLE READ` snapshot containing the world
+description as world brief, the optional prose guide, all active Mechanics with
+their exact authored constraints and expressions, every non-archived Entity with its
 facilitator-visible profile values and generated sheet data (logical input,
 intrinsic/effective values, and active Status instances), and the three most recent resolved
 Problem/Consequence pairs. Consequence generation and compilation also
 include the current Problem and all submitted Actions. Short per-request
 references stand in for UUIDs, then the server maps Luna's references back to
 world-owned resources before preview.
+
+Platform instructions let the prose guide shape Terra's diction, rhythm,
+narrative distance, and imagery while keeping facts, Mechanics, privacy,
+authority, and player Actions outside its control. Luna receives the same
+authoritative mechanical context with the prose guide removed. The ChatGPT
+page agent receives the guide through its World inspection and applies the same
+bounded presentation contract client-side.
 
 For a human facilitator, Luna compilation is advisory and persists nothing;
 the human sees the original prose, effects, and preview and separately chooses

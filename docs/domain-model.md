@@ -64,6 +64,17 @@ Terra mode the world description also serves as the world
 brief supplied to generation; it remains ordinary user-authored prose rather
 than a privileged rules field.
 
+A World may also carry an optional prose guide. It is nonsecret,
+nonmechanical settings text for the expression of model-authored public
+Problems and Consequences. It may shape diction, rhythm, narrative distance,
+imagery, dialogue, and how in-world specialized language is attributed. It
+cannot establish World facts, override Mechanics or authority, disclose
+restricted information, direct tools, or choose a player's Action. Terra and
+the ChatGPT page agent apply the current guide when authoring new prose; Luna
+does not receive it when compiling Effects. A guide edit shares the World
+settings revision and never rewrites existing Problems, Consequences, or
+history.
+
 A world Mechanic is a typed scalar definition with an author-facing
 classification and a source:
 
@@ -509,3 +520,8 @@ Archive and final-state rules include:
 Configuration and logical state are normalized relational data. JSON is a transport
 shape, never the canonical persisted aggregate, and no migration seeds a world
 vocabulary.
+
+This document names the implementation field `prose_guide`; maintained product
+terminology and its history remain authoritative in the registered Semantics
+repository outside this source tree. Neither that documentation authority nor
+the field gives any word inside a guide engine-level meaning.

@@ -14,6 +14,10 @@ func TestMigrationHistoryMatches(t *testing.T) {
 		"002_mechanic_graph_status_instances.sql",
 		"003_interaction_audience_invalidations.sql",
 		"004_password_auth.sql",
+		"005_terra.sql",
+		"006_facilitator_assignment.sql",
+		"007_agent_facilitator.sql",
+		"008_world_prose_guide.sql",
 	}
 	tests := []struct {
 		name    string
@@ -155,6 +159,26 @@ func TestAgentFacilitatorMigrationContract(t *testing.T) {
 	} {
 		if !strings.Contains(sql, fragment) {
 			t.Errorf("migration is missing agent facilitator contract fragment %q", fragment)
+		}
+	}
+}
+
+func TestWorldProseGuideMigrationContract(t *testing.T) {
+	t.Parallel()
+
+	contents, err := files.ReadFile("008_world_prose_guide.sql")
+	if err != nil {
+		t.Fatalf("read migration: %v", err)
+	}
+	sql := string(contents)
+	for _, fragment := range []string{
+		"alter table worlds",
+		"add column prose_guide text",
+		"worlds_prose_guide_length",
+		"char_length(prose_guide) <= 10000",
+	} {
+		if !strings.Contains(sql, fragment) {
+			t.Errorf("migration is missing prose guide contract fragment %q", fragment)
 		}
 	}
 }

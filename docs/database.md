@@ -2,7 +2,8 @@
 
 ## Overview
 
-PostgreSQL is authoritative. The schema persists worlds, memberships,
+PostgreSQL is authoritative. The schema persists worlds and their optional
+prose guides, memberships,
 user-authored input/derived mechanic graphs, Problem-sourced Status instances,
 sparse stored overrides, Entity profiles, Interactions, expanded Resolution receipts, event
 cursors, password credentials, and revocable sessions as normalized relations.
@@ -57,6 +58,7 @@ The current schema is installed by this ordered chain:
 | `005_terra.sql`                              | World-level human/Terra facilitator source selection.                                                  |
 | `006_facilitator_assignment.sql`             | Designated human membership plus human/Terra attribution for live Interactions, Resolution receipts, and World events. |
 | `007_agent_facilitator.sql`                  | Non-membership agent attribution for agent-facilitated Interactions, Resolutions, and events.          |
+| `008_world_prose_guide.sql`                  | Optional World-authored prose guidance for model-authored Problems and Consequences.                   |
 
 For a local database that already has a Gezerah migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
@@ -85,6 +87,12 @@ worlds have no facilitator membership, and agent-authored interactions,
 resolutions, and events have no human actor column; the player session remains
 the authorization context rather than becoming the persisted author.
 
+`008` adds nullable `worlds.prose_guide` with a 10,000-character database
+bound. It is ordinary World settings text: the database gives none of its words
+mechanical or engine-level meaning. Deployed databases whose ledger already
+ends at `007_agent_facilitator.sql` receive this column through the forward
+`008_world_prose_guide.sql` migration; already-applied files are not edited.
+
 The schema contains no alternate configuration container, secondary live
 container, reusable simulation aggregate, or alternate profile storage.
 
@@ -93,8 +101,8 @@ They are versioned Markdown release assets. Selecting one creates a new ordinary
 World transactionally in the normalized tables described below; PostgreSQL is
 then authoritative for that independent copy. Every file-local Mechanic,
 expression, Character-field, and Entity alias is replaced with a fresh UUID.
-Only initial configuration, profiles, and sparse logical input overrides are
-materialized—memberships other than the new owner, Controllers, invites,
+Only initial configuration, the prose guide, profiles, and sparse logical input
+overrides are materialized—memberships other than the new owner, Controllers, invites,
 Interactions, Status instances, Resolutions, and history are never copied.
 
 ## Logical schema
@@ -105,7 +113,7 @@ Interactions, Status instances, Resolutions, and history are never copied.
 | -------------------------- | ---------------------------------------------------------------------------------------- |
 | `users`                    | Username, normalized username, Argon2id password hash, display name, and account status. |
 | `auth_sessions`            | SHA-256 token digest, user, activity/expiry timestamps, and revocation state.            |
-| `worlds`                   | Name/description, human/Terra/agent facilitator assignment, lifecycle, settings revision, and roster revision. |
+| `worlds`                   | Name, description, prose guide, human/Terra/agent facilitator assignment, lifecycle, settings revision, and roster revision. |
 | `world_memberships`        | Owner/editor/player/spectator role, status, and membership revision.                     |
 | `world_invites`            | Expiring/revocable membership-role offer with SHA-256 token digest and use count.        |
 | `world_invite_redemptions` | One durable redemption per invite/user linked to the resulting membership.               |
@@ -379,7 +387,7 @@ restricted history references. It is not a supported operational action.
 After the existing migration chain is released:
 
 1. add the next zero-padded file after the current tip
-   (`007_agent_facilitator.sql`, so currently `008_*.sql`);
+   (`008_world_prose_guide.sql`, so currently `009_*.sql`);
 2. never edit a migration already recorded in a durable database;
 3. keep each file valid inside one transaction;
 4. preserve user-authored, world-scoped vocabulary—do not seed canonical

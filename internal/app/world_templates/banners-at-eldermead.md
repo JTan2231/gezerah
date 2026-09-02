@@ -1,9 +1,11 @@
 ---
 id: banners-at-eldermead
-version: 1
+version: 2
 name: Banners at Eldermead
 summary: War is closing around a village outside a vital trade city, and the reputations of five ordinary villagers may decide whom their neighbors trust.
 setting: Medieval fantasy
+prose_guide: |-
+  Tell Eldermead in plain, grave language, with the weight of an old tale and the closeness of village life. Favor work, weather, food, animals, roads, tools, faces, and what people owe one another. Let large politics enter through specific demands made on households. Keep wonder spare and matter-of-fact. Avoid heroic bombast and decorative archaic speech. Let the cost of a choice reveal its meaning.
 world_description: |-
   Eldermead lies beyond the walls of Caldris, where the Amber Road crosses the River Leth. Salt, wool, northern grain, and military traffic pass its fields. Beneath the chapel hill are stones older than the crown; villagers say the buried bell-metal hums before riders arrive.
 

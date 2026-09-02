@@ -139,6 +139,40 @@ func TestUpdateWorldRequestDistinguishesOmittedAndNullDescription(t *testing.T) 
 	}
 }
 
+func TestUpdateWorldRequestDistinguishesOmittedAndNullProseGuide(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		body      string
+		wantSet   bool
+		wantValue *string
+	}{
+		{name: "omitted", body: `{"expected_revision":1}`},
+		{name: "null", body: `{"prose_guide":null,"expected_revision":1}`, wantSet: true},
+		{name: "string", body: `{"prose_guide":"Stay close to ordinary details.","expected_revision":1}`, wantSet: true, wantValue: testString("Stay close to ordinary details.")},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			var request updateWorldRequest
+			if err := decodeStrictBytes([]byte(test.body), &request); err != nil {
+				t.Fatalf("decode request: %v", err)
+			}
+			if request.ProseGuide.Set != test.wantSet {
+				t.Fatalf("prose guide set = %t, want %t", request.ProseGuide.Set, test.wantSet)
+			}
+			if test.wantValue == nil && request.ProseGuide.Value != nil {
+				t.Fatalf("prose guide value = %q, want nil", *request.ProseGuide.Value)
+			}
+			if test.wantValue != nil && (request.ProseGuide.Value == nil || *request.ProseGuide.Value != *test.wantValue) {
+				t.Fatalf("prose guide value = %#v, want %q", request.ProseGuide.Value, *test.wantValue)
+			}
+		})
+	}
+}
+
 func testString(value string) *string { return &value }
 
 func TestWriteJSONPreservesErrorEnvelopeWhenSerializationFails(t *testing.T) {
