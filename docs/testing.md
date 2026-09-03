@@ -217,9 +217,10 @@ shell at direct `/play/...` and `/build/...` SPA routes; and every same-origin
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
 Wrought Home at `https://wrought.joeytan.dev`,
-validates its title and delegated-start heading, and verifies that the sole
-candidate ChatGPT launch targets `https://chatgpt.com/` with its starter prompt and
-the candidate's exact absolute `/play/new` attachment URL. It then opens
+validates its centered **Wrought** title, **A generative narrative engine.**
+subtitle, and sole **Play with ChatGPT** action, then verifies that the candidate
+ChatGPT launch targets `https://chatgpt.com/` with its starter prompt and the
+candidate's exact absolute `/play/new` attachment URL. It then opens
 that Start-page
 authentication boundary directly and submits an intentionally unknown
 randomized username. It requires the expected 401 and generic credential error
@@ -284,7 +285,7 @@ data.
 The acceptance participant performs only these actions:
 
 1. Open the candidate's Wrought Home page at `<origin>/` and choose
-   **Open in ChatGPT**. For the canonical deployed candidate this is
+   **Play with ChatGPT**. For the canonical deployed candidate this is
    `https://wrought.joeytan.dev`, and the requested attached page must be
    `https://wrought.joeytan.dev/play/new`.
 2. Sign in to Wrought in the attached browser tab if required.

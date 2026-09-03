@@ -60,14 +60,17 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("heading", { name: "Play Wrought with ChatGPT" }),
+      page.getByRole("heading", { name: "Wrought", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("A generative narrative engine.", { exact: true }),
     ).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("link", { name: "Open in ChatGPT" }),
+      page.getByRole("link", { name: "Play with ChatGPT" }),
     ).toBeFocused();
     await expect(
-      page.getByRole("link", { name: "Open in ChatGPT" }),
+      page.getByRole("link", { name: "Play with ChatGPT" }),
     ).toHaveAttribute("href", /^https:\/\/chatgpt\.com\/\?surface=work&/);
     await expect(page.getByRole("link")).toHaveCount(1);
     await expect(

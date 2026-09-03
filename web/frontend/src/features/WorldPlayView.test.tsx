@@ -243,7 +243,7 @@ describe("WorldPlayView", () => {
     expect(html).toContain("A courier who knows the flooded roads.");
     expect(html).toContain("Play site-tool surface is ready");
     expect(html).not.toContain("Play as Ash");
-    expect(html).not.toContain("Open in ChatGPT");
+    expect(html).not.toContain("Play with ChatGPT");
     expect(html).not.toContain("Copy starter prompt");
   });
 

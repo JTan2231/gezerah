@@ -4,15 +4,16 @@
 
 The React application retains two internal product areas over the same World
 model: `/play` is the Play area and `/build` is the configuration area. The
-Wrought home at `/` does not expose either library. It presents one
-data-free **Open in ChatGPT** launch that navigates the ordinary browser to
-`chatgpt.com` with a starter prompt and a request to attach the exact
-`https://wrought.joeytan.dev/play/new` page. It has no
-prompt-only or manual-template fallback. When a supported ChatGPT surface honors
-that request, ChatGPT uses the Start site-tool surface after authentication to
-inspect and copy one of three complete World templates, then the Play site-tool
-surface to claim a complete Character and begin Play. The same conversation and
-attached browser tab continue across that route change.
+Wrought home at `/` does not expose either library. Its visible surface contains
+only a centered **Wrought** title, **A generative narrative engine.** subtitle,
+and one data-free **Play with ChatGPT** launch. That action navigates the ordinary
+browser to `chatgpt.com` with a starter prompt and a request to attach the exact
+`https://wrought.joeytan.dev/play/new` page. It has no prompt-only or
+manual-template fallback. When a supported ChatGPT surface honors that request,
+ChatGPT uses the Start site-tool surface after authentication to inspect and
+copy one of three complete World templates, then the Play site-tool surface to
+claim a complete Character and begin Play. The same conversation and attached
+browser tab continue across that route change.
 
 The internal Build and Play routes remain directly addressable for authoring,
 administration, and validation. A signed-in account sees only Worlds it owns or

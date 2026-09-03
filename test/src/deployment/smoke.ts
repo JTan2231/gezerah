@@ -297,10 +297,13 @@ export async function verifyBrowser(
       );
     }
     await page
-      .getByRole("heading", { name: "Play Wrought with ChatGPT" })
+      .getByRole("heading", { name: "Wrought", exact: true })
+      .waitFor({ state: "visible" });
+    await page
+      .getByText("A generative narrative engine.", { exact: true })
       .waitFor({ state: "visible" });
     const launchHref = await page
-      .getByRole("link", { name: "Open in ChatGPT" })
+      .getByRole("link", { name: "Play with ChatGPT" })
       .getAttribute("href");
     if (launchHref === null) {
       throw new Error("browser homepage omitted the ChatGPT launch URL");

@@ -96,7 +96,7 @@ unavailable when ChatGPT is Facilitator.
 
 ## Delegated start and Play
 
-1. From Home, the person chooses **Open in ChatGPT**. The ordinary browser
+1. From Home, the person chooses **Play with ChatGPT**. The ordinary browser
    navigates to `chatgpt.com` with the starter prompt and exact
    `https://wrought.joeytan.dev/play/new` attachment request. A successful
    supported launch opens one conversation with that page in a top-level
