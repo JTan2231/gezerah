@@ -2,29 +2,29 @@
 
 ## Current deployment classification
 
-Wrought's intended canonical public application URL is
-<https://wrought.joeytan.dev>, which is also its browser security origin. As of
-2026-09-03, the subdomain DNS and Railway custom domain have not yet been
-verified. The separate <https://joeytan.dev> personal site remains entirely on
-GitHub Pages and outside Wrought's authenticated origin. The hosted instances
-remain conditional previews, not designated
-public production; no public-release gate or production-audience commitment
-has been opened. The conditions in this document therefore remain requirements
-before broader or real-user use. Reachability, DNS cutover, and a healthy smoke
-check do not satisfy them.
+Wrought's canonical public application URL is <https://wrought.joeytan.dev>,
+which is also its browser security origin. As of 2026-09-03, the subdomain DNS,
+Railway custom domain, canonical routing, and anonymous invalid-signin browser
+boundary are verified. The separate <https://joeytan.dev> personal site remains
+entirely on GitHub Pages and outside Wrought's authenticated origin. The hosted
+instance remains a conditional preview, not designated public production; no
+public-release gate or production-audience commitment has been opened. The
+conditions in this document therefore remain requirements before broader or
+real-user use. Reachability, DNS cutover, and a healthy smoke check do not
+satisfy them.
 
 Wrought has native username/password authentication and revocable server sessions.
 Caller-selected identity headers do not authenticate or override a session. Health,
 signup, and signin are the explicit public API exceptions; every other product
 endpoint derives its actor from a valid session.
 
-This prevents direct caller-selected impersonation. The intended Railway
-configuration uses `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`, but
-the subdomain DNS, certificate, and deployed secure-cookie behavior have not
-yet been verified. Broader public use also
-needs backups, monitoring, capacity/abuse testing, and an explicit support
-policy. The account model intentionally collects no email and therefore
-provides no password recovery.
+This prevents direct caller-selected impersonation. The Railway configuration
+uses `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`. The deployed
+invalid-signin smoke verifies the canonical origin but does not create a
+session, so deployed secure-cookie issuance and attributes remain unverified.
+Broader public use also needs backups, monitoring, capacity/abuse testing, and
+an explicit support policy. The account model intentionally collects no email
+and therefore provides no password recovery.
 
 The post-cutover deployed browser smoke submits intentionally invalid
 credentials. It verifies canonical-origin routing and the anonymous login-error

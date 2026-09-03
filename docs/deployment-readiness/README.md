@@ -6,14 +6,14 @@ system descriptions in [Operations](../operations.md) and
 [Security](../security.md); it does not replace them.
 
 **Current project state (2026-09-03):** trusted local development remains
-active, and a public-addressable pre-cutover Railway preview is running with a
-managed PostgreSQL service. The intended subdomain target at
-<https://wrought.joeytan.dev> is not yet live or verified. The personal site at
-<https://joeytan.dev> remains entirely on its unchanged GitHub Pages
-deployment. Neither the running preview nor the intended target is designated
-public production or has a production-audience commitment. Their existence does not
-turn the broader readiness items here into local-development blockers or imply
-that a public-release gate is open.
+active, and the canonical Wrought subdomain preview is live on Railway with a
+managed PostgreSQL service. DNS and the Railway custom domain are verified, and
+the canonical root, API health, asset, Play, Build, and anonymous invalid-signin
+browser checks pass. The personal site at <https://joeytan.dev> remains
+entirely on its unchanged GitHub Pages deployment. The preview is not designated
+public production and has no production-audience commitment. Its existence does
+not turn the broader readiness items here into local-development blockers or
+imply that a public-release gate is open.
 
 Readiness documents use these labels for a target's gate if that target is
 pursued:
@@ -28,17 +28,16 @@ pursued:
 | Deployment target | Current state | Gate | Reason |
 | --- | --- | --- | --- |
 | Local trusted development | Active | Ready | Native signup/signin and server sessions work through the managed Vite origin. |
-| Pre-cutover Railway preview | Active | Conditional | The release is reachable through its generated Railway hostname and backed by the managed database, but it does not exercise the intended canonical origin. |
-| Canonical Wrought subdomain preview | Not yet cut over | Blocked | Preserve the existing database reference, bind and certify `wrought.joeytan.dev`, add its DNS records, and pass the root, API, asset, Play, and Build smoke before calling it active. |
+| Railway provider endpoint | Active for diagnostics | Conditional | The generated hostname remains available for deployment diagnostics but is not the canonical browser origin. |
+| Canonical Wrought subdomain preview | Active | Conditional | DNS, the Railway custom domain, and canonical HTTP/browser smoke are verified; secure-session behavior, public-production readiness, and ChatGPT acceptance remain separate gates. |
 | Public production | Not deployed | Blocked | No production launch is declared. Resolve backup/restore, monitoring, distributed abuse controls, privacy/support policy, capacity evidence, and external review before opening that gate. |
 
-The pre-cutover preview proves only the hosted process. It does not verify the
-canonical subdomain configuration, and neither target
-is safe by implication for an unrestricted audience or durable real-user data.
+The canonical preview verifies the hosted process, dedicated browser origin,
+and root-mounted routing. It does not verify secure-session cookie issuance and
+is not safe by implication for an unrestricted audience or durable real-user
+data. Wrought's independent browser origin leaves the apex personal-site
+deployment unchanged.
 
-The target gives Wrought its own browser origin without changing the apex
-personal-site deployment. Before cutover, verify root-mounted routing,
-secure-cookie/HSTS behavior, and the exact subdomain DNS and Railway bindings.
 See [Operations](../operations.md#subdomain-topology-and-cutover) and
 [Security](../security.md#dedicated-subdomain-origin).
 

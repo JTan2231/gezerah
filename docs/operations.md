@@ -1,12 +1,12 @@
 # Operations
 
-> **Cutover state (2026-09-03):** Wrought's intended canonical application URL
-> is <https://wrought.joeytan.dev>. Its DNS and Railway custom domain have not
-> yet been verified. The existing <https://joeytan.dev> site remains entirely
-> on its unchanged GitHub Pages deployment. Do not describe the Wrought target
-> as live until the verification steps in this runbook pass. Railway's
-> environment name `production` is not a declaration of public-production
-> readiness; the separate public-release gate remains closed.
+> **Cutover state (2026-09-03):** Wrought's canonical application URL is live at
+> <https://wrought.joeytan.dev>. DNS, the Railway custom domain, canonical HTTP
+> routes, and the anonymous invalid-signin browser boundary are verified. The
+> existing <https://joeytan.dev> site remains entirely on its unchanged GitHub
+> Pages deployment. This remains an operational preview; Railway's environment
+> name `production` is not a declaration of public-production readiness, and the
+> separate public-release gate remains closed.
 
 In this runbook, **deploy** means changing the active Railway preview through the
 operator-initiated `deploy.sh` path. Publishing the repository's source does not
@@ -172,11 +172,10 @@ The Wrought service owns these route families on its dedicated host:
 | `/api`, `/api/**`       | JSON API and SSE, including `/api/health`.  |
 | `/assets`, `/assets/**` | Hashed Vite assets; missing files stay 404. |
 
-As of 2026-09-03, the subdomain DNS and Railway custom domain are not yet
-verified. Railway has `WROUGHT_DATABASE_URL` set to the preserved application
-database reference and must not fall back to a different generic database URL.
-Its canonical origin must be
-`WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`.
+As of 2026-09-03, the subdomain DNS and Railway custom domain are verified.
+Railway uses `WROUGHT_DATABASE_URL` for the preserved application database
+reference and does not fall back to a different generic database URL. Its
+canonical origin is `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`.
 
 Use this order for the one-time subdomain cutover:
 
