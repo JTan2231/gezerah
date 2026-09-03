@@ -2,7 +2,7 @@
 
 ## Delegate a ready-made start to ChatGPT
 
-1. From Wrought Home at `https://wrought.joeytan.dev`, choose **Open in
+1. From Wrought Home at `https://wrought.joeytan.dev`, choose **Play with
    ChatGPT**. The ordinary web browser navigates to `chatgpt.com` with a starter
    prompt and a request to attach the exact
    `https://wrought.joeytan.dev/play/new` Start site-tool page. It does not

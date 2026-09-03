@@ -83,7 +83,7 @@ createdb wrought
 Open `http://127.0.0.1:5173/`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-The Wrought home page at `/` offers one **Open in ChatGPT** launch. It navigates the
+The Wrought home page at `/` offers one **Play with ChatGPT** launch. It navigates the
 ordinary web browser to `chatgpt.com` with a starter prompt and a request to
 attach the authenticated `https://wrought.joeytan.dev/play/new` page; it does not invoke the desktop app.
 On a supported ChatGPT surface, the person signs up or signs in there and

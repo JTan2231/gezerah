@@ -136,7 +136,7 @@ export default function App() {
     return revokeSessions("/api/auth/logout-all");
   }
 
-  if (location.type === "home") return <HomeChoice navigate={navigate} />;
+  if (location.type === "home") return <HomeChoice />;
   if (location.type === "not-found")
     return <NotFoundPage navigate={navigate} />;
   if (location.type === "redirect") return null;

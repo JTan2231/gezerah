@@ -49,11 +49,12 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await ownerPage.goto(`${baseURL}`);
         await expect(
           ownerPage.getByRole("heading", {
-            name: "Play Wrought with ChatGPT",
+            name: "Wrought",
+            exact: true,
           }),
         ).toBeVisible();
         await expect(
-          ownerPage.getByRole("link", { name: "Open in ChatGPT" }),
+          ownerPage.getByRole("link", { name: "Play with ChatGPT" }),
         ).toBeVisible();
         await expect(
           ownerPage.getByRole("link", { name: "Build", exact: true }),

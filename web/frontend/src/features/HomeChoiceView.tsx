@@ -1,21 +1,12 @@
-import { Brand } from "../components/StudioUI";
-import {
-  ChatGPTWorldStartView,
-  type ChatGPTWorldStartViewProps,
-} from "./ChatGPTWorldStartView";
-
-export function HomeChoiceView({
-  worldStart,
-}: {
-  worldStart: ChatGPTWorldStartViewProps;
-}) {
+export function HomeChoiceView({ chatGPTHref }: { chatGPTHref: string }) {
   return (
     <main className="home-choice">
-      <header>
-        <Brand />
-        <h1>Play Wrought with ChatGPT</h1>
-      </header>
-      <ChatGPTWorldStartView {...worldStart} />
+      <h1>Wrought</h1>
+      <p className="home-choice-tagline">A generative narrative engine.</p>
+      <a className="button button-primary home-choice-play" href={chatGPTHref}>
+        <span aria-hidden="true">▶</span>
+        Play with ChatGPT
+      </a>
     </main>
   );
 }
