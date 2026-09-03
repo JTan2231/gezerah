@@ -2,10 +2,10 @@
 
 ## Delegate a ready-made start to ChatGPT
 
-1. From Wrought Home at `https://joeytan.dev/wrought`, choose **Open in
+1. From Wrought Home at `https://wrought.joeytan.dev`, choose **Open in
    ChatGPT**. The ordinary web browser navigates to `chatgpt.com` with a starter
    prompt and a request to attach the exact
-   `https://joeytan.dev/wrought/play/new` Start site-tool page. It does not
+   `https://wrought.joeytan.dev/play/new` Start site-tool page. It does not
    invoke the desktop app. On a supported ChatGPT surface, one conversation
    opens with that page in a top-level attached browser tab.
 2. Sign in there if necessary. Send the prefilled starter prompt, leaving its
@@ -16,7 +16,7 @@
    starting templates, including their prose guides, applies a setting,
    Character, tone, or other play preference or makes a reasonable choice, and
    copies one into a new independent World. The attached tab navigates to
-   `https://joeytan.dev/wrought/play/{world_id}`.
+   `https://wrought.joeytan.dev/play/{world_id}`.
 4. Once the Play site-tool surface is ready, ChatGPT inspects the World, chooses
    and claims one of its available Characters, and inspects the resulting ready
    Play state. Every bundled template profile is complete. ChatGPT reads the
@@ -53,7 +53,7 @@ version.
 
 ## Create and configure a world
 
-1. Open internal `/wrought/build`, then sign up or sign in. Signup requires a
+1. Open internal `/build`, then sign up or sign in. Signup requires a
    username, display name, and password but no email address. The Build library
    offers copyable **Start a World with ChatGPT** guidance for shaping the idea
    and guiding this configuration; it is not delegated start, and every durable
@@ -89,8 +89,8 @@ attributes, skills, entity classes, or privileged names.
 
 ## Join a world
 
-1. Open `/wrought/play/invite/{token}` for a player/spectator invitation or
-   `/wrought/build/invite/{token}` for an editor invitation.
+1. Open `/play/invite/{token}` for a player/spectator invitation or
+   `/build/invite/{token}` for an editor invitation.
 2. Sign up or sign in if needed; the invite URL remains intact throughout.
 3. Review the world, inviter, and offered membership role.
 4. Redeem the link.
@@ -108,7 +108,7 @@ authenticated account, and redemption binds the membership to that account.
 
 Problems are runtime moments, never authored configuration.
 
-First enter the world through `/wrought/play` and inspect the Facilitator shown in
+First enter the world through `/play` and inspect the Facilitator shown in
 the header. Between Problems, an owner/editor or the current human Facilitator
 may assign any active non-spectator or Terra. Delegated template copy establishes
 the agent assignment before the attached tab enters Play; the ordinary Play

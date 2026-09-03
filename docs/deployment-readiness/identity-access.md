@@ -7,8 +7,8 @@ At this audit's 2026-08-07 date, there was no hosted deployment, production
 database, production user base, external audience, or release commitment. A
 public-addressable Railway preview was activated afterward. That operational
 preview does not convert this audit into a public-production sign-off. As of
-2026-09-02 it is still the pre-cutover release; the intended
-`https://joeytan.dev/wrought` combined-host target has not yet been verified.
+2026-09-03 it is still pre-cutover; the intended
+`https://wrought.joeytan.dev` subdomain target has not yet been verified.
 
 ## Conclusion
 
@@ -40,7 +40,7 @@ system, at the cost of no automated password reset.
 
 ### Signup
 
-`POST /wrought/api/auth/signup` accepts username, display name, and password. Usernames
+`POST /api/auth/signup` accepts username, display name, and password. Usernames
 contain 3–64 ASCII characters, start with a letter or number, and otherwise use
 letters, numbers, dots, underscores, or hyphens. New passwords must contain at
 least 8 Unicode code points.
@@ -54,7 +54,7 @@ rate-limited per directly connected client address.
 
 ### Signin
 
-`POST /wrought/api/auth/signin` normalizes the username, performs an Argon2id
+`POST /api/auth/signin` normalizes the username, performs an Argon2id
 verification, creates a new independent session on success, and returns the
 same authentication response as signup. Unknown username, wrong password, and
 disabled account use one generic credential error. Unknown accounts still run
@@ -64,7 +64,7 @@ connected peer per five minutes; failures additionally cap at 100 per peer and
 
 ### Session bootstrap
 
-`GET /wrought/api/me` requires a valid cookie. It returns the current account and the
+`GET /api/me` requires a valid cookie. It returns the current account and the
 CSRF value for that session, letting a page reload restore authenticated state
 without exposing the cookie to JavaScript. A missing, malformed, expired,
 revoked, or disabled-account session returns the same authentication-required
@@ -85,10 +85,10 @@ next cycle.
 
 ### Logout and password change
 
-`POST /wrought/api/auth/logout` revokes the current session and expires both supported
-cookie names. `POST /wrought/api/auth/logout-all` revokes every session for the account.
+`POST /api/auth/logout` revokes the current session and expires both supported
+cookie names. `POST /api/auth/logout-all` revokes every session for the account.
 
-`PUT /wrought/api/me/password` requires the current password and a valid new password.
+`PUT /api/me/password` requires the current password and a valid new password.
 It replaces the password hash, revokes all existing sessions, and creates one
 new session atomically. Wrong current-password errors remain validation errors,
 not session-expiry errors, so the authenticated UI can report the problem
@@ -103,20 +103,18 @@ The React application preserves the requested Play, Build, or invite URL while
 showing signin/signup. Signup and password change confirm the new password in
 the browser because there is no recovery channel. The application no longer
 fetches a user list or stores a UUID in local storage. The session cookie is inaccessible to JavaScript; the CSRF token
-exists only in module memory and is reacquired through `/wrought/api/me` after reload.
+exists only in module memory and is reacquired through `/api/me` after reload.
 
-For the combined deployment, the canonical application base is
-`https://joeytan.dev/wrought` but the exact CSRF origin is
-`https://joeytan.dev`. The HTTPS cookie is `__Host-wrought_session` with path
-`/`, so it is sent to personal-site requests as well as Wrought requests on the
-host. Every root-site script is therefore trusted relative to the signed-in
-session; `/wrought` is not a browser security boundary.
+For the subdomain deployment, the canonical application base and exact CSRF
+origin are both `https://wrought.joeytan.dev`. The HTTPS cookie is
+`__Host-wrought_session` with path `/`, so it covers every Wrought route on that
+host but is not sent to the separate `joeytan.dev` personal site.
 
 A 401 belonging to the current session ends frontend authenticated state,
 clears the in-memory CSRF value, and returns the protected surface to signin; a
 late 401 from a superseded session cannot tear down a newer one. If another tab
 rotates the same account's shared cookie, the client refreshes its stale CSRF
-value through `/wrought/api/me` and replays only the mutation rejected by the CSRF
+value through `/api/me` and replays only the mutation rejected by the CSRF
 middleware. It refuses that replay if the cookie now belongs to a different
 account. Signout is available from the Play/Build libraries, workspaces, and
 invite surface. Password change and all-session signout live in account
@@ -129,7 +127,7 @@ same opaque token rather than losing the onboarding context.
 
 Route registration is deny-by-default for the product API:
 
-- `GET /wrought/api/health` is explicitly public;
+- `GET /api/health` is explicitly public;
 - signup and signin are explicitly public exact-origin mutations;
 - authenticated safe methods require a valid session;
 - authenticated unsafe methods require session, exact origin, and CSRF;
@@ -218,9 +216,9 @@ that preview—and before any public-production use—remain conditional on the
 following:
 
 1. Maintain correct HTTPS termination/redirection and the exact external HTTPS
-   `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`, and verify
-   `__Host-wrought_session` in the deployed browser. Do not put `/wrought` in
-   the origin value.
+   `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`, and verify
+   `__Host-wrought_session` in the deployed browser. Do not put a path in the
+   origin value.
 2. Decide how support handles a forgotten password when no email/recovery proof
    exists; do not invent an administrator bypass ad hoc.
 3. Decide whether the production threat model requires MFA or federated login.

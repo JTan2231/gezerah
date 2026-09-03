@@ -52,7 +52,7 @@ describe("Railway deployment adapter", () => {
       {
         serviceId: webServiceID,
         serviceName: "wrought-web",
-        customDomains: ["joeytan.dev"],
+        customDomains: ["wrought.joeytan.dev"],
         serviceDomains: ["wrought-web-production.up.railway.app"],
       },
       {
@@ -123,7 +123,7 @@ describe("Railway deployment adapter", () => {
     );
   });
 
-  test("binds path-mounted public URLs to the exact environment and service", () => {
+  test("binds public origins to the exact environment and service", () => {
     const project = parseProjectStatus(projectFixture());
     const environment = project.environments[0]!;
     const web = parseServiceList(serviceFixture(deploymentID)).find(
@@ -131,13 +131,13 @@ describe("Railway deployment adapter", () => {
     )!;
 
     assert.doesNotThrow(() =>
-      assertPublicURLExposed(environment, web, "https://joeytan.dev/wrought"),
+      assertPublicURLExposed(environment, web, "https://wrought.joeytan.dev"),
     );
     assert.doesNotThrow(() =>
       assertPublicURLExposed(
         environment,
         web,
-        "https://wrought-web-production.up.railway.app/wrought",
+        "https://wrought-web-production.up.railway.app",
       ),
     );
     assert.throws(
@@ -145,7 +145,7 @@ describe("Railway deployment adapter", () => {
         assertPublicURLExposed(
           environment,
           web,
-          "https://unattached.wrought.test/wrought",
+          "https://unattached.wrought.test",
         ),
       /does not expose/,
     );
@@ -155,7 +155,7 @@ describe("Railway deployment adapter", () => {
       serviceDomains: environment.serviceDomains.map((binding) =>
         binding.serviceId === webServiceID
           ? { ...binding, customDomains: [] }
-          : { ...binding, customDomains: ["joeytan.dev"] },
+          : { ...binding, customDomains: ["wrought.joeytan.dev"] },
       ),
     };
     assert.throws(
@@ -163,7 +163,7 @@ describe("Railway deployment adapter", () => {
         assertPublicURLExposed(
           domainOnDatabaseOnly,
           web,
-          "https://joeytan.dev/wrought",
+          "https://wrought.joeytan.dev",
         ),
       /does not expose/,
     );
@@ -179,7 +179,7 @@ describe("Railway deployment adapter", () => {
         assertPublicURLExposed(
           missingBinding,
           web,
-          "https://joeytan.dev/wrought",
+          "https://wrought.joeytan.dev",
         ),
       /exactly one Railway domain set.*found 0/,
     );
@@ -196,15 +196,15 @@ describe("Railway deployment adapter", () => {
         assertPublicURLExposed(
           duplicateBinding,
           web,
-          "https://joeytan.dev/wrought",
+          "https://wrought.joeytan.dev",
         ),
       /exactly one Railway domain set.*found 2/,
     );
 
     for (const publicURL of [
-      "http://joeytan.dev/wrought",
-      "https://user@joeytan.dev/wrought",
-      "https://joeytan.dev/wrought?query=yes",
+      "http://wrought.joeytan.dev",
+      "https://user@wrought.joeytan.dev",
+      "https://wrought.joeytan.dev?query=yes",
     ]) {
       assert.throws(
         () => assertPublicURLExposed(environment, web, publicURL),
@@ -222,7 +222,7 @@ describe("Railway deployment adapter", () => {
 
     assert.equal(
       railwayProviderPublicURL(environment, web),
-      "https://wrought-web-production.up.railway.app/wrought",
+      "https://wrought-web-production.up.railway.app",
     );
     assert.doesNotThrow(() => assertPostCutoverDomains(environment, web));
 
@@ -232,14 +232,14 @@ describe("Railway deployment adapter", () => {
         binding.serviceId === webServiceID
           ? {
               ...binding,
-              customDomains: ["joeytan.dev", "retired.example"],
+              customDomains: ["wrought.joeytan.dev", "retired.example"],
             }
           : binding,
       ),
     };
     assert.throws(
       () => assertPostCutoverDomains(withUnexpectedCustomDomain, web),
-      /must contain only custom domain joeytan\.dev.*retired\.example/,
+      /must contain only custom domain wrought\.joeytan\.dev.*retired\.example/,
     );
 
     const withMisnamedProvider = {
@@ -255,7 +255,7 @@ describe("Railway deployment adapter", () => {
     };
     assert.equal(
       railwayProviderPublicURL(withMisnamedProvider, web),
-      "https://retired-web-production.up.railway.app/wrought",
+      "https://retired-web-production.up.railway.app",
     );
     assert.throws(
       () => assertPostCutoverDomains(withMisnamedProvider, web),
@@ -307,7 +307,7 @@ describe("Railway deployment adapter", () => {
         meta: {
           serviceManifest: {
             deploy: {
-              healthcheckPath: "/wrought/api/health",
+              healthcheckPath: "/api/health",
               healthcheckTimeout: 29,
               numReplicas: 1,
               drainingSeconds: 15,
@@ -327,7 +327,7 @@ describe("Railway deployment adapter", () => {
         meta: {
           serviceManifest: {
             deploy: {
-              healthcheckPath: "/wrought/api/health",
+              healthcheckPath: "/api/health",
               healthcheckTimeout: 30,
               numReplicas: 1,
               drainingSeconds: 10,
@@ -538,7 +538,7 @@ function serviceInstanceFixture(): readonly Record<string, unknown>[] {
         serviceId: webServiceID,
         serviceName: "wrought-web",
         domains: {
-          customDomains: [{ domain: "joeytan.dev" }],
+          customDomains: [{ domain: "wrought.joeytan.dev" }],
           serviceDomains: [{ domain: "wrought-web-production.up.railway.app" }],
         },
       },
@@ -614,7 +614,7 @@ function deploymentFixture(
       cliMessage: "Deploy abc123 token",
       serviceManifest: {
         deploy: {
-          healthcheckPath: "/wrought/api/health",
+          healthcheckPath: "/api/health",
           healthcheckTimeout: 30,
           numReplicas: 1,
           drainingSeconds: 15,

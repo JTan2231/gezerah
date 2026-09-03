@@ -3,12 +3,11 @@
 ## Current deployment classification
 
 Wrought's intended canonical public application URL is
-<https://joeytan.dev/wrought>. The combined Railway artifact serves the
-vendored personal site at the other `joeytan.dev` paths, so its browser
-security origin is `https://joeytan.dev` and its application mount is
-`/wrought`. As of 2026-09-02, the DNS and Railway cutover have not yet been
-verified and that canonical path still returns 404 from the pre-cutover GitHub
-Pages host. The hosted instances remain conditional previews, not designated
+<https://wrought.joeytan.dev>, which is also its browser security origin. As of
+2026-09-03, the subdomain DNS and Railway custom domain have not yet been
+verified. The separate <https://joeytan.dev> personal site remains entirely on
+GitHub Pages and outside Wrought's authenticated origin. The hosted instances
+remain conditional previews, not designated
 public production; no public-release gate or production-audience commitment
 has been opened. The conditions in this document therefore remain requirements
 before broader or real-user use. Reachability, DNS cutover, and a healthy smoke
@@ -20,9 +19,9 @@ signup, and signin are the explicit public API exceptions; every other product
 endpoint derives its actor from a valid session.
 
 This prevents direct caller-selected impersonation. The intended Railway
-configuration now has `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev` without
-triggering a release, but the combined artifact, DNS, certificate, and deployed
-secure-cookie behavior have not yet been verified. Broader public use also
+configuration uses `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`, but
+the subdomain DNS, certificate, and deployed secure-cookie behavior have not
+yet been verified. Broader public use also
 needs backups, monitoring, capacity/abuse testing, and an explicit support
 policy. The account model intentionally collects no email and therefore
 provides no password recovery.
@@ -85,18 +84,18 @@ inspection of PostgreSQL or platform diagnostic logging.
 
 Loopback-only local HTTP uses `wrought_session`. HTTPS uses
 `__Host-wrought_session`, which is `Secure`, host-only by construction, and
-scoped to `/`. The `/` cookie path is required by the `__Host-` prefix and means
-the browser sends the cookie on both personal-site and Wrought requests to
-`joeytan.dev`; the cookie remains unreadable to JavaScript. Both variants are
-`HttpOnly` and `SameSite=Lax`; logout clears both names. Configured non-loopback
-HTTP origins are rejected, and an unset origin fails closed to secure cookies
-unless both the request host and network peer are loopback. Configure the exact
-external HTTPS origin, `https://joeytan.dev`, in `WROUGHT_PUBLIC_ORIGIN` when
-deploying behind a proxy. The value must not contain `/wrought` or any other
-path.
+scoped to `/`. The `/` cookie path is required by the `__Host-` prefix and
+covers every Wrought route on `wrought.joeytan.dev`; the cookie remains
+unreadable to JavaScript and cannot be sent to the separate `joeytan.dev`
+host. Both variants are `HttpOnly` and `SameSite=Lax`; logout clears both names.
+Configured non-loopback HTTP origins are rejected, and an unset origin fails
+closed to secure cookies unless both the request host and network peer are
+loopback. Configure the exact external HTTPS origin,
+`https://wrought.joeytan.dev`, in `WROUGHT_PUBLIC_ORIGIN` when deploying behind
+a proxy. The value must not contain a path.
 
-`POST /wrought/api/auth/logout` revokes the current session. `POST
-/wrought/api/auth/logout-all` revokes every active session for the account. Password
+`POST /api/auth/logout` revokes the current session. `POST
+/api/auth/logout-all` revokes every active session for the account. Password
 change does the same before creating its replacement. Revocation/expiry is
 checked in PostgreSQL rather than trusted from the cookie.
 
@@ -112,9 +111,9 @@ Every unsafe authenticated request requires both:
 
 Signup and signin also require the exact origin, although they do not require a
 preexisting CSRF token. The CSRF value is returned by signup, signin, `GET
-/wrought/api/me`, and password change. The React client keeps it in module memory only;
+/api/me`, and password change. The React client keeps it in module memory only;
 it is neither a cookie nor browser storage. A page reload reacquires it through
-`GET /wrought/api/me` using the HttpOnly session cookie.
+`GET /api/me` using the HttpOnly session cookie.
 
 The server does not emit permissive CORS headers. Browser security headers
 include a same-origin Content Security Policy, frame denial, MIME sniffing
@@ -122,38 +121,21 @@ protection, no-referrer policy, a restrictive permissions policy, and HSTS when
 the request/public origin is HTTPS. Authenticated and authentication responses
 are `private, no-store` and vary on `Cookie`.
 
-### Combined-host origin
+### Dedicated-subdomain origin
 
-The `/wrought` prefix is a routing boundary, not a browser security boundary.
-The personal site at `/`, `/annals/`, `/plaid/oauth.html`, and the other
-vendored root paths has the same origin as Wrought. JavaScript running from any
-of those pages can make credentialed requests to `/wrought/api`, read a CSRF
-token returned by `/wrought/api/me`, and perform whatever Wrought operation the
-signed-in account is authorized to perform. Wrought's Content Security Policy
-is applied to Wrought responses; it does not constrain script already executing
-on a different same-origin personal-site page.
-
-Consequently, the complete vendored snapshot under `web/site/`, its update
-process, and every future root-site script or handler are part of Wrought's
-browser trust boundary. Snapshot updates require the same dependency, script,
-secret, and content-origin review as changes under the product mount. Do not
-introduce a root-site proxy, upload surface, user-controlled HTML, or third-party
-script on the assumption that `/wrought` isolates authenticated state.
-
-The combined server emits the non-CSP security headers across the host, and
-HTTPS responses enable HSTS with `includeSubDomains`. Those policies therefore
-affect the personal site and subdomains as well as Wrought and must be reviewed
-as host-level operations. See [Operations](operations.md#combined-host-topology-and-cutover)
-for snapshot provenance, DNS cutover, and rollback.
+Wrought owns the complete `https://wrought.joeytan.dev` browser origin. Its
+Home, Play, Build, API, and asset paths therefore share one authenticated trust
+boundary. The separate `https://joeytan.dev` origin cannot read Wrought's
+host-only cookie or make same-origin credentialed API requests.
 
 ## Endpoint trust matrix
 
 | Surface                             | Gate                                            | Additional authority                                                      |
 | ----------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------- |
-| Personal-site and Wrought static assets | Public                                      | Same-origin root scripts are inside the authenticated browser trust boundary. |
-| `GET /wrought/api/health`                   | Public                                          | Database readiness only.                                                  |
+| Wrought static assets                    | Public                                      | Application code shares the Wrought authenticated browser origin.              |
+| `GET /api/health`                   | Public                                          | Database readiness only.                                                  |
 | Signup/signin                       | Exact origin + in-memory throttle               | Creates a user/session or verifies credentials.                           |
-| `GET /wrought/api/me`                       | Active session                                  | Returns current user and session CSRF token.                              |
+| `GET /api/me`                       | Active session                                  | Returns current user and session CSRF token.                              |
 | Logout/password change              | Active session + origin + CSRF                  | Revokes current/all sessions as documented above.                         |
 | Invite preview                      | Active session + opaque bearer token            | Exposes active invite/world metadata.                                     |
 | Invite redemption                   | Session + origin + CSRF + bearer token          | Creates/reactivates one membership; never changes an already-active membership role. |
@@ -311,7 +293,7 @@ connections and outbound Terra/Luna model requests still have no general per-use
 If a public launch is ever proposed:
 
 1. Terminate TLS at a trusted proxy, redirect HTTP to HTTPS, set the exact HTTPS
-   `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`, and verify secure-cookie/HSTS
+   `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`, and verify secure-cookie/HSTS
    behavior end to end.
 2. Decide the no-email support policy: lost passwords currently mean creating a
    new account; there is no automated recovery or account-administration API.
@@ -326,9 +308,6 @@ If a public launch is ever proposed:
 8. Define user-data export/erasure and retention policies for display names,
    actions, narrative, profiles, sessions, and logs.
 9. Load/soak test Argon2id concurrency and SSE behavior for the target capacity.
-10. Review and test the complete same-origin personal-site snapshot, including
-    every script and outbound dependency, as part of the authenticated product
-    boundary.
 
 The process still has no built-in TLS server, WAF, metrics/tracing, complete
 configuration audit history, or separate migration role. Those are distinct
@@ -356,8 +335,8 @@ For every route or field:
 - Use a fresh empty database for the password-auth migration; it intentionally
   refuses to invent credentials for preexisting users.
 - Keep `WROUGHT_PUBLIC_ORIGIN` aligned exactly with the browser-visible origin.
-- Treat every script and dynamic handler on `joeytan.dev`, not just paths below
-  `/wrought`, as trusted application code.
+- Treat every script and dynamic handler on `wrought.joeytan.dev` as trusted
+  application code.
 - Do not put personal secrets in narrative or character-field values.
 - Protect database and deployment configuration independently of application
   authentication.

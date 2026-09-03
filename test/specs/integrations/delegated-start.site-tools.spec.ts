@@ -114,7 +114,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     if (candidate !== page) additionalPageCount += 1;
   });
 
-  await page.goto(`${baseURL}/wrought/play/new`);
+  await page.goto(`${baseURL}/play/new`);
   await expect(
     page.getByRole("heading", { name: "Starting with ChatGPT" }),
   ).toBeVisible();
@@ -155,9 +155,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     current_play_role: "player",
     play_status: "waiting-for-character",
   });
-  await expect(page).toHaveURL(
-    `${baseURL}/wrought/play/${copied.copied_world.id}`,
-  );
+  await expect(page).toHaveURL(`${baseURL}/play/${copied.copied_world.id}`);
   expect(additionalPageCount).toBe(0);
   expect(page.context().pages()).toHaveLength(1);
   expect(page.context().pages()[0]).toBe(page);

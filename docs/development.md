@@ -52,9 +52,8 @@ Start both development services:
 ./run.sh
 ```
 
-Open `http://127.0.0.1:5173/wrought`. Vite serves the React application at its
-fixed `/wrought` base and proxies
-`/wrought/api` to `http://localhost:8080`. The Go process connects by default to:
+Open `http://127.0.0.1:5173/`. Vite serves the React application at `/` and
+proxies `/api` to `http://localhost:8080`. The Go process connects by default to:
 
 ```text
 postgres://localhost:5432/wrought?sslmode=disable
@@ -120,10 +119,9 @@ accepted only when both that host and the network peer are loopback. Managed
 exported. A proxied deployment must set the exact browser-visible HTTPS origin,
 without a path, query, or fragment.
 
-The canonical public application URL is <https://joeytan.dev/wrought>, while
-its origin is `https://joeytan.dev`. `/wrought` is a fixed application mount,
-not part of `WROUGHT_PUBLIC_ORIGIN` and not a configurable tenant or product
-scope.
+The canonical public application URL and browser origin are both
+<https://wrought.joeytan.dev>. `WROUGHT_PUBLIC_ORIGIN` contains that origin
+without a path.
 
 `OPENAI_API_KEY` is optional for startup but required for Terra's autonomous
 Continue/Decide lifecycle and for Luna compilation of human Consequences. When it is empty, those
@@ -182,7 +180,7 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 - Builds `cmd/wrought` into `.wrought/run/backend/wrought`.
 - Starts that binary in the background.
 - Appends stdout/stderr to `.wrought/log/backend.log`.
-- Waits up to 60 seconds for `/wrought/api/health`.
+- Waits up to 60 seconds for `/api/health`.
 - Does not watch Go files. Restart after backend edits:
 
   ```sh
@@ -195,7 +193,7 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 - Runs a frozen install only when the local Vite executable is missing.
 - Starts Vite on `127.0.0.1:5173 --strictPort`.
 - Appends output to `.wrought/log/frontend.log`.
-- Waits up to 60 seconds for `/wrought`.
+- Waits up to 60 seconds for `/`.
 - Uses Vite HMR for source changes.
 
 ### PID and unmanaged-process safety
@@ -232,10 +230,6 @@ CGO_ENABLED=0 go build -trimpath -o out ./cmd/wrought
 
 The Vite output is embedded at Go compile time. A binary compiled before
 `web/static/index.html` exists serves the API but returns 503 for SPA routes.
-The production-style Go run also serves the tracked personal-site snapshot in
-`web/site/` at non-Wrought root paths. Managed Vite development focuses on the
-Wrought application mount; use the production-style binary or E2E tests when
-checking the combined host boundary.
 For public ChatGPT acceptance, do not expose the normal managed development
 pair; use the isolated HTTPS [acceptance environment](testing.md#acceptance-environment)
 instead.
@@ -332,7 +326,6 @@ from non-facilitator JSON.
 | `out`                        | Production/Railway-style binary.                               |
 | `web/frontend/node_modules/` | Frontend install.                                              |
 | `web/static/*`               | Vite production assets; placeholder is tracked.                |
-| `web/site/*`                 | Tracked `joeytan.dev` root-site snapshot; do not regenerate implicitly. |
 | `test/node_modules/`         | E2E install.                                                   |
 | `test/artifacts/`            | App log, Playwright results/report/media.                      |
 | `coverage/`                  | Reserved coverage output.                                      |
@@ -357,7 +350,7 @@ correct, and the role can create/use `pgcrypto` and apply migrations.
 
 ### Frontend shows network errors
 
-Check the backend health at `http://127.0.0.1:8080/wrought/api/health`. The dev proxy is
+Check the backend health at `http://127.0.0.1:8080/api/health`. The dev proxy is
 fixed to `http://localhost:8080`; a direct backend on another port will not be
 used by Vite without changing configuration.
 

@@ -2,10 +2,10 @@
 
 The candidate ChatGPT launch navigates the person's ordinary web browser to
 `chatgpt.com` with a prefilled starter prompt and a request to attach the exact
-`https://joeytan.dev/wrought/play/new` Start site-tool page. It does not invoke
+`https://wrought.joeytan.dev/play/new` Start site-tool page. It does not invoke
 the ChatGPT desktop app or a desktop custom scheme. On a supported ChatGPT
 surface, delegated start uses that page and the later
-`https://joeytan.dev/wrought/play/{world_id}` Play site-tool page to choose and
+`https://wrought.joeytan.dev/play/{world_id}` Play site-tool page to choose and
 copy a ready-made World, claim a Character, and begin Play. ChatGPT is the
 Facilitator, while the signed-in person remains a current player.
 
@@ -39,7 +39,7 @@ starter prompt. Its final line, `My play preference: surprise me.`, is the sole
 setup input: the person may send it unchanged or replace that preference. The
 instructions require ChatGPT to preserve the person's agency over later
 in-fiction Actions. Home encodes `surface=work`, the prompt, and the absolute
-`https://joeytan.dev/wrought/play/new` URL as ordinary `https://chatgpt.com/`
+`https://wrought.joeytan.dev/play/new` URL as ordinary `https://chatgpt.com/`
 query parameters; those parameters request the conversation and attachment but
 do not prove support.
 
@@ -65,7 +65,7 @@ the Start site-tool surface.
 ## Authentication and trust boundary
 
 - A successful supported ChatGPT launch attaches the exact
-  `https://joeytan.dev/wrought/play/new` page. If the attached browser profile
+  `https://wrought.joeytan.dev/play/new` page. If the attached browser profile
   is signed out, the person signs in to Wrought in that tab. An existing Safari
   or Chrome login is not assumed to carry over.
 - Site tools call the existing same-origin API client. The host-only HttpOnly
@@ -81,12 +81,11 @@ the Start site-tool surface.
 - No cross-origin API allowance, JavaScript-readable session credential, OAuth
   connection to ChatGPT, iframe exception, or server-side OpenAI key is needed.
 
-The canonical application base is `https://joeytan.dev/wrought`; the browser
-security origin is only `https://joeytan.dev`. The personal site at the other
-paths on that host is same-origin trusted code, not an isolation boundary.
-Because the HTTPS `__Host-wrought_session` cookie must use path `/`, root-site
-requests receive it and root-site JavaScript can call `/wrought/api` with the
-signed-in account's authority. See [Security](security.md#combined-host-origin).
+The canonical application base and browser security origin are both
+`https://wrought.joeytan.dev`. The HTTPS `__Host-wrought_session` cookie uses
+path `/`, covering every Wrought route on that host. The separate
+`https://joeytan.dev` personal site cannot receive that host-only cookie or
+make same-origin credentialed API requests.
 
 The `agent` Facilitator is a non-membership source, like Terra, but it never
 calls an OpenAI model from the server. It lets the same authenticated membership
@@ -99,7 +98,7 @@ unavailable when ChatGPT is Facilitator.
 
 1. From Home, the person chooses **Open in ChatGPT**. The ordinary browser
    navigates to `chatgpt.com` with the starter prompt and exact
-   `https://joeytan.dev/wrought/play/new` attachment request. A successful
+   `https://wrought.joeytan.dev/play/new` attachment request. A successful
    supported launch opens one conversation with that page in a top-level
    attached browser tab.
 2. The person signs in there if necessary. After authentication and successful
@@ -108,7 +107,7 @@ unavailable when ChatGPT is Facilitator.
    play preference to their settings, Characters, descriptions, and prose
    guides or makes a reasonable choice, and copies that template. The
    command navigates the same attached browser tab to the new ordinary
-   `/wrought/play/{world_id}` page.
+   `/play/{world_id}` page.
 4. When the Play site-tool surface becomes ready, ChatGPT inspects Play, chooses
    an available Character using the same preference, and claims it. Template
    profiles are complete, so a successful claim makes the current player ready.
@@ -155,7 +154,7 @@ attached browser tab.
 
 ### Start site-tool page
 
-The authenticated `/wrought/play/new` page exposes exactly the two delegated-start
+The authenticated `/play/new` page exposes exactly the two delegated-start
 commands:
 
 - `inspect_world_templates` returns the complete three-template catalog with the
@@ -164,14 +163,14 @@ commands:
   three templates.
 - `copy_world_template` accepts one inspected `template_id`, creates an
   independent agent-facilitated World with a stable client destination UUID for
-  safe retry, and navigates the same attached tab to `/wrought/play/{world_id}`.
+  safe retry, and navigates the same attached tab to `/play/{world_id}`.
 
 These commands do not expose custom Build, saved Worlds, invitations, multiplayer
 setup, or arbitrary World authoring.
 
 ### Play site-tool page
 
-An active `/wrought/play/{world_id}` page registers the six-command Play surface only
+An active `/play/{world_id}` page registers the six-command Play surface only
 when the World
 uses the `agent` Facilitator and the signed-in membership is a current player.
 The membership's Play status and command-specific state still authorize each
@@ -328,13 +327,13 @@ entry or site-tool experience is described as accepted or promoted as the
 public delegated-start path.
 
 No new dated three-turn acceptance record has been supplied for the Wrought
-rename and `https://joeytan.dev/wrought/play/new` attachment. This documentation
+rename and `https://wrought.joeytan.dev/play/new` attachment. This documentation
 therefore does **not** claim that the rebranded candidate is ChatGPT accepted.
 
 Acceptance covers the complete boundary:
 
 - the Home launch navigates to `chatgpt.com`, and one conversation opens with
-  the exact `https://joeytan.dev/wrought/play/new` page attached;
+  the exact `https://wrought.joeytan.dev/play/new` page attached;
 - authentication is the only ordinary manual Wrought operation;
 - the Start surface becomes ready and ChatGPT inspects and copies one template;
 - the same attached tab navigates to Play, where ChatGPT inspects, claims,

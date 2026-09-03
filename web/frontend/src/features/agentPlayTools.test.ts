@@ -207,7 +207,7 @@ describe("ChatGPT play tools", () => {
               : input.url;
         const path = new URL(requestURL, "https://play.example").pathname;
         requests.push(path);
-        if (path === "/wrought/api/worlds/world-1")
+        if (path === "/api/worlds/world-1")
           return Promise.resolve(
             Response.json({
               id: "world-1",
@@ -223,7 +223,7 @@ describe("ChatGPT play tools", () => {
               rules_revision: 3,
             }),
           );
-        if (path === "/wrought/api/worlds/world-1/members")
+        if (path === "/api/worlds/world-1/members")
           return Promise.resolve(
             Response.json([
               {
@@ -232,7 +232,7 @@ describe("ChatGPT play tools", () => {
               },
             ]),
           );
-        if (path === "/wrought/api/worlds/world-1/entities")
+        if (path === "/api/worlds/world-1/entities")
           return Promise.resolve(
             Response.json([
               {
@@ -251,7 +251,7 @@ describe("ChatGPT play tools", () => {
               },
             ]),
           );
-        if (path === "/wrought/api/worlds/world-1/entities/ash/profile")
+        if (path === "/api/worlds/world-1/entities/ash/profile")
           return Promise.resolve(
             Response.json({
               entity_id: "ash",
@@ -282,11 +282,9 @@ describe("ChatGPT play tools", () => {
       next_step: string;
     };
 
+    expect(requests).not.toContain("/api/worlds/world-1/available-entities");
     expect(requests).not.toContain(
-      "/wrought/api/worlds/world-1/available-entities",
-    );
-    expect(requests).not.toContain(
-      "/wrought/api/worlds/world-1/entities/unclaimed/profile",
+      "/api/worlds/world-1/entities/unclaimed/profile",
     );
     expect(payload.claimed_characters.map(({ id }) => id)).toEqual(["ash"]);
     expect(payload.world.facilitator_source).toBe("agent");
@@ -310,7 +308,7 @@ describe("ChatGPT play tools", () => {
               ? input.href
               : input.url;
         const path = new URL(requestURL, "https://play.example").pathname;
-        if (path === "/wrought/api/worlds/world-1")
+        if (path === "/api/worlds/world-1")
           return Promise.resolve(
             Response.json({
               id: "world-1",
@@ -326,7 +324,7 @@ describe("ChatGPT play tools", () => {
               rules_revision: 3,
             }),
           );
-        if (path === "/wrought/api/worlds/world-1/members")
+        if (path === "/api/worlds/world-1/members")
           return Promise.resolve(
             Response.json([
               {
@@ -339,11 +337,11 @@ describe("ChatGPT play tools", () => {
               },
             ]),
           );
-        if (path === "/wrought/api/worlds/world-1/entities")
+        if (path === "/api/worlds/world-1/entities")
           return Promise.resolve(Response.json([]));
-        if (path === "/wrought/api/worlds/world-1/mechanics")
+        if (path === "/api/worlds/world-1/mechanics")
           return Promise.resolve(Response.json({ revision: 3, mechanics: [] }));
-        if (path === "/wrought/api/worlds/world-1/interactions")
+        if (path === "/api/worlds/world-1/interactions")
           return Promise.resolve(
             Response.json([
               {
@@ -402,14 +400,14 @@ describe("ChatGPT play tools", () => {
               : input.url;
         const path = new URL(requestURL, "https://play.example").pathname;
         requests.push({ path, init });
-        if (path === "/wrought/api/worlds/world-1/available-entities")
+        if (path === "/api/worlds/world-1/available-entities")
           return Promise.resolve(
             Response.json({
               roster_revision: 7,
               entities: [{ id: "entity-1", display_name: "Entity One" }],
             }),
           );
-        if (path === "/wrought/api/worlds/world-1/entities/entity-1/claim")
+        if (path === "/api/worlds/world-1/entities/entity-1/claim")
           return Promise.resolve(
             Response.json({
               entity_id: "entity-1",
@@ -438,8 +436,8 @@ describe("ChatGPT play tools", () => {
     };
 
     expect(requests.map(({ path }) => path)).toEqual([
-      "/wrought/api/worlds/world-1/available-entities",
-      "/wrought/api/worlds/world-1/entities/entity-1/claim",
+      "/api/worlds/world-1/available-entities",
+      "/api/worlds/world-1/entities/entity-1/claim",
     ]);
     const claimBody = requests[1]?.init?.body;
     if (typeof claimBody !== "string")
@@ -464,7 +462,7 @@ describe("ChatGPT play tools", () => {
               ? input.href
               : input.url;
         const path = new URL(requestURL, "https://play.example").pathname;
-        if (path === "/wrought/api/worlds/world-1/agent/continue")
+        if (path === "/api/worlds/world-1/agent/continue")
           return Promise.resolve(
             Response.json({
               id: "interaction-1",
@@ -506,7 +504,7 @@ describe("ChatGPT play tools", () => {
               ? input.href
               : input.url;
         const path = new URL(requestURL, "https://play.example").pathname;
-        if (path === "/wrought/api/worlds/world-1/interactions")
+        if (path === "/api/worlds/world-1/interactions")
           return Promise.resolve(
             Response.json([
               {
@@ -517,9 +515,7 @@ describe("ChatGPT play tools", () => {
               },
             ]),
           );
-        if (
-          path === "/wrought/api/worlds/world-1/interactions/problem-1/actions"
-        ) {
+        if (path === "/api/worlds/world-1/interactions/problem-1/actions") {
           if (typeof init?.body === "string")
             submittedBody = JSON.parse(init.body) as unknown;
           return Promise.resolve(

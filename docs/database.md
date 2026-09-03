@@ -461,7 +461,7 @@ pg_dump --format=custom --no-owner --file=wrought.dump "$database_url"
 ```
 
 Restore into an empty access-controlled database using the same major
-PostgreSQL toolchain, then verify migrations, `/wrought/api/health`, representative
+PostgreSQL toolchain, then verify migrations, `/api/health`, representative
 Mechanic graph, Status instances and modifier-snapshot provenance, logical state and effective values,
 Resolution receipts, revisions, and World-event cursors.
 

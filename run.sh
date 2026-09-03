@@ -70,10 +70,10 @@ process_alive() {
 probe_service() {
 	case "$1" in
 	backend)
-		curl -fsS --max-time 1 http://127.0.0.1:8080/wrought/api/health >/dev/null 2>&1
+		curl -fsS --max-time 1 http://127.0.0.1:8080/api/health >/dev/null 2>&1
 		;;
 	frontend)
-		curl -fsS --max-time 1 http://127.0.0.1:5173/wrought >/dev/null 2>&1
+		curl -fsS --max-time 1 http://127.0.0.1:5173/ >/dev/null 2>&1
 		;;
 	esac
 }
@@ -81,10 +81,10 @@ probe_service() {
 display_url() {
 	case "$1" in
 	backend)
-		printf 'http://localhost:8080/wrought\n'
+		printf 'http://localhost:8080/\n'
 		;;
 	frontend)
-		printf 'http://127.0.0.1:5173/wrought\n'
+		printf 'http://127.0.0.1:5173/\n'
 		;;
 	esac
 }

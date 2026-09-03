@@ -14,11 +14,10 @@ The hosted instance is a conditional preview, not a supported
 public-production service. See [deployment readiness](docs/deployment-readiness/README.md)
 for its current boundaries.
 
-The intended canonical application URL is <https://joeytan.dev/wrought>, with
-browser origin `https://joeytan.dev`. The combined-host cutover is not yet
-verified. Security reports may cover either the `/wrought` application or the
-vendored personal-site code at other same-origin paths because root-site scripts
-share the authenticated browser trust boundary.
+The intended canonical application URL and browser origin are both
+<https://wrought.joeytan.dev>; the subdomain cutover is not yet verified. The
+separate <https://joeytan.dev> personal site remains on GitHub Pages and is
+outside Wrought's authenticated browser origin.
 
 ## Report a vulnerability privately
 

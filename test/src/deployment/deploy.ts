@@ -379,7 +379,7 @@ function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
     expectedDatabaseVolume:
       env.WROUGHT_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
     publicURL: normalizePublicURL(
-      env.WROUGHT_DEPLOY_URL ?? "https://joeytan.dev/wrought",
+      env.WROUGHT_DEPLOY_URL ?? "https://wrought.joeytan.dev",
     ),
     timeoutMs: readTimeout(env.WROUGHT_DEPLOY_TIMEOUT_SECONDS),
   };
@@ -523,9 +523,9 @@ function deploymentPublicURL(
   if (releaseStage === "pre-dns") {
     return railwayProviderPublicURL(environment, service);
   }
-  if (configuredURL !== "https://joeytan.dev/wrought") {
+  if (configuredURL !== "https://wrought.joeytan.dev") {
     throw new Error(
-      `post-cutover verification requires https://joeytan.dev/wrought, found ${configuredURL}`,
+      `post-cutover verification requires https://wrought.joeytan.dev, found ${configuredURL}`,
     );
   }
   assertPublicURLExposed(environment, service, configuredURL);

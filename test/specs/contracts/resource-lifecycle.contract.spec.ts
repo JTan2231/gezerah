@@ -157,13 +157,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   const mainWorld = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name: `Copper Meridian ${unique}` },
     owner.id,
   );
   const foreignWorld = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name: `Foreign Observatory ${unique}` },
     owner.id,
   );
@@ -174,7 +174,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   const activeMechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+    `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
     activeMechanicRequest,
     owner.id,
   );
@@ -184,13 +184,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   const createdArchivedMechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+    `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
     archivedMechanicRequest,
     owner.id,
   );
   const archivedMechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics/${createdArchivedMechanic.mechanic.id}/archive`,
+    `${baseURL}/api/worlds/${mainWorld.id}/mechanics/${createdArchivedMechanic.mechanic.id}/archive`,
     { expected_rules_revision: createdArchivedMechanic.revision },
     owner.id,
   );
@@ -199,7 +199,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   const foreignMechanicName = `Foreign Frequency ${unique}`;
   const foreignMechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/mechanics`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/mechanics`,
     inputMechanicRequest(foreignMechanicName, foreignWorld.rules_revision),
     owner.id,
   );
@@ -228,12 +228,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     await runCase("MEC-V03", matrixCase.key, async () => {
       const before = await getJSON<MechanicCollectionResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+        `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
         owner.id,
       );
       const candidateID = randomUUID();
       const response = await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+        `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
         {
           data: derivedMechanicRequest(
             candidateID,
@@ -268,7 +268,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         .soft(
           await getJSON<MechanicCollectionResponse>(
             request,
-            `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+            `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
             owner.id,
           ),
         )
@@ -278,12 +278,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
 
   const initialFields = await getJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/character-fields`,
+    `${baseURL}/api/worlds/${mainWorld.id}/character-fields`,
     owner.id,
   );
   const characterFieldSet = await putJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/character-fields`,
+    `${baseURL}/api/worlds/${mainWorld.id}/character-fields`,
     {
       expected_revision: initialFields.revision,
       fields: [
@@ -365,7 +365,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await test.step("LFC-003 archives an entity into read-only history", async () => {
     const result = await postJSON<EntityResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}/archive`,
+      `${baseURL}/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}/archive`,
       undefined,
       owner.id,
     );
@@ -386,13 +386,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   ] as const;
   let interactionsSnapshot = await getJSON<InteractionResponse[]>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions`,
+    `${baseURL}/api/worlds/${mainWorld.id}/interactions`,
     owner.id,
   );
   for (const matrixCase of contextCases) {
     await runCase("RST-V03", matrixCase.key, async () => {
       const response = await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions`,
+        `${baseURL}/api/worlds/${mainWorld.id}/interactions`,
         {
           data: {
             id: randomUUID(),
@@ -416,7 +416,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         .soft(
           await getJSON<InteractionResponse[]>(
             request,
-            `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions`,
+            `${baseURL}/api/worlds/${mainWorld.id}/interactions`,
             owner.id,
           ),
         )
@@ -426,7 +426,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
 
   const openInteraction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions`,
+    `${baseURL}/api/worlds/${mainWorld.id}/interactions`,
     {
       present: true,
       prompt: `The lamps gutter above the crossing ${unique}.`,
@@ -447,13 +447,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   );
   let interactionSnapshot = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
+    `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
     owner.id,
   );
   await runCase("RST-V03", "incomplete-attribution", async () => {
     await expectAPIError(
       await actorRequest(readyPlayer.id).post(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
+        `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
         {
           data: {
             expected_revision: interactionSnapshot.revision,
@@ -474,7 +474,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<InteractionResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
+          `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
           owner.id,
         ),
       )
@@ -495,7 +495,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await runCase("RST-V03", "archived-attribution", async () => {
     await expectAPIError(
       await actorRequest(readyPlayer.id).post(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
+        `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/actions`,
         {
           data: {
             expected_revision: interactionSnapshot.revision,
@@ -515,7 +515,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<InteractionResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
+          `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
           owner.id,
         ),
       )
@@ -524,7 +524,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
 
   const adjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/adjudicate`,
+    `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/adjudicate`,
     { expected_revision: interactionSnapshot.revision },
     owner.id,
   );
@@ -547,17 +547,17 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
     await runCase("RST-V03", matrixCase.key, async () => {
       const beforeInteraction = await getJSON<InteractionResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
+        `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
         owner.id,
       );
       const beforeSheet = await getJSON<EntitySheetResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
+        `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
         owner.id,
       );
       await expectAPIError(
         await actorRequest(owner.id).post(
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/preview`,
+          `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}/preview`,
           {
             data: {
               expected_revision: beforeInteraction.revision,
@@ -589,7 +589,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         .soft(
           await getJSON<InteractionResponse>(
             request,
-            `${baseURL}/wrought/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
+            `${baseURL}/api/worlds/${mainWorld.id}/interactions/${openInteraction.id}`,
             owner.id,
           ),
         )
@@ -598,7 +598,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
         .soft(
           await getJSON<EntitySheetResponse>(
             request,
-            `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
+            `${baseURL}/api/worlds/${mainWorld.id}/entities/${matrixCase.entityID}/sheet`,
             owner.id,
           ),
         )
@@ -609,13 +609,13 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await runCase("LFC-V04", "archived-new-reference", async () => {
     const before = await getJSON<MechanicCollectionResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+      `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
       owner.id,
     );
     const candidateID = randomUUID();
     await expectAPIError(
       await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+        `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
         {
           data: derivedMechanicRequest(
             candidateID,
@@ -640,7 +640,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<MechanicCollectionResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics`,
+          `${baseURL}/api/worlds/${mainWorld.id}/mechanics`,
           owner.id,
         ),
       )
@@ -650,12 +650,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await runCase("LFC-V04", "entity-mutation", async () => {
     const before = await getJSON<EntityResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
+      `${baseURL}/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
       owner.id,
     );
     await expectAPIError(
       await actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
+        `${baseURL}/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
         {
           data: {
             display_name: `Mutated retired pathfinder ${unique}`,
@@ -674,7 +674,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<EntityResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
+          `${baseURL}/api/worlds/${mainWorld.id}/entities/${archivedEntity.id}`,
           owner.id,
         ),
       )
@@ -684,12 +684,12 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await runCase("LFC-V04", "mechanic-mutation", async () => {
     const before = await getJSON<MechanicMutationResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
+      `${baseURL}/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
       owner.id,
     );
     await expectAPIError(
       await actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
+        `${baseURL}/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
         {
           data: {
             ...archivedMechanicRequest,
@@ -710,7 +710,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<MechanicMutationResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
+          `${baseURL}/api/worlds/${mainWorld.id}/mechanics/${archivedMechanic.mechanic.id}`,
           owner.id,
         ),
       )
@@ -720,32 +720,29 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
   await runCase("LFC-V04", "world-mutation", async () => {
     const world = await postJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds`,
+      `${baseURL}/api/worlds`,
       { name: `Finished Archive ${unique}` },
       owner.id,
     );
     const archived = await postJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/archive`,
+      `${baseURL}/api/worlds/${world.id}/archive`,
       { expected_revision: world.revision },
       owner.id,
     );
     expect(archived.status).toBe("archived");
     const before = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}`,
+      `${baseURL}/api/worlds/${world.id}`,
       owner.id,
     );
     await expectAPIError(
-      await actorRequest(owner.id).patch(
-        `${baseURL}/wrought/api/worlds/${world.id}`,
-        {
-          data: {
-            name: `Mutated archive ${unique}`,
-            expected_revision: before.revision,
-          },
+      await actorRequest(owner.id).patch(`${baseURL}/api/worlds/${world.id}`, {
+        data: {
+          name: `Mutated archive ${unique}`,
+          expected_revision: before.revision,
         },
-      ),
+      }),
       {
         status: 409,
         code: "world_archived",
@@ -757,7 +754,7 @@ test("contract: scenario matrices reject invalid and archived resource use atomi
       .soft(
         await getJSON<WorldResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${world.id}`,
+          `${baseURL}/api/worlds/${world.id}`,
           owner.id,
         ),
       )
@@ -827,7 +824,7 @@ async function joinWorldAsPlayer(
 ): Promise<WorldResponse> {
   const invite = await postJSON<InviteResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+    `${baseURL}/api/worlds/${worldID}/invites`,
     { role: "player", expires_in_days: 7 },
     ownerID,
   );
@@ -837,7 +834,7 @@ async function joinWorldAsPlayer(
   );
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
+    `${baseURL}/api/world-invites/${token}/redeem`,
     undefined,
     playerID,
   );
@@ -853,7 +850,7 @@ async function createEntity(
 ): Promise<EntityResponse> {
   return postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities`,
+    `${baseURL}/api/worlds/${worldID}/entities`,
     {
       display_name: displayName,
       controller_world_membership_ids: [controllerMembershipID],
@@ -874,12 +871,12 @@ async function completeProfile(
 ): Promise<EntityProfileResponse> {
   const before = await getJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     ownerID,
   );
   return putJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: before.revision,
       expected_character_field_set_revision: characterFieldSetRevision,

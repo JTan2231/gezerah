@@ -664,7 +664,7 @@ class ScenarioRuntime {
     const applicationURL = new URL(this.baseURL);
     if (requestURL.origin !== applicationURL.origin) return;
     const worldMatch = requestURL.pathname.match(
-      /^\/wrought\/api\/worlds\/([0-9a-f-]{36})(?:\/|$)/i,
+      /^\/api\/worlds\/([0-9a-f-]{36})(?:\/|$)/i,
     );
     if (worldMatch?.[1] !== undefined) {
       this.#actorWorldIds.set(actorId, worldMatch[1]);
@@ -845,7 +845,7 @@ async function readAvailableWorldEvents(
   const chunks = await page.evaluate(async (targetWorldId) => {
     const controller = new AbortController();
     const response = await fetch(
-      `/wrought/api/worlds/${targetWorldId}/events?after=0`,
+      `/api/worlds/${targetWorldId}/events?after=0`,
       { credentials: "same-origin", signal: controller.signal },
     );
     if (response.status !== 200 || response.body === null) {

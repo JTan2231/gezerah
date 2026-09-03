@@ -66,14 +66,14 @@ describe("scenario evidence", () => {
     });
     assert.deepEqual(
       [
-        "/wrought/play/invite/play-bearer",
-        "/wrought/build/invite/build-bearer",
-        "/wrought/api/world-invites/api-bearer/redeem",
+        "/play/invite/play-bearer",
+        "/build/invite/build-bearer",
+        "/api/world-invites/api-bearer/redeem",
       ].map(sanitizeURL),
       [
-        `/wrought/play/invite/${REDACTED}`,
-        `/wrought/build/invite/${REDACTED}`,
-        `/wrought/api/world-invites/${REDACTED}/redeem`,
+        `/play/invite/${REDACTED}`,
+        `/build/invite/${REDACTED}`,
+        `/api/world-invites/${REDACTED}/redeem`,
       ],
     );
     assert.equal(
@@ -105,12 +105,12 @@ describe("scenario evidence", () => {
       phase: "harness",
       result: "failed",
       details: new Error(
-        "POST /wrought/api/world-invites/error-bearer/redeem?token=query-bearer failed",
+        "POST /api/world-invites/error-bearer/redeem?token=query-bearer failed",
       ),
     });
     assert.deepEqual(failure.entries()[0]?.details, {
       name: "Error",
-      message: `POST /wrought/api/world-invites/${REDACTED}/redeem?token=${encodeURIComponent(
+      message: `POST /api/world-invites/${REDACTED}/redeem?token=${encodeURIComponent(
         REDACTED,
       )} failed`,
     });

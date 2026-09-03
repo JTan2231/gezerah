@@ -2,10 +2,7 @@ package app
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"encoding/json"
-	"fmt"
-	"io/fs"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -27,15 +24,17 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
-		{path: "/wrought", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
-		{path: "/wrought/assets/app.js", wantStatus: http.StatusOK, wantBody: "console.log('Wrought')"},
-		{path: "/wrought/assets/chunks/app.js", wantStatus: http.StatusOK, wantBody: "console.log('nested')"},
-		{path: "/wrought/build/world-id/capacities", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
-		{path: "/wrought/assets", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/wrought/assets/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/wrought/assets/chunks", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/wrought/assets/chunks/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/wrought/assets/missing.js", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
+		{path: "/", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
+		{path: "/assets/app.js", wantStatus: http.StatusOK, wantBody: "console.log('Wrought')"},
+		{path: "/assets/chunks/app.js", wantStatus: http.StatusOK, wantBody: "console.log('nested')"},
+		{path: "/play/world-id", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
+		{path: "/build/world-id/capacities", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
+		{path: "/not-an-application-route", wantStatus: http.StatusOK, wantBody: "<main>composer</main>"},
+		{path: "/assets", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
+		{path: "/assets/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
+		{path: "/assets/chunks", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
+		{path: "/assets/chunks/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
+		{path: "/assets/missing.js", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
 	}
 	for _, test := range tests {
 		t.Run(test.path, func(t *testing.T) {
@@ -48,7 +47,7 @@ func TestStaticRoutesServeAssetsAndSPAFallback(t *testing.T) {
 			if body := response.Body.String(); !strings.Contains(body, test.wantBody) {
 				t.Fatalf("body = %q, want it to contain %q", body, test.wantBody)
 			}
-			if strings.HasPrefix(test.path, "/wrought/assets") && response.Header().Get("Location") != "" {
+			if strings.HasPrefix(test.path, "/assets") && response.Header().Get("Location") != "" {
 				t.Fatalf("Location = %q, want no asset redirect", response.Header().Get("Location"))
 			}
 		})
@@ -71,9 +70,9 @@ func TestProductStaticRoutesRejectUnsupportedMethods(t *testing.T) {
 		http.MethodTrace,
 	} {
 		for _, requestPath := range []string{
-			"/wrought",
-			"/wrought/play/world-id",
-			"/wrought/assets/app.js",
+			"/",
+			"/play/world-id",
+			"/assets/app.js",
 		} {
 			t.Run(method+" "+requestPath, func(t *testing.T) {
 				response := httptest.NewRecorder()
@@ -93,189 +92,12 @@ func TestProductStaticRoutesRejectUnsupportedMethods(t *testing.T) {
 	}
 }
 
-func TestEmbeddedSiteOwnsRootAndAncillaryPaths(t *testing.T) {
-	server := NewServerWithStaticFS(nil, fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("<main>wrought application</main>")},
-	})
-	handler := server.Routes()
-
-	tests := []struct {
-		path       string
-		wantStatus int
-		wantBody   string
-	}{
-		{path: "/", wantStatus: http.StatusOK, wantBody: "Joey Tan - Software Engineer"},
-		{path: "/index", wantStatus: http.StatusOK, wantBody: "Joey Tan - Software Engineer"},
-		{path: "/index.html", wantStatus: http.StatusOK, wantBody: "Joey Tan - Software Engineer"},
-		{path: "/privacy-policy", wantStatus: http.StatusOK, wantBody: "Privacy Policy"},
-		{path: "/privacy-policy.html", wantStatus: http.StatusOK, wantBody: "Privacy Policy"},
-		{path: "/annals/", wantStatus: http.StatusOK, wantBody: "annals-web-production.up.railway.app"},
-		{path: "/annals/index", wantStatus: http.StatusOK, wantBody: "annals-web-production.up.railway.app"},
-		{path: "/annals/index.html", wantStatus: http.StatusOK, wantBody: "annals-web-production.up.railway.app"},
-		{path: "/llms.txt", wantStatus: http.StatusOK, wantBody: "Joey Tan"},
-		{path: "/llms/joeytan-dev-home.md", wantStatus: http.StatusOK, wantBody: "Joey Tan"},
-		{path: "/plaid/oauth", wantStatus: http.StatusOK, wantBody: "Solari"},
-		{path: "/plaid/oauth.html", wantStatus: http.StatusOK, wantBody: "Solari"},
-		{path: "/llms/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/plaid/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/.well-known/", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/api/health", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/not-a-site-page", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/wroughtly", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/CNAME", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/.nojekyll", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/.pratica-wrought-site.toml", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-		{path: "/pratica-public-association-contract.md", wantStatus: http.StatusNotFound, wantBody: "404 page not found"},
-	}
-	for _, test := range tests {
-		t.Run(test.path, func(t *testing.T) {
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, test.path, nil))
-			if response.Code != test.wantStatus {
-				t.Fatalf("status = %d, want %d", response.Code, test.wantStatus)
-			}
-			if body := response.Body.String(); !strings.Contains(body, test.wantBody) {
-				t.Fatalf("body = %q, want it to contain %q", body, test.wantBody)
-			}
-			if strings.Contains(response.Body.String(), "wrought application") {
-				t.Fatal("root site miss fell back to the Wrought SPA")
-			}
-		})
-	}
-	for _, directory := range []string{"/annals", "/llms", "/plaid", "/.well-known"} {
-		for _, query := range []string{"", "?probe=1"} {
-			t.Run(directory+query+" redirect", func(t *testing.T) {
-				response := httptest.NewRecorder()
-				handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, directory+query, nil))
-				if response.Code != http.StatusMovedPermanently {
-					t.Fatalf("status = %d, want %d", response.Code, http.StatusMovedPermanently)
-				}
-				if location, want := response.Header().Get("Location"), directory+"/"+query; location != want {
-					t.Fatalf("Location = %q, want %q", location, want)
-				}
-			})
-		}
-	}
-
-	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/.well-known/apple-app-site-association", nil))
-	if response.Code != http.StatusOK {
-		t.Fatalf("association status = %d, want %d", response.Code, http.StatusOK)
-	}
-	if contentType := response.Header().Get("Content-Type"); contentType != "application/json" {
-		t.Fatalf("association Content-Type = %q, want application/json", contentType)
-	}
-	if location := response.Header().Get("Location"); location != "" {
-		t.Fatalf("association redirected to %q", location)
-	}
-	if got := fmt.Sprintf("%x", sha256.Sum256(response.Body.Bytes())); got != "789b60b536c7bf1cd98a9ac37e8a89fb78691a06a525fea67c1a8ece41cb7b96" {
-		t.Fatalf("association SHA-256 = %s, bytes changed", got)
-	}
-}
-
-func TestEmbeddedSiteServesEveryTrackedFileAtItsExactPath(t *testing.T) {
-	server := NewServerWithStaticFS(nil, fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("<main>wrought application</main>")},
-	})
-	handler := server.Routes()
-	if err := fs.WalkDir(server.siteFS, ".", func(filePath string, entry fs.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		t.Run(filePath, func(t *testing.T) {
-			expected, err := fs.ReadFile(server.siteFS, filePath)
-			if err != nil {
-				t.Fatalf("read embedded file: %v", err)
-			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/"+filePath, nil))
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-			}
-			if !bytes.Equal(response.Body.Bytes(), expected) {
-				t.Fatalf("served bytes differ from embedded %s", filePath)
-			}
-			if location := response.Header().Get("Location"); location != "" {
-				t.Fatalf("tracked file redirected to %q", location)
-			}
-		})
-		return nil
-	}); err != nil {
-		t.Fatalf("walk embedded site: %v", err)
-	}
-}
-
-func TestEmbeddedSiteServesHTMLExtensionlessAliases(t *testing.T) {
-	server := NewServerWithStaticFS(nil, fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("<main>wrought application</main>")},
-	})
-	handler := server.Routes()
-	aliases := map[string]string{
-		"/index":          "index.html",
-		"/annals/index":   "annals/index.html",
-		"/plaid/oauth":    "plaid/oauth.html",
-		"/privacy-policy": "privacy-policy.html",
-	}
-	for alias, filePath := range aliases {
-		t.Run(alias, func(t *testing.T) {
-			expected, err := fs.ReadFile(server.siteFS, filePath)
-			if err != nil {
-				t.Fatalf("read embedded file: %v", err)
-			}
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, alias+"?probe=1", nil))
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-			}
-			if !bytes.Equal(response.Body.Bytes(), expected) {
-				t.Fatalf("served bytes differ from embedded %s", filePath)
-			}
-			if contentType := response.Header().Get("Content-Type"); contentType != "text/html; charset=utf-8" {
-				t.Fatalf("Content-Type = %q, want text/html; charset=utf-8", contentType)
-			}
-			if location := response.Header().Get("Location"); location != "" {
-				t.Fatalf("extensionless alias redirected to %q", location)
-			}
-		})
-	}
-}
-
-func TestEmbeddedSiteContentTypesMatchPublishedSite(t *testing.T) {
-	server := NewServerWithStaticFS(nil, fstest.MapFS{
-		"index.html": &fstest.MapFile{Data: []byte("<main>wrought application</main>")},
-	})
-	handler := server.Routes()
-	tests := map[string]string{
-		"/index.html":                     "text/html; charset=utf-8",
-		"/annals/main.js":                 "application/javascript; charset=utf-8",
-		"/annals/style.css":               "text/css; charset=utf-8",
-		"/bio-prompt.md":                  "text/markdown; charset=utf-8",
-		"/llms.txt":                       "text/plain; charset=utf-8",
-		"/llms/joeytan-dev-bio-prompt.md": "text/markdown; charset=utf-8",
-	}
-	for target, want := range tests {
-		t.Run(target, func(t *testing.T) {
-			response := httptest.NewRecorder()
-			handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, target, nil))
-			if response.Code != http.StatusOK {
-				t.Fatalf("status = %d, want %d", response.Code, http.StatusOK)
-			}
-			if contentType := response.Header().Get("Content-Type"); contentType != want {
-				t.Fatalf("Content-Type = %q, want %q", contentType, want)
-			}
-		})
-	}
-}
-
 func TestProductAPINotFoundIsScopedAndJSON(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("<main>wrought application</main>")},
 	})
 	response := httptest.NewRecorder()
-	server.Routes().ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/wrought/api/not-an-endpoint", nil))
+	server.Routes().ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/not-an-endpoint", nil))
 	if response.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusNotFound)
 	}
@@ -294,7 +116,7 @@ func TestSecurityHeadersAndHTTPSOnlyHSTS(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{
 		"index.html": &fstest.MapFile{Data: []byte("index")},
 	})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/wrought", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	for name, want := range map[string]string{
@@ -310,12 +132,6 @@ func TestSecurityHeadersAndHTTPSOnlyHSTS(t *testing.T) {
 	}
 	if hsts := response.Header().Get("Strict-Transport-Security"); hsts != "" {
 		t.Fatalf("HTTP Strict-Transport-Security = %q, want empty", hsts)
-	}
-
-	response = httptest.NewRecorder()
-	server.Routes().ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
-	if csp := response.Header().Get("Content-Security-Policy"); csp != "" {
-		t.Fatalf("root Content-Security-Policy = %q, want empty for embedded inline script", csp)
 	}
 
 	server.securePublicOrigin = true
@@ -340,7 +156,7 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 
 	wake := server.currentWorldEventWake()
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wrought/api/test/wake", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/test/wake", nil))
 	if response.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want %d", response.Code, http.StatusCreated)
 	}
@@ -355,7 +171,7 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 		t.Fatal("event wake generation did not rotate")
 	}
 	response = httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wrought/api/test/reject", nil))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/test/reject", nil))
 	select {
 	case <-nextWake:
 		t.Fatal("rejected API mutation woke event handlers")
@@ -365,18 +181,18 @@ func TestSuccessfulAPIMutationsBroadcastWorldEventWakeups(t *testing.T) {
 
 func TestAuthenticationMutationsDoNotBroadcastWorldEventWakeups(t *testing.T) {
 	for _, path := range []string{
-		"/wrought/api/auth/signup",
-		"/wrought/api/auth/signin",
-		"/wrought/api/auth/logout",
-		"/wrought/api/auth/logout-all",
-		"/wrought/api/me/password",
+		"/api/auth/signup",
+		"/api/auth/signin",
+		"/api/auth/logout",
+		"/api/auth/logout-all",
+		"/api/me/password",
 	} {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, path, nil)
 		if successfulAPIMutation(request, http.StatusNoContent) {
 			t.Errorf("successfulAPIMutation(%q) woke world streams for account-only work", path)
 		}
 	}
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wrought/api/worlds", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/worlds", nil)
 	if !successfulAPIMutation(request, http.StatusCreated) {
 		t.Fatal("world mutation no longer wakes world event streams")
 	}
@@ -391,7 +207,7 @@ func TestExportedAPIRouteRegistrationIsAuthenticatedByDefault(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusNoContent)
 	})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/wrought/api/test/protected", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/test/protected", nil)
 	request.Header.Set("X-Wrought-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
@@ -411,7 +227,7 @@ func TestRecoveryReturnsJSONForAPIPanic(t *testing.T) {
 		panic("test panic")
 	})
 
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/wrought/api/panic-test", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/api/panic-test", nil)
 	response := httptest.NewRecorder()
 	server.Routes().ServeHTTP(response, request)
 	if response.Code != http.StatusInternalServerError {
@@ -434,58 +250,58 @@ func TestRequestLogPathRedactsInviteBearersAndOmitsQueries(t *testing.T) {
 	}{
 		{
 			name:   "play invitation",
-			target: "/wrought/play/invite/" + pathMarker + "?token=" + queryMarker,
-			want:   "/wrought/play/invite/[REDACTED]",
+			target: "/play/invite/" + pathMarker + "?token=" + queryMarker,
+			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "build invitation",
-			target: "/wrought/build/invite/" + pathMarker + "?invite=" + queryMarker,
-			want:   "/wrought/build/invite/[REDACTED]",
+			target: "/build/invite/" + pathMarker + "?invite=" + queryMarker,
+			want:   "/build/invite/[REDACTED]",
 		},
 		{
 			name:   "API invitation preview",
-			target: "/wrought/api/world-invites/" + pathMarker + "?secret=" + queryMarker,
-			want:   "/wrought/api/world-invites/[REDACTED]",
+			target: "/api/world-invites/" + pathMarker + "?secret=" + queryMarker,
+			want:   "/api/world-invites/[REDACTED]",
 		},
 		{
 			name:   "API invitation redemption",
-			target: "/wrought/api/world-invites/" + pathMarker + "/redeem?key=" + queryMarker,
-			want:   "/wrought/api/world-invites/[REDACTED]/redeem",
+			target: "/api/world-invites/" + pathMarker + "/redeem?key=" + queryMarker,
+			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "encoded slash cannot expose a bearer suffix",
-			target: "/wrought/api/world-invites/opaque%2F" + pathMarker + "/redeem",
-			want:   "/wrought/api/world-invites/[REDACTED]/redeem",
+			target: "/api/world-invites/opaque%2F" + pathMarker + "/redeem",
+			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "malformed frontend suffix is entirely redacted",
-			target: "/wrought/play/invite/" + pathMarker + "/unexpected/suffix",
-			want:   "/wrought/play/invite/[REDACTED]",
+			target: "/play/invite/" + pathMarker + "/unexpected/suffix",
+			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "canonical redirect cannot expose a play bearer",
-			target: "/other/../wrought/./play/invite/" + pathMarker,
-			want:   "/wrought/play/invite/[REDACTED]",
+			target: "/other/../play/invite/" + pathMarker,
+			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "canonical redirect cannot expose an API bearer",
-			target: "/wrought/api/./world-invites/" + pathMarker + "/redeem",
-			want:   "/wrought/api/world-invites/[REDACTED]/redeem",
+			target: "/api/./world-invites/" + pathMarker + "/redeem",
+			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 		{
 			name:   "normal API path",
-			target: "/wrought/api/worlds/world-id/invites?token=" + queryMarker,
-			want:   "/wrought/api/worlds/world-id/invites",
+			target: "/api/worlds/world-id/invites?token=" + queryMarker,
+			want:   "/api/worlds/world-id/invites",
 		},
 		{
 			name:   "normal frontend path",
-			target: "/wrought/play/world-id?invite=" + queryMarker,
-			want:   "/wrought/play/world-id",
+			target: "/play/world-id?invite=" + queryMarker,
+			want:   "/play/world-id",
 		},
 		{
 			name:   "invitation prefix without bearer",
-			target: "/wrought/api/world-invites?token=" + queryMarker,
-			want:   "/wrought/api/world-invites",
+			target: "/api/world-invites?token=" + queryMarker,
+			want:   "/api/world-invites",
 		},
 	}
 
@@ -518,23 +334,23 @@ func TestRequestAndRecoveryLogsRedactEveryInviteBearerPath(t *testing.T) {
 	}{
 		{
 			name:   "play invitation",
-			target: "/wrought/play/invite/" + pathMarker + "?token=" + queryMarker,
-			want:   "/wrought/play/invite/[REDACTED]",
+			target: "/play/invite/" + pathMarker + "?token=" + queryMarker,
+			want:   "/play/invite/[REDACTED]",
 		},
 		{
 			name:   "build invitation",
-			target: "/wrought/build/invite/" + pathMarker + "?token=" + queryMarker,
-			want:   "/wrought/build/invite/[REDACTED]",
+			target: "/build/invite/" + pathMarker + "?token=" + queryMarker,
+			want:   "/build/invite/[REDACTED]",
 		},
 		{
 			name:   "API invitation preview",
-			target: "/wrought/api/world-invites/" + pathMarker + "?token=" + queryMarker,
-			want:   "/wrought/api/world-invites/[REDACTED]",
+			target: "/api/world-invites/" + pathMarker + "?token=" + queryMarker,
+			want:   "/api/world-invites/[REDACTED]",
 		},
 		{
 			name:   "API invitation redemption",
-			target: "/wrought/api/world-invites/" + pathMarker + "/redeem?token=" + queryMarker,
-			want:   "/wrought/api/world-invites/[REDACTED]/redeem",
+			target: "/api/world-invites/" + pathMarker + "/redeem?token=" + queryMarker,
+			want:   "/api/world-invites/[REDACTED]/redeem",
 		},
 	}
 

@@ -140,7 +140,7 @@ async function refreshCSRFToken(
     return true;
   }
   const session = await requestAPI<unknown>(
-    "/wrought/api/me",
+    "/api/me",
     signal === undefined ? {} : { signal },
     false,
   );
@@ -186,12 +186,12 @@ export function jsonBody(value: unknown): Pick<RequestInit, "body"> {
 }
 
 export function worldPath(worldId: string, resource = ""): string {
-  const base = `/wrought/api/worlds/${encodeURIComponent(worldId)}`;
+  const base = `/api/worlds/${encodeURIComponent(worldId)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 
 export function worldInvitePath(token: string, resource = ""): string {
-  const base = `/wrought/api/world-invites/${encodeURIComponent(token)}`;
+  const base = `/api/world-invites/${encodeURIComponent(token)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 

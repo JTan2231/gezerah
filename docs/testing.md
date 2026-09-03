@@ -66,8 +66,8 @@ An unperformed or blocked acceptance run does not make automated validation
 fail, but it must be reported as such and cannot support a claim that the
 candidate's ChatGPT experience passed acceptance.
 
-The Wrought rename, canonical `https://joeytan.dev/wrought` attachment URL,
-and combined-host deployment change this boundary. No new dated three-turn
+The Wrought rename, canonical `https://wrought.joeytan.dev` attachment URL,
+and root-mounted subdomain deployment change this boundary. No new dated three-turn
 ChatGPT acceptance record has been supplied for that candidate, so
 the rebranded launch is currently **not claimed as ChatGPT accepted**. Automated
 CI, site-tool integration, and deployed smoke may validate the implementation
@@ -197,41 +197,37 @@ browser result to skipped because the generated host is not the configured
 authentication origin. `--pre-dns` is not valid with `verify`.
 
 Normal `deploy` and `verify` are post-cutover stages. They require exactly
-`https://joeytan.dev/wrought`, exactly one custom domain (`joeytan.dev`), and
+`https://wrought.joeytan.dev`, exactly one custom domain
+(`wrought.joeytan.dev`), and
 one generated Railway provider hostname aligned with the current service name;
 unexpected custom domains fail the allowlist gate. They run the browser probe
 unless `--no-browser` is explicit.
 
 Both successful deploy mode and verify mode require the selected Railway web and
 PostgreSQL services and database volume to be healthy and the active web
-manifest to use `/wrought/api/health`, a 30-second health-check timeout, one
+manifest to use `/api/health`, a 30-second health-check timeout, one
 replica, and more than ten seconds of draining. Database health includes
 Railway's non-migrating flag, the pinned volume name, `READY` state, at least 5
 GB, and the standard
 `/var/lib/postgresql/data` mount. They refuse to attest while another web
 rollout is unresolved. HTTP checks then require HTTPS with no redirects; the
-Joey Tan static shell at `/` and `/index.html`; the vendored Annals redirect,
-Plaid OAuth page, and `llms.txt` with deterministic content types; denial of
-directory listings; the exact vendored bytes of
-`/.well-known/apple-app-site-association`; `ok:true` health JSON at
-`/wrought/api/health`; the Wrought app shell at `/wrought`; the same shell at a
-direct `/wrought/play/...` SPA route; and every same-origin
-`/wrought/assets/**` JavaScript and stylesheet discovered from the Wrought
-HTML.
+Wrought app shell at `/`; `ok:true` health JSON at `/api/health`; the same
+shell at direct `/play/...` and `/build/...` SPA routes; and every same-origin
+`/assets/**` JavaScript and stylesheet discovered from the Wrought HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
-Wrought Home at `https://joeytan.dev/wrought`,
+Wrought Home at `https://wrought.joeytan.dev`,
 validates its title and delegated-start heading, and verifies that the sole
 candidate ChatGPT launch targets `https://chatgpt.com/` with its starter prompt and
-the candidate's exact absolute `/wrought/play/new` attachment URL. It then opens
+the candidate's exact absolute `/play/new` attachment URL. It then opens
 that Start-page
 authentication boundary directly and submits an intentionally unknown
 randomized username. It requires the expected 401 and generic credential error
 and fails on page exceptions, console warnings/errors, same-origin request
 failures, or unexpected same-origin 4xx/5xx responses. The probe creates no
 account or other durable application fixture. Chrome's generic console noise is
-tolerated only when accounted for by the expected anonymous `GET /wrought/api/me` and
-invalid-signin `POST /wrought/api/auth/signin` 401 responses; those UI and response
+tolerated only when accounted for by the expected anonymous `GET /api/me` and
+invalid-signin `POST /api/auth/signin` 401 responses; those UI and response
 boundaries are asserted directly. This proves the launch URL construction, not
 that ChatGPT web honored the attachment request or exposed Site tools. Because
 the credentials are deliberately invalid, it also proves only the canonical
@@ -241,7 +237,7 @@ not evidence for `__Host-wrought_session` creation, flags, path, or scope.
 This smoke test deliberately does not replay the 141-scenario suite against the
 hosted database. `./ci.sh` owns broad, deterministic product behavior against a
 disposable database; deployed smoke owns the narrower Railway build, service,
-public TLS/proxy, combined-root, deployed-origin, asset, and database-read-path
+public TLS/proxy, root-mounted routing, deployed-origin, asset, and database-read-path
 boundary.
 Passing runs write an allowlisted, secret-free record with `schemaVersion: 2`
 and private file permissions. `releaseStage` distinguishes `pre-dns` from
@@ -265,7 +261,7 @@ The run must identify one exact clean source artifact or deployed candidate and
 use:
 
 - its production frontend and Go artifact at one exact HTTPS browser origin,
-  with a canonical Wrought application base below `/wrought`;
+  with the canonical Wrought application at `/`;
 - an isolated synthetic Wrought account and disposable data boundary;
 - a fresh or deliberately cleared ChatGPT web conversation with site-tool
   support;
@@ -277,9 +273,9 @@ A disposable local candidate may be built from the exact source, run on
 `127.0.0.1:8080` against a uniquely named PostgreSQL database, and exposed with
 an official checksum-verified `cloudflared tunnel --no-autoupdate --url
 http://127.0.0.1:8080`. Set `WROUGHT_PUBLIC_ORIGIN` to the resulting HTTPS
-origin, treat it as public while alive, and require `/wrought/api/health`
+origin, treat it as public while alive, and require `/api/health`
 through that origin to return `ok:true`. The candidate Home is
-`<origin>/wrought`; the origin value itself never contains `/wrought`. Do not
+`<origin>/`; the origin value itself never contains a path. Do not
 expose the normal `./run.sh` Vite/backend pair or reuse development or hosted
 data.
 
@@ -287,10 +283,10 @@ data.
 
 The acceptance participant performs only these actions:
 
-1. Open the candidate's Wrought Home page at `<origin>/wrought` and choose
+1. Open the candidate's Wrought Home page at `<origin>/` and choose
    **Open in ChatGPT**. For the canonical deployed candidate this is
-   `https://joeytan.dev/wrought`, and the requested attached page must be
-   `https://joeytan.dev/wrought/play/new`.
+   `https://wrought.joeytan.dev`, and the requested attached page must be
+   `https://wrought.joeytan.dev/play/new`.
 2. Sign in to Wrought in the attached browser tab if required.
 3. Send the prefilled starter prompt with its final
    `My play preference: surprise me.` line unchanged. A run may separately
@@ -306,7 +302,7 @@ browser operation:
 1. use the ready Start surface to call `inspect_world_templates`, choose from the
    complete three-template catalog, and call `copy_world_template`;
 2. continue in the same conversation while the same attached tab navigates to
-   `/wrought/play/{world_id}` and the Play surface becomes ready;
+   `/play/{world_id}` and the Play surface becomes ready;
 3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again,
    read the relevant `read_play_handbook` topics, and `present_problem`;
 4. for each of the three participant responses, record it with `submit_action`,
@@ -318,7 +314,7 @@ browser operation:
 A run passes only when all of the following are observed:
 
 - the Home launch navigates to `chatgpt.com`, and the exact absolute Start page
-  for the candidate's `/wrought/play/new` route is attached in one conversation;
+  for the candidate's `/play/new` route is attached in one conversation;
 - authentication is the participant's only manual Wrought operation;
 - site-tool support and readiness are established on both Start and Play pages;
 - ChatGPT makes zero browser-control requests and asks zero setup questions
@@ -453,11 +449,8 @@ PostgreSQL integration fixture. They cover:
 
 - configuration precedence and log levels;
 - strict JSON and the error envelope;
-- exact `/wrought` static/SPA routing, root-site extensionless `.html`
-  aliases, deterministic HTML/JavaScript/CSS/Markdown/text MIME types,
-  query-preserving directory redirects without directory listings, and panic
-  recovery; the root-site tests also prove that `CNAME` and `.nojekyll` are not
-  served;
+- root-mounted static/SPA routing, missing-asset 404 behavior, and panic
+  recovery;
 - API Mechanic values and exact numeric transport;
 - interaction mappings and generated IDs;
 - archived-mechanic and dependency guards;
@@ -470,7 +463,7 @@ PostgreSQL integration fixture. They cover:
 - recursive expression transport/storage reconstruction, derived-source
   validation, cycle field mapping, inline status modifier normalization, exact
   remove-target validation, and active derived-dependency guards;
-- unknown route families return `404 endpoint_not_found`.
+- unknown API route families return `404 endpoint_not_found`.
 
 Migration contract tests also require digest-only invitation storage, the
 world mechanic graph/status tables, root-creation triggers, normalized storage
@@ -503,8 +496,7 @@ API adapter, and backend-independent view rendering:
   and reset behavior;
 - password minimum-length behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
-  round trips, fixed `/wrought` prefixing, and rejection of unprefixed or
-  lookalike routes;
+  round trips, and root-relative Play and Build routing;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown;
@@ -602,7 +594,7 @@ claim lifecycle-journey evidence.
 
 `test/specs/integrations/delegated-start.site-tools.spec.ts` is the automated
 site-tool page integration. It installs a controlled browser WebMCP harness,
-starts from authenticated `/wrought/play/new`, invokes the complete Start surface,
+starts from authenticated `/play/new`, invokes the complete Start surface,
 requires same-tab navigation, invokes the Play
 inspect/claim/inspect/read-handbook/present/submit/resolve sequence, presents the
 next Problem, reloads, and checks durable agreement. It also proves that no
@@ -626,7 +618,7 @@ When invoked through `./ci.sh e2e`, Playwright global setup:
 4. selects a free loopback port;
 5. starts the application with debug logging and the disposable URL as its
    exact public origin;
-6. waits up to 10 seconds for `/wrought/api/health`;
+6. waits up to 10 seconds for `/api/health`;
 7. writes the base URL and disposable database URL to ignored runtime metadata,
    created with mode `0600`.
 
@@ -800,5 +792,3 @@ can be destroyed or modified without consequence.
 - no Firefox, WebKit, mobile, or retry project;
 - no load, proxy/multi-replica, long-duration SSE soak, fault-injection, or
   backup/restore tests;
-- no exhaustive byte-for-byte test of every file in the vendored personal-site
-  snapshot; deployed smoke verifies the home shell and association file only.

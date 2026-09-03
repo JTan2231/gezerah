@@ -13,10 +13,10 @@ const noop = () => undefined;
 describe("ChatGPTWorldStartView", () => {
   test("offers the custom World route from Build", () => {
     const prompt = createChatGPTWorldStartPrompt(
-      "https://joeytan.dev/wrought/build",
+      "https://wrought.joeytan.dev/build",
     );
     const chatGPTHref = createChatGPTLaunchURL(
-      "https://joeytan.dev/wrought/build",
+      "https://wrought.joeytan.dev/build",
       prompt,
     );
     const html = renderToStaticMarkup(
@@ -33,13 +33,13 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain(
       "A World is your world setting and continuing history.",
     );
-    expect(html).toContain("https://joeytan.dev/wrought/build");
+    expect(html).toContain("https://wrought.joeytan.dev/build");
     expect(html).toContain("I will sign in and make each change myself.");
     expect(html).toContain("help me choose ChatGPT as Facilitator");
     expect(html).toContain("Start in ChatGPT");
     expect(html).toContain("https://chatgpt.com/?surface=work&amp;prompt=");
     expect(html).toContain(
-      "browserUrl=https%3A%2F%2Fjoeytan.dev%2Fwrought%2Fbuild",
+      "browserUrl=https%3A%2F%2Fwrought.joeytan.dev%2Fbuild",
     );
     expect(html).toContain("Copy starter prompt");
     expect(html).not.toContain("Choose a World yourself");
@@ -48,19 +48,19 @@ describe("ChatGPTWorldStartView", () => {
 
   test("offers a copyable route through the three World templates", () => {
     const prompt = createChatGPTTemplateStartPrompt(
-      "https://joeytan.dev/wrought/play/new",
+      "https://wrought.joeytan.dev/play/new",
     );
     const html = renderToStaticMarkup(
       <ChatGPTWorldStartView
         variant="template"
         prompt={prompt}
         chatGPTHref={createChatGPTLaunchURL(
-          "https://joeytan.dev/wrought/play/new",
+          "https://wrought.joeytan.dev/play/new",
           prompt,
         )}
         copyStatus="idle"
         onCopyPrompt={noop}
-        manualHref="/wrought/play/new"
+        manualHref="/play/new"
         onStartManually={noop}
       />,
     );
@@ -68,7 +68,7 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("Start playing with ChatGPT");
     expect(html).toContain("three complete World templates");
     expect(html).toContain("final line of this prompt as my only setup input");
-    expect(html).toContain("https://joeytan.dev/wrought/play/new");
+    expect(html).toContain("https://wrought.joeytan.dev/play/new");
     expect(html).toContain("Keep lasting game state in Wrought");
     expect(html).toContain("My play preference: surprise me.");
     expect(html).toContain("never invent or submit an Action");
@@ -83,7 +83,7 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("Make the chosen World apparent through the scene");
     expect(html).not.toContain("tell me which World and Character you chose");
     expect(html).toContain("Choose a World yourself");
-    expect(html).toContain('href="/wrought/play/new"');
+    expect(html).toContain('href="/play/new"');
   });
 
   test("reports copy success and failure accessibly", () => {
@@ -116,11 +116,11 @@ describe("ChatGPTWorldStartView", () => {
   test("builds one web launch with the prompt and attached page", () => {
     expect(
       createChatGPTLaunchURL(
-        "https://joeytan.dev/wrought/play/new",
+        "https://wrought.joeytan.dev/play/new",
         "Start a World & ask me questions.",
       ),
     ).toBe(
-      "https://chatgpt.com/?surface=work&prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fjoeytan.dev%2Fwrought%2Fplay%2Fnew",
+      "https://chatgpt.com/?surface=work&prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fwrought.joeytan.dev%2Fplay%2Fnew",
     );
   });
 
@@ -133,7 +133,7 @@ describe("ChatGPTWorldStartView", () => {
         copyStatus="idle"
         onCopyPrompt={noop}
         promptFallback={false}
-        manualHref="/wrought/play/new"
+        manualHref="/play/new"
         onStartManually={noop}
       />,
     );

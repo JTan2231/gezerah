@@ -16,7 +16,7 @@ test("makes ChatGPT on the web the sole public interface", () => {
         copyStatus: "idle",
         onCopyPrompt: noop,
         promptFallback: false,
-        manualHref: "/wrought/play/new",
+        manualHref: "/play/new",
         onStartManually: noop,
       }}
     />,

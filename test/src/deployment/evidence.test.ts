@@ -103,7 +103,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     id: webServiceID,
     name: "wrought-web",
     deploymentId: deploymentID,
-    url: "https://joeytan.dev",
+    url: "https://wrought.joeytan.dev",
   });
   const database = service({
     id: databaseServiceID,
@@ -123,7 +123,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     status: "SUCCESS",
     createdAt: "2026-08-08T06:34:01.761Z",
     manifest: {
-      healthcheckPath: "/wrought/api/health",
+      healthcheckPath: "/api/health",
       healthcheckTimeout: 30,
       numReplicas: 1,
       drainingSeconds: 15,
@@ -139,11 +139,11 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     database,
     deployment,
     localCommit: "a".repeat(40),
-    publicURL: "https://joeytan.dev/wrought",
+    publicURL: "https://wrought.joeytan.dev",
     http: [
       {
         name: "health",
-        url: "https://joeytan.dev/wrought/api/health",
+        url: "https://wrought.joeytan.dev/api/health",
         status: 200,
         contentType: "application/json",
         bytes: 57,
@@ -153,7 +153,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     browser: {
       skipped: false,
       title: "Wrought",
-      finalPath: "/wrought/play",
+      finalPath: "/play",
       authProbe: true,
       failureCount: 0,
       durationMs: 900,

@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 
 import { chromium, type BrowserContext } from "@playwright/test";
 
@@ -55,16 +55,12 @@ export function normalizePublicURL(value: string): string {
   if (parsed.username !== "" || parsed.password !== "") {
     throw new Error("deployment URL must not contain credentials");
   }
-  if (
-    (parsed.pathname !== "/wrought" && parsed.pathname !== "/wrought/") ||
-    parsed.search !== "" ||
-    parsed.hash !== ""
-  ) {
+  if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") {
     throw new Error(
-      'deployment URL must use the canonical "/wrought" application path',
+      "deployment URL must identify an HTTPS origin without a path",
     );
   }
-  return `${parsed.origin}/wrought`;
+  return parsed.origin;
 }
 
 export function extractAssetURLs(
@@ -140,105 +136,6 @@ export async function verifyHTTP(
   };
   const checks: HTTPCheck[] = [];
 
-  const siteRoot = await requestText(
-    "site homepage",
-    new URL("/", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(siteRoot, "text/html");
-  if (!/<title>Joey Tan - Software Engineer<\/title>/i.test(siteRoot.body)) {
-    throw new Error("site homepage did not return the Joey Tan static shell");
-  }
-  checks.push(toCheck(siteRoot));
-
-  const siteIndex = await requestText(
-    "site index",
-    new URL("/index.html", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(siteIndex, "text/html");
-  if (!/<title>Joey Tan - Software Engineer<\/title>/i.test(siteIndex.body)) {
-    throw new Error("site index did not return the Joey Tan static shell");
-  }
-  checks.push(toCheck(siteIndex));
-
-  const annalsIndex = await requestText(
-    "annals index",
-    new URL("/annals/index.html", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(annalsIndex, "text/html");
-  if (
-    !/<title>Redirecting\.\.\.<\/title>/i.test(annalsIndex.body) ||
-    !annalsIndex.body.includes("annals-web-production.up.railway.app")
-  ) {
-    throw new Error("annals index did not return the vendored redirect shell");
-  }
-  checks.push(toCheck(annalsIndex));
-
-  const plaidOAuth = await requestText(
-    "Plaid OAuth page",
-    new URL("/plaid/oauth.html", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(plaidOAuth, "text/html");
-  checks.push(toCheck(plaidOAuth));
-
-  const llms = await requestText(
-    "LLM index",
-    new URL("/llms.txt", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(llms, "text/plain");
-  if (!llms.body.startsWith("# Joey Tan")) {
-    throw new Error("LLM index did not return the vendored text index");
-  }
-  checks.push(toCheck(llms));
-
-  for (const directoryPath of ["/llms/", "/plaid/", "/.well-known/"]) {
-    const directory = await requestTextWithStatus(
-      `directory denial ${directoryPath}`,
-      new URL(directoryPath, normalized),
-      httpNotFound,
-      fetchImpl,
-      retryOptions,
-      now,
-    );
-    requireNoDirectoryListing(directory);
-    checks.push(toCheck(directory));
-  }
-
-  const association = await requestText(
-    "Apple app-site association",
-    new URL("/.well-known/apple-app-site-association", normalized),
-    fetchImpl,
-    retryOptions,
-    now,
-  );
-  requireContentType(association, "application/json");
-  const associationHash = createHash("sha256")
-    .update(association.body, "utf8")
-    .digest("hex");
-  if (
-    associationHash !==
-    "789b60b536c7bf1cd98a9ac37e8a89fb78691a06a525fea67c1a8ece41cb7b96"
-  ) {
-    throw new Error(
-      "Apple app-site association did not match the vendored source",
-    );
-  }
-  checks.push(toCheck(association));
-
   const health = await requestText(
     "health",
     new URL(`${normalized}/api/health`),
@@ -273,15 +170,25 @@ export async function verifyHTTP(
   requireHTMLShell(root);
   checks.push(toCheck(root));
 
-  const deepLink = await requestText(
-    "SPA deep link",
+  const playDeepLink = await requestText(
+    "Play SPA deep link",
     new URL(`${normalized}/play/deployment-smoke`),
     fetchImpl,
     retryOptions,
     now,
   );
-  requireHTMLShell(deepLink);
-  checks.push(toCheck(deepLink));
+  requireHTMLShell(playDeepLink);
+  checks.push(toCheck(playDeepLink));
+
+  const buildDeepLink = await requestText(
+    "Build SPA deep link",
+    new URL(`${normalized}/build/deployment-smoke/capacities`),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireHTMLShell(buildDeepLink);
+  checks.push(toCheck(buildDeepLink));
 
   const assets = extractAssetURLs(root.body, root.finalURL);
   const javascript = assets.filter((url) => pathname(url).endsWith(".js"));
@@ -429,7 +336,7 @@ export async function verifyBrowser(
       page.waitForResponse(
         (candidate) =>
           candidate.request().method() === "POST" &&
-          new URL(candidate.url()).pathname === "/wrought/api/auth/signin",
+          new URL(candidate.url()).pathname === "/api/auth/signin",
       ),
       form.getByRole("button", { name: "Sign in", exact: true }).click(),
     ]);
@@ -496,7 +403,6 @@ async function requestText(
 }
 
 const httpOK = 200;
-const httpNotFound = 404;
 
 async function requestTextWithStatus(
   name: string,
@@ -588,12 +494,6 @@ function requireHTMLShell(response: TextResponse): void {
   }
 }
 
-function requireNoDirectoryListing(response: TextResponse): void {
-  if (/<title>\s*Index of |Directory listing for/i.test(response.body)) {
-    throw new Error(`${response.name} exposed a directory listing`);
-  }
-}
-
 function requireContentType(response: TextResponse, expected: string): void {
   if (!response.contentType.toLowerCase().includes(expected)) {
     throw new Error(
@@ -664,8 +564,8 @@ function safePath(value: string): string {
 
 function expectedAnonymous401(method: string, path: string): boolean {
   return (
-    (method === "GET" && path === "/wrought/api/me") ||
-    (method === "POST" && path === "/wrought/api/auth/signin")
+    (method === "GET" && path === "/api/me") ||
+    (method === "POST" && path === "/api/auth/signin")
   );
 }
 

@@ -362,7 +362,7 @@ test("contract: the three World templates clone atomically into complete, playab
   await test.step("the authenticated catalog exposes exactly the three equal choices", async () => {
     const catalog = await getJSON<WorldTemplateResponse[]>(
       request,
-      `${baseURL}/wrought/api/world-templates`,
+      `${baseURL}/api/world-templates`,
       owner.id,
     );
     expect(catalog).toHaveLength(3);
@@ -385,16 +385,14 @@ test("contract: the three World templates clone atomically into complete, playab
   for (const expected of templates) {
     await test.step(`copy and inspect ${expected.name}`, async () => {
       const destinationID = randomUUID();
-      const cloneURL = `${baseURL}/wrought/api/world-templates/${expected.id}/clone`;
+      const cloneURL = `${baseURL}/api/world-templates/${expected.id}/clone`;
       const response = await postAs(
         request,
         cloneURL,
         { id: destinationID },
         owner.id,
       );
-      expect(response.headers().location).toBe(
-        `/wrought/api/worlds/${destinationID}`,
-      );
+      expect(response.headers().location).toBe(`/api/worlds/${destinationID}`);
       const world = await expectJSONStatus<WorldResponse>(
         response,
         201,
@@ -451,7 +449,7 @@ test("contract: the three World templates clone atomically into complete, playab
   await test.step("claiming a complete preset makes Play ready", async () => {
     const copy = required(copies.get("terms-of-the-city"), "Terms copy");
     const chosen = required(copy.available.entities[0], "available Character");
-    const claimURL = `${baseURL}/wrought/api/worlds/${copy.world.id}/entities/${chosen.id}/claim`;
+    const claimURL = `${baseURL}/api/worlds/${copy.world.id}/entities/${chosen.id}/claim`;
     const claimed = await expectJSONStatus<ClaimedWorldEntityResponse>(
       await postAs(
         request,
@@ -471,7 +469,7 @@ test("contract: the three World templates clone atomically into complete, playab
 
     const readyWorld = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${copy.world.id}`,
+      `${baseURL}/api/worlds/${copy.world.id}`,
       owner.id,
     );
     expect(readyWorld).toMatchObject({
@@ -481,7 +479,7 @@ test("contract: the three World templates clone atomically into complete, playab
     });
     const readyProfile = await getJSON<EntityProfileResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${copy.world.id}/entities/${chosen.id}/profile`,
+      `${baseURL}/api/worlds/${copy.world.id}/entities/${chosen.id}/profile`,
       owner.id,
     );
     expect(readyProfile.character_status).toBe("ready");
@@ -494,7 +492,7 @@ test("contract: the three World templates clone atomically into complete, playab
     );
     const first = required(copies.get(expected.id), "first Banners copy");
     const destinationID = randomUUID();
-    const cloneURL = `${baseURL}/wrought/api/world-templates/${expected.id}/clone`;
+    const cloneURL = `${baseURL}/api/world-templates/${expected.id}/clone`;
     const world = await expectJSONStatus<WorldResponse>(
       await postAs(request, cloneURL, { id: destinationID }, owner.id),
       201,
@@ -526,14 +524,14 @@ test("contract: World template endpoints reject unauthenticated, unknown, and in
   );
 
   await expectAPIError(
-    await getAs(request, `${baseURL}/wrought/api/world-templates`),
+    await getAs(request, `${baseURL}/api/world-templates`),
     401,
     "authentication_required",
   );
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/wrought/api/world-templates/not-a-template/clone`,
+      `${baseURL}/api/world-templates/not-a-template/clone`,
       { id: randomUUID() },
       owner.id,
     ),
@@ -543,7 +541,7 @@ test("contract: World template endpoints reject unauthenticated, unknown, and in
   const invalid = await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/wrought/api/world-templates/banners-at-eldermead/clone`,
+      `${baseURL}/api/world-templates/banners-at-eldermead/clone`,
       { id: "not-a-uuid" },
       owner.id,
     ),
@@ -570,7 +568,7 @@ async function inspectMaterializedCopy(
   world: WorldResponse,
   expected: ExpectedTemplate,
 ): Promise<MaterializedCopy> {
-  const worldURL = `${baseURL}/wrought/api/worlds/${world.id}`;
+  const worldURL = `${baseURL}/api/worlds/${world.id}`;
   const [mechanics, fieldSet, entities, available] = await Promise.all([
     getJSON<MechanicCollectionResponse>(
       request,
