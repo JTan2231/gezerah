@@ -49,14 +49,14 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const context = await publicContext(baseURL);
     try {
       await expectAPIError(
-        await context.post("/wrought/api/auth/signup", {
+        await context.post("/api/auth/signup", {
           data: { username: "!", display_name: "", password: "short" },
         }),
         422,
         "validation_failed",
       );
       await expectAPIError(
-        await context.get("/wrought/api/me"),
+        await context.get("/api/me"),
         401,
         "authentication_required",
       );
@@ -71,7 +71,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const duplicate = await publicContext(baseURL);
     try {
       await expectAPIError(
-        await duplicate.post("/wrought/api/auth/signup", {
+        await duplicate.post("/api/auth/signup", {
           data: {
             username: username.toLowerCase(),
             display_name: `Duplicate ${unique}`,
@@ -82,7 +82,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
         "username_unavailable",
       );
       await expectAPIError(
-        await duplicate.get("/wrought/api/me"),
+        await duplicate.get("/api/me"),
         401,
         "authentication_required",
       );
@@ -107,7 +107,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const unknown = await publicContext(baseURL);
     try {
       const unknownError = await readAPIError(
-        await unknown.post("/wrought/api/auth/signin", {
+        await unknown.post("/api/auth/signin", {
           data: {
             username: `unknown-${unique}`,
             password: "a-wrong-password-long-enough",
@@ -124,7 +124,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const wrong = await publicContext(baseURL);
     try {
       const wrongError = await readAPIError(
-        await wrong.post("/wrought/api/auth/signin", {
+        await wrong.post("/api/auth/signin", {
           data: {
             username: credentialUsername,
             password: "a-wrong-password-long-enough",
@@ -146,7 +146,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   ]);
   await test.step("IDN-V03[missing] session is rejected", async () => {
     await expectAPIError(
-      await request.get(`${baseURL}/wrought/api/me`),
+      await request.get(`${baseURL}/api/me`),
       401,
       "authentication_required",
     );
@@ -159,7 +159,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     });
     try {
       await expectAPIError(
-        await malformed.get("/wrought/api/me"),
+        await malformed.get("/api/me"),
         401,
         "authentication_required",
       );
@@ -172,7 +172,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const expired = await signupActor(baseURL, `Expired actor ${unique}`);
     await expireSessionForDirectContract(expired.id);
     await expectAPIError(
-      await expired.api.get("/wrought/api/me"),
+      await expired.api.get("/api/me"),
       401,
       "authentication_required",
     );
@@ -181,25 +181,25 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   await test.step("IDN-V03[revoked] session is rejected", async () => {
     const revoked = await signupActor(baseURL, `Revoked actor ${unique}`);
     const world = await expectJSON<{ id: string }>(
-      await revoked.api.post("/wrought/api/worlds", {
+      await revoked.api.post("/api/worlds", {
         data: { name: `Revoked stream ${unique}` },
       }),
     );
     const sessionCookie = await actorSessionCookie(revoked.id);
     const controller = new AbortController();
     const stream = await fetch(
-      `${baseURL}/wrought/api/worlds/${world.id}/events?after=0`,
+      `${baseURL}/api/worlds/${world.id}/events?after=0`,
       {
         headers: { Cookie: `${sessionCookie.name}=${sessionCookie.value}` },
         signal: controller.signal,
       },
     );
     expect(stream.status).toBe(200);
-    const logout = await revoked.api.post("/wrought/api/auth/logout");
+    const logout = await revoked.api.post("/api/auth/logout");
     expect(logout.status()).toBe(204);
     await expectEventStreamClosure(stream, controller);
     await expectAPIError(
-      await revoked.api.get("/wrought/api/me"),
+      await revoked.api.get("/api/me"),
       401,
       "authentication_required",
     );
@@ -209,7 +209,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const disabled = await signupActor(baseURL, `Disabled actor ${unique}`);
     await disableUserForDirectContract(disabled.id);
     await expectAPIError(
-      await disabled.api.get("/wrought/api/me"),
+      await disabled.api.get("/api/me"),
       401,
       "authentication_required",
     );
@@ -255,9 +255,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const fresh = await readAuthPersistenceForDirectContract(
       firstPersistenceActor.id,
     );
-    expect(
-      (await firstPersistenceActor.api.get("/wrought/api/me")).status(),
-    ).toBe(200);
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
     const unchanged = await readAuthPersistenceForDirectContract(
       firstPersistenceActor.id,
     );
@@ -268,9 +266,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const aged = await readAuthPersistenceForDirectContract(
       firstPersistenceActor.id,
     );
-    expect(
-      (await firstPersistenceActor.api.get("/wrought/api/me")).status(),
-    ).toBe(200);
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
     const touched = await readAuthPersistenceForDirectContract(
       firstPersistenceActor.id,
     );
@@ -279,9 +275,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
       aged.idleExpiresAtMicros,
     );
 
-    expect(
-      (await firstPersistenceActor.api.get("/wrought/api/me")).status(),
-    ).toBe(200);
+    expect((await firstPersistenceActor.api.get("/api/me")).status()).toBe(200);
     const suppressed = await readAuthPersistenceForDirectContract(
       firstPersistenceActor.id,
     );
@@ -291,7 +285,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
 
   await test.step("SSE reauthorization is read-only and does not extend idle expiry", async () => {
     const world = await expectJSON<{ id: string }>(
-      await firstPersistenceActor.api.post("/wrought/api/worlds", {
+      await firstPersistenceActor.api.post("/api/worlds", {
         data: { name: `Read-only session stream ${unique}` },
       }),
     );
@@ -301,7 +295,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     ]);
     const controller = new AbortController();
     const stream = await fetch(
-      `${baseURL}/wrought/api/worlds/${world.id}/events?after=0`,
+      `${baseURL}/api/worlds/${world.id}/events?after=0`,
       {
         headers: { Cookie: `${sessionCookie.name}=${sessionCookie.value}` },
         signal: controller.signal,
@@ -325,7 +319,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const [firstRecord, sessionCookie, me] = await Promise.all([
       readAuthPersistenceForDirectContract(firstPersistenceActor.id),
       actorSessionCookie(firstPersistenceActor.id),
-      firstPersistenceActor.api.get("/wrought/api/me"),
+      firstPersistenceActor.api.get("/api/me"),
     ]);
     const meBody = await me.text();
     for (const secret of [
@@ -339,7 +333,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   });
 
   const csrfActor = await signupActor(baseURL, `CSRF actor ${unique}`);
-  const csrfWorldsURL = `${baseURL}/wrought/api/worlds`;
+  const csrfWorldsURL = `${baseURL}/api/worlds`;
   await test.step("IDN-V05[missing-token] mutation fails atomically", async () => {
     await expectAPIError(
       await csrfActor.api.post(csrfWorldsURL, {
@@ -386,7 +380,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const actor = await signupActor(baseURL, `Session cap ${unique}`);
     await insertActiveSessionFixturesForDirectContract(actor.id, 20);
     const newest = await signinActor(baseURL, actor.username, actor.password);
-    expect((await newest.api.get("/wrought/api/me")).status()).toBe(200);
+    expect((await newest.api.get("/api/me")).status()).toBe(200);
     expect(
       (await readAuthPersistenceForDirectContract(actor.id)).sessionCount,
     ).toBe(20);
@@ -395,7 +389,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   await test.step("IDN-007 password change rejects a wrong current password without ending the session", async () => {
     const actor = await signupActor(baseURL, `Password guard ${unique}`);
     await expectAPIError(
-      await actor.api.put("/wrought/api/me/password", {
+      await actor.api.put("/api/me/password", {
         data: {
           current_password: "not-the-current-password",
           new_password: "a-valid-new-password-that-will-not-apply",
@@ -404,14 +398,14 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
       422,
       "validation_failed",
     );
-    expect((await actor.api.get("/wrought/api/me")).status()).toBe(200);
+    expect((await actor.api.get("/api/me")).status()).toBe(200);
   });
 
   await test.step("IDN-007 password change rotates session and credentials", async () => {
     const actor = await signupActor(baseURL, `Password rotation ${unique}`);
     const oldCookie = await actorSessionCookie(actor.id);
     const newPassword = "the-new-lantern-password-is-long-enough";
-    const changed = await actor.api.put("/wrought/api/me/password", {
+    const changed = await actor.api.put("/api/me/password", {
       data: {
         current_password: actor.password,
         new_password: newPassword,
@@ -436,12 +430,12 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const oldPassword = await publicContext(baseURL);
     try {
       await expectAPIError(
-        await oldSession.get("/wrought/api/me"),
+        await oldSession.get("/api/me"),
         401,
         "authentication_required",
       );
       await expectAPIError(
-        await oldPassword.post("/wrought/api/auth/signin", {
+        await oldPassword.post("/api/auth/signin", {
           data: { username: actor.username, password: actor.password },
         }),
         401,
@@ -451,7 +445,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
       await Promise.all([oldSession.dispose(), oldPassword.dispose()]);
     }
     const replacement = await signinActor(baseURL, actor.username, newPassword);
-    expect((await replacement.api.get("/wrought/api/me")).status()).toBe(200);
+    expect((await replacement.api.get("/api/me")).status()).toBe(200);
   });
 
   await test.step("IDN-007 concurrent old-password signin cannot survive password rotation", async () => {
@@ -460,13 +454,13 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const newPassword = "the-raced-lantern-password-is-long-enough";
     try {
       const [changed, racedSignin] = await Promise.all([
-        actor.api.put("/wrought/api/me/password", {
+        actor.api.put("/api/me/password", {
           data: {
             current_password: actor.password,
             new_password: newPassword,
           },
         }),
-        oldPasswordSignin.post("/wrought/api/auth/signin", {
+        oldPasswordSignin.post("/api/auth/signin", {
           data: { username: actor.username, password: actor.password },
         }),
       ]);
@@ -482,7 +476,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
         await expectAPIError(racedSignin, 401, "invalid_credentials");
       }
       await expectAPIError(
-        await oldPasswordSignin.get("/wrought/api/me"),
+        await oldPasswordSignin.get("/api/me"),
         401,
         "authentication_required",
       );
@@ -494,13 +488,13 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   await test.step("IDN-008 logout-all revokes every session for the account", async () => {
     const first = await signupActor(baseURL, `All sessions ${unique}`);
     const second = await signinActor(baseURL, first.username, first.password);
-    expect((await second.api.get("/wrought/api/me")).status()).toBe(200);
-    const logoutAll = await first.api.post("/wrought/api/auth/logout-all");
+    expect((await second.api.get("/api/me")).status()).toBe(200);
+    const logoutAll = await first.api.post("/api/auth/logout-all");
     expect(logoutAll.status()).toBe(204);
     await Promise.all(
       [first.api, second.api].map(async (context) =>
         expectAPIError(
-          await context.get("/wrought/api/me"),
+          await context.get("/api/me"),
           401,
           "authentication_required",
         ),
@@ -511,7 +505,7 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
   await test.step("AUT-V07[anonymous-forgery] cannot authenticate", async () => {
     const victim = await signupActor(baseURL, `Forgery victim ${unique}`);
     await expectAPIError(
-      await request.get(`${baseURL}/wrought/api/worlds`, {
+      await request.get(`${baseURL}/api/worlds`, {
         headers: { "X-WROUGHT-User-ID": victim.id },
       }),
       401,
@@ -523,24 +517,21 @@ test("contract: password accounts, sessions, CSRF, and forged identity headers a
     const victim = await signupActor(baseURL, `Override victim ${unique}`);
     const attacker = await signupActor(baseURL, `Override attacker ${unique}`);
     const victimWorld = await expectJSON<{ id: string }>(
-      await actorRequest(victim.id).post("/wrought/api/worlds", {
+      await actorRequest(victim.id).post("/api/worlds", {
         data: { name: `Victim world ${unique}` },
       }),
     );
     expect(
       await expectJSON<unknown[]>(
-        await actorRequest(attacker.id).get("/wrought/api/worlds", {
+        await actorRequest(attacker.id).get("/api/worlds", {
           headers: { "X-WROUGHT-User-ID": victim.id },
         }),
       ),
     ).toEqual([]);
     await expectAPIError(
-      await actorRequest(attacker.id).get(
-        `/wrought/api/worlds/${victimWorld.id}`,
-        {
-          headers: { "X-WROUGHT-User-ID": victim.id },
-        },
-      ),
+      await actorRequest(attacker.id).get(`/api/worlds/${victimWorld.id}`, {
+        headers: { "X-WROUGHT-User-ID": victim.id },
+      }),
       403,
       "world_forbidden",
     );

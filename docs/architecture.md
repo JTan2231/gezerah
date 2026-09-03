@@ -42,14 +42,11 @@ flowchart TB
     Binary[Single Wrought Go binary]
     Migrations[Embedded SQL migrations]
     App[Embedded Wrought Vite build]
-    Site[Vendored joeytan.dev snapshot]
     Postgres[(PostgreSQL)]
     OpenAI[OpenAI Responses API]
 
-    Client -->|GET /wrought routes| Binary
-    Client -->|GET root site paths| Binary
+    Client -->|GET app routes| Binary
     Binary --> App
-    Binary --> Site
     Client -->|JSON commands and queries| Binary
     Client -->|world event stream| Binary
     Binary -->|pgx pool| Postgres
@@ -63,41 +60,25 @@ PostgreSQL, applies unapplied embedded migrations, constructs the HTTP server,
 and listens. `SIGINT` and `SIGTERM` start a bounded shutdown attempt with a
 ten-second deadline.
 
-The public application base is exactly `/wrought`, so its canonical URL is
-<https://joeytan.dev/wrought>; the browser security origin is the host-only
-`https://joeytan.dev`. The outer server accepts `/wrought` and
-`/wrought/**`, strips that mount before passing requests to the product
-handler, and sends the resulting `/api` family to the method-aware API mux.
-Other mounted GET paths use the Wrought static filesystem with SPA fallback to
-`index.html`. Missing files under public `/wrought/assets/**` do not receive
-that fallback.
-
-Every other root path is served from `web/site`, a tracked snapshot of
-`/Users/joey/ts/jtan2231.github.io` at revision `d0a73a4`. Its published paths
-include `/`, `/.well-known/apple-app-site-association`, `/annals/**`,
-`/bio-prompt.md`, `/llms.txt`, `/llms/**`, `/plaid/oauth.html`, and
-`/privacy-policy.html`. Existing `.html` files are also available through
-extensionless aliases such as `/plaid/oauth` and `/privacy-policy`. Root files
-have deterministic MIME types; directory canonicalization preserves query
-strings and never exposes a listing. The source repository's `CNAME` and
-`.nojekyll` are intentionally not vendored or served. Unknown root-site paths
-return 404 rather than falling through to the Wrought SPA. Both surfaces
-deliberately share one origin and one TLS/HSTS boundary. The `/wrought` mount is not a browser isolation
-boundary: root-site JavaScript can make authenticated same-origin Wrought API
-requests, so the complete snapshot is trusted application code. See
-[Security](security.md#combined-host-origin).
+The public application base is `/`, so its canonical URL and browser security
+origin are both <https://wrought.joeytan.dev>. The server sends the `/api`
+family to the method-aware API mux. Other GET paths use the Wrought static
+filesystem with SPA fallback to `index.html`; missing files under public
+`/assets/**` do not receive that fallback. The `/play/**` and `/build/**`
+families are client-side routes. The separate <https://joeytan.dev> personal
+site remains on GitHub Pages and is outside this runtime and browser origin.
 
 ### Local development
 
 ```mermaid
 flowchart LR
-    Browser -->|http://127.0.0.1:5173/wrought| Vite[Vite dev server]
-    Vite -->|proxy /wrought/api| Go[Go API :8080]
+    Browser -->|http://127.0.0.1:5173/| Vite[Vite dev server]
+    Vite -->|proxy /api| Go[Go API :8080]
     Go --> DB[(local PostgreSQL)]
 ```
 
 `./run.sh` builds and manages the Go process and starts Vite. PID files and
-logs live below ignored `.wrought/`. The frontend uses the same relative `/wrought/api`
+logs live below ignored `.wrought/`. The frontend uses the same relative `/api`
 paths in both topologies.
 
 ## Architectural layers
@@ -119,14 +100,14 @@ flowchart TD
 ### Browser layer
 
 The browser starts with one data-free ChatGPT web launch for delegated template
-Play. The Wrought home at `/wrought` navigates to `chatgpt.com` with a starter
+Play. The Wrought home at `/` navigates to `chatgpt.com` with a starter
 prompt and a request to attach the exact
-`https://joeytan.dev/wrought/play/new` Start site-tool page, without
+`https://wrought.joeytan.dev/play/new` Start site-tool page, without
 duplicating the catalog at the home page. When a supported ChatGPT surface
 honors that request, one
-template copy navigates the same attached browser tab to `/wrought/play/{world_id}` and
+template copy navigates the same attached browser tab to `/play/{world_id}` and
 replaces the Start site-tool surface with the Play site-tool surface. The Wrought
-home does not expose the internal `/wrought/build` or `/wrought/play` libraries in this first
+home does not expose the internal `/build` or `/play` libraries in this first
 version. Those routes still own authoring, administration, saved-World,
 invitation, and broader Play behavior and share the same authenticated account
 boundary, API types, fetch helpers, route helpers, and UI primitives.
@@ -172,12 +153,9 @@ Problem's Consequence during Play.
 A current player who is not ready sees only controlled-character onboarding and does
 not request live interactions or events.
 
-Routing uses the History API. `/wrought` and `/wrought/` are the same Home
-surface. Only that exact application mount, the current `/wrought/build/**`,
-`/wrought/play/**`, and area-scoped invite URLs are recognized. Unprefixed
-product-looking paths and near-prefix paths such as `/wroughtly` never enter
-the application; unknown paths inside the mount render Wrought's not-found
-screen.
+Routing uses the History API. `/` is the Home surface. The current `/build/**`,
+`/play/**`, and area-scoped invite URLs are recognized; unknown application
+paths render Wrought's not-found screen.
 
 Ordinary JSON calls pass through one credentialed fetch adapter that sets JSON
 headers, maps the error envelope, and attaches the in-memory session CSRF token
@@ -254,7 +232,7 @@ sequenceDiagram
     participant H as HTTP handler
     participant DB as PostgreSQL
 
-    UI->>H: POST /wrought/api/worlds
+    UI->>H: POST /api/worlds
     H->>DB: Begin transaction
     H->>DB: Insert world with initial human facilitator assignment
     H->>DB: Insert matching owner membership (deferred assignment FK)
@@ -443,7 +421,7 @@ a response cannot combine different revisions.
 ## Events and freshness
 
 Live and rules-configuration mutations append `world_events`. The browser opens
-`GET /wrought/api/worlds/{world_id}/events` with an `after` cursor or `Last-Event-ID`.
+`GET /api/worlds/{world_id}/events` with an `after` cursor or `Last-Event-ID`.
 The server emits monotonic IDs and compact resource references, plus keep-alive
 comments. Events are invalidation hints; clients reload authoritative world
 resources instead of reconstructing state from event payloads. A
@@ -488,7 +466,6 @@ clients reconnect with their last cursor.
 | `internal/migrations/`          | Embedded PostgreSQL baseline and future migrations.                              |
 | `web/frontend/`                 | React/Vite Build and Play SPA.                                                   |
 | `web/static/`                   | Ignored Vite output embedded by Go; only a placeholder is tracked.               |
-| `web/site/`                     | Tracked `joeytan.dev` root-site snapshot from revision `d0a73a4`.                 |
 | `test/`                         | Playwright harness, clean-database scenarios, and deployed-system smoke tooling. |
 | `ci.sh`, `run.sh`, `deploy.sh`  | Validation, managed local development, and Railway release orchestration.        |
 | `railpack.json`, `railway.toml` | Railway build and deployment configuration.                                      |
@@ -518,6 +495,5 @@ clients reconnect with their last cursor.
   hooks, route construction, and event streams. Cross into views only through
   semantic models and user-intent callbacks; keep authorization authoritative
   on the server.
-- Keep Wrought confined to the exact `/wrought` mount and root-site serving
-  confined to the reviewed vendored snapshot; do not let either fallback into
-  the other's URL space.
+- Keep `/api/**` reserved for JSON/SSE handlers and `/assets/**` reserved for
+  static files; do not let either family fall through to the SPA.

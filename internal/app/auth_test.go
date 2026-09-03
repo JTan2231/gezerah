@@ -77,7 +77,7 @@ func TestPasswordWorkHasAProcessWideConcurrencyLimit(t *testing.T) {
 	}
 
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/wrought/api/auth/signup", strings.NewReader(`{
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signup", strings.NewReader(`{
 		"username":"capacity-test",
 		"display_name":"Capacity Test",
 		"password":"a sufficiently long password"
@@ -198,7 +198,7 @@ func TestAuthThrottleKeysDoNotRetainAttackerInput(t *testing.T) {
 
 func TestSameOriginPolicy(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/wrought/api/auth/signin", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", nil)
 	request.Host = "127.0.0.1"
 	request.RemoteAddr = "127.0.0.1:12345"
 	if err := server.requireSameOrigin(request); err == nil {
@@ -212,12 +212,12 @@ func TestSameOriginPolicy(t *testing.T) {
 	if err := server.requireSameOrigin(request); err != nil {
 		t.Fatalf("same Origin rejected: %v", err)
 	}
-	remoteHTTP := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://app.example/wrought/api/auth/signin", nil)
+	remoteHTTP := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://app.example/api/auth/signin", nil)
 	remoteHTTP.Header.Set("Origin", "http://app.example")
 	if err := server.requireSameOrigin(remoteHTTP); err == nil {
 		t.Fatal("non-loopback HTTP origin was accepted without an explicit secure origin")
 	}
-	spoofedLoopback := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/wrought/api/auth/signin", nil)
+	spoofedLoopback := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", nil)
 	spoofedLoopback.Header.Set("Origin", "http://127.0.0.1")
 	spoofedLoopback.RemoteAddr = "203.0.113.10:4321"
 	if err := server.requireSameOrigin(spoofedLoopback); err == nil {
@@ -240,7 +240,7 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
 
 	local := httptest.NewRecorder()
-	localRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/wrought/api/me", nil)
+	localRequest := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
 	localRequest.RemoteAddr = "127.0.0.1:12345"
 	server.setSessionCookie(local, localRequest, session)
 	localCookies := local.Result().Cookies()
@@ -253,7 +253,7 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 
 	server.securePublicOrigin = true
 	secure := httptest.NewRecorder()
-	server.setSessionCookie(secure, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://internal/wrought/api/me", nil), session)
+	server.setSessionCookie(secure, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://internal/api/me", nil), session)
 	secureCookies := secure.Result().Cookies()
 	if len(secureCookies) != 1 {
 		t.Fatalf("secure cookies = %#v", secureCookies)
@@ -265,7 +265,7 @@ func TestSessionCookieSecurityAttributes(t *testing.T) {
 
 func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/wrought/api/me", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
 	request.RemoteAddr = "127.0.0.1:12345"
 	request.Header.Set("Cookie", localSessionCookieName+"=local-token; "+secureSessionCookieName+"=secure-token")
 	if got := server.sessionCookieToken(request); got != "local-token" {
@@ -276,7 +276,7 @@ func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 		t.Fatalf("HTTPS session token = %q, want __Host- cookie", got)
 	}
 
-	secureWithOnlyDevelopment := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/wrought/api/me", nil)
+	secureWithOnlyDevelopment := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
 	secureWithOnlyDevelopment.Header.Set("Cookie", localSessionCookieName+"=development-token")
 	if got := server.sessionCookieToken(secureWithOnlyDevelopment); got != "" {
 		t.Fatalf("secure mode accepted development cookie %q", got)
@@ -285,7 +285,7 @@ func TestSecureModeDoesNotAcceptTheDevelopmentCookie(t *testing.T) {
 
 func TestUnconfiguredRemoteHTTPFailsClosedToSecureCookies(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/wrought/api/me", nil)
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "http://127.0.0.1/api/me", nil)
 	request.RemoteAddr = "203.0.113.10:4321"
 	if !server.secureCookies(request) {
 		t.Fatal("remote HTTP peer with a spoofed loopback Host selected an insecure cookie")
@@ -296,7 +296,7 @@ func TestAuthenticationRoutesRejectForgedIdentityAndEnforceOrigin(t *testing.T) 
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
 	handler := server.Routes()
 
-	for _, path := range []string{"/wrought/api/worlds", "/wrought/api/world-invites/not-a-real-token"} {
+	for _, path := range []string{"/api/worlds", "/api/world-invites/not-a-real-token"} {
 		request := httptest.NewRequestWithContext(t.Context(), http.MethodGet, path, nil)
 		request.Header.Set("X-Wrought-User-Id", "57898ef8-85cf-43f3-a666-afdcfdd8cc54")
 		response := httptest.NewRecorder()
@@ -310,7 +310,7 @@ func TestAuthenticationRoutesRejectForgedIdentityAndEnforceOrigin(t *testing.T) 
 	}
 
 	response := httptest.NewRecorder()
-	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/wrought/api/auth/signup", strings.NewReader(`{}`)))
+	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/api/auth/signup", strings.NewReader(`{}`)))
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("signup without Origin status = %d, want 403", response.Code)
 	}
@@ -344,7 +344,7 @@ func TestAuthThrottleAllowsNormalFixtureVolumeAndExpires(t *testing.T) {
 
 func TestSigninAttemptBucketLimitsSuccessfulOrFailedArgonWork(t *testing.T) {
 	server := NewServerWithStaticFS(nil, fstest.MapFS{"index.html": &fstest.MapFile{Data: []byte("index")}})
-	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/wrought/api/auth/signin", strings.NewReader(`{
+	request := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "http://127.0.0.1/api/auth/signin", strings.NewReader(`{
 		"username":"attempt-limit",
 		"password":"a sufficiently long password"
 	}`))

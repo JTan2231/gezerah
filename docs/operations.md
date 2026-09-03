@@ -1,13 +1,10 @@
 # Operations
 
-> **Cutover state (2026-09-02):** Wrought's intended canonical application URL
-> is <https://joeytan.dev/wrought>. The DNS and Railway rename/cutover have not
-> yet been verified: `joeytan.dev` still serves GitHub Pages and `/wrought`
-> returns 404, while the active Railway release still has its pre-rename names,
-> domains, manifest, and `/api/health` path. The post-cutover target below uses
-> one Railway web service for the whole host, with the personal-site snapshot at
-> root paths and Wrought at the exact `/wrought` mount. Do not describe that
-> target as live until the verification steps in this runbook pass. Railway's
+> **Cutover state (2026-09-03):** Wrought's intended canonical application URL
+> is <https://wrought.joeytan.dev>. Its DNS and Railway custom domain have not
+> yet been verified. The existing <https://joeytan.dev> site remains entirely
+> on its unchanged GitHub Pages deployment. Do not describe the Wrought target
+> as live until the verification steps in this runbook pass. Railway's
 > environment name `production` is not a declaration of public-production
 > readiness; the separate public-release gate remains closed.
 
@@ -19,15 +16,15 @@ production.
 ## Deployable artifact
 
 Wrought deploys as one statically built Go application plus PostgreSQL. The
-browser assets are compiled by Vite into `web/static`; the personal site is a
-tracked snapshot under `web/site`. Both are embedded in the Go binary. That
+browser assets are compiled by Vite into `web/static` and embedded in the Go
+binary. That
 binary:
 
 - connects to PostgreSQL;
 - applies all pending migrations before listening;
-- serves Wrought API/SSE routes below `/wrought/api`;
-- serves the embedded Wrought SPA below `/wrought` and the personal-site
-  snapshot at the remaining root paths;
+- serves Wrought API/SSE routes below `/api`;
+- serves the embedded Wrought SPA from `/`, including `/play/**` and
+  `/build/**` routes;
 - logs structured JSON to stdout;
 - attempts bounded HTTP shutdown on termination signals.
 
@@ -42,8 +39,7 @@ CGO_ENABLED=0 go build -trimpath -o out ./cmd/wrought
 ```
 
 Building Go before Vite embeds only the tracked Wrought placeholder and
-produces a binary whose Wrought SPA routes return 503. The tracked personal-site
-snapshot is independent of that generated output.
+produces a binary whose Wrought SPA routes return 503.
 
 ## Runtime configuration
 
@@ -71,12 +67,11 @@ to `127.0.0.1:8080` and supplies
 `WROUGHT_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
 Configuration rejects a non-loopback HTTP public origin and also rejects a
 wildcard listener paired with a loopback HTTP origin. For the canonical
-deployment, set `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`. This value is the
+deployment, set `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`. This value is the
 exact external HTTPS origin—scheme and authority only, with no path, query, or
-fragment. The public application URL is separately fixed at
-`https://joeytan.dev/wrought`. This distinction is required when a reverse
-proxy changes the request host and ensures the `Secure`
-`__Host-wrought_session` cookie is issued.
+fragment. This ensures that a reverse proxy can change the request host while
+the `Secure` `__Host-wrought_session` cookie is still issued for the canonical
+browser origin.
 
 Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
 read secret files or rotate credentials. Supply them through the deployment
@@ -97,7 +92,7 @@ Startup is fail-fast:
 4. construct routes/static filesystem;
 5. bind and log `Wrought listening`.
 
-`GET /wrought/api/health` performs a fresh database ping with a two-second deadline:
+`GET /api/health` performs a fresh database ping with a two-second deadline:
 
 - `200` with `ok` and a timestamp when reachable;
 - `503 database_unavailable` otherwise.
@@ -160,122 +155,60 @@ At minimum, alert on restart loops, health failures, elevated 5xx/409 rates,
 database connection saturation, database storage, and migration duration. Be
 careful not to add private notes or player action text to telemetry.
 
-## Combined-host topology and cutover
+## Subdomain topology and cutover
 
-Railway custom domains bind a hostname, not a URL path. Directing
-`joeytan.dev` to Railway therefore directs the whole host, not only
-`/wrought`. The web service preserves the existing personal site by embedding a
-reviewed snapshot copied from `/Users/joey/ts/jtan2231.github.io` at revision
-`d0a73a4` into `web/site/`.
+The personal site at `joeytan.dev` remains entirely on its existing GitHub
+Pages deployment. Wrought uses the independent hostname
+`wrought.joeytan.dev`, so the cutover does not replace or modify the apex A/AAAA
+records, personal-site source, or GitHub Pages routing.
 
-The combined server owns these route families:
+The Wrought service owns these route families on its dedicated host:
 
-| Public path                                                                               | Content                                       |
-| ----------------------------------------------------------------------------------------- | --------------------------------------------- |
-| `/`, `/index`, `/index.html`                                                              | Personal-site home page.                      |
-| `/.well-known/apple-app-site-association`                                                 | Apple app-site association JSON.              |
-| `/annals/`, `/annals/index`, `/annals/index.html`, `/annals/main.js`, `/annals/style.css` | Annals static application.                    |
-| `/bio-prompt.md`                                                                          | Personal-site source document.                |
-| `/llms.txt`                                                                               | Root LLM index.                               |
-| `/llms/*.md`                                                                              | Vendored LLM-readable documents listed below. |
-| `/plaid/oauth`, `/plaid/oauth.html`                                                       | Plaid OAuth return page.                      |
-| `/privacy-policy`, `/privacy-policy.html`                                                 | Personal-site privacy policy.                 |
-| `/wrought` and `/wrought/**`                                                              | Wrought SPA, assets, and `/wrought/api/**`.   |
+| Public path  | Content                                      |
+| ------------ | -------------------------------------------- |
+| `/`          | Wrought Home.                                |
+| `/play/**`   | Play, onboarding, and player invite routes.  |
+| `/build/**`  | Build, administration, and editor invites.   |
+| `/api`, `/api/**`       | JSON API and SSE, including `/api/health`.  |
+| `/assets`, `/assets/**` | Hashed Vite assets; missing files stay 404. |
 
-The tracked `/llms` documents are exactly:
+As of 2026-09-03, the subdomain DNS and Railway custom domain are not yet
+verified. Railway has `WROUGHT_DATABASE_URL` set to the preserved application
+database reference and must not fall back to a different generic database URL.
+Its canonical origin must be
+`WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev`.
 
-- `/llms/github-jtan2231.md`;
-- `/llms/joeytan-dev-annals.md`;
-- `/llms/joeytan-dev-bio-prompt.md`;
-- `/llms/joeytan-dev-home.md`;
-- `/llms/linkedin-joseph-tan.md`;
-- `/llms/stet.md`;
-- `/llms/substack-ai-prompting-as-policy-drafting.md`;
-- `/llms/substack-designing-a-prompt.md`; and
-- `/llms/substack-legibility.md`.
+Use this order for the one-time subdomain cutover:
 
-The product prefix is exact. `/wrought` and `/wrought/` are Wrought Home;
-unprefixed `/play` or `/build` and lookalikes such as `/wroughtly` are not
-Wrought routes. Unknown personal-site files return 404 rather than falling back
-to the product SPA. A root-site request whose exact path is absent may resolve
-to the corresponding tracked `.html` file without redirecting; this provides
-the extensionless aliases listed above. The server assigns deterministic MIME
-types to HTML, JavaScript, CSS, Markdown, and text files, while the Apple
-association route is explicitly JSON.
-
-Requests for a tracked directory without its trailing slash receive a
-deterministic `301` to the slash form and preserve the raw query string. A
-directory with no `index.html` then returns 404 instead of exposing a directory
-listing. `CNAME` and `.nojekyll` are GitHub Pages source-host controls: they are
-intentionally neither vendored under `web/site/` nor served by the combined
-binary.
-
-The root site and Wrought share the browser origin `https://joeytan.dev`.
-Path prefixes do not isolate cookies or JavaScript authority: every root-site
-script is trusted code relative to an authenticated Wrought session. Review
-snapshot changes as product-security changes and see
-[Security](security.md#combined-host-origin) before adding scripts, dynamic
-handlers, third-party content, or user-authored HTML anywhere on the host.
-
-The pre-cutover observation recorded on 2026-09-02 is the rollback baseline:
-
-- `joeytan.dev` has GitHub Pages IPv4 records
-  `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, and
-  `185.199.111.153`;
-- its IPv6 records are `2606:50c0:8000::153`,
-  `2606:50c0:8001::153`, `2606:50c0:8002::153`, and
-  `2606:50c0:8003::153`;
-- it has no CNAME answer and retains a GitHub ownership TXT record;
-- HTTPS `/` returns the GitHub Pages site, while `/wrought` returns 404; and
-- Railway now has `WROUGHT_DATABASE_URL` set byte-for-byte equal to the
-  pre-rename application reference, selecting `/scryer`, and
-  `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`. They were applied without
-  triggering a deployment. Its generic `DATABASE_URL` still selects a
-  different `/railway` database and must not supersede the Wrought-specific
-  value.
-
-Re-resolve and re-record the authoritative DNS immediately before changing it;
-the values above are evidence for this observation, not permission to overwrite
-a later owner change.
-
-Use this order for the one-time host cutover:
-
-1. Record the current GitHub Pages DNS records, Railway variables, active
-   deployment, and database target so each can be restored exactly.
-2. Copy the existing application database reference to
-   `WROUGHT_DATABASE_URL` before deleting any pre-rename variable. Confirm its
-   database pathname remains `/scryer`; do not silently fall back to the
-   Railway service's separate `/railway` database. Set
-   `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev` at the same time. This safety
-   step was completed without a deployment on 2026-09-02; reverify both values
-   immediately before cutover.
-3. Run `./deploy.sh deploy --pre-dns`. This selects Railway's one generated
-   provider hostname automatically and performs the complete combined-root and
-   Wrought HTTP smoke over HTTPS, including `/wrought/api/health` and built
-   assets. It intentionally omits the browser authentication probe because
-   mutations remain bound to the configured canonical origin.
-4. Add `joeytan.dev` as the Railway web service's custom domain and apply the
-   exact DNS target and ownership records Railway provides. Do not point DNS at
-   a path or assume Railway will preserve GitHub Pages content.
-5. Wait for DNS and certificate readiness, then run `./deploy.sh verify` to
-   verify the same root and Wrought bytes/routes through
-   `https://joeytan.dev`, the exact domain allowlist, and the browser
-   origin/login boundary. Verify secure-cookie issuance and attributes
-   separately with the explicit canary procedure below; the invalid-signin
+1. Record Railway variables, the active deployment, the database target, and
+   any existing `wrought` DNS records so each can be restored exactly.
+2. Reverify `WROUGHT_DATABASE_URL` and set
+   `WROUGHT_PUBLIC_ORIGIN=https://wrought.joeytan.dev` before deployment.
+3. Run `./deploy.sh deploy --pre-dns`. It selects Railway's generated provider
+   hostname and verifies `/`, `/api/health`, a direct `/play/**` route, and
+   built assets over HTTPS. It omits the browser authentication probe because
+   mutations remain bound to the canonical origin.
+4. Add `wrought.joeytan.dev` as the Railway web service's custom domain and add
+   only the exact DNS target and ownership records Railway provides. Do not
+   change the apex GitHub Pages records.
+5. Wait for DNS and certificate readiness, then manually smoke `/`,
+   `/api/health`, a deep Play route, and its discovered assets through
+   `https://wrought.joeytan.dev`. Verify secure-cookie issuance and attributes
+   separately with an explicitly managed canary account.
+6. After that canonical smoke passes, remove obsolete branded variables and
+   custom domains. Preserve the generated provider domain because the release
+   verifier uses it for diagnostics.
+7. Run `./deploy.sh verify` against the canonical URL, the now-clean domain
+   allowlist, and the browser origin/login boundary. The automated invalid-signin
    smoke does not issue a session.
-6. Only after those checks pass, remove obsolete branded variables and any
-   provider domain that is intentionally being retired. Preserve the generated
-   domain if it remains part of deployment diagnostics.
 
-To roll back the host cutover, restore the recorded GitHub Pages DNS records,
-then verify the personal-site root and association file from GitHub Pages.
-Redeploy the prior Railway commit and restore its recorded variables if the
-Wrought service must also be rolled back. Because the old host served Wrought
-elsewhere, this combined rollback can make the canonical `/wrought` URL
-temporarily unavailable; communicate that explicitly. Database migrations are
-forward-only, so use the database recovery choices in
-[Backup, restore, and rollback](#backup-restore-and-rollback) when schema or
-data changed.
+To roll back the subdomain cutover, restore or remove only the recorded
+`wrought` DNS records and Railway custom-domain binding. The apex personal site
+requires no rollback because the cutover does not change it. Redeploy the prior
+Railway commit and restore its recorded variables if the Wrought service must
+also be rolled back. Database migrations are forward-only, so use the database
+recovery choices in [Backup, restore, and rollback](#backup-restore-and-rollback)
+when schema or data changed.
 
 ## Railway deployment
 
@@ -284,15 +217,15 @@ The intended post-cutover Railway target uses project `Wrought`
 (`9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08`) with these resources:
 
 - `wrought-web` (`73261ce4-d382-41a5-a7ac-64dd71c536ab`), one public web
-  replica with the `joeytan.dev` custom domain and a provider-generated domain;
+  replica with the `wrought.joeytan.dev` custom domain and a
+  provider-generated domain;
 - `Postgres` (`beb083b4-4ca6-4b3d-b2df-c429e9746f44`), one managed PostgreSQL
   replica;
 - `postgres-volume`, a 5 GB persistent database volume.
 
-Railway reports domains at host granularity; the canonical Wrought URL appends
-the fixed path and is `https://joeytan.dev/wrought`. Discover and verify the
-current generated hostname from Railway rather than deriving it from a service
-display name.
+Railway reports domains at host granularity; the canonical Wrought URL is
+`https://wrought.joeytan.dev`. Discover and verify the current generated
+hostname from Railway rather than deriving it from a service display name.
 
 The checked-in deployment definition is:
 
@@ -301,7 +234,7 @@ The checked-in deployment definition is:
 - `railway.toml` performs a frozen frontend install/build, then a `CGO_ENABLED=0`
   trimmed Go build to `out`;
 - start command is `./out`;
-- health path is `/wrought/api/health` with a 30-second timeout;
+- health path is `/api/health` with a 30-second timeout;
 - configured replica count is one;
 - deployment draining is configured for 15 seconds.
 
@@ -313,7 +246,7 @@ the project/environment/services/domain/variables to exist already. It does not
 create or reconfigure a Railway project, service, database, volume, domain, or
 variable.
 
-Before changing DNS for the initial combined-host cutover, deploy the current
+Before changing DNS for the initial subdomain cutover, deploy the current
 committed revision with the generated-provider, HTTP-only stage:
 
 ```sh
@@ -322,7 +255,7 @@ committed revision with the generated-provider, HTTP-only stage:
 
 Here “HTTP-only” means HTTPS requests without a browser run. This stage selects
 the Railway domain set's one generated `*.up.railway.app` hostname and verifies
-the root-site and Wrought HTTP surfaces there. It does not require the canonical
+the Wrought HTTP surface there. It does not require the canonical
 custom domain to be active, does not run the invalid-signin browser probe, and
 records `releaseStage: "pre-dns"`. `--pre-dns` is valid only with `deploy`; it
 cannot be combined with `verify`.
@@ -336,8 +269,8 @@ commands use the post-cutover stage:
 ```
 
 They require `WROUGHT_DEPLOY_URL` to resolve exactly to
-`https://joeytan.dev/wrought`, require the web service to expose only the
-`joeytan.dev` custom domain plus one generated Railway provider hostname
+`https://wrought.joeytan.dev`, require the web service to expose only the
+`wrought.joeytan.dev` custom domain plus one generated Railway provider hostname
 aligned with the current service name, and reject leftover custom domains.
 They run the canonical HTTP smoke and, unless `--no-browser` is explicit, the
 browser origin/login-boundary probe. `--no-browser` does not relax the exact
@@ -401,8 +334,8 @@ checked-in target-specific defaults. `WROUGHT_DEPLOY_DATABASE_VOLUME` pins the
 database service's volume name. The database check also requires no volume
 migration, exactly one ready volume of at least 5 GB mounted at
 `/var/lib/postgresql/data`.
-`WROUGHT_DEPLOY_URL` defaults to <https://joeytan.dev/wrought>. It must be a
-credential-free HTTPS URL with exactly the `/wrought` path. Post-cutover
+`WROUGHT_DEPLOY_URL` defaults to <https://wrought.joeytan.dev>. It must be a
+credential-free HTTPS URL at the root path. Post-cutover
 verification additionally requires that exact canonical value; pre-DNS deploy
 uses the selected service's generated provider hostname instead.
 `WROUGHT_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
@@ -420,11 +353,10 @@ the application service. Define a reference variable such as
 name, or set `WROUGHT_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
 
-The `joeytan.dev` custom domain must use the exact DNS target and ownership
-records shown by Railway for that domain. Preserve a copy of the prior GitHub
-Pages DNS records for rollback. `WROUGHT_PUBLIC_ORIGIN` must remain exactly
-`https://joeytan.dev`; it is not the canonical application URL and must not
-include `/wrought`.
+The `wrought.joeytan.dev` custom domain must use the exact DNS target and
+ownership records shown by Railway for that domain. Do not change the
+`joeytan.dev` GitHub Pages records. `WROUGHT_PUBLIC_ORIGIN` must remain exactly
+`https://wrought.joeytan.dev` and must not include a path.
 
 The checked-in 15-second Railway drain exceeds the application's ten-second
 shutdown deadline. The deployment script verifies that the active manifest
@@ -455,10 +387,10 @@ preparing for broader public use:
    remains greater than the ten-second application shutdown deadline, then
    deploy one instance and inspect migration, startup, request, and shutdown
    logs.
-7. Beyond the script's personal-site root, association file,
-   health/deep-link/asset/invalid-signin smoke, verify signup,
-   successful signin, `/wrought/api/me`, logout revocation, and representative
-   authorized API reads against an explicitly managed canary account.
+7. Beyond the script's root, health, deep-link, asset, and invalid-signin
+   smoke, verify signup, successful signin, `/api/me`, logout revocation, and
+   representative authorized API reads against an explicitly managed canary
+   account.
 8. In a real HTTPS browser, verify `__Host-wrought_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
    missing-CSRF mutations fail.
@@ -602,7 +534,8 @@ pipeline, rebuild Vite, then rebuild/redeploy Go.
 ### SPA route works but an asset is 404
 
 Confirm the requested hashed asset exists in the Vite build embedded in the
-same binary. `/wrought/assets/*` intentionally does not fall back to `index.html`.
+same binary. `/assets` and `/assets/**` intentionally do not fall back to
+`index.html`.
 
 ### Elevated revision conflicts
 

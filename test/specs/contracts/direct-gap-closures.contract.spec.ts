@@ -219,7 +219,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   );
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name: `Gap Closure World ${unique}` },
     owner.id,
   );
@@ -243,7 +243,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     });
     const listed = await getJSON<InviteResponse[]>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/invites`,
+      `${baseURL}/api/worlds/${world.id}/invites`,
       owner.id,
     );
     expect(requiredByID(listed, invite.id, "idempotent invite").use_count).toBe(
@@ -251,7 +251,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const memberships = await getJSON<WorldMember[]>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/members`,
+      `${baseURL}/api/worlds/${world.id}/members`,
       owner.id,
     );
     expect(
@@ -283,14 +283,14 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     });
     const listed = await getJSON<InviteResponse[]>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/invites`,
+      `${baseURL}/api/worlds/${world.id}/invites`,
       owner.id,
     );
     expect(requiredByID(listed, invite.id, "owner invite").use_count).toBe(1);
     const ownerMemberships = (
       await getJSON<WorldMember[]>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}/members`,
+        `${baseURL}/api/worlds/${world.id}/members`,
         owner.id,
       )
     ).filter((member) => member.user_id === owner.id);
@@ -337,12 +337,12 @@ test("contract: direct scenario gap closures preserve logical input values, priv
 
   const initialFields = await getJSON<CharacterFieldSet>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     owner.id,
   );
   let fields = await putJSON<CharacterFieldSet>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     {
       expected_revision: initialFields.revision,
       fields: [
@@ -408,7 +408,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   rulesRevision = toArchive.revision;
   const archivedMechanic = await postJSON<MechanicMutation>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${toArchive.mechanic.id}/archive`,
+    `${baseURL}/api/worlds/${world.id}/mechanics/${toArchive.mechanic.id}/archive`,
     { expected_rules_revision: rulesRevision },
     owner.id,
   );
@@ -418,7 +418,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     const before = await readMechanics(request, baseURL, world.id, owner.id);
     await expectAPIError(
       await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${baseMechanic.mechanic.id}/archive`,
+        `${baseURL}/api/worlds/${world.id}/mechanics/${baseMechanic.mechanic.id}/archive`,
         {
           data: { expected_rules_revision: before.revision },
         },
@@ -450,7 +450,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     rulesRevision = winner.revision;
     await expectAPIError(
       await actorRequest(editor.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/mechanics`,
+        `${baseURL}/api/worlds/${world.id}/mechanics`,
         {
           data: booleanMechanic(`Stale flag ${unique}`, stale.revision),
         },
@@ -515,7 +515,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   );
   const archivedEntity = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${archivedEntityCreated.id}/archive`,
+    `${baseURL}/api/worlds/${world.id}/entities/${archivedEntityCreated.id}/archive`,
     undefined,
     owner.id,
   );
@@ -569,7 +569,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     const staleFields = fields;
     fields = await putJSON<CharacterFieldSet>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+      `${baseURL}/api/worlds/${world.id}/character-fields`,
       {
         expected_revision: staleFields.revision,
         fields: [
@@ -591,7 +591,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     await expectAPIError(
       await actorRequest(player.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/profile`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/profile`,
         {
           data: {
             expected_revision: staleProfile.revision,
@@ -676,12 +676,12 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   await test.step("CCY-V04 one stale controller replacement wins and the loser reloads it", async () => {
     const before = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}`,
+      `${baseURL}/api/worlds/${world.id}`,
       owner.id,
     );
     const responses = await Promise.all([
       actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
+        `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
           data: {
             expected_roster_revision: before.roster_revision,
@@ -690,7 +690,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
         },
       ),
       actorRequest(editor.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
+        `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
         {
           data: {
             expected_roster_revision: before.roster_revision,
@@ -720,7 +720,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     expect(winner.roster_revision).toBe(before.roster_revision + 1);
     const members = await getJSON<WorldMember[]>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/members`,
+      `${baseURL}/api/worlds/${world.id}/members`,
       editor.id,
     );
     const controllers = members
@@ -730,12 +730,12 @@ test("contract: direct scenario gap closures preserve logical input values, priv
 
     const postRaceWorld = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}`,
+      `${baseURL}/api/worlds/${world.id}`,
       owner.id,
     );
     await putJSON<ControllerResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
+      `${baseURL}/api/worlds/${world.id}/entities/${raceEntity.id}/controllers`,
       {
         expected_roster_revision: postRaceWorld.roster_revision,
         controller_world_membership_ids: [],
@@ -753,7 +753,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   );
   let primarySheet = await putJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
+    `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
     {
       expected_logical_state_revision:
         initialPrimarySheet.logical_state_revision,
@@ -775,7 +775,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     await expectAPIError(
       await actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         {
           data: {
             expected_logical_state_revision: before.logical_state_revision,
@@ -805,7 +805,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     await expectAPIError(
       await actorRequest(player.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         {
           data: {
             expected_logical_state_revision: before.logical_state_revision,
@@ -828,7 +828,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   await test.step("AUT-V06 setup players retain onboarding reads but not live feed or events", async () => {
     const setupWorld = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}`,
+      `${baseURL}/api/worlds/${world.id}`,
       setupPlayer.id,
     );
     expect(setupWorld.play_status).toBe("setup-required");
@@ -848,14 +848,14 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     ).toMatchObject({ entity_id: incomplete.id });
     await expectAPIError(
       await actorRequest(setupPlayer.id).get(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+        `${baseURL}/api/worlds/${world.id}/interactions`,
         {},
       ),
       403,
       "character_setup_required",
     );
     const eventResponse = await fetch(
-      `${baseURL}/wrought/api/worlds/${world.id}/events?after=0`,
+      `${baseURL}/api/worlds/${world.id}/events?after=0`,
       { headers: { Cookie: await actorCookieHeader(setupPlayer.id) } },
     );
     await expectFetchAPIError(eventResponse, 403, "character_setup_required");
@@ -864,7 +864,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
   await test.step("PLY-V01 an explicitly audience-free draft cannot be presented", async () => {
     const draft = await postJSON<InteractionResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       {
         prompt: `No audience draft ${unique}`,
         audience_membership_ids: [],
@@ -881,7 +881,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     const cursor = await latestEventCursor(baseURL, world.id, owner.id);
     await expectAPIError(
       await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${draft.id}/present`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}/present`,
         {
           data: { expected_revision: draft.revision },
         },
@@ -897,7 +897,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     ).toEqual([]);
     await postJSON<InteractionResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${draft.id}/cancel`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}/cancel`,
       { expected_revision: draft.revision },
       owner.id,
     );
@@ -936,7 +936,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
       await test.step(scenarioCase.name, async () => {
         await expectAPIError(
           await actorRequest(owner.id).post(
-            `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+            `${baseURL}/api/worlds/${world.id}/interactions`,
             {
               data: {
                 present: true,
@@ -967,7 +967,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     const receiptSecret = `Facilitator consequence ${unique}`;
     const open = await postJSON<InteractionResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       {
         present: true,
         prompt: `Same-world chain ${unique}`,
@@ -984,7 +984,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const action = await postJSON<InteractionAction>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/actions`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
       {
         text: `Act through the controlled courier ${unique}`,
         acting_entity_id: primary.id,
@@ -1007,14 +1007,14 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const adjudicating = await postJSON<InteractionResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
       { expected_revision: withAction.revision },
       owner.id,
     );
     const effectID = randomUUID();
     const resolved = await postJSON<InteractionResolutionResult>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/resolve`,
       {
         expected_revision: adjudicating.revision,
         expected_rules_revision: rulesRevision,
@@ -1123,7 +1123,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const responses = await Promise.all([
       actorRequest(player.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/actions`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
           data: {
             text: "First simultaneous offer",
@@ -1132,7 +1132,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
         },
       ),
       actorRequest(player.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/actions`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
           data: {
             text: "Second simultaneous offer",
@@ -1281,7 +1281,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const result = await postJSON<InteractionResolutionResult>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
       {
         expected_revision: adjudicating.revision,
         expected_rules_revision: rulesRevision,
@@ -1329,7 +1329,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     await expectAPIError(
       await actorRequest(owner.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${statusTarget.mechanic.id}/archive`,
+        `${baseURL}/api/worlds/${world.id}/mechanics/${statusTarget.mechanic.id}/archive`,
         {
           data: { expected_rules_revision: mechanicsBefore.revision },
         },
@@ -1368,12 +1368,12 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     const rosterBefore = await getJSON<WorldResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}`,
+      `${baseURL}/api/worlds/${world.id}`,
       owner.id,
     );
     await putJSON<ControllerResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/controllers`,
+      `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/controllers`,
       {
         expected_roster_revision: rosterBefore.roster_revision,
         controller_world_membership_ids: [],
@@ -1384,14 +1384,14 @@ test("contract: direct scenario gap closures preserve logical input values, priv
       (
         await getJSON<WorldResponse>(
           request,
-          `${baseURL}/wrought/api/worlds/${world.id}`,
+          `${baseURL}/api/worlds/${world.id}`,
           player.id,
         )
       ).play_status,
     ).toBe("ready");
     await expectAPIError(
       await actorRequest(player.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}/profile`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}/profile`,
         {
           data: {
             expected_revision: ownerBefore.revision,
@@ -1450,7 +1450,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     );
     await expectAPIError(
       await actorRequest(player.id).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/actions`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/actions`,
         {
           data: {
             text: `A stale attribution ${unique}`,
@@ -1479,23 +1479,23 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     expect(
       await getJSON<WorldResponse[]>(
         request,
-        `${baseURL}/wrought/api/worlds`,
+        `${baseURL}/api/worlds`,
         outsider.id,
       ),
     ).toEqual([]);
 
     const nestedPairs = [
       [
-        `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${baseMechanic.mechanic.id}`,
-        `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${randomUUID()}`,
+        `${baseURL}/api/worlds/${world.id}/mechanics/${baseMechanic.mechanic.id}`,
+        `${baseURL}/api/worlds/${world.id}/mechanics/${randomUUID()}`,
       ],
       [
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${primary.id}`,
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${randomUUID()}`,
+        `${baseURL}/api/worlds/${world.id}/entities/${primary.id}`,
+        `${baseURL}/api/worlds/${world.id}/entities/${randomUUID()}`,
       ],
       [
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${realInteraction.id}`,
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${randomUUID()}`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${realInteraction.id}`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${randomUUID()}`,
       ],
     ] as const;
     for (const [existingURL, guessedURL] of nestedPairs) {
@@ -1513,21 +1513,21 @@ test("contract: direct scenario gap closures preserve logical input values, priv
     }
 
     const attempts = [
-      { method: "GET", path: `/wrought/api/worlds/${world.id}` },
-      { method: "GET", path: `/wrought/api/worlds/${world.id}/mechanics` },
-      { method: "GET", path: `/wrought/api/worlds/${world.id}/entities` },
+      { method: "GET", path: `/api/worlds/${world.id}` },
+      { method: "GET", path: `/api/worlds/${world.id}/mechanics` },
+      { method: "GET", path: `/api/worlds/${world.id}/entities` },
       {
         method: "GET",
-        path: `/wrought/api/worlds/${world.id}/entities/${primary.id}/sheet`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/sheet`,
       },
       {
         method: "GET",
-        path: `/wrought/api/worlds/${world.id}/entities/${primary.id}/profile`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/profile`,
       },
-      { method: "GET", path: `/wrought/api/worlds/${world.id}/interactions` },
+      { method: "GET", path: `/api/worlds/${world.id}/interactions` },
       {
         method: "PATCH",
-        path: `/wrought/api/worlds/${world.id}`,
+        path: `/api/worlds/${world.id}`,
         data: {
           name: "Outsider overwrite",
           expected_revision: before.world.revision,
@@ -1535,22 +1535,22 @@ test("contract: direct scenario gap closures preserve logical input values, priv
       },
       {
         method: "POST",
-        path: `/wrought/api/worlds/${world.id}/invites`,
+        path: `/api/worlds/${world.id}/invites`,
         data: { role: "player", expires_in_days: 7 },
       },
       {
         method: "POST",
-        path: `/wrought/api/worlds/${world.id}/mechanics`,
+        path: `/api/worlds/${world.id}/mechanics`,
         data: booleanMechanic("Outsider mechanic", before.mechanics.revision),
       },
       {
         method: "POST",
-        path: `/wrought/api/worlds/${world.id}/entities`,
+        path: `/api/worlds/${world.id}/entities`,
         data: { display_name: "Outsider entity" },
       },
       {
         method: "PUT",
-        path: `/wrought/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/logical-state`,
         data: {
           expected_logical_state_revision: before.sheet.logical_state_revision,
           expected_rules_revision: before.sheet.rules_revision,
@@ -1559,7 +1559,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
       },
       {
         method: "PUT",
-        path: `/wrought/api/worlds/${world.id}/entities/${primary.id}/profile`,
+        path: `/api/worlds/${world.id}/entities/${primary.id}/profile`,
         data: {
           expected_revision: before.profile.revision,
           expected_character_field_set_revision: fields.revision,
@@ -1568,7 +1568,7 @@ test("contract: direct scenario gap closures preserve logical input values, priv
       },
       {
         method: "POST",
-        path: `/wrought/api/worlds/${world.id}/interactions`,
+        path: `/api/worlds/${world.id}/interactions`,
         data: {
           prompt: "Outsider problem",
           eligible_responder_membership_ids: [],
@@ -1613,13 +1613,13 @@ async function authoritativeSnapshot(
     await Promise.all([
       getJSON<WorldResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${worldID}`,
+        `${baseURL}/api/worlds/${worldID}`,
         ownerID,
       ),
       readMechanics(request, baseURL, worldID, ownerID),
       getJSON<EntityResponse[]>(
         request,
-        `${baseURL}/wrought/api/worlds/${worldID}/entities`,
+        `${baseURL}/api/worlds/${worldID}/entities`,
         ownerID,
       ),
       getSheet(request, baseURL, worldID, entityID, ownerID),
@@ -1627,7 +1627,7 @@ async function authoritativeSnapshot(
       listInteractions(request, baseURL, worldID, ownerID),
       getJSON<InviteResponse[]>(
         request,
-        `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+        `${baseURL}/api/worlds/${worldID}/invites`,
         ownerID,
       ),
     ]);
@@ -1663,7 +1663,7 @@ async function assertResolutionRejectedAtomically(
     const cursor = await latestEventCursor(baseURL, world.id, ownerID);
     await expectAPIError(
       await actorRequest(ownerID).post(
-        `${baseURL}/wrought/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
+        `${baseURL}/api/worlds/${world.id}/interactions/${adjudicating.id}/resolve`,
         {
           data: {
             expected_revision: adjudicating.revision,
@@ -1708,7 +1708,7 @@ async function createAdjudicatingInteraction(
 ): Promise<InteractionResponse> {
   const open = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
     {
       present: true,
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
@@ -1720,7 +1720,7 @@ async function createAdjudicatingInteraction(
   );
   const adjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
     { expected_revision: open.revision },
     ownerID,
   );
@@ -1739,7 +1739,7 @@ async function createOpenInteraction(
 ): Promise<InteractionResponse> {
   const open = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
     {
       present: true,
       prompt,
@@ -1770,7 +1770,7 @@ async function readAvailableEvents(
 ): Promise<WorldEvent[]> {
   const controller = new AbortController();
   const response = await fetch(
-    `${baseURL}/wrought/api/worlds/${worldID}/events?after=${after}`,
+    `${baseURL}/api/worlds/${worldID}/events?after=${after}`,
     {
       headers: { Cookie: await actorCookieHeader(userID) },
       signal: controller.signal,
@@ -1825,7 +1825,7 @@ async function createInvite(
 ): Promise<InviteResponse> {
   return postJSON<InviteResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+    `${baseURL}/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     ownerID,
   );
@@ -1839,7 +1839,7 @@ async function redeemInvite(
 ): Promise<WorldResponse> {
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
+    `${baseURL}/api/world-invites/${token}/redeem`,
     undefined,
     userID,
   );
@@ -1873,7 +1873,7 @@ async function createMechanic(
 ): Promise<MechanicMutation> {
   return postJSON<MechanicMutation>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/api/worlds/${worldID}/mechanics`,
     data,
     ownerID,
   );
@@ -1939,7 +1939,7 @@ async function readMechanics(
 ): Promise<MechanicCollection> {
   return getJSON<MechanicCollection>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/api/worlds/${worldID}/mechanics`,
     userID,
   );
 }
@@ -1954,7 +1954,7 @@ async function createEntity(
 ): Promise<EntityResponse> {
   return postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities`,
+    `${baseURL}/api/worlds/${worldID}/entities`,
     {
       display_name: displayName,
       controller_world_membership_ids: controllers,
@@ -1975,7 +1975,7 @@ async function saveProfile(
 ): Promise<EntityProfileResponse> {
   return putJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: expectedRevision,
       expected_character_field_set_revision: expectedCharacterFieldSetRevision,
@@ -1994,7 +1994,7 @@ async function getProfile(
 ): Promise<EntityProfileResponse> {
   return getJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
     userID,
   );
 }
@@ -2008,7 +2008,7 @@ async function getSheet(
 ): Promise<EntitySheetResponse> {
   return getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/sheet`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }
@@ -2021,7 +2021,7 @@ async function listInteractions(
 ): Promise<InteractionResponse[]> {
   return getJSON<InteractionResponse[]>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions`,
+    `${baseURL}/api/worlds/${worldID}/interactions`,
     userID,
   );
 }
@@ -2035,7 +2035,7 @@ async function getInteraction(
 ): Promise<InteractionResponse> {
   return getJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions/${interactionID}`,
+    `${baseURL}/api/worlds/${worldID}/interactions/${interactionID}`,
     userID,
   );
 }

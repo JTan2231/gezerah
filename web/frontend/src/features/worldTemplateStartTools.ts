@@ -126,7 +126,7 @@ export function createWorldTemplateStartTools(
           destinationWorldIDs.set(templateID, destinationWorldID);
         }
         const world = await api<World>(
-          `/wrought/api/world-templates/${encodeURIComponent(templateID)}/clone`,
+          `/api/world-templates/${encodeURIComponent(templateID)}/clone`,
           {
             method: "POST",
             signal: requestSignal,
@@ -157,12 +157,9 @@ export function createWorldTemplateStartTools(
 async function loadCompleteCatalog(
   signal: AbortSignal,
 ): Promise<WorldTemplate[]> {
-  const worldTemplates = await api<WorldTemplate[]>(
-    "/wrought/api/world-templates",
-    {
-      signal,
-    },
-  );
+  const worldTemplates = await api<WorldTemplate[]>("/api/world-templates", {
+    signal,
+  });
   if (worldTemplates.length !== 3)
     throw new SiteToolUsageError(
       "The complete set of three ready-made Worlds is not available.",

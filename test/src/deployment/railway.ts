@@ -520,7 +520,7 @@ export function railwayProviderPublicURL(
       `expected exactly one generated Railway provider hostname for service ${service.id}, found ${generated.length}`,
     );
   }
-  return `https://${generated[0]}/wrought`;
+  return `https://${generated[0]}`;
 }
 
 export function assertPostCutoverDomains(
@@ -530,10 +530,10 @@ export function assertPostCutoverDomains(
   const binding = exactServiceDomains(environment, service);
   if (
     binding.customDomains.length !== 1 ||
-    binding.customDomains[0] !== "joeytan.dev"
+    binding.customDomains[0] !== "wrought.joeytan.dev"
   ) {
     throw new Error(
-      `post-cutover Railway domains for service ${service.id} must contain only custom domain joeytan.dev; found ${binding.customDomains.length === 0 ? "none" : binding.customDomains.join(", ")}`,
+      `post-cutover Railway domains for service ${service.id} must contain only custom domain wrought.joeytan.dev; found ${binding.customDomains.length === 0 ? "none" : binding.customDomains.join(", ")}`,
     );
   }
   const providerHostname = new URL(
@@ -573,9 +573,9 @@ export function assertNoActiveDeployment(
 }
 
 export function assertDeploymentManifest(deployment: RailwayDeployment): void {
-  if (deployment.manifest?.healthcheckPath !== "/wrought/api/health") {
+  if (deployment.manifest?.healthcheckPath !== "/api/health") {
     throw new Error(
-      `deployment ${deployment.id} does not expose the expected /wrought/api/health check`,
+      `deployment ${deployment.id} does not expose the expected /api/health check`,
     );
   }
   if (deployment.manifest.numReplicas !== 1) {

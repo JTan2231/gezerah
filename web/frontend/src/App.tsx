@@ -75,7 +75,7 @@ export default function App() {
       return undefined;
     const controller = new AbortController();
     setAuthenticationError(null);
-    void api<AuthenticatedSession>("/wrought/api/me", {
+    void api<AuthenticatedSession>("/api/me", {
       signal: controller.signal,
     })
       .then(establishSession)
@@ -129,11 +129,11 @@ export default function App() {
   }
 
   function logout() {
-    return revokeSessions("/wrought/api/auth/logout");
+    return revokeSessions("/api/auth/logout");
   }
 
   function logoutAll() {
-    return revokeSessions("/wrought/api/auth/logout-all");
+    return revokeSessions("/api/auth/logout-all");
   }
 
   if (location.type === "home") return <HomeChoice navigate={navigate} />;

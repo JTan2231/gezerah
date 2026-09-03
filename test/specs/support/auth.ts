@@ -45,7 +45,7 @@ export async function signupActor(
     extraHTTPHeaders: { Origin: originOf(baseURL) },
   });
   try {
-    const response = await bootstrap.post("/wrought/api/auth/signup", {
+    const response = await bootstrap.post("/api/auth/signup", {
       data: { username, display_name: displayName, password },
     });
     const auth = await expectAuthResponse(response, "signup");
@@ -75,7 +75,7 @@ export async function signinActor(
     extraHTTPHeaders: { Origin: originOf(baseURL) },
   });
   try {
-    const response = await bootstrap.post("/wrought/api/auth/signin", {
+    const response = await bootstrap.post("/api/auth/signin", {
       data: { username, password },
     });
     const auth = await expectAuthResponse(response, "signin");

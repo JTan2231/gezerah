@@ -318,7 +318,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
   );
   const foreignAction = await postJSON<InteractionActionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/actions`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/actions`,
     {
       text: `Foreign response ${unique}`,
       acting_entity_id: foreignEntity.id,
@@ -328,14 +328,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
   );
   const foreignAdjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/adjudicate`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/adjudicate`,
     { expected_revision: foreignOpen.revision + 1 },
     owner.id,
   );
   const foreignStatusName = `Foreign status ${unique}`;
   await postJSON<InteractionResolutionResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/resolve`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/interactions/${foreignOpen.id}/resolve`,
     {
       expected_revision: foreignAdjudicating.revision,
       expected_rules_revision: foreignMechanic.revision,
@@ -365,7 +365,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
   );
   const foreignSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/entities/${foreignEntity.id}/sheet`,
+    `${baseURL}/api/worlds/${foreignWorld.id}/entities/${foreignEntity.id}/sheet`,
     owner.id,
   );
   const foreignStatus = required(
@@ -395,14 +395,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
 
     const previewError = await expectAPIError(
       await actorRequest(inviteCandidate.id).get(
-        `${baseURL}/wrought/api/world-invites/${invalidToken}`,
+        `${baseURL}/api/world-invites/${invalidToken}`,
       ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
       await actorRequest(inviteCandidate.id).post(
-        `${baseURL}/wrought/api/world-invites/${invalidToken}/redeem`,
+        `${baseURL}/api/world-invites/${invalidToken}/redeem`,
         {},
       ),
       404,
@@ -430,7 +430,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
     const token = inviteToken(invite);
     await postJSON<InviteResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${primaryWorld.id}/invites/${invite.id}/revoke`,
+      `${baseURL}/api/worlds/${primaryWorld.id}/invites/${invite.id}/revoke`,
       undefined,
       owner.id,
     );
@@ -453,14 +453,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
 
     const previewError = await expectAPIError(
       await actorRequest(inviteCandidate.id).get(
-        `${baseURL}/wrought/api/world-invites/${token}`,
+        `${baseURL}/api/world-invites/${token}`,
       ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
       await actorRequest(inviteCandidate.id).post(
-        `${baseURL}/wrought/api/world-invites/${token}/redeem`,
+        `${baseURL}/api/world-invites/${token}/redeem`,
         {},
       ),
       404,
@@ -524,14 +524,14 @@ test("contract: invitation closure and authorization matrices are atomic and pri
 
     const previewError = await expectAPIError(
       await actorRequest(inviteCandidate.id).get(
-        `${baseURL}/wrought/api/world-invites/${token}`,
+        `${baseURL}/api/world-invites/${token}`,
       ),
       404,
       "invite_not_found",
     );
     const redeemError = await expectAPIError(
       await actorRequest(inviteCandidate.id).post(
-        `${baseURL}/wrought/api/world-invites/${token}/redeem`,
+        `${baseURL}/api/world-invites/${token}/redeem`,
         {},
       ),
       404,
@@ -576,7 +576,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           await expectAPIError(
             await actorRequest(actorID).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/mechanics`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/mechanics`,
               {
                 data: inputMechanicRequest(
                   `Denied ${item.case} ${unique}`,
@@ -601,7 +601,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           await expectAPIError(
             await actorRequest(actorID).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions`,
               {
                 data: {
                   prompt: `Denied facilitation ${item.case} ${unique}`,
@@ -628,7 +628,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           await expectAPIError(
             await actorRequest(actorID).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryOpen.id}/actions`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryOpen.id}/actions`,
               {
                 data: {
                   text: `Denied spectator response ${unique}`,
@@ -659,7 +659,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           await expectAPIError(
             await actorRequest(actorID).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/archive`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/archive`,
               {
                 data: { expected_revision: before.revision },
               },
@@ -678,7 +678,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
 
   const primaryAdjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryOpen.id}/adjudicate`,
+    `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryOpen.id}/adjudicate`,
     { expected_revision: primaryOpen.revision },
     owner.id,
   );
@@ -713,7 +713,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
         case "mechanic":
           error = await expectAPIError(
             await actorRequest(owner.id).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
                 data: resolutionRequest(
                   primaryAdjudicating,
@@ -741,7 +741,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
         case "entity":
           error = await expectAPIError(
             await actorRequest(owner.id).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
                 data: resolutionRequest(
                   primaryAdjudicating,
@@ -778,7 +778,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           error = await expectAPIError(
             await actorRequest(owner.id).put(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/entities/${primaryEntity.id}/controllers`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/entities/${primaryEntity.id}/controllers`,
               {
                 data: {
                   expected_roster_revision: primaryWorldBefore.roster_revision,
@@ -810,7 +810,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
           );
           error = await expectAPIError(
             await actorRequest(owner.id).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
                 data: {
                   ...resolutionRequest(
@@ -840,7 +840,7 @@ test("contract: invitation closure and authorization matrices are atomic and pri
         case "status-instance":
           error = await expectAPIError(
             await actorRequest(owner.id).post(
-              `${baseURL}/wrought/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
+              `${baseURL}/api/worlds/${primaryWorld.id}/interactions/${primaryAdjudicating.id}/resolve`,
               {
                 data: resolutionRequest(
                   primaryAdjudicating,
@@ -920,7 +920,7 @@ async function createWorld(
 ): Promise<WorldResponse> {
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name },
     ownerID,
   );
@@ -937,7 +937,7 @@ async function joinWorld(
   const invite = await createInvite(request, baseURL, worldID, ownerID, role);
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/world-invites/${inviteToken(invite)}/redeem`,
+    `${baseURL}/api/world-invites/${inviteToken(invite)}/redeem`,
     undefined,
     userID,
   );
@@ -952,7 +952,7 @@ async function createInvite(
 ): Promise<InviteResponse> {
   return postJSON<InviteResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+    `${baseURL}/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     ownerID,
   );
@@ -972,7 +972,7 @@ async function createMechanic(
 ): Promise<MechanicMutationResponse> {
   return postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/api/worlds/${worldID}/mechanics`,
     inputMechanicRequest(name, expectedRulesRevision),
     ownerID,
   );
@@ -1004,7 +1004,7 @@ async function createEntity(
 ): Promise<EntityResponse> {
   return postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities`,
+    `${baseURL}/api/worlds/${worldID}/entities`,
     {
       display_name: displayName,
       controller_world_membership_ids: [controllerMembershipID],
@@ -1024,7 +1024,7 @@ async function createOpenInteraction(
 ): Promise<InteractionResponse> {
   const interaction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions`,
+    `${baseURL}/api/worlds/${worldID}/interactions`,
     {
       present: true,
       prompt,
@@ -1063,7 +1063,7 @@ async function worldFor(
 ): Promise<WorldResponse> {
   return getJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}`,
+    `${baseURL}/api/worlds/${worldID}`,
     userID,
   );
 }
@@ -1073,11 +1073,7 @@ async function worldsFor(
   baseURL: string,
   userID: string,
 ): Promise<WorldResponse[]> {
-  return getJSON<WorldResponse[]>(
-    request,
-    `${baseURL}/wrought/api/worlds`,
-    userID,
-  );
+  return getJSON<WorldResponse[]>(request, `${baseURL}/api/worlds`, userID);
 }
 
 async function membersFor(
@@ -1088,7 +1084,7 @@ async function membersFor(
 ): Promise<WorldMemberResponse[]> {
   return getJSON<WorldMemberResponse[]>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/members`,
+    `${baseURL}/api/worlds/${worldID}/members`,
     userID,
   );
 }
@@ -1102,7 +1098,7 @@ async function listedInvite(
 ): Promise<InviteResponse> {
   const invites = await getJSON<InviteResponse[]>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+    `${baseURL}/api/worlds/${worldID}/invites`,
     userID,
   );
   return required(
@@ -1119,7 +1115,7 @@ async function mechanicsFor(
 ): Promise<MechanicCollectionResponse> {
   return getJSON<MechanicCollectionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/api/worlds/${worldID}/mechanics`,
     userID,
   );
 }
@@ -1132,7 +1128,7 @@ async function interactionsFor(
 ): Promise<InteractionResponse[]> {
   return getJSON<InteractionResponse[]>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions`,
+    `${baseURL}/api/worlds/${worldID}/interactions`,
     userID,
   );
 }
@@ -1146,7 +1142,7 @@ async function interactionFor(
 ): Promise<InteractionResponse> {
   return getJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions/${interactionID}`,
+    `${baseURL}/api/worlds/${worldID}/interactions/${interactionID}`,
     userID,
   );
 }
@@ -1160,7 +1156,7 @@ async function sheetFor(
 ): Promise<EntitySheetResponse> {
   return getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/sheet`,
+    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }

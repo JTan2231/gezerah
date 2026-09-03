@@ -153,7 +153,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   const owner = await signupActor(baseURL, `Graph Author ${unique}`);
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name: `Derived Coast ${unique}` },
     owner.id,
   );
@@ -163,7 +163,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const inputMutation = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics`,
+    `${baseURL}/api/worlds/${world.id}/mechanics`,
     {
       kind: "capacity",
       mode: "score",
@@ -210,7 +210,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   };
   const derivedMutation = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics`,
+    `${baseURL}/api/worlds/${world.id}/mechanics`,
     derivedRequest,
     owner.id,
   );
@@ -225,7 +225,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   const impact = derivedMutation.mechanic;
 
   const cyclePublication = await actorRequest(owner.id).put(
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${impact.id}`,
+    `${baseURL}/api/worlds/${world.id}/mechanics/${impact.id}`,
     {
       data: {
         ...derivedRequest,
@@ -254,7 +254,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   );
 
   const invalidTypePublication = await actorRequest(owner.id).put(
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics/${impact.id}`,
+    `${baseURL}/api/worlds/${world.id}/mechanics/${impact.id}`,
     {
       data: {
         ...derivedRequest,
@@ -289,7 +289,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const entity = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
+    `${baseURL}/api/worlds/${world.id}/entities`,
     { display_name: "Ilya Stone" },
     owner.id,
   );
@@ -308,7 +308,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   const authoredSheet =
     await test.step("CCY-V03 rejects a stale logical-state/rules save and accepts the authoritative retry", async () => {
       const staleLogicalStateWrite = await actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
         {
           data: {
             expected_logical_state_revision:
@@ -322,7 +322,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
       const result = await putJSON<EntitySheetResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
+        `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/logical-state`,
         {
           expected_logical_state_revision: entity.sheet.logical_state_revision,
           expected_rules_revision: rulesRevision,
@@ -397,7 +397,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   };
 
   const stalePreview = await actorRequest(owner.id).post(
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
     {
       data: { ...applyPayload, expected_rules_revision: rulesRevision - 1 },
     },
@@ -406,7 +406,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const applyPreview = await postJSON<ConsequencePreviewResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/preview`,
     applyPayload,
     owner.id,
   );
@@ -447,7 +447,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const sheetAfterPreview = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${entity.id}/sheet`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
   expect(sheetAfterPreview).toMatchObject({
@@ -459,7 +459,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   const applyIdempotencyKey = randomUUID();
   const applyResult = await postJSON<InteractionResolutionResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
     { ...applyPayload, idempotency_key: applyIdempotencyKey },
     owner.id,
   );
@@ -488,7 +488,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const replayedApply = await postJSON<InteractionResolutionResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
     { ...applyPayload, idempotency_key: applyIdempotencyKey },
     owner.id,
   );
@@ -500,7 +500,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   });
   await expectAPIError(
     await actorRequest(owner.id).post(
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${applyInteraction.id}/resolve`,
       {
         data: {
           ...applyPayload,
@@ -515,7 +515,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const weakenedSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${entity.id}/sheet`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
   expect(weakenedSheet).toMatchObject({
@@ -596,7 +596,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
   };
   const removePreview = await postJSON<ConsequencePreviewResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${removeInteraction.id}/preview`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${removeInteraction.id}/preview`,
     removePayload,
     owner.id,
   );
@@ -621,7 +621,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const removeResult = await postJSON<InteractionResolutionResult>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${removeInteraction.id}/resolve`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${removeInteraction.id}/resolve`,
     { ...removePayload, idempotency_key: randomUUID() },
     owner.id,
   );
@@ -651,7 +651,7 @@ test("world mechanic graph publishes atomically and Status instances change effe
 
   const restoredSheet = await getJSON<EntitySheetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${entity.id}/sheet`,
+    `${baseURL}/api/worlds/${world.id}/entities/${entity.id}/sheet`,
     owner.id,
   );
   expect(restoredSheet).toMatchObject({
@@ -682,13 +682,13 @@ test("world mechanic graph publishes atomically and Status instances change effe
   };
   const competingResponses = await Promise.all([
     actorRequest(owner.id).post(
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
       {
         data: { ...competingPayload, idempotency_key: randomUUID() },
       },
     ),
     actorRequest(owner.id).post(
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${competingInteraction.id}/resolve`,
       {
         data: { ...competingPayload, idempotency_key: randomUUID() },
       },
@@ -719,7 +719,7 @@ async function expectPublishedMechanicGraph(
 ): Promise<void> {
   const collection = await getJSON<MechanicCollectionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/api/worlds/${worldID}/mechanics`,
     userID,
   );
   expect(collection.revision).toBe(revision);
@@ -738,7 +738,7 @@ async function createAdjudicatingInteraction(
 ): Promise<InteractionResponse> {
   const open = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions`,
+    `${baseURL}/api/worlds/${worldID}/interactions`,
     {
       present: true,
       prompt,
@@ -750,7 +750,7 @@ async function createAdjudicatingInteraction(
   expect(open).toMatchObject({ status: "open", revision: 1 });
   const adjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/interactions/${open.id}/adjudicate`,
+    `${baseURL}/api/worlds/${worldID}/interactions/${open.id}/adjudicate`,
     { expected_revision: open.revision },
     userID,
   );

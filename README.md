@@ -66,8 +66,8 @@ private vulnerability reports.
 - Go 1.25.14, standard-library HTTP routing, and embedded static assets.
 - PostgreSQL through `pgx/v5`, with forward-only embedded SQL migrations.
 - React 19 and TypeScript, built by Vite and managed with Bun 1.1.42.
-- One production Go binary serving the vendored `joeytan.dev` site at root
-  paths and Wrought at the exact `/wrought` mount.
+- One production Go binary serving the Wrought API and embedded SPA at the
+  root of its dedicated host.
 
 ## Local development
 
@@ -80,12 +80,12 @@ createdb wrought
 ./run.sh
 ```
 
-Open `http://127.0.0.1:5173/wrought`. Vite proxies `/wrought/api` to the Go server at
+Open `http://127.0.0.1:5173/`. Vite proxies `/api` to the Go server at
 `http://localhost:8080`.
 
-The Wrought home page at `/wrought` offers one **Open in ChatGPT** launch. It navigates the
+The Wrought home page at `/` offers one **Open in ChatGPT** launch. It navigates the
 ordinary web browser to `chatgpt.com` with a starter prompt and a request to
-attach the authenticated `https://joeytan.dev/wrought/play/new` page; it does not invoke the desktop app.
+attach the authenticated `https://wrought.joeytan.dev/play/new` page; it does not invoke the desktop app.
 On a supported ChatGPT surface, the person signs up or signs in there and
 ChatGPT performs delegated start through the Start and Play site-tool surfaces:
 it copies one of the three repository-backed World templates, claims a complete
@@ -95,7 +95,7 @@ username and password; no email address is required. Automated CI and deployed
 smoke do not establish ChatGPT web Site-tool support; that boundary requires a
 dated model-in-the-loop acceptance run.
 
-The existing `/wrought/build` and `/wrought/play` routes remain directly addressable internal
+The existing `/build` and `/play` routes remain directly addressable internal
 surfaces for authoring, administration, and validation, but the candidate entry
 does not expose custom Build, saved-World discovery, invites or multiplayer
 onboarding, or incomplete Character setup yet. Build defines input and derived
@@ -143,10 +143,9 @@ concurrent starts serialize schema upgrades.
 | `WROUGHT_LOG_LEVEL`     | `info`                                              | `debug`, `info`, `warn`, or `error`.                                  |
 | `WROUGHT_PUBLIC_ORIGIN` | request origin                                      | Exact browser origin for authenticated writes; HTTP is loopback-only. |
 
-The public application URL is <https://joeytan.dev/wrought>, but the security
-origin is only `https://joeytan.dev`: an origin never contains a path. The
-application mount is fixed at `/wrought` and is not configured through
-`WROUGHT_PUBLIC_ORIGIN`.
+The public application URL and browser origin are both
+<https://wrought.joeytan.dev>. `WROUGHT_PUBLIC_ORIGIN` contains that origin
+without a trailing path.
 
 World membership roles, lifecycle states, visibility, and mutation permissions are
 enforced by the server. Username/password authentication creates an opaque,
@@ -181,26 +180,16 @@ authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 ## Deployment
 
 The intended deployment target serves the canonical Wrought preview at
-<https://joeytan.dev/wrought>. As of 2026-09-02, the DNS and Railway cutover are
-not yet verified: `joeytan.dev` still serves GitHub Pages and `/wrought`
-returns 404. Do not describe the canonical target as live until the
-[operations cutover checks](docs/operations.md#combined-host-topology-and-cutover)
+<https://wrought.joeytan.dev>. As of 2026-09-03, its DNS and Railway custom
+domain have not yet been verified. The existing <https://joeytan.dev> site
+remains entirely on its unchanged GitHub Pages deployment. Do not describe the
+Wrought target as live until the
+[operations cutover checks](docs/operations.md#subdomain-topology-and-cutover)
 pass. Once active, it remains an operational preview, not a declaration of
 public-production readiness and not evidence that ChatGPT accepted the attached
 page or site tools.
 
-The combined Go binary also serves a tracked snapshot of the personal site at the
-remaining `joeytan.dev` root paths. That snapshot came from
-`/Users/joey/ts/jtan2231.github.io` revision `d0a73a4`; it is vendored under
-`web/site/` so DNS can direct the whole hostname to one Railway service without
-losing the existing root site. Because both surfaces share an origin, every
-root-site script and handler is inside Wrought's browser trust boundary.
-Tracked `.html` pages also have extensionless aliases; root-file MIME types and
-query-preserving directory redirects are deterministic, and directories never
-expose listings. The source site's `CNAME` and `.nojekyll` are intentionally not
-vendored or served.
-
-For the initial combined-host release before changing DNS, deploy a clean
+For the initial subdomain release before changing DNS, deploy a clean
 committed checkout with the generated-provider, HTTP-only stage:
 
 ```sh
@@ -211,11 +200,10 @@ The command runs the complete `./ci.sh` validator, confirms that the checkout
 remains unchanged, uploads the exact commit from a temporary detached worktree
 with `railway up`, follows the exact deployment to a terminal state, verifies
 the web service plus PostgreSQL replica and volume, and checks the generated
-Railway hostname's HTTPS personal-site and Wrought surfaces without a browser
-authentication probe.
+Railway hostname's Wrought HTTP surface without a browser authentication probe.
 
-After DNS and certificate cutover, `./deploy.sh verify` checks the exact
-`https://joeytan.dev/wrought` URL and domain allowlist. Normal
+After DNS, certificate, and obsolete-domain cleanup, `./deploy.sh verify`
+checks the exact `https://wrought.joeytan.dev` URL and domain allowlist. Normal
 `./deploy.sh deploy` uses the same post-cutover gates and also uploads a new
 release. Unless `--no-browser` is explicit, the post-cutover stage performs a
 short real-browser invalid-signin probe of the canonical origin and login-error
@@ -237,7 +225,7 @@ volume, domain, or variables, and it does not automatically roll back a failed
 release.
 
 Railway configuration is included. Railpack installs Bun, builds the frontend,
-compiles a static Go binary, starts it as `./out`, and checks `/wrought/api/health`.
+compiles a static Go binary, starts it as `./out`, and checks `/api/health`.
 When activating another target, attach PostgreSQL and define a reference
 variable on the application service, such as
 `DATABASE_URL=${{Postgres.DATABASE_URL}}` using the actual database service

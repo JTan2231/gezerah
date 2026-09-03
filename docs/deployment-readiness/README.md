@@ -5,14 +5,13 @@ deploying Wrought beyond a trusted local environment. It complements the
 system descriptions in [Operations](../operations.md) and
 [Security](../security.md); it does not replace them.
 
-**Current project state (2026-09-02):** trusted local development remains
+**Current project state (2026-09-03):** trusted local development remains
 active, and a public-addressable pre-cutover Railway preview is running with a
-managed PostgreSQL service. The intended combined-host target at
-<https://joeytan.dev/wrought> is not yet live or verified: `joeytan.dev` still
-serves GitHub Pages and `/wrought` returns 404, while Railway retains the prior
-names, domains, manifest, and health path. Neither the running preview nor the
-intended target is designated public production or has a production-audience
-commitment. Their existence does not
+managed PostgreSQL service. The intended subdomain target at
+<https://wrought.joeytan.dev> is not yet live or verified. The personal site at
+<https://joeytan.dev> remains entirely on its unchanged GitHub Pages
+deployment. Neither the running preview nor the intended target is designated
+public production or has a production-audience commitment. Their existence does not
 turn the broader readiness items here into local-development blockers or imply
 that a public-release gate is open.
 
@@ -29,30 +28,28 @@ pursued:
 | Deployment target | Current state | Gate | Reason |
 | --- | --- | --- | --- |
 | Local trusted development | Active | Ready | Native signup/signin and server sessions work through the managed Vite origin. |
-| Pre-cutover Railway preview | Active | Conditional | The prior release remains reachable and backed by the managed database, but it does not exercise the Wrought name, fixed `/wrought` mount, combined root site, or intended canonical origin. |
-| Canonical Wrought combined-host preview | Not yet cut over | Blocked | Deploy and verify the combined artifact, preserve the existing database reference, bind and certify `joeytan.dev`, cut over DNS, and pass the root plus `/wrought` smoke before calling it active. |
+| Pre-cutover Railway preview | Active | Conditional | The release is reachable through its generated Railway hostname and backed by the managed database, but it does not exercise the intended canonical origin. |
+| Canonical Wrought subdomain preview | Not yet cut over | Blocked | Preserve the existing database reference, bind and certify `wrought.joeytan.dev`, add its DNS records, and pass the root, API, asset, Play, and Build smoke before calling it active. |
 | Public production | Not deployed | Blocked | No production launch is declared. Resolve backup/restore, monitoring, distributed abuse controls, privacy/support policy, capacity evidence, and external review before opening that gate. |
 
-The pre-cutover preview proves only the earlier hosted process. It does not
-verify the current checked-in combined-host configuration, and neither target
+The pre-cutover preview proves only the hosted process. It does not verify the
+canonical subdomain configuration, and neither target
 is safe by implication for an unrestricted audience or durable real-user data.
 
-The combined target deliberately places the vendored personal-site snapshot and
-Wrought on one browser origin. Before cutover, verify the root snapshot from
-`/Users/joey/ts/jtan2231.github.io` revision `d0a73a4`, exact `/wrought`
-routing, host-wide cookie/HSTS effects, and root-script authority over Wrought
-API calls. Preserve the former GitHub Pages DNS records and prior Railway
-release/variables as an explicit rollback path. See
-[Operations](../operations.md#combined-host-topology-and-cutover) and
-[Security](../security.md#combined-host-origin).
+The target gives Wrought its own browser origin without changing the apex
+personal-site deployment. Before cutover, verify root-mounted routing,
+secure-cookie/HSTS behavior, and the exact subdomain DNS and Railway bindings.
+See [Operations](../operations.md#subdomain-topology-and-cutover) and
+[Security](../security.md#dedicated-subdomain-origin).
 
 The cutover uses two distinct release stages. First,
 `./deploy.sh deploy --pre-dns` records `schemaVersion: 2` and
 `releaseStage: "pre-dns"`
 evidence from HTTP checks against the generated Railway hostname; it never runs
-the browser authentication probe. After DNS and certificate readiness,
-`./deploy.sh verify` must record `releaseStage: "post-cutover"` against exactly
-`https://joeytan.dev/wrought` and the cleaned domain allowlist. Both stages
+the browser authentication probe. After DNS and certificate readiness plus
+obsolete-domain cleanup, `./deploy.sh verify` must record
+`releaseStage: "post-cutover"` against exactly `https://wrought.joeytan.dev`
+and the cleaned domain allowlist. Both stages
 require the manifest's 30-second health-check timeout. The post-cutover invalid
 signin probe verifies the canonical origin and anonymous login boundary, not
 session-cookie issuance or attributes.
@@ -77,7 +74,7 @@ external handbook may own a dated acceptance record for an exact candidate; it
 does not change the gate definition or replace repository evidence.
 
 No new dated three-turn record has been supplied for the Wrought rename and
-`https://joeytan.dev/wrought/play/new` attachment, so the rebranded candidate is
+`https://wrought.joeytan.dev/play/new` attachment, so the rebranded candidate is
 not currently claimed as ChatGPT accepted.
 
 ## Audit index

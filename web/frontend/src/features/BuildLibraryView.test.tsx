@@ -17,7 +17,7 @@ const actions: BuildLibraryViewActions = {
 const worldStart = {
   variant: "build" as const,
   prompt:
-    "Help me start a new World in Wrought at https://joeytan.dev/wrought/build.",
+    "Help me start a new World in Wrought at https://wrought.joeytan.dev/build.",
   chatGPTHref:
     "https://chatgpt.com/?surface=work&prompt=Help+me+start+a+new+World",
   copyStatus: "idle" as const,
@@ -60,7 +60,7 @@ describe("BuildLibraryView", () => {
     expect(html).toContain("Active 2h ago");
     expect(html).toContain("Account fixture");
     expect(html).toContain("Start a World with ChatGPT");
-    expect(html).toContain("https://joeytan.dev/wrought/build");
+    expect(html).toContain("https://wrought.joeytan.dev/build");
     expect(html).toContain("Copy starter prompt");
     expect(html.indexOf("Start a World with ChatGPT")).toBeLessThan(
       html.indexOf("Glass Harbor"),

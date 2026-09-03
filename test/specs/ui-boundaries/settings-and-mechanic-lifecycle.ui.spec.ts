@@ -99,13 +99,13 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
     );
     const adjudicating = await postJSON<Interaction>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
       { expected_revision: open.revision },
       owner.id,
     );
     await postJSON(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/resolve`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/resolve`,
       {
         expected_revision: adjudicating.revision,
         expected_rules_revision: derived.revision,
@@ -128,13 +128,13 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       openAuthenticated(
         ownerPage,
         baseURL,
-        `/wrought/build/${world.id}/settings`,
+        `/build/${world.id}/settings`,
         owner,
       ),
       openAuthenticated(
         editorPage,
         baseURL,
-        `/wrought/build/${world.id}/settings`,
+        `/build/${world.id}/settings`,
         editor,
       ),
     ]);
@@ -209,7 +209,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
     await test.step("NAV-003/dirty-draft-save-and-discard", async () => {
       await ownerPage.goto(
-        `${baseURL}/wrought/build/${world.id}/capacities/${independent.mechanic.id}`,
+        `${baseURL}/build/${world.id}/capacities/${independent.mechanic.id}`,
       );
       const savedName = `${labels.independent} revised`;
       await ownerPage.getByLabel("Name").fill(savedName);
@@ -235,9 +235,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       dismissNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Return home" }).click();
       await expect(ownerPage).toHaveURL(
-        new RegExp(
-          `/wrought/build/${world.id}/capacities/${independent.mechanic.id}$`,
-        ),
+        new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
       );
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         `This text must be discarded ${unique}`,
@@ -248,9 +246,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         .locator(".world-identity > button", { hasText: "Worlds" })
         .click();
       await expect(ownerPage).toHaveURL(
-        new RegExp(
-          `/wrought/build/${world.id}/capacities/${independent.mechanic.id}$`,
-        ),
+        new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
       );
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         `This text must be discarded ${unique}`,
@@ -260,9 +256,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       await ownerPage.setViewportSize({ width: 390, height: 844 });
       await ownerPage.getByRole("button", { name: "Build worlds" }).click();
       await expect(ownerPage).toHaveURL(
-        new RegExp(
-          `/wrought/build/${world.id}/capacities/${independent.mechanic.id}$`,
-        ),
+        new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
       );
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         `This text must be discarded ${unique}`,
@@ -274,9 +268,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         .getByRole("button", { name: new RegExp(labels.base) })
         .click();
       await expect(ownerPage).toHaveURL(
-        new RegExp(
-          `/wrought/build/${world.id}/capacities/${independent.mechanic.id}$`,
-        ),
+        new RegExp(`/build/${world.id}/capacities/${independent.mechanic.id}$`),
       );
       await expect(ownerPage.getByLabel("Description")).toHaveValue(
         `This text must be discarded ${unique}`,
@@ -287,9 +279,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         .getByRole("button", { name: new RegExp(labels.base) })
         .click();
       await expect(ownerPage).toHaveURL(
-        new RegExp(
-          `/wrought/build/${world.id}/capacities/${base.mechanic.id}$`,
-        ),
+        new RegExp(`/build/${world.id}/capacities/${base.mechanic.id}$`),
       );
       await ownerPage
         .getByRole("button", { name: new RegExp(savedName) })
@@ -301,7 +291,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
     await test.step("LFC-002/archive-dependency-chain-in-safe-order", async () => {
       await ownerPage.goto(
-        `${baseURL}/wrought/build/${world.id}/capacities/${base.mechanic.id}`,
+        `${baseURL}/build/${world.id}/capacities/${base.mechanic.id}`,
       );
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive capacity" }).click();
@@ -311,7 +301,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       ).toHaveCount(0);
 
       await ownerPage.goto(
-        `${baseURL}/wrought/build/${world.id}/capacities/${derived.mechanic.id}`,
+        `${baseURL}/build/${world.id}/capacities/${derived.mechanic.id}`,
       );
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive capacity" }).click();
@@ -320,7 +310,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
       ).toBeVisible();
 
       await ownerPage.goto(
-        `${baseURL}/wrought/build/${world.id}/capacities/${base.mechanic.id}`,
+        `${baseURL}/build/${world.id}/capacities/${base.mechanic.id}`,
       );
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive capacity" }).click();
@@ -331,7 +321,7 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
 
     await test.step("LFC-001/archive-independent-mechanic-retains-history", async () => {
       await ownerPage.goto(
-        `${baseURL}/wrought/build/${world.id}/capacities/${independent.mechanic.id}`,
+        `${baseURL}/build/${world.id}/capacities/${independent.mechanic.id}`,
       );
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive capacity" }).click();
@@ -339,14 +329,14 @@ test("UI boundaries: stale settings, dirty drafts, and mechanic archive order re
         ownerPage.getByText("Archived", { exact: true }),
       ).toBeVisible();
 
-      await ownerPage.goto(`${baseURL}/wrought/build/${world.id}/roster`);
+      await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
       await ownerPage
         .getByRole("button", { name: new RegExp(labels.entity) })
         .click();
       await ownerPage.getByRole("tab", { name: "Sheet" }).click();
       await expect(ownerPage.getByLabel(labels.independent)).toHaveCount(0);
 
-      await ownerPage.goto(`${baseURL}/wrought/play/${world.id}`);
+      await ownerPage.goto(`${baseURL}/play/${world.id}`);
       await expect(ownerPage.getByText(labels.history)).toBeVisible();
       await expect(
         ownerPage.locator(".history-card").filter({ hasText: labels.history }),

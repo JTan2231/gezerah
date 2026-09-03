@@ -1,7 +1,5 @@
 export type AppArea = "play" | "build";
 
-const APP_BASE_PATH = "/wrought";
-
 export interface NavigateOptions {
   replace?: boolean;
 }
@@ -42,9 +40,8 @@ const buildSections: ReadonlySet<string> = new Set([
 ]);
 
 export function readLocation(pathname = window.location.pathname): AppLocation {
-  const relativePath = stripAppBasePath(pathname);
-  if (relativePath === null) return { type: "not-found" };
-  const parts = relativePath.split("/").filter(Boolean).map(decodeURIComponent);
+  if (!pathname.startsWith("/")) return { type: "not-found" };
+  const parts = pathname.split("/").filter(Boolean).map(decodeURIComponent);
   if (parts.length === 0) return { type: "home" };
 
   if (parts[0] === "play") {
@@ -90,23 +87,16 @@ export function readLocation(pathname = window.location.pathname): AppLocation {
   return { type: "not-found" };
 }
 
-function stripAppBasePath(pathname: string): string | null {
-  if (pathname === APP_BASE_PATH || pathname === `${APP_BASE_PATH}/`)
-    return "/";
-  if (!pathname.startsWith(`${APP_BASE_PATH}/`)) return null;
-  return pathname.slice(APP_BASE_PATH.length);
-}
-
 export function homeURL(): string {
-  return APP_BASE_PATH;
+  return "/";
 }
 
 export function playLibraryURL(): string {
-  return `${APP_BASE_PATH}/play`;
+  return "/play";
 }
 
 export function buildLibraryURL(): string {
-  return `${APP_BASE_PATH}/build`;
+  return "/build";
 }
 
 export function playWorldURL(worldId: string): string {

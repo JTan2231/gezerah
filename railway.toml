@@ -4,7 +4,7 @@ buildCommand = "cd web/frontend && bun install --frozen-lockfile && bun run buil
 
 [deploy]
 startCommand = "./out"
-healthcheckPath = "/wrought/api/health"
+healthcheckPath = "/api/health"
 healthcheckTimeout = 30
 numReplicas = 1
 drainingSeconds = 15

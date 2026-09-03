@@ -49,23 +49,19 @@ flowchart LR
     Rules[Pure Go rules engine]
     DB[(PostgreSQL)]
     App[Embedded Wrought Vite assets]
-    Site[Vendored joeytan.dev site]
 
-    Browser -->|JSON API and SSE| API
-    Browser -->|root static requests| Site
+    Browser -->|SPA, JSON API, and SSE| API
     API -->|validate and resolve| Rules
     API -->|pgx transactions| DB
-    App -->|/wrought SPA| API
-    Site -->|embedded by| API
+    API -->|serves embedded| App
 ```
 
 The production artifact is one Go binary. It runs migrations, connects to
-PostgreSQL, serves the Wrought API and SPA only under the exact `/wrought`
-mount, and serves a tracked personal-site snapshot at the remaining root paths.
-The canonical application URL is <https://joeytan.dev/wrought>; its security
-origin is `https://joeytan.dev`, without a path. During development, Vite serves
-Wrought on port `5173` and proxies `/wrought/api` to the Go process on port
-`8080`.
+PostgreSQL, and serves the Wrought API and SPA from the root of its dedicated
+host. The canonical application URL and security origin are both
+<https://wrought.joeytan.dev>. The separate <https://joeytan.dev> personal site
+remains on GitHub Pages. During development, Vite serves Wrought on port `5173`
+and proxies `/api` to the Go process on port `8080`.
 
 ## Product path
 
@@ -142,7 +138,6 @@ authority when behavior and prose diverge:
   authorization.
 - `internal/migrations/*.sql` for persisted shape and database constraints.
 - `web/frontend/src/api/types.ts` for the frontend's view of API payloads.
-- `web/site/` for the pinned `joeytan.dev` root-site snapshot.
 - `web/frontend/src/features/` for screen behavior.
 - `ci.sh`, `run.sh`, `deploy.sh`, `test/src/deployment/`, `railway.toml`, and
   `railpack.json` for tooling and runtime operations.

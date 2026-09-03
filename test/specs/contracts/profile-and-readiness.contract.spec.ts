@@ -105,19 +105,19 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds`,
+    `${baseURL}/api/worlds`,
     { name: `Profile World ${unique}` },
     owner.id,
   );
 
   const emptyFields = await getJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     owner.id,
   );
   const fields = await putJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     {
       expected_revision: emptyFields.revision,
       fields: [
@@ -140,7 +140,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const mechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/mechanics`,
+    `${baseURL}/api/worlds/${world.id}/mechanics`,
     {
       kind: "capacity",
       mode: "score",
@@ -178,7 +178,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const waitingPlayerFields = await getJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     player.id,
   );
   expect(waitingPlayerFields).toMatchObject({ revision: fields.revision });
@@ -191,7 +191,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const controlled = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
+    `${baseURL}/api/worlds/${world.id}/entities`,
     {
       display_name: `Controlled Courier ${unique}`,
       controller_world_membership_ids: [joinedPlayer.membership_id],
@@ -200,19 +200,19 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   const uncontrolled = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
+    `${baseURL}/api/worlds/${world.id}/entities`,
     { display_name: `Uncontrolled Sentinel ${unique}` },
     owner.id,
   );
 
   const currentWorld = await getJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}`,
+    `${baseURL}/api/worlds/${world.id}`,
     owner.id,
   );
   const playerFacilitatedWorld = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
     {
       source: "human",
       membership_id: joinedPlayer.membership_id,
@@ -222,7 +222,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   const facilitatorReadOnlyProfile = await getJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
+    `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
     player.id,
   );
   expect(facilitatorReadOnlyProfile).toMatchObject({
@@ -236,7 +236,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   await expectAPIError(
     await actorRequest(player.id).put(
-      `${baseURL}/wrought/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
+      `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/profile`,
       {
         data: {
           expected_revision: facilitatorReadOnlyProfile.revision,
@@ -255,7 +255,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   await putJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/api/worlds/${world.id}/facilitator`,
     {
       source: "human",
       membership_id: world.membership_id,
@@ -266,7 +266,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const beforeProfile = await getJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     player.id,
   );
   expect(beforeProfile).toMatchObject({
@@ -278,7 +278,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   });
   await expectAPIError(
     await actorRequest(player.id).get(
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       {},
     ),
     403,
@@ -289,7 +289,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   const restrictedStory = `Carries the unbroken seal ${unique}.`;
   const partial = await putJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     {
       expected_revision: beforeProfile.revision,
       expected_character_field_set_revision: fields.revision,
@@ -306,7 +306,7 @@ test("contract: readiness and profile projections preserve authority and privacy
     (
       await getJSON<WorldResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}`,
+        `${baseURL}/api/worlds/${world.id}`,
         player.id,
       )
     ).play_status,
@@ -314,7 +314,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   expect(
     (
       await actorRequest(player.id).get(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/sheet`,
+        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/sheet`,
         {},
       )
     ).status(),
@@ -322,7 +322,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   expect(
     (
       await actorRequest(player.id).get(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${uncontrolled.id}/sheet`,
+        `${baseURL}/api/worlds/${world.id}/entities/${uncontrolled.id}/sheet`,
         {},
       )
     ).status(),
@@ -330,7 +330,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const complete = await putJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     {
       expected_revision: partial.revision,
       expected_character_field_set_revision: fields.revision,
@@ -350,7 +350,7 @@ test("contract: readiness and profile projections preserve authority and privacy
     (
       await getJSON<WorldResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}`,
+        `${baseURL}/api/worlds/${world.id}`,
         player.id,
       )
     ).play_status,
@@ -359,7 +359,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   await test.step("AUT-V03 omits restricted Character-field definitions and Entity-profile values", async () => {
     const spectatorProjection = await getJSON<EntityProfileResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+      `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
       spectator.id,
     );
     expect(spectatorProjection).toMatchObject({
@@ -386,7 +386,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   expect(
     (
       await actorRequest(spectator.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+        `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
         {
           data: {
             expected_revision: complete.revision,
@@ -399,7 +399,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   ).toBe(403);
   await expectAPIError(
     await actorRequest(player.id).put(
-      `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+      `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
       {
         data: {
           expected_revision: 0,
@@ -416,7 +416,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   );
   const unchangedProfile = await getJSON<EntityProfileResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/entities/${controlled.id}/profile`,
+    `${baseURL}/api/worlds/${world.id}/entities/${controlled.id}/profile`,
     player.id,
   );
   expect(unchangedProfile).toMatchObject({
@@ -441,7 +441,7 @@ test("contract: readiness and profile projections preserve authority and privacy
     (
       await getJSON<EntityResponse[]>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}/entities`,
+        `${baseURL}/api/worlds/${world.id}/entities`,
         player.id,
       )
     ).find((entity) => entity.id === controlled.id)?.sheet
@@ -450,7 +450,7 @@ test("contract: readiness and profile projections preserve authority and privacy
 
   const openInteraction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+    `${baseURL}/api/worlds/${world.id}/interactions`,
     {
       present: true,
       prompt: `The profile contract remains in use ${unique}.`,
@@ -480,7 +480,7 @@ test("contract: readiness and profile projections preserve authority and privacy
   await test.step("CHF-V01 blocks character-field-set changes during unfinished play", async () => {
     await expectAPIError(
       await actorRequest(owner.id).put(
-        `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+        `${baseURL}/api/worlds/${world.id}/character-fields`,
         {
           data: expandedFieldRequest,
         },
@@ -490,21 +490,21 @@ test("contract: readiness and profile projections preserve authority and privacy
     );
     const fieldsAfterDenial = await getJSON<CharacterFieldSetResponse>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+      `${baseURL}/api/worlds/${world.id}/character-fields`,
       owner.id,
     );
     expect(fieldsAfterDenial).toEqual(fields);
   });
   await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${openInteraction.id}/cancel`,
+    `${baseURL}/api/worlds/${world.id}/interactions/${openInteraction.id}/cancel`,
     { expected_revision: openInteraction.revision },
     owner.id,
   );
 
   const expandedFields = await putJSON<CharacterFieldSetResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
+    `${baseURL}/api/worlds/${world.id}/character-fields`,
     expandedFieldRequest,
     owner.id,
   );
@@ -513,14 +513,14 @@ test("contract: readiness and profile projections preserve authority and privacy
     (
       await getJSON<WorldResponse>(
         request,
-        `${baseURL}/wrought/api/worlds/${world.id}`,
+        `${baseURL}/api/worlds/${world.id}`,
         player.id,
       )
     ).play_status,
   ).toBe("setup-required");
   await expectAPIError(
     await actorRequest(player.id).get(
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
+      `${baseURL}/api/worlds/${world.id}/interactions`,
       {},
     ),
     403,
@@ -546,14 +546,14 @@ async function redeemInvite(
 ): Promise<WorldResponse> {
   const invite = await postJSON<InviteResponse>(
     request,
-    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
+    `${baseURL}/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     ownerID,
   );
   const token = required(invite.join_path?.split("/").at(-1), `${role} token`);
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
+    `${baseURL}/api/world-invites/${token}/redeem`,
     undefined,
     userID,
   );

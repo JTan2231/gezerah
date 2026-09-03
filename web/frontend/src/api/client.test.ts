@@ -30,12 +30,10 @@ afterEach(() => {
 });
 
 describe("API authentication adapter", () => {
-  test("builds API and event-stream paths beneath the Wrought mount", () => {
-    expect(worldPath("world/1", "events")).toBe(
-      "/wrought/api/worlds/world%2F1/events",
-    );
+  test("builds API and event-stream paths at the Wrought origin", () => {
+    expect(worldPath("world/1", "events")).toBe("/api/worlds/world%2F1/events");
     expect(worldInvitePath("token value", "redeem")).toBe(
-      "/wrought/api/world-invites/token%20value/redeem",
+      "/api/world-invites/token%20value/redeem",
     );
   });
 
@@ -47,8 +45,8 @@ describe("API authentication adapter", () => {
     });
     setCSRFToken("csrf-value");
 
-    await api<{ ok: boolean }>("/wrought/api/example");
-    await api<{ ok: boolean }>("/wrought/api/example", {
+    await api<{ ok: boolean }>("/api/example");
+    await api<{ ok: boolean }>("/api/example", {
       method: "POST",
       ...jsonBody({ value: true }),
     });
@@ -89,11 +87,11 @@ describe("API authentication adapter", () => {
 
     let error: unknown;
     try {
-      await api("/wrought/api/protected", { method: "POST" });
+      await api("/api/protected", { method: "POST" });
     } catch (reason) {
       error = reason;
     }
-    await api("/wrought/api/another-command", { method: "POST" });
+    await api("/api/another-command", { method: "POST" });
     unsubscribe();
 
     expect(error).toBeInstanceOf(ApiError);
@@ -116,7 +114,7 @@ describe("API authentication adapter", () => {
       { preconnect: originalFetch.preconnect },
     );
     setCSRFToken("old-session-csrf");
-    const staleRequest = api("/wrought/api/stale", { method: "POST" }).catch(
+    const staleRequest = api("/api/stale", { method: "POST" }).catch(
       (reason: unknown) => reason,
     );
     await Promise.resolve();
@@ -140,7 +138,7 @@ describe("API authentication adapter", () => {
       currentRequest = init;
       return Response.json({ ok: true });
     });
-    await api("/wrought/api/current", { method: "POST" });
+    await api("/api/current", { method: "POST" });
     unsubscribe();
 
     expect(authenticationRequiredCount).toBe(0);
@@ -188,16 +186,16 @@ describe("API authentication adapter", () => {
     setCSRFToken("stale-session-csrf", "user-one");
 
     expect(
-      await api<{ ok: boolean }>("/wrought/api/worlds", {
+      await api<{ ok: boolean }>("/api/worlds", {
         method: "POST",
         ...jsonBody({ name: "The retried world" }),
       }),
     ).toEqual({ ok: true });
 
     expect(requests.map(({ input }) => input)).toEqual([
-      "/wrought/api/worlds",
-      "/wrought/api/me",
-      "/wrought/api/worlds",
+      "/api/worlds",
+      "/api/me",
+      "/api/worlds",
     ]);
     expect(new Headers(requests[0]?.init?.headers).get("X-WROUGHT-CSRF")).toBe(
       "stale-session-csrf",
@@ -245,7 +243,7 @@ describe("API authentication adapter", () => {
 
     let error: unknown;
     try {
-      await api("/wrought/api/worlds", {
+      await api("/api/worlds", {
         method: "POST",
         ...jsonBody({ name: "Must not be replayed" }),
       });

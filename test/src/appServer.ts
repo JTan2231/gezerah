@@ -172,7 +172,7 @@ async function waitForHealth(
       );
     }
     try {
-      const response = await fetch(`${baseURL}/wrought/api/health`);
+      const response = await fetch(`${baseURL}/api/health`);
       if (response.ok) return;
     } catch {
       // Startup and migrations are still in progress.

@@ -31,7 +31,7 @@ export function BuildLibrary({
   onLogoutAll: () => Promise<void>;
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
-  const worlds = useCollection<World>("/wrought/api/worlds");
+  const worlds = useCollection<World>("/api/worlds");
   const [creating, setCreating] = useState(false);
   const worldStart = useChatGPTWorldStart(buildLibraryURL(), "build");
   const editableWorlds = worlds.items.flatMap<BuildLibraryWorld>((world) => {
@@ -116,7 +116,7 @@ function CreateWorldController({
     setSaving(true);
     setError(null);
     try {
-      const world = await api<World>("/wrought/api/worlds", {
+      const world = await api<World>("/api/worlds", {
         method: "POST",
         ...jsonBody({
           name: name.trim(),

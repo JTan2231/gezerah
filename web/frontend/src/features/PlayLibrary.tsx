@@ -19,7 +19,7 @@ export function PlayLibrary({
   onLogoutAll: () => Promise<void>;
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
-  const worlds = useCollection<World>("/wrought/api/worlds");
+  const worlds = useCollection<World>("/api/worlds");
 
   return (
     <PlayLibraryView

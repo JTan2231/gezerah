@@ -3,11 +3,11 @@
 ## Product surface
 
 The React application retains two internal product areas over the same World
-model: `/wrought/play` is the Play area and `/wrought/build` is the configuration area. The
-Wrought home at `/wrought` does not expose either library. It presents one
+model: `/play` is the Play area and `/build` is the configuration area. The
+Wrought home at `/` does not expose either library. It presents one
 data-free **Open in ChatGPT** launch that navigates the ordinary browser to
 `chatgpt.com` with a starter prompt and a request to attach the exact
-`https://joeytan.dev/wrought/play/new` page. It has no
+`https://wrought.joeytan.dev/play/new` page. It has no
 prompt-only or manual-template fallback. When a supported ChatGPT surface honors
 that request, ChatGPT uses the Start site-tool surface after authentication to
 inspect and copy one of three complete World templates, then the Play site-tool
@@ -42,7 +42,7 @@ text, not a structured style selector or mechanical configuration.
 ## Stack and source layout
 
 The frontend is React 19 and strict TypeScript, built by Vite with public base
-`/wrought/` and managed with Bun. It uses browser `fetch`, History API routing,
+`/` and managed with Bun. It uses browser `fetch`, History API routing,
 and native form controls.
 There is no router, global-state library, form framework,
 component framework, or service worker.
@@ -243,34 +243,32 @@ Routes are parsed without an external router:
 
 | URL                                             | Surface                                       |
 | ----------------------------------------------- | --------------------------------------------- |
-| `/wrought`, `/wrought/`                         | Wrought Home and sole ChatGPT launch for delegated start; no API load. |
-| `/wrought/play`                                         | Current account's World list for Play.        |
-| `/wrought/play/new`                                     | Authenticated Start site-tool page; catalog is visible but copied only through ChatGPT. |
-| `/wrought/play/{world-id}`                              | Onboarding or Play.                           |
-| `/wrought/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
-| `/wrought/build`                                        | Editable-world list and world creation.       |
-| `/wrought/build/{world-id}/capacities/{mechanic-id?}`   | Capacity catalog/editor.                      |
-| `/wrought/build/{world-id}/capabilities/{mechanic-id?}` | Capability catalog/editor.                    |
-| `/wrought/build/{world-id}/character-fields`            | Required character-field editor.              |
-| `/wrought/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
-| `/wrought/build/{world-id}/members`                     | World memberships and invite links.           |
-| `/wrought/build/{world-id}/settings`                    | World details, current-Facilitator summary, lifecycle. |
-| `/wrought/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
+| `/`                                             | Wrought Home and sole ChatGPT launch for delegated start; no API load. |
+| `/play`                                         | Current account's World list for Play.        |
+| `/play/new`                                     | Authenticated Start site-tool page; catalog is visible but copied only through ChatGPT. |
+| `/play/{world-id}`                              | Onboarding or Play.                           |
+| `/play/invite/{opaque-token}`                   | Player/spectator invite preview and redeem.   |
+| `/build`                                        | Editable-world list and world creation.       |
+| `/build/{world-id}/capacities/{mechanic-id?}`   | Capacity catalog/editor.                      |
+| `/build/{world-id}/capabilities/{mechanic-id?}` | Capability catalog/editor.                    |
+| `/build/{world-id}/character-fields`            | Required character-field editor.              |
+| `/build/{world-id}/roster`                      | Entity, controller, profile, and sheet setup. |
+| `/build/{world-id}/members`                     | World memberships and invite links.           |
+| `/build/{world-id}/settings`                    | World details, current-Facilitator summary, lifecycle. |
+| `/build/invite/{opaque-token}`                  | Editor invite preview and redeem.             |
 
-`APP_BASE_PATH` in `src/worldRoutes.ts` fixes the mount at `/wrought`. Only the
-exact mount and paths beginning `/wrought/` enter the route parser;
-unprefixed product paths, `/`, and near-prefix paths such as `/wroughtly` are
-not Wrought routes. Unknown paths inside the mount render a not-found screen
-rather than silently opening a library.
+`src/worldRoutes.ts` treats `/` as Home and recognizes the `/play/**` and
+`/build/**` families. Unknown paths render a not-found screen rather than
+silently opening a library.
 A bare Build world path canonicalizes to capacities. A player or spectator
 cannot cause Play to render under a Build URL; Build shows an explicit
 access boundary and offers a deliberate transition to Play.
 
 The Wrought Home launch remains data-free. Its requested attachment destination
-is the exact `https://joeytan.dev/wrought/play/new` URL; if ChatGPT honors the request, that route survives
+is the exact `https://wrought.joeytan.dev/play/new` URL; if ChatGPT honors the request, that route survives
 the account gate and only then loads the authenticated catalog and registers the
 complete Start site-tool surface. On entering Play, Build, or an invite URL,
-the application bootstraps with `GET /wrought/api/me`. An anonymous browser sees a
+the application bootstraps with `GET /api/me`. An anonymous browser sees a
 username/password gate; signup asks for username, display name, and a password
 of at least 8 characters with confirmation, while signin asks only for username
 and password. Password change also confirms the new value because this release
@@ -280,12 +278,12 @@ to the intended area or opaque invite without storing a redirect target.
 
 The browser owns no durable identity credential in JavaScript. `fetch` sends
 the server's HttpOnly SameSite session cookie, while the CSRF token returned by
-signup, signin, `/wrought/api/me`, or password change lives only in module memory and
+signup, signin, `/api/me`, or password change lives only in module memory and
 is added to unsafe calls as `X-WROUGHT-CSRF`. A global 401 boundary clears that
 token and returns protected surfaces to the signin gate; each request captures
 its starting authentication token so a late 401 from an old session cannot
 tear down a newly established one. A `csrf_invalid` response caused by another
-tab rotating the same account's cookie triggers `/wrought/api/me` and one safe retry;
+tab rotating the same account's cookie triggers `/api/me` and one safe retry;
 the client will not replay the mutation if the cookie belongs to another user.
 Account controls are
 available in libraries, workspaces, and invite preview; signout revokes the
@@ -294,22 +292,22 @@ revoking the account's other sessions.
 
 ## World library
 
-Both internal libraries request `GET /wrought/api/worlds`. The Build library filters to
+Both internal libraries request `GET /api/worlds`. The Build library filters to
 owner/editor memberships, offers both custom-World assistance and manual World
 creation, and opens the capacity editor. The internal Play library shows every
 admitted saved World but does not expose a manual template-start route.
 Saved cards emphasize the current play role, Play status, roster size, and last
 activity. The membership role remains available separately inside the World.
 
-`/wrought/play/new` loads the complete three-item catalog from
-`GET /wrought/api/world-templates`. Each authored option is visible with equal weight,
+`/play/new` loads the complete three-item catalog from
+`GET /api/world-templates`. Each authored option is visible with equal weight,
 including the prose guide that lets a requested tone or voice inform ChatGPT's
 selection, but the page exposes no manual copy command. Its Start site-tool surface
 registers `inspect_world_templates` and `copy_world_template`. The copy handler
 generates the destination World UUID and reuses it when retrying
-`POST /wrought/api/world-templates/{template_id}/clone`, so an uncertain response cannot
+`POST /api/world-templates/{template_id}/clone`, so an uncertain response cannot
 create a second copy. A successful command replaces the catalog URL with
-`/wrought/play/{world-id}`, unregisters the Start surface, and lets the Play page
+`/play/{world-id}`, unregisters the Start surface, and lets the Play page
 register its own surface. An incomplete catalog is unavailable rather than
 silently offering fewer than three choices.
 
@@ -498,11 +496,9 @@ these values. Revisions, counts, positions, and priorities remain JavaScript
 numbers.
 
 The API adapter, event stream, route builders, invite-link builder, and History
-API destinations all emit the `/wrought` prefix. Root-relative paths are
-deliberate so a deep Wrought route never resolves an API or asset below its own
-pathname. The surrounding personal site is not part of this React tree, but it
-shares the `joeytan.dev` origin and therefore shares browser authority; see
-[Security](security.md#combined-host-origin).
+API destinations all emit root-relative paths. This ensures a deep Wrought
+route never resolves an API or asset below its own pathname. The separate
+`joeytan.dev` personal site is not part of this React tree or browser origin.
 
 ## Accessibility and responsive behavior
 

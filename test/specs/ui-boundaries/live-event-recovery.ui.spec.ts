@@ -66,9 +66,7 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
     [entity.id],
   );
 
-  const eventPattern = new RegExp(
-    `/wrought/api/worlds/${world.id}/events(?:\\?.*)?$`,
-  );
+  const eventPattern = new RegExp(`/api/worlds/${world.id}/events(?:\\?.*)?$`);
   let attempt = 0;
   let firstStreamObserved: (() => void) | undefined;
   let reconnectObserved: ((url: string) => void) | undefined;
@@ -94,12 +92,12 @@ test("UI boundaries: interrupted live events resume from the cursor without dupl
   });
 
   await test.step("NAV-V02/event-stream-interruption", async () => {
-    await openAuthenticated(page, baseURL, `/wrought/play/${world.id}`, player);
+    await openAuthenticated(page, baseURL, `/play/${world.id}`, player);
     await firstStream;
     await expect(page.getByText(prompt)).toBeVisible();
     await postJSON<Interaction>(
       request,
-      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/cancel`,
+      `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/cancel`,
       { expected_revision: interaction.revision },
       owner.id,
     );

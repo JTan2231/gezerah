@@ -141,7 +141,7 @@ trap handle_signal HUP INT TERM
 "$repo_root/run.sh" stop backend
 backend_stopped=1
 
-if curl -fsS --max-time 1 http://127.0.0.1:8080/wrought/api/health >/dev/null 2>&1; then
+if curl -fsS --max-time 1 http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
 	printf 'Refusing to reset while an unmanaged backend is reachable on port 8080; stop it and retry.\n' >&2
 	exit 1
 fi
