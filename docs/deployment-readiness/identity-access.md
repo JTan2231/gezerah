@@ -5,10 +5,10 @@ Remediation status: **Implemented; deployment controls remain conditional**
 
 At this audit's 2026-08-07 date, there was no hosted deployment, production
 database, production user base, external audience, or release commitment. A
-public-addressable Railway preview was activated afterward. That operational
-preview does not convert this audit into a public-production sign-off. As of
-2026-09-03 it is still pre-cutover; the intended
-`https://wrought.joeytan.dev` subdomain target has not yet been verified.
+public-addressable Railway preview was activated afterward, and its canonical
+`https://wrought.joeytan.dev` subdomain was verified on 2026-09-03. That
+operational preview does not convert this audit into a public-production
+sign-off.
 
 ## Conclusion
 

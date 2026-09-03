@@ -179,15 +179,13 @@ authored mechanics, generated sheets, and the multiplayer ad-hoc Play loop.
 
 ## Deployment
 
-The intended deployment target serves the canonical Wrought preview at
-<https://wrought.joeytan.dev>. As of 2026-09-03, its DNS and Railway custom
-domain have not yet been verified. The existing <https://joeytan.dev> site
-remains entirely on its unchanged GitHub Pages deployment. Do not describe the
-Wrought target as live until the
-[operations cutover checks](docs/operations.md#subdomain-topology-and-cutover)
-pass. Once active, it remains an operational preview, not a declaration of
-public-production readiness and not evidence that ChatGPT accepted the attached
-page or site tools.
+The operational Wrought preview is live at <https://wrought.joeytan.dev>. As of
+2026-09-03, its DNS and Railway custom domain are verified, and its canonical
+root, API health, asset, Play, Build, and anonymous invalid-signin browser
+checks pass. The existing <https://joeytan.dev> site remains entirely on its
+unchanged GitHub Pages deployment. This is an operational preview, not a
+declaration of public-production readiness and not evidence that ChatGPT
+accepted the attached page or site tools.
 
 For the initial subdomain release before changing DNS, deploy a clean
 committed checkout with the generated-provider, HTTP-only stage:
