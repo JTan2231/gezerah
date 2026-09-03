@@ -108,12 +108,19 @@ describe("ChatGPT play tools", () => {
     );
     expect(presentDescription).toContain("cannot change established facts");
     expect(presentDescription).toContain("Never quote it");
-    expect(presentDescription).toContain("same text you present");
+    expect(presentDescription).toContain("same narrative text you present");
+    expect(presentDescription).toContain("response_preamble");
+    expect(presentDescription).toContain("copied exactly");
+    expect(presentDescription).toContain("not part of the saved Problem");
+    expect(presentDescription).toContain("not part of the prose word or beat");
     expect(presentDescription).not.toContain("receipt");
     expect(presentDescription).toMatch(/up to about 180 words/i);
     expect(presentDescription).toMatch(/combined public passage.+100 to 140/i);
     expect(resolveDescription).toContain("Show decisions and changed state");
     expect(resolveDescription).toContain("report about the operation");
+    expect(resolveDescription).toContain("response_preamble");
+    expect(resolveDescription).toContain("exactly");
+    expect(resolveDescription).toContain("once before a combined Consequence");
     expect(resolveDescription).toContain("Follow the prose guide");
     expect(resolveDescription).toContain("unexpressed thoughts");
     expect(resolveDescription).toMatch(/100 to 140 words total/i);
@@ -154,6 +161,21 @@ describe("ChatGPT play tools", () => {
     const narrativeGuidance = complete.handbook.sections.find(
       ({ topic }) => topic === "narrative-presentation",
     )?.guidance;
+    const stateGuidance = complete.handbook.sections.find(
+      ({ topic }) => topic === "state-and-effects",
+    )?.guidance;
+    expect(stateGuidance).toContain("State — Character");
+    expect(stateGuidance).toContain("Mechanics:");
+    expect(stateGuidance).toContain("Statuses:");
+    expect(stateGuidance).toContain("Changes:");
+    expect(stateGuidance).toContain("Label: value");
+    expect(stateGuidance).toContain("current effective values");
+    expect(stateGuidance).toContain("Initial state");
+    expect(stateGuidance).toContain("None");
+    expect(stateGuidance).toContain("before → after");
+    expect(stateGuidance).toContain("+Status/−Status");
+    expect(stateGuidance).toContain("Never add IDs, revisions, private data");
+    expect(stateGuidance).toContain("not saved fiction");
     expect(narrativeGuidance).toContain(
       "Follow the inspected World's prose guide",
     );
@@ -163,6 +185,9 @@ describe("ChatGPT play tools", () => {
     expect(narrativeGuidance).toMatch(/180 words or fewer/i);
     expect(narrativeGuidance).toMatch(/5 to 7 short prose beats/i);
     expect(narrativeGuidance).toMatch(/combined passage, not each saved part/i);
+    expect(narrativeGuidance).toContain(
+      "diagnostic preamble does not count toward either target",
+    );
     expect(narrativeGuidance).toMatch(
       /at most one concise sentence on changed state/i,
     );
@@ -385,6 +410,163 @@ describe("ChatGPT play tools", () => {
     expect(payload.active_interaction.context_entity_ids).toEqual(["ash"]);
   });
 
+  test("builds the hierarchical response preamble from effective state and the latest committed changes", async () => {
+    let interactions: unknown[] = [];
+    globalThis.fetch = Object.assign(
+      (input: Parameters<typeof fetch>[0]) => {
+        const requestURL =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        const path = new URL(requestURL, "https://play.example").pathname;
+        if (path === "/api/worlds/world-1")
+          return Promise.resolve(
+            Response.json({
+              id: "world-1",
+              name: "The Glass Coast",
+              status: "active",
+              facilitator: { source: "agent" },
+              membership_id: "member-1",
+              role: "player",
+              current_play_role: "player",
+              play_status: "ready",
+              roster_revision: 4,
+              rules_revision: 3,
+            }),
+          );
+        if (path === "/api/worlds/world-1/members")
+          return Promise.resolve(
+            Response.json([
+              {
+                id: "member-1",
+                display_name: "River",
+                status: "active",
+                current_play_role: "player",
+                play_status: "ready",
+                controlled_entity_ids: ["aria"],
+              },
+            ]),
+          );
+        if (path === "/api/worlds/world-1/entities")
+          return Promise.resolve(
+            Response.json([
+              {
+                id: "aria",
+                display_name: "Aria",
+                archived: false,
+                character_status: "ready",
+                sheet: {
+                  entity_id: "aria",
+                  logical_input_values: {
+                    resolve: { kind: "number", value: "6" },
+                  },
+                  effective_values: {
+                    resolve: { kind: "number", value: "4" },
+                    vigilance: { kind: "boolean", value: true },
+                    supply: { kind: "number", value: "2" },
+                    hidden: { kind: "number", value: "99" },
+                  },
+                  active_status_instances: [
+                    { id: "shaken-1", name: "Shaken" },
+                    { id: "shaken-2", name: "Shaken" },
+                  ],
+                },
+              },
+            ]),
+          );
+        if (path === "/api/worlds/world-1/entities/aria/profile")
+          return Promise.resolve(
+            Response.json({ entity_id: "aria", fields: [] }),
+          );
+        if (path === "/api/worlds/world-1/mechanics")
+          return Promise.resolve(
+            Response.json({
+              revision: 3,
+              mechanics: [
+                { id: "resolve", name: "Resolve", archived: false },
+                { id: "vigilance", name: "Vigilance", archived: false },
+                { id: "supply", name: "Supply", archived: false },
+                { id: "hidden", name: "Hidden", archived: true },
+              ],
+            }),
+          );
+        if (path === "/api/worlds/world-1/interactions")
+          return Promise.resolve(Response.json(interactions));
+        return Promise.resolve(Response.json({}, { status: 404 }));
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    const inspect = createAgentPlayTools(
+      "world-1",
+      () => undefined,
+      new AbortController().signal,
+    ).find((tool) => tool.name === "inspect_play");
+
+    const initial = (await inspect?.execute({})) as {
+      response_preamble: string;
+    };
+    expect(initial.response_preamble).toBe(
+      "**State — Aria**\n\n- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2\n- **Statuses:** Shaken ×2\n- **Changes:** Initial state",
+    );
+
+    interactions = [
+      {
+        id: "resolution-1",
+        status: "resolved",
+        resolution: { applications: [], effective_changes: [] },
+      },
+    ];
+    const unchanged = (await inspect?.execute({})) as {
+      response_preamble: string;
+    };
+    expect(unchanged.response_preamble).toEndWith("- **Changes:** None");
+
+    interactions = [
+      {
+        id: "resolution-2",
+        status: "resolved",
+        resolution: {
+          effective_changes: [
+            {
+              entity_id: "aria",
+              mechanic_id: "resolve",
+              before: { kind: "number", value: "6" },
+              after: { kind: "number", value: "4" },
+            },
+          ],
+          applications: [
+            {
+              type: "apply-status",
+              entity_id: "aria",
+              status_name: "Shaken",
+              active_before: false,
+              active_after: true,
+              changed: true,
+            },
+            {
+              type: "remove-status",
+              entity_id: "aria",
+              status_name: "Inspired",
+              active_before: true,
+              active_after: false,
+              changed: true,
+            },
+          ],
+        },
+      },
+    ];
+    const changed = (await inspect?.execute({})) as {
+      response_preamble: string;
+    };
+    expect(changed.response_preamble).toBe(
+      "**State — Aria**\n\n- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2\n- **Statuses:** Shaken ×2\n- **Changes:** Resolve: 6 → 4 · +Shaken · −Inspired",
+    );
+    expect(changed.response_preamble).not.toContain("Hidden");
+    expect(changed.response_preamble).not.toContain("99");
+  });
+
   test("claims an available Entity against the world roster revision", async () => {
     const requests: Array<{
       path: string;
@@ -488,7 +670,10 @@ describe("ChatGPT play tools", () => {
     expect(payload.presented_interaction.id).toBe("interaction-1");
     expect(payload.presented_interaction.context_entity_ids).toEqual(["ash"]);
     expect(payload.next_step).toContain(
-      "presented_interaction.prompt directly as the scene",
+      "response_preamble from the latest Play inspection exactly as provided",
+    );
+    expect(payload.next_step).toContain(
+      "presented_interaction.prompt unchanged as the scene",
     );
     expect(payload.next_step).toContain("without saying it was saved");
   });
@@ -550,6 +735,81 @@ describe("ChatGPT play tools", () => {
       "Never submit another Action until the player explicitly states or delegates it",
     );
     expect(payload.next_step).toContain("Do not announce Action submission");
+  });
+
+  test("preserves the saved Consequence while directing a refreshed exact-change preamble", async () => {
+    let submittedBody: unknown;
+    globalThis.fetch = Object.assign(
+      (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+        const requestURL =
+          typeof input === "string"
+            ? input
+            : input instanceof URL
+              ? input.href
+              : input.url;
+        const path = new URL(requestURL, "https://play.example").pathname;
+        if (path === "/api/worlds/world-1/interactions")
+          return Promise.resolve(
+            Response.json([
+              {
+                id: "problem-1",
+                revision: 6,
+                status: "open",
+                facilitator_source: "agent",
+              },
+            ]),
+          );
+        if (path === "/api/worlds/world-1/mechanics")
+          return Promise.resolve(Response.json({ revision: 3, mechanics: [] }));
+        if (
+          path === "/api/worlds/world-1/interactions/problem-1/agent/resolve"
+        ) {
+          if (typeof init?.body === "string")
+            submittedBody = JSON.parse(init.body) as unknown;
+          return Promise.resolve(
+            Response.json({
+              interaction_id: "problem-1",
+              interaction_revision: 7,
+              rules_revision: 3,
+              narrative: "The gate gives, one hinge at a time.",
+              applications: [],
+              effective_changes: [],
+              entity_sheets: {},
+            }),
+          );
+        }
+        return Promise.resolve(Response.json({}, { status: 404 }));
+      },
+      { preconnect: originalFetch.preconnect },
+    );
+    const resolve = createAgentPlayTools(
+      "world-1",
+      () => undefined,
+      new AbortController().signal,
+    ).find((tool) => tool.name === "resolve_problem");
+
+    const payload = (await resolve?.execute({
+      narrative: "The gate gives, one hinge at a time.",
+      effects: [],
+    })) as {
+      resolution: { narrative: string; effective_changes: unknown[] };
+      next_step: string;
+    };
+
+    expect(submittedBody).toMatchObject({
+      narrative: "The gate gives, one hinge at a time.",
+      effects: [],
+    });
+    expect(JSON.stringify(submittedBody)).not.toContain("State —");
+    expect(payload.resolution.narrative).toBe(
+      "The gate gives, one hinge at a time.",
+    );
+    expect(payload.resolution.effective_changes).toEqual([]);
+    expect(payload.next_step).toContain("Read Play again");
+    expect(payload.next_step).toContain("response_preamble");
+    expect(payload.next_step).toContain("exact changes");
+    expect(payload.next_step).toContain("resolution.narrative unchanged");
+    expect(payload.next_step).toContain("narrative portion");
   });
 
   test("returns API conflicts as useful tool results", async () => {

@@ -317,6 +317,12 @@ export async function verifyBrowser(
       launchPrompt === null ||
       !launchPrompt.includes(`${normalized}/play/new`) ||
       !launchPrompt.includes("read and apply Wrought's Play handbook") ||
+      !launchPrompt.includes("prefix every successful gameplay response") ||
+      !launchPrompt.includes("State — Character") ||
+      !launchPrompt.includes("Mechanics:") ||
+      !launchPrompt.includes("Statuses:") ||
+      !launchPrompt.includes("Changes:") ||
+      !launchPrompt.includes("Label: value") ||
       !launchPrompt.includes("My play preference: surprise me.")
     ) {
       throw new Error(

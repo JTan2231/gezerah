@@ -305,12 +305,24 @@ browser operation:
 2. continue in the same conversation while the same attached tab navigates to
    `/play/{world_id}` and the Play surface becomes ready;
 3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again,
-   read the relevant `read_play_handbook` topics, and `present_problem`;
+   read the relevant `read_play_handbook` topics, `present_problem`, and begin
+   that first scene response with current effective state and `Initial state`;
 4. for each of the three participant responses, record it with `submit_action`,
-   resolve it with `resolve_problem`, refresh Play, and present the next
-   Problem.
+   resolve it with `resolve_problem`, refresh Play, and begin the next response
+   with current effective state and the exact committed changes before
+   presenting the next Problem.
 
 #### Pass and failure criteria
+
+The required operative-state preamble has this hierarchy:
+
+```markdown
+**State — CHARACTER**
+
+- **Mechanics:** LABEL: VALUE · LABEL: VALUE
+- **Statuses:** STATUS · STATUS ×COUNT
+- **Changes:** LABEL: BEFORE → AFTER · +STATUS · −STATUS
+```
 
 A run passes only when all of the following are observed:
 
@@ -321,6 +333,20 @@ A run passes only when all of the following are observed:
 - ChatGPT makes zero browser-control requests and asks zero setup questions
   after the prefilled play preference is sent;
 - Start-to-Play navigation happens in the same attached browser tab;
+- every successful in-Play scene response after Character claim begins with the
+  required preamble, the `State` heading names the selected Character, and one
+  blank line separates the preamble from the persisted narrative;
+- each `Mechanics` row lists every active Mechanic from the authoritative
+  refreshed Entity sheet as `Label: current-effective-value`; each `Statuses`
+  row lists all current active Status names, collapses same-name instances as
+  `Name ×count`, and says `None` when there are none;
+- the first Problem's `Changes` row says `Initial state`; every later row agrees
+  exactly with the just-committed Resolution's effective changes and Status
+  applications or removals, uses `Label: before → after`, `+Name`, and `−Name`,
+  and says `None` when that Resolution made no such change;
+- the preamble remains neutral diagnostic information: it contains no prose,
+  invented category or value, control-plane detail, or predicted result, and it
+  is neither persisted nor counted toward narrative word or beat targets;
 - the first Problem opens with a short expositional statement saying who the
   selected Character is and what they are currently doing, without repeating
   that introduction in later Problems, then establishes concrete, innocuous
@@ -335,9 +361,10 @@ A run passes only when all of the following are observed:
   display, document, or other in-world source when the guide calls for that
   distinction; the narrator otherwise uses the guide's ordinary human register
   rather than turning facilitation rules or application concepts into labels;
-- the first Problem uses up to about 180 presented words across five to seven
-  short narrative beats when the opening needs them, and fewer when it does not;
-  each whole Consequence-plus-next-Problem passage normally contains 100–140
+- excluding the operative-state preamble, the first Problem uses up to about
+  180 presented narrative words across five to seven short narrative beats when
+  the opening needs them, and fewer when it does not; each whole
+  Consequence-plus-next-Problem narrative passage normally contains 100–140
   presented words across five to seven beats, with the range applying once to
   the combined passage rather than separately to each saved part;
 - each ordinary scene passage selects rather than inventories detail, uses at
@@ -358,12 +385,12 @@ A run passes only when all of the following are observed:
   approval or workflow acknowledgement;
 - each public Problem prompt and Consequence narrative presented in chat agrees
   with the persisted public prose, and each committed Consequence flows into the
-  persisted next Problem without a second receipt-shaped Effect, Application,
-  or effective-change summary and without an unpersisted bridge;
-- durable changes are embodied in observable conditions, access, treatment,
-  pressure, injury, equipment, or similarly meaningful prose rather than a
-  routine state ledger; exact current-player-visible Mechanics, Statuses, and
-  values are still answered directly if asked;
+  persisted next Problem without an additional Effect, Application, or
+  effective-change summary and without an unpersisted narrative bridge; the
+  diagnostic preamble is the only material added around that persisted prose;
+- durable changes remain embodied in observable conditions, access, treatment,
+  pressure, injury, equipment, or similarly meaningful prose; the diagnostic
+  preamble does not replace, paraphrase, or otherwise change that narrative;
 - ordinary scene prose exposes no site-tool names, registration/readiness,
   revisions, idempotency, Interaction lifecycle, or other control-plane state;
 - a mutation failure, if one occurs, is reported as an operational failure and
@@ -396,11 +423,13 @@ acceptance-environment kind, ChatGPT surface, stated play preference, result
 (`passed`, `failed`, or `blocked`), browser-control-request count, and cleanup
 result. For every step reached, it records the World and Character, participant
 Actions and persisted submitted Actions, public Consequences and following
-Problems, each scene passage's presented word and beat counts, any cadence
-exception rationale, and whether the transcript was reviewed for presentation
-and control-plane leakage. It also records the conversation count, setup-
-question count, and any platform-owned confirmation count separately. A failed
-or blocked record must state the observed reason.
+Problems, each response's exact operative-state preamble, whether its current
+values and changes agree with the refreshed Entity sheet and just-committed
+Resolution, each narrative passage's presented word and beat counts excluding
+the preamble, any cadence exception rationale, and whether the transcript was
+reviewed for presentation and control-plane leakage. It also records the
+conversation count, setup-question count, and any platform-owned confirmation
+count separately. A failed or blocked record must state the observed reason.
 
 Do not publish the transcript or record the password, session cookie, CSRF token,
 database URL, invitation secret, or transient tunnel URL. An external handbook
@@ -506,9 +535,9 @@ API adapter, and backend-independent view rendering:
 - World-settings prose-guide editing and clearing; and
 - Start and six-command Play site-tool registration outcomes, schemas, prose-guide
   transport and bounded authority, static
-  Play-handbook topics and presentation contract, API adaptation, idempotent
-  retry state, route replacement, and recoverable errors through a controlled
-  `document.modelContext`.
+  Play-handbook topics, operative-state preamble and presentation contract, API
+  adaptation, idempotent retry state, route replacement, and recoverable errors
+  through a controlled `document.modelContext`.
 
 Backend-independent `*View.tsx` components also have fixture-driven rendering
 tests. They use `react-dom/server`'s `renderToStaticMarkup`, which is already

@@ -13,9 +13,11 @@ The attached pages remain the canonical application surfaces. They display the
 available authored choices, current Problem, current-player Action, Resolution
 history, Entity sheets, and logical state. ChatGPT changes durable state only
 through their site tools, which reuse the existing same-origin API. Chat is the
-lived scene, not a second state store: it presents the same public Consequence
-and next-Problem prose that Wrought persists while the exact record remains in
-Wrought.
+lived scene, not a second state store: after Character claim, each successful
+in-Play scene response begins with a small unpersisted operative-state preamble
+drawn from authoritative Wrought state, then presents the same public
+Consequence and next-Problem prose that Wrought persists while the exact record
+remains in Wrought.
 
 This integration uses the browser's imperative WebMCP API. It is not a remote
 MCP server and does not add a second authentication system.
@@ -116,10 +118,13 @@ unavailable when ChatGPT is Facilitator.
    Problem from the World description, prose guide, Mechanics, profiles, and
    logical state. That first Problem alone opens with a short expositional
    statement saying who the selected Character is and what they are currently
-   doing; later Problems do not repeat that introduction.
+   doing; later Problems do not repeat that introduction. The response begins
+   with the operative-state preamble and labels its Changes row `Initial state`.
 6. The person describes an in-fiction Action in chat. ChatGPT records the
    Action, resolves the Problem with public narrative and optional valid
-   Effects, refreshes Play, and presents the next Problem.
+   Effects, refreshes Play, and begins the response with current effective state
+   plus the exact changes from that committed Resolution before presenting the
+   persisted Consequence and next Problem.
 
 The attached page refreshes its authoritative state after each mutation.
 Closing its tab or navigating away removes its site tools; reopening the
@@ -178,7 +183,9 @@ command independently, so registration never bypasses the server gates:
 
 - `inspect_play` returns the current-player-visible World, including its prose
   guide, World mechanic graph, roster, profiles, Entity sheets, active Problem,
-  Actions, and recent Resolutions.
+  Actions, and recent Resolutions. For ready Play it also returns the complete
+  display-ready `response_preamble`, projected from those authoritative values
+  and the latest finalized Interaction.
 - `read_play_handbook` returns the static platform facilitation contract. It
   accepts `all` or one of `role-and-authority`, `play-loop`,
   `state-and-effects`, `narrative-presentation`, `fiction-and-privacy`, and
@@ -190,7 +197,9 @@ command independently, so registration never bypasses the server gates:
 - `submit_action` records the signed-in current player's Action against the
   active Problem, using an Entity controlled by that membership.
 - `resolve_problem` begins agent adjudication and applies a Consequence with
-  optional concrete Effects under revision and idempotency protection.
+  optional concrete Effects under revision and idempotency protection. Its
+  successful result exposes the just-committed effective-value and Status
+  lifecycle changes needed for the diagnostic Changes row.
 
 Tool handlers reuse the frontend API adapter and refresh the authoritative page
 state after mutations. Results are concise structured data for ChatGPT; the
@@ -206,14 +215,50 @@ retain short local reminders at the point where an omission would be costly.
 
 ### Narrative presentation contract
 
-ChatGPT presents Play as meaningful continuous prose. A person's decision is
+ChatGPT presents Play as meaningful continuous prose. Every successful in-Play
+scene response after Character claim begins with the diagnostic preamble below;
+the preamble is separate from the narrative. A person's decision remains
 apparent through what their Character attempts and the world's causal response,
-not through a repeated approval or an `Action submitted` announcement. State is
-apparent through changed conditions, access, treatment, pressure, injury,
-equipment, and other observable consequences, not through a receipt-shaped
-ledger inserted into every turn. Implicit means embodied rather than hidden: if
+not through a repeated approval or an `Action submitted` announcement. State
+also remains apparent in the narrative through changed conditions, access,
+treatment, pressure, injury, equipment, and other observable consequences. If
 the person asks for an exact Mechanic, Status, value, or other information their
 current-player view may reveal, ChatGPT answers directly and exactly.
+
+#### Operative-state preamble
+
+The preamble uses a fixed hierarchy and neutral labels, with no explanatory or
+colorful prose:
+
+```markdown
+**State — Aria**
+
+- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2
+- **Statuses:** Shaken ×2
+- **Changes:** Resolve: 6 → 4 · +Shaken · −Inspired
+```
+
+`State` names the controlled Character. `Mechanics` lists every active Mechanic
+and its current effective value from the authoritative refreshed Entity sheet;
+each Mechanic uses `Label: value` so labels and values remain visually distinct.
+If the membership controls more than one Character, each gets a complete block.
+`Statuses` lists every active Status name, collapses same-name instances as
+`Name ×count`, and says `None` when there are no active Statuses. The first
+Problem says `Changes: Initial state`. Every later scene response derives
+`Changes` only from the just-committed Resolution: effective changes use
+`Label: before → after`, Status applications use `+Name`, and Status removals use
+`−Name`. It says `None` when that Resolution changed no effective value and
+applied or removed no Status.
+
+The preamble is followed by a blank line and then the persisted narrative. It is
+an unpersisted diagnostic projection, not a second durable state store or part
+of the Problem or Consequence prose, and it introduces no built-in Mechanic or
+Status vocabulary. The addition changes only this prefix; the persisted
+narrative beneath it follows the existing presentation contract unchanged.
+ChatGPT does not infer values or changes from the narrative, predict an
+uncommitted Effect, or present cached values as current. A failed mutation
+receives the operational failure treatment below rather than a speculative
+preamble.
 
 The latest inspected prose guide shapes each public Problem and Consequence
 throughout the passage, including word choice, sentence rhythm, narrative
@@ -226,11 +271,12 @@ persisted history.
 
 The public Consequence prose passed to `resolve_problem` is the prose ChatGPT
 presents after the commit. After refreshing Play, the persisted next Problem is
-the next movement of the same scene. ChatGPT does not generate a second summary
-of Applications and effective changes, or an unpersisted narrative bridge
-between the Consequence and Problem. Wrought retains the exact Action,
-Consequence, Effects, Resolution receipt, Entity sheets, and history for audit
-and direct inspection.
+the next movement of the same scene. The required `Changes` row is the only
+added mechanical summary, and it projects exact effective changes and Status
+Applications or removals from that committed Resolution. ChatGPT does not
+generate an additional summary or an unpersisted narrative bridge between the
+Consequence and Problem. Wrought retains the exact Action, Consequence, Effects,
+Resolution receipt, Entity sheets, and history for audit and direct inspection.
 
 Ordinary scene passages use a compact cadence. The first Problem uses up to
 about 180 words across five to seven short narrative beats when the opening
@@ -240,17 +286,19 @@ beats. That combined target applies once to the Consequence-plus-Problem
 passage, not separately to each saved part; each uses only the share it needs. A
 beat is a movement of action or perception, not a required line break. ChatGPT
 writes to the target before saving and never pads, truncates, or paraphrases
-persisted prose afterward.
+persisted prose afterward. Preamble labels and values are outside these
+narrative word and beat counts.
 
 Compression comes from selection rather than flattening the prose guide.
 ChatGPT leads with the immediate situation or causal outcome, keeps only details
 that establish the result, meaningful changed state, new pressure, and the
-responders' opening, and avoids inventorying unchanged context. When one brief
-sentence can orient the responders to changed state, one is enough; ChatGPT does
-not both dramatize and restate the same change. A Problem ends at one decision
-point: a direct question that leaves every eligible responder free to act or a
-clear cliffhanger. If examples help, ChatGPT offers at most three compact,
-non-exhaustive possibilities in one sentence.
+responders' opening, and avoids inventorying unchanged context in the narrative
+even though the preamble lists the complete current mechanical state. When one
+brief sentence can orient the responders to changed state, one is enough;
+ChatGPT does not both dramatize and restate the same change. A Problem ends at
+one decision point: a direct question that leaves every eligible responder free
+to act or a clear cliffhanger. If examples help, ChatGPT offers at most three
+compact, non-exhaustive possibilities in one sentence.
 
 These are presentation targets rather than server validation, storage limits,
 or quotas. ChatGPT uses fewer words when the scene is already clear and only the
@@ -342,8 +390,10 @@ Acceptance covers the complete boundary:
   decision;
 - three natural-language Actions are submitted and resolved; the first Problem
   and every Consequence-plus-next-Problem passage use the ordinary compact
-  cadence, and each transition presents its persisted prose continuously without
-  workflow chatter or a receipt-shaped state summary;
+  cadence outside the preamble, and every successful scene response after
+  Character claim begins with the required current-state and exact-change
+  hierarchy before presenting its persisted prose continuously without workflow
+  chatter or any additional receipt-shaped summary;
 - the copied World's prose guide remains recognizable across the three turns,
   including its distinction between narrator language and attributed in-world
   language, without being exposed as instructions; and

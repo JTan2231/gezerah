@@ -60,9 +60,21 @@ interface PlayInspection {
     controlled_entity_ids: string[];
   };
   available_entities?: AvailableEntity[];
-  entities?: Array<{ id: string; name: string }>;
+  mechanics?: Array<{ id: string; name: string; unit?: string }>;
+  entities?: Array<{
+    id: string;
+    name: string;
+    sheet: {
+      effective_values: Record<
+        string,
+        { kind: "number"; value: string } | { kind: "boolean"; value: boolean }
+      >;
+      active_status_instances: Array<{ name: string }>;
+    };
+  }>;
   active_interaction?: Interaction;
   recent_history?: Interaction[];
+  response_preamble?: string;
   next_step: string;
 }
 
@@ -89,6 +101,9 @@ interface ResolvedProblemResult {
   resolution: {
     interaction_id: string;
     narrative: string;
+    applications: unknown[];
+    effective_changes: unknown[];
+    entity_sheets: Record<string, unknown>;
   };
   next_step: string;
 }
@@ -192,6 +207,21 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   expect(handbook.handbook.sections[0]?.guidance).toMatch(
     /combined passage, not each saved part/i,
   );
+  const stateHandbook = await invokeSiteTool<PlayHandbookResult>(
+    page,
+    "read_play_handbook",
+    { topic: "state-and-effects" },
+  );
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
+    /State — Character/i,
+  );
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
+    /Mechanics:.+Statuses:.+Changes:/i,
+  );
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(/Label: value/i);
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
+    /Initial state.+None.+before → after.+\+Status\/−Status/i,
+  );
 
   const waiting = await invokeSiteTool<PlayInspection>(
     page,
@@ -229,6 +259,26 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     controlled_entity_ids: [selectedCharacter!.id],
   });
   expect(ready.entities?.map(({ id }) => id)).toContain(selectedCharacter!.id);
+  const controlledCharacter = ready.entities?.find(
+    ({ id }) => id === selectedCharacter!.id,
+  );
+  expect(controlledCharacter).toBeDefined();
+  expect(ready.response_preamble).toContain(
+    `**State — ${controlledCharacter!.name}**\n\n- **Mechanics:**`,
+  );
+  for (const mechanic of ready.mechanics ?? []) {
+    const value = controlledCharacter!.sheet.effective_values[mechanic.id];
+    expect(value).toBeDefined();
+    const rendered =
+      value!.kind === "number" ? value!.value : String(value!.value);
+    expect(ready.response_preamble).toContain(
+      `${mechanic.name}: ${rendered}${mechanic.unit ? ` ${mechanic.unit}` : ""}`,
+    );
+  }
+  expect(ready.response_preamble).toContain("- **Statuses:** None");
+  expect(
+    ready.response_preamble?.endsWith("- **Changes:** Initial state"),
+  ).toBe(true);
 
   const firstProblem = {
     title: `The delayed sentence ${run}`,
@@ -244,7 +294,8 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     prompt: firstProblem.prompt,
     status: "open",
   });
-  expect(presented.next_step).toMatch(/directly as the scene/i);
+  expect(presented.next_step).toMatch(/response_preamble.+exactly/i);
+  expect(presented.next_step).toMatch(/prompt unchanged as the scene/i);
   expect(presented.next_step).not.toMatch(/problem (?:created|presented)/i);
   await expect(page.getByText(firstProblem.prompt)).toBeVisible();
   await expect(
@@ -285,9 +336,26 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     interaction_id: presented.presented_interaction.id,
     narrative: resolutionNarrative,
   });
-  expect(resolved.next_step).toMatch(/directly as the Consequence/i);
+  expect(resolved.resolution.applications).toEqual([]);
+  expect(resolved.resolution.effective_changes).toEqual([]);
+  expect(resolved.next_step).toMatch(/Read Play again/i);
+  expect(resolved.next_step).toMatch(/response_preamble.+exact changes/i);
+  expect(resolved.next_step).toMatch(/narrative unchanged as the Consequence/i);
   expect(resolved.next_step).toMatch(
     /without an approval recap|report about the operation/i,
+  );
+
+  const refreshed = await invokeSiteTool<PlayInspection>(
+    page,
+    "inspect_play",
+    {},
+  );
+  expect(refreshed.response_preamble).toContain(
+    `**State — ${controlledCharacter!.name}**\n\n- **Mechanics:**`,
+  );
+  expect(refreshed.response_preamble).toContain("- **Statuses:** None");
+  expect(refreshed.response_preamble?.endsWith("- **Changes:** None")).toBe(
+    true,
   );
 
   const secondProblem = {

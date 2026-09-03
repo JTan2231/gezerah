@@ -5,11 +5,14 @@ import type {
   AvailableEntities,
   EntityClaimResult,
   EntityProfile,
+  EntitySheet,
   Interaction,
   InteractionAction,
   InteractionResolutionResult,
+  MechanicValue,
   World,
   WorldEntity,
+  WorldMechanic,
   WorldMechanicCollection,
   WorldMember,
 } from "../api/types";
@@ -59,6 +62,9 @@ const compactProblemNarrationGuidance =
 
 const compactConsequenceNarrationGuidance =
   "Keep the Consequence compact enough that it and the following Problem form a combined public passage of about 100 to 140 words total, not 100 to 140 words for each saved part. Let each saved part use only the share it needs. Lead with the Action's immediate outcome, include only causal details that matter now, and use at most one concise sentence for changed state when stating it directly is clearest. Do not both dramatize and restate the same change.";
+
+const responsePreambleGuidance =
+  "Prefix every successful public gameplay passage with response_preamble from the latest Play inspection, copied exactly and followed by a blank line. It is neutral operative state, not part of the saved Problem or Consequence, not a second narrative summary, and not part of the prose word or beat target. Use it once before a combined Consequence and following Problem; do not add prose, IDs, revisions, or workflow commentary to it.";
 
 const mechanicValueSchema = {
   oneOf: [
@@ -308,7 +314,7 @@ export function createAgentPlayTools(
     {
       name: "inspect_play",
       description:
-        "Read the current World and all Play context visible to the signed-in current player: Play status, prose guide, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. The prose guide shapes how public Problems and Consequences are written, not what is true. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
+        "Read the current World and all Play context visible to the signed-in current player: Play status, prose guide, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. For ready Play, response_preamble is a complete, display-ready diagnostic block built from current effective values and Statuses, plus the latest finalized Interaction's committed changes. Copy it exactly before the next successful public gameplay passage. The prose guide shapes how public Problems and Consequences are written, not what is true. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
       inputSchema: emptyInputSchema,
       annotations: { readOnlyHint: true },
       execute: async (input, options) => {
@@ -414,6 +420,10 @@ export function createAgentPlayTools(
               interaction.status === "cancelled",
           )
           .slice(0, 3);
+        const activeMechanics = mechanics.mechanics.filter(
+          (mechanic) => !mechanic.archived,
+        );
+        const activeEntities = entities.filter((entity) => !entity.archived);
 
         return toolResult({
           world: worldSummary(world),
@@ -428,20 +438,22 @@ export function createAgentPlayTools(
               controlled_entity_ids: membership.controlled_entity_ids,
             })),
           rules_revision: mechanics.revision,
-          mechanics: mechanics.mechanics.filter(
-            (mechanic) => !mechanic.archived,
-          ),
-          entities: entities
-            .filter((entity) => !entity.archived)
-            .map((entity) => ({
-              id: entity.id,
-              name: entity.display_name,
-              character_status: entity.character_status,
-              profile: profilesByEntity.get(entity.id)?.fields ?? [],
-              sheet: entity.sheet,
-            })),
+          mechanics: activeMechanics,
+          entities: activeEntities.map((entity) => ({
+            id: entity.id,
+            name: entity.display_name,
+            character_status: entity.character_status,
+            profile: profilesByEntity.get(entity.id)?.fields ?? [],
+            sheet: entity.sheet,
+          })),
           active_interaction: activeInteraction,
           recent_history: recentHistory,
+          response_preamble: buildResponsePreamble(
+            activeEntities,
+            viewer?.controlled_entity_ids ?? [],
+            activeMechanics,
+            recentHistory[0],
+          ),
           next_step: nextPlayStep(world, viewer, activeInteraction),
         });
       },
@@ -511,7 +523,7 @@ export function createAgentPlayTools(
     },
     {
       name: "present_problem",
-      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same text you present in chat as the scene: present it without describing the save or adding a second summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactProblemNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same narrative text you present in chat as the scene, unchanged after the separate diagnostic preamble. ${responsePreambleGuidance} Present the prompt without describing the save or adding another summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactProblemNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -542,7 +554,7 @@ export function createAgentPlayTools(
         return toolResult({
           presented_interaction: interaction,
           next_step:
-            "Present presented_interaction.prompt directly as the scene, without saying it was saved or adding a second summary, then invite the current player to describe what their Character does.",
+            "Prefix the response with response_preamble from the latest Play inspection exactly as provided, followed by a blank line. Then present presented_interaction.prompt unchanged as the scene, without saying it was saved or adding another summary, and invite the current player to describe what their Character does.",
         });
       },
     },
@@ -600,7 +612,7 @@ export function createAgentPlayTools(
     },
     {
       name: "resolve_problem",
-      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same text you present in chat: present it without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactConsequenceNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same narrative text you present in chat, unchanged after the separate diagnostic preamble. ${responsePreambleGuidance} Present the narrative without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactConsequenceNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -682,7 +694,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Present resolution.narrative directly as the Consequence, without an approval recap, list of Effects, or report about the operation. Read Play again and save the next compact Problem before presenting it; that prompt may flow from the Consequence as one continuous scene. Keep the combined ordinary single-player passage about 100 to 140 words across 5 to 7 short prose beats.",
+            "Read Play again so response_preamble contains the refreshed current state and this committed Resolution's exact changes, then save the next compact Problem. Prefix the combined response with that response_preamble exactly once, followed by a blank line; then present resolution.narrative unchanged as the Consequence and let the next saved prompt flow from it as one continuous scene. Do not add an approval recap, list of Effects, or report about the operation. Keep the narrative portion of the combined ordinary single-player passage about 100 to 140 words across 5 to 7 short prose beats.",
         });
       },
     },
@@ -782,7 +794,7 @@ function nextPlayStep(
 ): string {
   if (world.status === "archived") return "This world is read-only.";
   if (interaction === undefined)
-    return "Write and save the next Problem, then present its public prompt directly as the scene.";
+    return "Write and save the next Problem, then prefix the response with response_preamble and present its public prompt unchanged as the scene.";
   if (interaction.status === "adjudicating")
     return "Refresh your view of Play and the Entity sheets, then retry the pending Resolution.";
   if (interaction.status !== "open")
@@ -797,12 +809,150 @@ function nextPlayStep(
     interaction.eligible_responder_membership_ids.includes(viewer.id) &&
     !submittedMembershipIDs.has(viewer.id)
   )
-    return "Continue from the saved Problem as the scene and ask what the current player's Character does, then record only their explicit Action.";
+    return "Prefix the response with response_preamble, continue from the saved Problem as the scene, and ask what the current player's Character does, then record only their explicit Action.";
   const allRespondersActed =
     interaction.eligible_responder_membership_ids.every((membershipID) =>
       submittedMembershipIDs.has(membershipID),
     );
   return allRespondersActed
-    ? "Resolve the Problem, then present its saved public Consequence directly as the scene."
-    : "Continue the scene without workflow commentary while waiting for the remaining responders.";
+    ? "Resolve the Problem, refresh Play, then prefix the response with the refreshed response_preamble before its saved public Consequence."
+    : "Prefix the response with response_preamble and continue the scene without workflow commentary while waiting for the remaining responders.";
+}
+
+function buildResponsePreamble(
+  entities: WorldEntity[],
+  controlledEntityIDs: string[],
+  mechanics: WorldMechanic[],
+  latestFinalizedInteraction: Interaction | undefined,
+): string {
+  const controlledIDs = new Set(controlledEntityIDs);
+  return entities
+    .filter((entity) => controlledIDs.has(entity.id))
+    .map((entity) =>
+      [
+        `**State — ${diagnosticText(entity.display_name)}**`,
+        "",
+        `- **Mechanics:** ${mechanicSummary(entity.sheet, mechanics)}`,
+        `- **Statuses:** ${statusSummary(entity.sheet)}`,
+        `- **Changes:** ${changeSummary(
+          entity.id,
+          mechanics,
+          latestFinalizedInteraction,
+        )}`,
+      ].join("\n"),
+    )
+    .join("\n\n");
+}
+
+function mechanicSummary(
+  sheet: EntitySheet,
+  mechanics: WorldMechanic[],
+): string {
+  const entries = mechanics.flatMap((mechanic) => {
+    const value = sheet.effective_values[mechanic.id];
+    return value === undefined
+      ? []
+      : [
+          `${diagnosticText(mechanic.name)}: ${formatMechanicValue(
+            value,
+            mechanic,
+          )}`,
+        ];
+  });
+  return entries.length === 0 ? "None" : entries.join(" · ");
+}
+
+function statusSummary(sheet: EntitySheet): string {
+  const counts = new Map<string, number>();
+  for (const status of sheet.active_status_instances)
+    counts.set(status.name, (counts.get(status.name) ?? 0) + 1);
+  if (counts.size === 0) return "None";
+  return [...counts]
+    .map(
+      ([name, count]) =>
+        `${diagnosticText(name)}${count === 1 ? "" : ` ×${count}`}`,
+    )
+    .join(" · ");
+}
+
+function changeSummary(
+  entityID: string,
+  mechanics: WorldMechanic[],
+  latestFinalizedInteraction: Interaction | undefined,
+): string {
+  if (latestFinalizedInteraction === undefined) return "Initial state";
+  if (
+    latestFinalizedInteraction.status !== "resolved" ||
+    latestFinalizedInteraction.resolution === undefined
+  )
+    return "None";
+
+  const changes = latestFinalizedInteraction.resolution.effective_changes;
+  const entries = mechanics.flatMap((mechanic) => {
+    const change = changes.find(
+      (candidate) =>
+        candidate.entity_id === entityID &&
+        candidate.mechanic_id === mechanic.id,
+    );
+    return change === undefined
+      ? []
+      : [
+          `${diagnosticText(mechanic.name)}: ${formatMechanicValue(
+            change.before,
+            mechanic,
+          )} → ${formatMechanicValue(change.after, mechanic)}`,
+        ];
+  });
+
+  const statusChanges = new Map<
+    string,
+    { prefix: "+" | "−"; name: string; count: number }
+  >();
+  for (const application of latestFinalizedInteraction.resolution
+    .applications) {
+    if (application.entity_id !== entityID || !application.changed) continue;
+    const prefix =
+      application.type === "apply-status" &&
+      !application.active_before &&
+      application.active_after
+        ? "+"
+        : application.type === "remove-status" &&
+            application.active_before &&
+            !application.active_after
+          ? "−"
+          : undefined;
+    if (prefix === undefined || !("status_name" in application)) continue;
+    const key = `${prefix}\u0000${application.status_name}`;
+    const existing = statusChanges.get(key);
+    statusChanges.set(key, {
+      prefix,
+      name: application.status_name,
+      count: (existing?.count ?? 0) + 1,
+    });
+  }
+  entries.push(
+    ...[...statusChanges.values()].map(
+      ({ prefix, name, count }) =>
+        `${prefix}${diagnosticText(name)}${count === 1 ? "" : ` ×${count}`}`,
+    ),
+  );
+  return entries.length === 0 ? "None" : entries.join(" · ");
+}
+
+function formatMechanicValue(
+  value: MechanicValue,
+  mechanic: WorldMechanic,
+): string {
+  const rendered = value.kind === "number" ? value.value : String(value.value);
+  const unit = mechanic.unit?.trim();
+  return value.kind === "number" && unit !== undefined && unit !== ""
+    ? `${rendered} ${diagnosticText(unit)}`
+    : rendered;
+}
+
+function diagnosticText(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, " ")
+    .replace(/[\\`*_[\]<>]/g, "\\$&");
 }

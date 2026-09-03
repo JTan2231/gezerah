@@ -23,9 +23,12 @@
    static platform Play handbook for its authority, Play-loop, presentation,
    privacy, and recovery contract.
 5. ChatGPT improvises and presents the first Problem from the World description,
-   prose guide, Mechanics, profiles, and logical state. The person responds with an
-   in-fiction Action in chat; ChatGPT records and resolves it and presents the
-   next Problem.
+   prose guide, Mechanics, profiles, and logical state. It begins the response
+   with an unpersisted diagnostic block headed by the Character, followed by
+   subordinate Mechanics, Statuses, and `Initial state` Changes rows. The person
+   responds with an in-fiction Action in chat; ChatGPT records and resolves it,
+   refreshes Play, and begins the next response with current effective state and
+   the exact changes from that Resolution before presenting the next Problem.
 
 After sign-in, ChatGPT performs these application operations through site tools
 and never makes a browser-control request. If the person says to choose, asks for
@@ -33,11 +36,18 @@ a surprise, or supplies no preference, ChatGPT does not require a setup
 questionnaire.
 
 During Play, chat is the lived scene and Wrought is the exact durable record.
-ChatGPT embodies decisions and state through causal, observable prose, presents
-the persisted public Consequence followed by the persisted next Problem, and
-does not insert a separate workflow acknowledgement, Resolution-receipt summary,
-or unpersisted bridge. It answers exact visible mechanical questions directly.
-A failed mutation is reported operationally and is never fictionalized.
+After Character claim, every successful scene response starts with the fixed
+operative-state hierarchy defined in [ChatGPT play through
+WebMCP](webmcp.md#operative-state-preamble): `State — Character`, then
+`Mechanics`, `Statuses`, and `Changes`. Mechanic entries use `Label: value`;
+Statuses use names and counts or `None`; Changes use exact `Label: before →
+after`, `+Status`, and `−Status` entries, `Initial state` on the first Problem,
+or `None` after a no-op Resolution. ChatGPT then presents the persisted public
+Consequence followed by the persisted next Problem without a workflow
+acknowledgement, additional Resolution summary, or unpersisted bridge. The
+diagnostic block is not persisted or included in narrative word and beat counts,
+and it does not replace causal, observable state in the unchanged narrative. A
+failed mutation is reported operationally and is never fictionalized.
 
 This candidate delegated-start path covers only the bundled ready-made World
 templates and complete Characters. Custom Build, saved-World discovery,

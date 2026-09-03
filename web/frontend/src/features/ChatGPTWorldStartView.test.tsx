@@ -73,9 +73,17 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("My play preference: surprise me.");
     expect(html).toContain("never invent or submit an Action");
     expect(html).toContain("read and apply Wrought&#x27;s Play handbook");
-    expect(html).toContain("begin directly with the first Problem");
+    expect(html).toContain("prefix every successful gameplay response");
+    expect(html).toContain("State — Character");
+    expect(html).toContain("Mechanics:");
+    expect(html).toContain("Statuses:");
+    expect(html).toContain("Changes:");
+    expect(html).toContain("Label: value");
     expect(html).toContain(
-      "In that first Problem only, open with a short expositional statement",
+      "do not alter the saved Problem or Consequence prose",
+    );
+    expect(html).toContain(
+      "In the first Problem&#x27;s narrative only, open with a short expositional statement",
     );
     expect(html).toContain(
       "who my Character is and what they are currently doing",
