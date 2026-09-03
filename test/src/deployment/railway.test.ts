@@ -2,6 +2,7 @@ import { strict as assert } from "node:assert";
 import { describe, test } from "bun:test";
 
 import {
+  assertPostCutoverDomains,
   assertNoActiveDeployment,
   assertDeploymentManifest,
   assertPublicURLExposed,
@@ -10,6 +11,7 @@ import {
   parseProjectStatus,
   parseServiceList,
   parseUploadOutput,
+  railwayProviderPublicURL,
   RailwayClient,
   selectTarget,
   waitForDeployment,
@@ -31,32 +33,33 @@ describe("Railway deployment adapter", () => {
       project,
       services,
       expectedProjectId: undefined,
-      expectedProject: "Gezerah",
+      expectedProject: "Wrought",
       expectedEnvironmentId: undefined,
       expectedEnvironment: "production",
       expectedWebId: undefined,
-      expectedWeb: "gezerah-web",
+      expectedWeb: "wrought-web",
       expectedDatabaseId: undefined,
       expectedDatabase: "Postgres",
     });
 
     assert.equal(target.project.id, projectID);
     assert.equal(target.environment.name, "production");
-    assert.equal(target.web.url, "https://legacy.gezerah.test");
+    assert.equal(
+      target.web.url,
+      "https://wrought-web-production.up.railway.app",
+    );
     assert.deepEqual(target.environment.serviceDomains, [
       {
         serviceId: webServiceID,
-        serviceName: "gezerah-web",
-        domains: [
-          "legacy.gezerah.test",
-          "gezerah.com",
-          "gezerah-web-production.up.railway.app",
-        ],
+        serviceName: "wrought-web",
+        customDomains: ["joeytan.dev"],
+        serviceDomains: ["wrought-web-production.up.railway.app"],
       },
       {
         serviceId: databaseServiceID,
         serviceName: "Postgres",
-        domains: [],
+        customDomains: [],
+        serviceDomains: [],
       },
     ]);
     assert.deepEqual(target.web.replicas, {
@@ -108,11 +111,11 @@ describe("Railway deployment adapter", () => {
           project,
           services,
           expectedProjectId: "00000000-0000-4000-8000-000000000000",
-          expectedProject: "Gezerah",
+          expectedProject: "Wrought",
           expectedEnvironmentId: environmentID,
           expectedEnvironment: "production",
           expectedWebId: webServiceID,
-          expectedWeb: "gezerah-web",
+          expectedWeb: "wrought-web",
           expectedDatabaseId: databaseServiceID,
           expectedDatabase: "Postgres",
         }),
@@ -120,7 +123,7 @@ describe("Railway deployment adapter", () => {
     );
   });
 
-  test("binds public origins to the exact environment and service", () => {
+  test("binds path-mounted public URLs to the exact environment and service", () => {
     const project = parseProjectStatus(projectFixture());
     const environment = project.environments[0]!;
     const web = parseServiceList(serviceFixture(deploymentID)).find(
@@ -128,17 +131,21 @@ describe("Railway deployment adapter", () => {
     )!;
 
     assert.doesNotThrow(() =>
-      assertPublicURLExposed(environment, web, "https://gezerah.com"),
+      assertPublicURLExposed(environment, web, "https://joeytan.dev/wrought"),
     );
     assert.doesNotThrow(() =>
-      assertPublicURLExposed(environment, web, "https://legacy.gezerah.test"),
+      assertPublicURLExposed(
+        environment,
+        web,
+        "https://wrought-web-production.up.railway.app/wrought",
+      ),
     );
     assert.throws(
       () =>
         assertPublicURLExposed(
           environment,
           web,
-          "https://unattached.gezerah.test",
+          "https://unattached.wrought.test/wrought",
         ),
       /does not expose/,
     );
@@ -147,8 +154,8 @@ describe("Railway deployment adapter", () => {
       ...environment,
       serviceDomains: environment.serviceDomains.map((binding) =>
         binding.serviceId === webServiceID
-          ? { ...binding, domains: ["legacy.gezerah.test"] }
-          : { ...binding, domains: ["gezerah.com"] },
+          ? { ...binding, customDomains: [] }
+          : { ...binding, customDomains: ["joeytan.dev"] },
       ),
     };
     assert.throws(
@@ -156,7 +163,7 @@ describe("Railway deployment adapter", () => {
         assertPublicURLExposed(
           domainOnDatabaseOnly,
           web,
-          "https://gezerah.com",
+          "https://joeytan.dev/wrought",
         ),
       /does not expose/,
     );
@@ -168,7 +175,12 @@ describe("Railway deployment adapter", () => {
       ),
     };
     assert.throws(
-      () => assertPublicURLExposed(missingBinding, web, "https://gezerah.com"),
+      () =>
+        assertPublicURLExposed(
+          missingBinding,
+          web,
+          "https://joeytan.dev/wrought",
+        ),
       /exactly one Railway domain set.*found 0/,
     );
 
@@ -181,20 +193,93 @@ describe("Railway deployment adapter", () => {
     };
     assert.throws(
       () =>
-        assertPublicURLExposed(duplicateBinding, web, "https://gezerah.com"),
+        assertPublicURLExposed(
+          duplicateBinding,
+          web,
+          "https://joeytan.dev/wrought",
+        ),
       /exactly one Railway domain set.*found 2/,
     );
 
     for (const publicURL of [
-      "https://user@gezerah.com",
-      "https://gezerah.com/path",
-      "https://gezerah.com?query=yes",
+      "http://joeytan.dev/wrought",
+      "https://user@joeytan.dev/wrought",
+      "https://joeytan.dev/wrought?query=yes",
     ]) {
       assert.throws(
         () => assertPublicURLExposed(environment, web, publicURL),
-        /credential-free exact HTTPS origin/,
+        /credential-free HTTPS URL/,
       );
     }
+  });
+
+  test("selects the exact generated provider hostname and gates post-cutover domains", () => {
+    const project = parseProjectStatus(projectFixture());
+    const environment = project.environments[0]!;
+    const web = parseServiceList(serviceFixture(deploymentID)).find(
+      ({ id }) => id === webServiceID,
+    )!;
+
+    assert.equal(
+      railwayProviderPublicURL(environment, web),
+      "https://wrought-web-production.up.railway.app/wrought",
+    );
+    assert.doesNotThrow(() => assertPostCutoverDomains(environment, web));
+
+    const withUnexpectedCustomDomain = {
+      ...environment,
+      serviceDomains: environment.serviceDomains.map((binding) =>
+        binding.serviceId === webServiceID
+          ? {
+              ...binding,
+              customDomains: ["joeytan.dev", "retired.example"],
+            }
+          : binding,
+      ),
+    };
+    assert.throws(
+      () => assertPostCutoverDomains(withUnexpectedCustomDomain, web),
+      /must contain only custom domain joeytan\.dev.*retired\.example/,
+    );
+
+    const withMisnamedProvider = {
+      ...environment,
+      serviceDomains: environment.serviceDomains.map((binding) =>
+        binding.serviceId === webServiceID
+          ? {
+              ...binding,
+              serviceDomains: ["retired-web-production.up.railway.app"],
+            }
+          : binding,
+      ),
+    };
+    assert.equal(
+      railwayProviderPublicURL(withMisnamedProvider, web),
+      "https://retired-web-production.up.railway.app/wrought",
+    );
+    assert.throws(
+      () => assertPostCutoverDomains(withMisnamedProvider, web),
+      /provider hostname.*not aligned with current service name/,
+    );
+
+    const multipleProviders = {
+      ...environment,
+      serviceDomains: environment.serviceDomains.map((binding) =>
+        binding.serviceId === webServiceID
+          ? {
+              ...binding,
+              serviceDomains: [
+                ...binding.serviceDomains,
+                "second-production.up.railway.app",
+              ],
+            }
+          : binding,
+      ),
+    };
+    assert.throws(
+      () => railwayProviderPublicURL(multipleProviders, web),
+      /exactly one generated Railway provider hostname.*found 2/,
+    );
   });
 
   test("rejects duplicate service-domain bindings in project status", () => {
@@ -214,14 +299,36 @@ describe("Railway deployment adapter", () => {
     ]);
     assert.notEqual(deployment, undefined);
     assertDeploymentManifest(deployment!);
+    assert.equal(deployment?.manifest?.healthcheckTimeout, 30);
 
-    const broken = parseDeploymentList([
+    const shortHealthCheck = parseDeploymentList([
       {
         ...deploymentFixture(deploymentID, "SUCCESS"),
         meta: {
           serviceManifest: {
             deploy: {
-              healthcheckPath: "/api/health",
+              healthcheckPath: "/wrought/api/health",
+              healthcheckTimeout: 29,
+              numReplicas: 1,
+              drainingSeconds: 15,
+            },
+          },
+        },
+      },
+    ])[0];
+    assert.throws(
+      () => assertDeploymentManifest(shortHealthCheck!),
+      /health-check timeout seconds, expected 30/,
+    );
+
+    const shortDrain = parseDeploymentList([
+      {
+        ...deploymentFixture(deploymentID, "SUCCESS"),
+        meta: {
+          serviceManifest: {
+            deploy: {
+              healthcheckPath: "/wrought/api/health",
+              healthcheckTimeout: 30,
               numReplicas: 1,
               drainingSeconds: 10,
             },
@@ -230,7 +337,7 @@ describe("Railway deployment adapter", () => {
       },
     ])[0];
     assert.throws(
-      () => assertDeploymentManifest(broken!),
+      () => assertDeploymentManifest(shortDrain!),
       /expected more than 10/,
     );
   });
@@ -385,7 +492,7 @@ describe("Railway deployment adapter", () => {
       {
         targetDeploymentId: deploymentID,
         webServiceId: webServiceID,
-        webService: "gezerah-web",
+        webService: "wrought-web",
         databaseServiceId: databaseServiceID,
         databaseService: "Postgres",
         databaseVolume: "postgres-volume",
@@ -407,7 +514,7 @@ function projectFixture(
 ): unknown {
   return {
     id: projectID,
-    name: "Gezerah",
+    name: "Wrought",
     environments: {
       edges: [
         {
@@ -429,13 +536,10 @@ function serviceInstanceFixture(): readonly Record<string, unknown>[] {
     {
       node: {
         serviceId: webServiceID,
-        serviceName: "gezerah-web",
+        serviceName: "wrought-web",
         domains: {
-          customDomains: [
-            { domain: "legacy.gezerah.test" },
-            { domain: "gezerah.com" },
-          ],
-          serviceDomains: [{ domain: "gezerah-web-production.up.railway.app" }],
+          customDomains: [{ domain: "joeytan.dev" }],
+          serviceDomains: [{ domain: "wrought-web-production.up.railway.app" }],
         },
       },
     },
@@ -480,12 +584,12 @@ function serviceFixture(webDeploymentID: string): unknown {
     },
     {
       id: webServiceID,
-      name: "gezerah-web",
+      name: "wrought-web",
       status: "SUCCESS",
       deploymentId: webDeploymentID,
       deploymentStopped: false,
       volumeMigrating: false,
-      url: "https://legacy.gezerah.test",
+      url: "https://wrought-web-production.up.railway.app",
       replicas: {
         configured: 1,
         running: 1,
@@ -510,7 +614,7 @@ function deploymentFixture(
       cliMessage: "Deploy abc123 token",
       serviceManifest: {
         deploy: {
-          healthcheckPath: "/api/health",
+          healthcheckPath: "/wrought/api/health",
           healthcheckTimeout: 30,
           numReplicas: 1,
           drainingSeconds: 15,

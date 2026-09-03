@@ -42,7 +42,7 @@ is no root `package.json`.
 Create the default database and install frontend dependencies:
 
 ```sh
-createdb gezerah
+createdb wrought
 (cd web/frontend && bun install --frozen-lockfile)
 ```
 
@@ -52,11 +52,12 @@ Start both development services:
 ./run.sh
 ```
 
-Open `http://127.0.0.1:5173`. Vite serves the React application and proxies
-`/api` to `http://localhost:8080`. The Go process connects by default to:
+Open `http://127.0.0.1:5173/wrought`. Vite serves the React application at its
+fixed `/wrought` base and proxies
+`/wrought/api` to `http://localhost:8080`. The Go process connects by default to:
 
 ```text
-postgres://localhost:5432/gezerah?sslmode=disable
+postgres://localhost:5432/wrought?sslmode=disable
 ```
 
 Migrations run automatically when the backend starts. The current chain is
@@ -74,9 +75,9 @@ Reset the development application to an empty state with:
 ./reset-db.sh
 ```
 
-The script uses `GEZERAH_DATABASE_URL`, then `DATABASE_URL`, then the same default
+The script uses `WROUGHT_DATABASE_URL`, then `DATABASE_URL`, then the same default
 URL as the application. It refuses PostgreSQL system databases, non-loopback
-servers, and databases without the Gezerah migration ledger. After
+servers, and databases without the Wrought migration ledger. After
 displaying the resolved database name and server, it requires that database
 name to be typed exactly. `--yes` skips only this confirmation; it does not
 bypass the target safety checks.
@@ -103,33 +104,38 @@ shell/process manager that launches the application. Vite independently loads
 
 | Variable              | Default/precedence                 | Purpose                                                                                           |
 | --------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `GEZERAH_ADDR`            | First; default `:8080`             | HTTP listen address.                                                                              |
-| `PORT`                | Used only when `GEZERAH_ADDR` is empty | Hosting port converted to `:<port>`.                                                              |
-| `GEZERAH_DATABASE_URL`    | First database URL                 | Preferred PostgreSQL connection URL.                                                              |
-| `DATABASE_URL`        | Hosting fallback                   | Used when `GEZERAH_DATABASE_URL` is empty.                                                            |
-| `GEZERAH_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
-| `GEZERAH_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
+| `WROUGHT_ADDR`            | First; default `:8080`             | HTTP listen address.                                                                              |
+| `PORT`                | Used only when `WROUGHT_ADDR` is empty | Hosting port converted to `:<port>`.                                                              |
+| `WROUGHT_DATABASE_URL`    | First database URL                 | Preferred PostgreSQL connection URL.                                                              |
+| `DATABASE_URL`        | Hosting fallback                   | Used when `WROUGHT_DATABASE_URL` is empty.                                                            |
+| `WROUGHT_PUBLIC_ORIGIN`   | Request origin                     | Exact auth/unsafe origin; HTTP is accepted only on loopback, and all other origins require HTTPS. |
+| `WROUGHT_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, or `error`; other values become info.                          |
 | `OPENAI_API_KEY`      | Empty                              | Enables Terra and Luna calls through the OpenAI Responses API.                                    |
-| `GEZERAH_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
+| `WROUGHT_OPENAI_BASE_URL` | Official OpenAI API                | Overrides the Responses API base URL, primarily for local integration tests.                      |
 
-When the binary is launched directly with `GEZERAH_PUBLIC_ORIGIN` unset, the server
+When the binary is launched directly with `WROUGHT_PUBLIC_ORIGIN` unset, the server
 uses the incoming request's scheme and host; plain HTTP authentication is
 accepted only when both that host and the network peer are loopback. Managed
 `run.sh` supplies `http://127.0.0.1:5173` unless the variable is already
 exported. A proxied deployment must set the exact browser-visible HTTPS origin,
 without a path, query, or fragment.
 
+The canonical public application URL is <https://joeytan.dev/wrought>, while
+its origin is `https://joeytan.dev`. `/wrought` is a fixed application mount,
+not part of `WROUGHT_PUBLIC_ORIGIN` and not a configurable tenant or product
+scope.
+
 `OPENAI_API_KEY` is optional for startup but required for Terra's autonomous
 Continue/Decide lifecycle and for Luna compilation of human Consequences. When it is empty, those
 endpoints return `503 model_unavailable`; the key is never sent to the
-frontend. Leave `GEZERAH_OPENAI_BASE_URL` empty for the official API.
+frontend. Leave `WROUGHT_OPENAI_BASE_URL` empty for the official API.
 
 ### Local process variables
 
 | Variable            | Default    | Purpose                         |
 | ------------------- | ---------- | ------------------------------- |
-| `GEZERAH_RUN_STATE_DIR` | `.gezerah/run` | Managed binaries and PID files. |
-| `GEZERAH_RUN_LOG_DIR`   | `.gezerah/log` | Managed development logs.       |
+| `WROUGHT_RUN_STATE_DIR` | `.wrought/run` | Managed binaries and PID files. |
+| `WROUGHT_RUN_LOG_DIR`   | `.wrought/log` | Managed development logs.       |
 
 Managed `run.sh` expects the backend at port 8080 because the Vite proxy is
 fixed. It defaults to `127.0.0.1:8080`, also accepts `localhost:8080`, and
@@ -141,17 +147,17 @@ binary directly, not when using the managed local workflow.
 
 | Variable                     | Consumer              | Purpose                                                                                                                         |
 | ---------------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `GEZERAH_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
-| `GEZERAH_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
-| `GEZERAH_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
-| `GEZERAH_E2E_DIAGNOSTICS`        | Direct E2E            | Set to `1` to retain trace and video on failure; the root performance-gated run keeps both disabled.                            |
-| `GEZERAH_E2E_APP_BINARY`         | E2E harness           | Prebuilt embedded application passed by `ci.sh`; direct test runs normally leave it unset and use the safe build fallback.      |
-| `GEZERAH_CI_CACHE_DIR`           | Root validator        | Optional persistent tool-cache directory; defaults to ignored `.gezerah/cache/ci`.                                                  |
+| `WROUGHT_TEST_DATABASE_URL`      | Backend smoke and E2E | Backend smoke migrates this exact database; E2E also uses it as highest-precedence admin URL. It must be disposable.            |
+| `WROUGHT_E2E_ADMIN_DATABASE_URL` | E2E                   | Admin URL used to create/drop a uniquely named database when the variable above is absent.                                      |
+| `WROUGHT_E2E_BROWSER_EXECUTABLE` | E2E                   | Requested Chrome/Chromium executable; current launcher discovery can supersede it. See [Testing](testing.md#browser-selection). |
+| `WROUGHT_E2E_DIAGNOSTICS`        | Direct E2E            | Set to `1` to retain trace and video on failure; the root performance-gated run keeps both disabled.                            |
+| `WROUGHT_E2E_APP_BINARY`         | E2E harness           | Prebuilt embedded application passed by `ci.sh`; direct test runs normally leave it unset and use the safe build fallback.      |
+| `WROUGHT_CI_CACHE_DIR`           | Root validator        | Optional persistent tool-cache directory; defaults to ignored `.wrought/cache/ci`.                                                  |
 | `PLAYWRIGHT_BROWSERS_PATH`   | Playwright/CI         | Browser cache/install location.                                                                                                 |
 
 The E2E admin URL path is rewritten to `/postgres` for database administration.
 Use credentials that can safely operate there. The backend smoke behavior is
-different: it applies migrations directly to `GEZERAH_TEST_DATABASE_URL`.
+different: it applies migrations directly to `WROUGHT_TEST_DATABASE_URL`.
 
 ## Managed local services
 
@@ -173,10 +179,10 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 ### Backend behavior
 
 - Verifies Go and curl.
-- Builds `cmd/gezerah` into `.gezerah/run/backend/gezerah`.
+- Builds `cmd/wrought` into `.wrought/run/backend/wrought`.
 - Starts that binary in the background.
-- Appends stdout/stderr to `.gezerah/log/backend.log`.
-- Waits up to 60 seconds for `/api/health`.
+- Appends stdout/stderr to `.wrought/log/backend.log`.
+- Waits up to 60 seconds for `/wrought/api/health`.
 - Does not watch Go files. Restart after backend edits:
 
   ```sh
@@ -188,8 +194,8 @@ Use `tail` to show the last 80 lines and continue following the selected logs.
 - Verifies Bun and curl.
 - Runs a frozen install only when the local Vite executable is missing.
 - Starts Vite on `127.0.0.1:5173 --strictPort`.
-- Appends output to `.gezerah/log/frontend.log`.
-- Waits up to 60 seconds for `/`.
+- Appends output to `.wrought/log/frontend.log`.
+- Waits up to 60 seconds for `/wrought`.
 - Uses Vite HMR for source changes.
 
 ### PID and unmanaged-process safety
@@ -213,19 +219,23 @@ Build frontend assets before compiling/running Go:
 
 ```sh
 (cd web/frontend && bun install --frozen-lockfile && bun run build)
-go run ./cmd/gezerah
+go run ./cmd/wrought
 ```
 
 For a reusable binary:
 
 ```sh
 (cd web/frontend && bun run build)
-CGO_ENABLED=0 go build -trimpath -o out ./cmd/gezerah
+CGO_ENABLED=0 go build -trimpath -o out ./cmd/wrought
 ./out
 ```
 
 The Vite output is embedded at Go compile time. A binary compiled before
 `web/static/index.html` exists serves the API but returns 503 for SPA routes.
+The production-style Go run also serves the tracked personal-site snapshot in
+`web/site/` at non-Wrought root paths. Managed Vite development focuses on the
+Wrought application mount; use the production-style binary or E2E tests when
+checking the combined host boundary.
 For public ChatGPT acceptance, do not expose the normal managed development
 pair; use the isolated HTTPS [acceptance environment](testing.md#acceptance-environment)
 instead.
@@ -242,7 +252,7 @@ instead.
 6. For a ChatGPT launch, delegated-start, site-tool, or ChatGPT-visible narration
    change, apply the [change-trigger matrix](testing.md#change-trigger-matrix).
 7. Run the complete `./ci.sh` before requesting review.
-8. Review `git status`; generated `web/static`, dependencies, `.gezerah`, test
+8. Review `git status`; generated `web/static`, dependencies, `.wrought`, test
    artifacts, and `out` should remain ignored.
 9. Stop services used for debugging.
 
@@ -318,10 +328,11 @@ from non-facilitator JSON.
 
 | Path                         | Producer/content                                               |
 | ---------------------------- | -------------------------------------------------------------- |
-| `.gezerah/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
+| `.wrought/`                      | `run.sh` state, persistent CI caches, and deployment evidence. |
 | `out`                        | Production/Railway-style binary.                               |
 | `web/frontend/node_modules/` | Frontend install.                                              |
 | `web/static/*`               | Vite production assets; placeholder is tracked.                |
+| `web/site/*`                 | Tracked `joeytan.dev` root-site snapshot; do not regenerate implicitly. |
 | `test/node_modules/`         | E2E install.                                                   |
 | `test/artifacts/`            | App log, Playwright results/report/media.                      |
 | `coverage/`                  | Reserved coverage output.                                      |
@@ -346,7 +357,7 @@ correct, and the role can create/use `pgcrypto` and apply migrations.
 
 ### Frontend shows network errors
 
-Check the backend health at `http://127.0.0.1:8080/api/health`. The dev proxy is
+Check the backend health at `http://127.0.0.1:8080/wrought/api/health`. The dev proxy is
 fixed to `http://localhost:8080`; a direct backend on another port will not be
 used by Vite without changing configuration.
 
@@ -378,12 +389,12 @@ builds there.
 
 Confirm `psql` is on `PATH` and the selected admin URL can connect to
 `postgres`, create/drop databases, and terminate connections. Check for an
-abandoned `gezerah_e2e_*` database if a previous process was forcibly interrupted.
+abandoned `wrought_e2e_*` database if a previous process was forcibly interrupted.
 
 ### E2E browser fails
 
 Install Playwright Chromium or Chrome/Chromium in one of the launcher's common
-system locations. `GEZERAH_E2E_BROWSER_EXECUTABLE` is not currently a reliable
+system locations. `WROUGHT_E2E_BROWSER_EXECUTABLE` is not currently a reliable
 discovery bypass: the launcher performs discovery/install first and may replace
 the value with a detected system browser. Inspect `test/artifacts/` after a test
 failure.

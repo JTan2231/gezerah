@@ -60,7 +60,7 @@ The current schema is installed by this ordered chain:
 | `007_agent_facilitator.sql`                  | Non-membership agent attribution for agent-facilitated Interactions, Resolutions, and events.          |
 | `008_world_prose_guide.sql`                  | Optional World-authored prose guidance for model-authored Problems and Consequences.                   |
 
-For a local database that already has a Gezerah migration ledger,
+For a local database that already has a Wrought migration ledger,
 `./reset-db.sh` safely rebuilds its `public` schema from empty on the next
 backend start.
 
@@ -452,16 +452,16 @@ and test PostgreSQL-native backups before relying on the application for
 durable history.
 
 ```sh
-database_url="${GEZERAH_DATABASE_URL:-${DATABASE_URL:-}}"
+database_url="${WROUGHT_DATABASE_URL:-${DATABASE_URL:-}}"
 if [ -z "$database_url" ]; then
-  echo "GEZERAH_DATABASE_URL or DATABASE_URL is required" >&2
+  echo "WROUGHT_DATABASE_URL or DATABASE_URL is required" >&2
   exit 1
 fi
-pg_dump --format=custom --no-owner --file=gezerah.dump "$database_url"
+pg_dump --format=custom --no-owner --file=wrought.dump "$database_url"
 ```
 
 Restore into an empty access-controlled database using the same major
-PostgreSQL toolchain, then verify migrations, `/api/health`, representative
+PostgreSQL toolchain, then verify migrations, `/wrought/api/health`, representative
 Mechanic graph, Status instances and modifier-snapshot provenance, logical state and effective values,
 Resolution receipts, revisions, and World-event cursors.
 

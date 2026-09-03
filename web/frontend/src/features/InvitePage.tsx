@@ -9,8 +9,10 @@ import type {
 } from "../api/types";
 import { useResource } from "../hooks/useResource";
 import {
+  buildLibraryURL,
   buildWorldURL,
   inviteURL,
+  playLibraryURL,
   playWorldURL,
   type AppArea,
   type Navigate,
@@ -102,8 +104,16 @@ export function InvitePage({
         />
       }
       onJoin={() => void join()}
-      onReturnToWorlds={() => navigate(`/${area}`)}
-      onNotNow={() => navigate(`/${canonicalArea ?? area}`)}
+      onReturnToWorlds={() =>
+        navigate(area === "play" ? playLibraryURL() : buildLibraryURL())
+      }
+      onNotNow={() =>
+        navigate(
+          (canonicalArea ?? area) === "play"
+            ? playLibraryURL()
+            : buildLibraryURL(),
+        )
+      }
     />
   );
 }

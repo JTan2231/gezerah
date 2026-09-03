@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 )
 
 func TestExpressionDTORoundTripPreservesTypedTreeAndExactNumbers(t *testing.T) {

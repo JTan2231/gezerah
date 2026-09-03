@@ -1,6 +1,6 @@
 # System documentation
 
-This directory is the canonical guide to Gezerah. It describes the system
+This directory is the canonical guide to Wrought. It describes the system
 implemented in this repository: separate membership-scoped Play and Build
 entry points, a typed input/derived mechanic graph, problem-authored persistent
 Status-instance layers, generated Entity sheets, membership-controlled Characters with
@@ -16,10 +16,10 @@ facilitators name Inline statuses in live Consequences. The server
 stores both in relational, world-scoped structures and enforces their declared
 constraints.
 
-The registered Semantics repository `gezerah` is authoritative for project and
-architecture terminology. Discover it through `semantics.repository.explore`
-and query it with `semantics repository show gezerah`. The documents below,
-code, and tests remain authoritative for actual behavior.
+The registered Semantics repository identified by the root participation
+marker is authoritative for maintained project and architecture terminology.
+Discover and read it through `semantics.repository.explore`. The documents
+below, code, and tests remain authoritative for actual behavior.
 
 ## Documentation map
 
@@ -44,22 +44,28 @@ code, and tests remain authoritative for actual behavior.
 
 ```mermaid
 flowchart LR
-    Browser[React browser application]
+    Browser[Browser]
     API[Go HTTP application]
     Rules[Pure Go rules engine]
     DB[(PostgreSQL)]
-    Assets[Embedded Vite assets]
+    App[Embedded Wrought Vite assets]
+    Site[Vendored joeytan.dev site]
 
     Browser -->|JSON API and SSE| API
+    Browser -->|root static requests| Site
     API -->|validate and resolve| Rules
     API -->|pgx transactions| DB
-    Assets -->|production SPA| API
+    App -->|/wrought SPA| API
+    Site -->|embedded by| API
 ```
 
 The production artifact is one Go binary. It runs migrations, connects to
-PostgreSQL, serves `/api/*`, and serves the embedded frontend for every other
-route. During development, Vite serves the frontend on port `5173` and proxies
-`/api` to the Go process on port `8080`.
+PostgreSQL, serves the Wrought API and SPA only under the exact `/wrought`
+mount, and serves a tracked personal-site snapshot at the remaining root paths.
+The canonical application URL is <https://joeytan.dev/wrought>; its security
+origin is `https://joeytan.dev`, without a path. During development, Vite serves
+Wrought on port `5173` and proxies `/wrought/api` to the Go process on port
+`8080`.
 
 ## Product path
 
@@ -112,12 +118,12 @@ effective changes, and the World event commit in the Resolution transaction.
 
 ## Vocabulary
 
-The registered Semantics repository `gezerah` is the single authority for
-project and architecture terms. Read it through the installed discovery route:
+The registered Semantics repository identified by the root participation
+marker is the single authority for maintained project and architecture terms.
+Read it through the installed discovery route:
 
 ```sh
 /Users/joey/.local/bin/chancery show semantics.repository.explore
-/Users/joey/.local/bin/semantics repository show gezerah
 ```
 
 In brief: a **World** is the sole scope; its **world mechanic graph** is
@@ -136,6 +142,7 @@ authority when behavior and prose diverge:
   authorization.
 - `internal/migrations/*.sql` for persisted shape and database constraints.
 - `web/frontend/src/api/types.ts` for the frontend's view of API payloads.
+- `web/site/` for the pinned `joeytan.dev` root-site snapshot.
 - `web/frontend/src/features/` for screen behavior.
 - `ci.sh`, `run.sh`, `deploy.sh`, `test/src/deployment/`, `railway.toml`, and
   `railpack.json` for tooling and runtime operations.

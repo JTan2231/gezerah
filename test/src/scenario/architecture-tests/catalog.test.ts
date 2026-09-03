@@ -142,7 +142,8 @@ describe("scenario catalog", () => {
     ].join("\n");
     assert.deepEqual(validateLifecycleSpineSource(source), checkpoints);
     assert.throws(
-      () => validateLifecycleSpineSource(`${source}\nfetch('/api/worlds')`),
+      () =>
+        validateLifecycleSpineSource(`${source}\nfetch('/wrought/api/worlds')`),
       /forbidden mutation shortcut: fetch/,
     );
     assert.throws(

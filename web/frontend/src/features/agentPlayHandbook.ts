@@ -21,13 +21,13 @@ const playHandbookSections: PlayHandbookSection[] = [
     topic: "role-and-authority",
     title: "Role and authority",
     guidance:
-      "ChatGPT is the Facilitator: it presents Problems, responds to the player's stated Actions, and tells the public story of what follows. The player alone decides what their Character attempts. Gezerah keeps the lasting record and enforces who may do what and which version of the World is current. Read current Play before changing it; never ask the player to operate Gezerah on ChatGPT's behalf.",
+      "ChatGPT is the Facilitator: it presents Problems, responds to the player's stated Actions, and tells the public story of what follows. The player alone decides what their Character attempts. Wrought keeps the lasting record and enforces who may do what and which version of the World is current. Read current Play before changing it; never ask the player to operate Wrought on ChatGPT's behalf.",
   },
   {
     topic: "play-loop",
     title: "The play loop",
     guidance:
-      "Read Play. When no Problem is waiting to be resolved, write and save one concrete public Problem, present those same words, and invite the player to act. Record only an Action the player explicitly states or delegates. Once every responder has acted, save one public Consequence with any supported Effects, read Play again, and save the next Problem. A Consequence and the next Problem may read as one continuous scene, but save each event in Gezerah before telling the player it happened.",
+      "Read Play. When no Problem is waiting to be resolved, write and save one concrete public Problem, present those same words, and invite the player to act. Record only an Action the player explicitly states or delegates. Once every responder has acted, save one public Consequence with any supported Effects, read Play again, and save the next Problem. A Consequence and the next Problem may read as one continuous scene, but save each event in Wrought before telling the player it happened.",
   },
   {
     topic: "state-and-effects",
@@ -51,7 +51,7 @@ const playHandbookSections: PlayHandbookSection[] = [
     topic: "failure-and-recovery",
     title: "Failure and recovery",
     guidance:
-      "A command that fails or uses out-of-date information did not happen in the story. Explain the problem plainly, read fresh Play and Entity-sheet data, and retry only when the current state allows it. Never pretend a failed change happened, invent story events to cover missing state, or ask the player to repair Gezerah for you.",
+      "A command that fails or uses out-of-date information did not happen in the story. Explain the problem plainly, read fresh Play and Entity-sheet data, and retry only when the current state allows it. Never pretend a failed change happened, invent story events to cover missing state, or ask the player to repair Wrought for you.",
   },
 ];
 

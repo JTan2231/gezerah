@@ -51,13 +51,16 @@ export function AccountControls({
     setChanged(false);
     setError(null);
     try {
-      const session = await api<AuthenticatedSession>("/api/me/password", {
-        method: "PUT",
-        ...jsonBody({
-          current_password: currentPassword,
-          new_password: newPassword,
-        }),
-      });
+      const session = await api<AuthenticatedSession>(
+        "/wrought/api/me/password",
+        {
+          method: "PUT",
+          ...jsonBody({
+            current_password: currentPassword,
+            new_password: newPassword,
+          }),
+        },
+      );
       onSessionChanged(session);
       setCurrentPassword("");
       setNewPassword("");

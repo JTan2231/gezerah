@@ -1,18 +1,20 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"path"
 	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/JTan2231/gezerah/web"
+	"github.com/JTan2231/wrought/web"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,6 +24,7 @@ type Server struct {
 	api                *http.ServeMux
 	models             modelProvider
 	worldTemplates     worldTemplateCatalog
+	siteFS             fs.FS
 	static             http.Handler
 	staticFS           fs.FS
 	publicOrigin       string
@@ -32,16 +35,22 @@ type Server struct {
 	worldEventWake   chan struct{}
 }
 
+const productMountPath = "/wrought"
+
 func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, error) {
 	staticFS, err := fs.Sub(web.Static, "static")
 	if err != nil {
 		return nil, fmt.Errorf("load static files: %w", err)
 	}
+	siteFS, err := fs.Sub(web.Site, "site")
+	if err != nil {
+		return nil, fmt.Errorf("load site files: %w", err)
+	}
 	publicOrigin, securePublicOrigin, err := parsePublicOrigin(config.PublicOrigin)
 	if err != nil {
 		return nil, err
 	}
-	server := newServerWithStaticFS(db, staticFS)
+	server := newServerWithFilesystems(db, staticFS, siteFS)
 	if strings.TrimSpace(config.OpenAIAPIKey) != "" {
 		provider, err := newOpenAIModelProvider(config.OpenAIAPIKey, config.OpenAIBaseURL)
 		if err != nil {
@@ -56,14 +65,19 @@ func NewServer(_ context.Context, db *pgxpool.Pool, config Config) (*Server, err
 
 // NewServerWithStaticFS is the test seam for serving a synthetic frontend.
 func NewServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
-	return newServerWithStaticFS(db, staticFS)
+	siteFS, err := fs.Sub(web.Site, "site")
+	if err != nil {
+		panic(fmt.Errorf("load embedded site files: %w", err))
+	}
+	return newServerWithFilesystems(db, staticFS, siteFS)
 }
 
-func newServerWithStaticFS(db *pgxpool.Pool, staticFS fs.FS) *Server {
+func newServerWithFilesystems(db *pgxpool.Pool, staticFS, siteFS fs.FS) *Server {
 	server := &Server{
 		db:             db,
 		api:            http.NewServeMux(),
 		worldTemplates: embeddedWorldTemplateCatalog,
+		siteFS:         siteFS,
 		static:         http.FileServer(http.FS(staticFS)),
 		staticFS:       staticFS,
 		authThrottle:   newAuthThrottle(),
@@ -109,10 +123,7 @@ func (s *Server) HandleAPIFunc(pattern string, handler http.HandlerFunc) {
 }
 
 func (s *Server) Routes() http.Handler {
-	staticMux := http.NewServeMux()
-	staticMux.HandleFunc("GET /", s.handleStatic)
-
-	root := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	product := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
 			if r.Body != nil {
 				r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
@@ -120,16 +131,137 @@ func (s *Server) Routes() http.Handler {
 			s.api.ServeHTTP(w, r)
 			return
 		}
-		staticMux.ServeHTTP(w, r)
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
+			w.Header().Set("Allow", "GET, HEAD")
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		s.handleStatic(w, r)
 	})
+	mountedProduct := stripProductMount(product)
+
+	root := http.NewServeMux()
+	root.Handle(productMountPath, mountedProduct)
+	root.Handle(productMountPath+"/", mountedProduct)
+	root.HandleFunc("GET /.well-known/apple-app-site-association", s.handleAppleAppSiteAssociation)
+	root.HandleFunc("/", s.handleSite)
 
 	return s.withRequestLog(s.withRecovery(s.withSecurityHeaders(root)))
+}
+
+func (s *Server) handleSite(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	requestPath := path.Clean(r.URL.Path)
+	filePath := strings.TrimPrefix(requestPath, "/")
+	if filePath == "" || filePath == "." {
+		filePath = "index.html"
+	}
+
+	info, err := fs.Stat(s.siteFS, filePath)
+	if err != nil {
+		filePath += ".html"
+		info, err = fs.Stat(s.siteFS, filePath)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+	}
+	if info.IsDir() {
+		if !strings.HasSuffix(r.URL.Path, "/") {
+			location := (&url.URL{
+				Path:     "/" + filePath + "/",
+				RawQuery: r.URL.RawQuery,
+			}).RequestURI()
+			http.Redirect(w, r, location, http.StatusMovedPermanently)
+			return
+		}
+		filePath = path.Join(filePath, "index.html")
+		info, err = fs.Stat(s.siteFS, filePath)
+		if err != nil || info.IsDir() {
+			http.NotFound(w, r)
+			return
+		}
+	} else if r.URL.Path != "/" && strings.HasSuffix(r.URL.Path, "/") {
+		http.NotFound(w, r)
+		return
+	}
+
+	contents, err := fs.ReadFile(s.siteFS, filePath)
+	if err != nil {
+		http.Error(w, "site file unavailable", http.StatusInternalServerError)
+		return
+	}
+	if contentType := siteContentType(filePath); contentType != "" {
+		w.Header().Set("Content-Type", contentType)
+	}
+	http.ServeContent(w, r, path.Base(filePath), info.ModTime(), bytes.NewReader(contents))
+}
+
+func siteContentType(filePath string) string {
+	switch path.Ext(filePath) {
+	case ".html":
+		return "text/html; charset=utf-8"
+	case ".js":
+		return "application/javascript; charset=utf-8"
+	case ".css":
+		return "text/css; charset=utf-8"
+	case ".md":
+		return "text/markdown; charset=utf-8"
+	case ".txt":
+		return "text/plain; charset=utf-8"
+	default:
+		return ""
+	}
+}
+
+func (s *Server) handleAppleAppSiteAssociation(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	http.ServeFileFS(w, r, s.siteFS, ".well-known/apple-app-site-association")
+}
+
+func stripProductMount(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !isProductPath(r.URL.Path) {
+			http.NotFound(w, r)
+			return
+		}
+		request := r.Clone(r.Context())
+		request.URL.Path = strings.TrimPrefix(request.URL.Path, productMountPath)
+		if request.URL.Path == "" {
+			request.URL.Path = "/"
+		}
+		if request.URL.RawPath != "" {
+			request.URL.RawPath = strings.TrimPrefix(request.URL.RawPath, productMountPath)
+			if request.URL.RawPath == "" {
+				request.URL.RawPath = "/"
+			}
+		}
+		next.ServeHTTP(w, request)
+	})
+}
+
+func isProductPath(requestPath string) bool {
+	return requestPath == productMountPath || strings.HasPrefix(requestPath, productMountPath+"/")
+}
+
+func isProductAPIPath(requestPath string) bool {
+	return requestPath == productMountPath+"/api" || strings.HasPrefix(requestPath, productMountPath+"/api/")
+}
+
+func publicProductPath(internalPath string) string {
+	return productMountPath + internalPath
 }
 
 func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		headers := w.Header()
-		headers.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'")
+		if isProductPath(r.URL.Path) {
+			headers.Set("Content-Security-Policy", "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; connect-src 'self'; img-src 'self' data:; script-src 'self'; style-src 'self' 'unsafe-inline'")
+		}
 		headers.Set("Permissions-Policy", "camera=(), geolocation=(), microphone=()")
 		headers.Set("Referrer-Policy", "no-referrer")
 		headers.Set("X-Content-Type-Options", "nosniff")
@@ -172,8 +304,8 @@ func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 			s.static.ServeHTTP(w, r)
 			return
 		}
-		if strings.HasPrefix(cleanPath, "assets/") {
-			s.static.ServeHTTP(w, r)
+		if cleanPath == "assets" || strings.HasPrefix(cleanPath, "assets/") {
+			http.NotFound(w, r)
 			return
 		}
 	}
@@ -195,7 +327,7 @@ func (s *Server) withRecovery(next http.Handler) http.Handler {
 					"panic_type", fmt.Sprintf("%T", recovered),
 					"stack", string(debug.Stack()),
 				)
-				if r.URL.Path == "/api" || strings.HasPrefix(r.URL.Path, "/api/") {
+				if isProductAPIPath(r.URL.Path) {
 					writeError(w, http.StatusInternalServerError, "internal_error", "internal server error", nil)
 					return
 				}
@@ -228,10 +360,10 @@ func successfulAPIMutation(r *http.Request, status int) bool {
 	if r == nil || status < http.StatusOK || status >= http.StatusBadRequest {
 		return false
 	}
-	if r.URL == nil || (r.URL.Path != "/api" && !strings.HasPrefix(r.URL.Path, "/api/")) {
+	if r.URL == nil || !isProductAPIPath(r.URL.Path) {
 		return false
 	}
-	if strings.HasPrefix(r.URL.Path, "/api/auth/") || r.URL.Path == "/api/me/password" {
+	if strings.HasPrefix(r.URL.Path, productMountPath+"/api/auth/") || r.URL.Path == productMountPath+"/api/me/password" {
 		return false
 	}
 	switch r.Method {
@@ -285,12 +417,12 @@ func requestLogPath(r *http.Request) string {
 }
 
 func redactedRequestLogPath(requestPath string) (string, bool) {
-	for _, prefix := range []string{"/play/invite", "/build/invite"} {
+	for _, prefix := range []string{productMountPath + "/play/invite", productMountPath + "/build/invite"} {
 		if redacted, ok := redactRequestBearerPath(requestPath, prefix, false); ok {
 			return redacted, true
 		}
 	}
-	if redacted, ok := redactRequestBearerPath(requestPath, "/api/world-invites", true); ok {
+	if redacted, ok := redactRequestBearerPath(requestPath, productMountPath+"/api/world-invites", true); ok {
 		return redacted, true
 	}
 	return "", false

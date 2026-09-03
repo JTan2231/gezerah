@@ -114,7 +114,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     if (candidate !== page) additionalPageCount += 1;
   });
 
-  await page.goto(`${baseURL}/play/new`);
+  await page.goto(`${baseURL}/wrought/play/new`);
   await expect(
     page.getByRole("heading", { name: "Starting with ChatGPT" }),
   ).toBeVisible();
@@ -155,7 +155,9 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     current_play_role: "player",
     play_status: "waiting-for-character",
   });
-  await expect(page).toHaveURL(`${baseURL}/play/${copied.copied_world.id}`);
+  await expect(page).toHaveURL(
+    `${baseURL}/wrought/play/${copied.copied_world.id}`,
+  );
   expect(additionalPageCount).toBe(0);
   expect(page.context().pages()).toHaveLength(1);
   expect(page.context().pages()[0]).toBe(page);
@@ -350,7 +352,7 @@ async function installSiteToolHarness(page: Page): Promise<void> {
       readonly signal?: AbortSignal;
     };
     type HarnessWindow = Window & {
-      __gezerahSiteToolHarness?: {
+      __wroughtSiteToolHarness?: {
         names(): string[];
         invoke(name: string, input: unknown): Promise<unknown>;
         trustedControlClicks(): string[];
@@ -414,7 +416,7 @@ async function installSiteToolHarness(page: Page): Promise<void> {
       },
       trustedControlClicks: () => [...controlClicks],
     };
-    (window as HarnessWindow).__gezerahSiteToolHarness = harness;
+    (window as HarnessWindow).__wroughtSiteToolHarness = harness;
   });
 }
 
@@ -433,8 +435,8 @@ async function waitForSiteTools(
 async function registeredSiteToolNames(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const harness = (
-      window as Window & { __gezerahSiteToolHarness?: SiteToolHarness }
-    ).__gezerahSiteToolHarness;
+      window as Window & { __wroughtSiteToolHarness?: SiteToolHarness }
+    ).__wroughtSiteToolHarness;
     if (harness === undefined) return [];
     return harness.names();
   });
@@ -448,8 +450,8 @@ async function invokeSiteTool<T>(
   return page.evaluate(
     async ({ toolName, toolInput }) => {
       const harness = (
-        window as Window & { __gezerahSiteToolHarness?: SiteToolHarness }
-      ).__gezerahSiteToolHarness;
+        window as Window & { __wroughtSiteToolHarness?: SiteToolHarness }
+      ).__wroughtSiteToolHarness;
       if (harness === undefined) {
         throw new Error("site-tool harness is unavailable");
       }
@@ -462,8 +464,8 @@ async function invokeSiteTool<T>(
 async function trustedControlClicks(page: Page): Promise<string[]> {
   return page.evaluate(() => {
     const harness = (
-      window as Window & { __gezerahSiteToolHarness?: SiteToolHarness }
-    ).__gezerahSiteToolHarness;
+      window as Window & { __wroughtSiteToolHarness?: SiteToolHarness }
+    ).__wroughtSiteToolHarness;
     if (harness === undefined) {
       throw new Error("site-tool harness is unavailable");
     }

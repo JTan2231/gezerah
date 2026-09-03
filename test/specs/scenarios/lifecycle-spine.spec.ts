@@ -46,10 +46,10 @@ test("one rendered lifecycle carries the World from authoring through archive", 
     await scenario.behavior(
       "identity.enter-internal-builder",
       async () => {
-        await ownerPage.goto(baseURL);
+        await ownerPage.goto(`${baseURL}/wrought`);
         await expect(
           ownerPage.getByRole("heading", {
-            name: "Play Gezerah with ChatGPT",
+            name: "Play Wrought with ChatGPT",
           }),
         ).toBeVisible();
         await expect(
@@ -58,7 +58,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await expect(
           ownerPage.getByRole("link", { name: "Build", exact: true }),
         ).toHaveCount(0);
-        await ownerPage.goto(`${baseURL}/build`);
+        await ownerPage.goto(`${baseURL}/wrought/build`);
         await createAccount(ownerPage, labels.ownerUsername, labels.owner);
         await expect(
           ownerPage.getByRole("heading", { name: "Worlds", exact: true }),
@@ -307,11 +307,11 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await expect(
           playerPage.locator(".world-card").filter({ hasText: labels.world }),
         ).toBeVisible();
-        await playerPage.goto(`${baseURL}/build`);
+        await playerPage.goto(`${baseURL}/wrought/build`);
         await expect(
           playerPage.locator(".world-card").filter({ hasText: labels.world }),
         ).toHaveCount(0);
-        await playerPage.goto(`${baseURL}/play`);
+        await playerPage.goto(`${baseURL}/wrought/play`);
         await enterWorldFromLibrary(playerPage, labels.world);
 
         await ownerPage
@@ -506,7 +506,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
         await expect(
           editorPage.getByRole("button", { name: "Archive world" }),
         ).toHaveCount(0);
-        await editorPage.goto(`${baseURL}/play`);
+        await editorPage.goto(`${baseURL}/wrought/play`);
         await enterWorldFromLibrary(editorPage, labels.world);
         await expect(
           editorPage.getByRole("heading", { name: labels.world }),
@@ -521,7 +521,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
           const pathname = new URL(response.url()).pathname;
           return (
             response.request().method() === "GET" &&
-            pathname.match(/^\/api\/worlds\/[^/]+$/) !== null &&
+            pathname.match(/^\/wrought\/api\/worlds\/[^/]+$/) !== null &&
             response.ok()
           );
         });
@@ -964,7 +964,7 @@ test("one rendered lifecycle carries the World from authoring through archive", 
           ownerBuildCard.getByText("archived", { exact: true }),
         ).toBeVisible();
 
-        await ownerPage.goto(`${baseURL}/play`);
+        await ownerPage.goto(`${baseURL}/wrought/play`);
         const ownerPlayCard = ownerPage
           .locator(".world-card")
           .filter({ hasText: labels.world });

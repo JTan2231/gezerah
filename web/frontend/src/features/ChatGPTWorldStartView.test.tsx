@@ -13,10 +13,10 @@ const noop = () => undefined;
 describe("ChatGPTWorldStartView", () => {
   test("offers the custom World route from Build", () => {
     const prompt = createChatGPTWorldStartPrompt(
-      "https://gezerah.example/build",
+      "https://joeytan.dev/wrought/build",
     );
     const chatGPTHref = createChatGPTLaunchURL(
-      "https://gezerah.example/build",
+      "https://joeytan.dev/wrought/build",
       prompt,
     );
     const html = renderToStaticMarkup(
@@ -33,12 +33,14 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain(
       "A World is your world setting and continuing history.",
     );
-    expect(html).toContain("https://gezerah.example/build");
+    expect(html).toContain("https://joeytan.dev/wrought/build");
     expect(html).toContain("I will sign in and make each change myself.");
     expect(html).toContain("help me choose ChatGPT as Facilitator");
     expect(html).toContain("Start in ChatGPT");
     expect(html).toContain("https://chatgpt.com/?surface=work&amp;prompt=");
-    expect(html).toContain("browserUrl=https%3A%2F%2Fgezerah.example%2Fbuild");
+    expect(html).toContain(
+      "browserUrl=https%3A%2F%2Fjoeytan.dev%2Fwrought%2Fbuild",
+    );
     expect(html).toContain("Copy starter prompt");
     expect(html).not.toContain("Choose a World yourself");
     expect(html).toContain('aria-live="polite"');
@@ -46,19 +48,19 @@ describe("ChatGPTWorldStartView", () => {
 
   test("offers a copyable route through the three World templates", () => {
     const prompt = createChatGPTTemplateStartPrompt(
-      "https://gezerah.example/play/new",
+      "https://joeytan.dev/wrought/play/new",
     );
     const html = renderToStaticMarkup(
       <ChatGPTWorldStartView
         variant="template"
         prompt={prompt}
         chatGPTHref={createChatGPTLaunchURL(
-          "https://gezerah.example/play/new",
+          "https://joeytan.dev/wrought/play/new",
           prompt,
         )}
         copyStatus="idle"
         onCopyPrompt={noop}
-        manualHref="/play/new"
+        manualHref="/wrought/play/new"
         onStartManually={noop}
       />,
     );
@@ -66,18 +68,22 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("Start playing with ChatGPT");
     expect(html).toContain("three complete World templates");
     expect(html).toContain("final line of this prompt as my only setup input");
-    expect(html).toContain("https://gezerah.example/play/new");
-    expect(html).toContain("Keep lasting game state in Gezerah");
+    expect(html).toContain("https://joeytan.dev/wrought/play/new");
+    expect(html).toContain("Keep lasting game state in Wrought");
     expect(html).toContain("My play preference: surprise me.");
     expect(html).toContain("never invent or submit an Action");
-    expect(html).toContain("read and apply Gezerah&#x27;s Play handbook");
+    expect(html).toContain("read and apply Wrought&#x27;s Play handbook");
     expect(html).toContain("begin directly with the first Problem");
     expect(html).toContain(
-      "Make the chosen World and Character apparent through the opening",
+      "In that first Problem only, open with a short expositional statement",
     );
+    expect(html).toContain(
+      "who my Character is and what they are currently doing",
+    );
+    expect(html).toContain("Make the chosen World apparent through the scene");
     expect(html).not.toContain("tell me which World and Character you chose");
     expect(html).toContain("Choose a World yourself");
-    expect(html).toContain('href="/play/new"');
+    expect(html).toContain('href="/wrought/play/new"');
   });
 
   test("reports copy success and failure accessibly", () => {
@@ -110,11 +116,11 @@ describe("ChatGPTWorldStartView", () => {
   test("builds one web launch with the prompt and attached page", () => {
     expect(
       createChatGPTLaunchURL(
-        "https://gezerah.example/play/new",
+        "https://joeytan.dev/wrought/play/new",
         "Start a World & ask me questions.",
       ),
     ).toBe(
-      "https://chatgpt.com/?surface=work&prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fgezerah.example%2Fplay%2Fnew",
+      "https://chatgpt.com/?surface=work&prompt=Start+a+World+%26+ask+me+questions.&browserUrl=https%3A%2F%2Fjoeytan.dev%2Fwrought%2Fplay%2Fnew",
     );
   });
 
@@ -127,7 +133,7 @@ describe("ChatGPTWorldStartView", () => {
         copyStatus="idle"
         onCopyPrompt={noop}
         promptFallback={false}
-        manualHref="/play/new"
+        manualHref="/wrought/play/new"
         onStartManually={noop}
       />,
     );

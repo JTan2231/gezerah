@@ -8,6 +8,8 @@ import {
   jsonBody,
   onAuthenticationRequired,
   setCSRFToken,
+  worldInvitePath,
+  worldPath,
 } from "./client";
 
 const originalFetch = globalThis.fetch;
@@ -28,6 +30,15 @@ afterEach(() => {
 });
 
 describe("API authentication adapter", () => {
+  test("builds API and event-stream paths beneath the Wrought mount", () => {
+    expect(worldPath("world/1", "events")).toBe(
+      "/wrought/api/worlds/world%2F1/events",
+    );
+    expect(worldInvitePath("token value", "redeem")).toBe(
+      "/wrought/api/world-invites/token%20value/redeem",
+    );
+  });
+
   test("uses same-origin cookies and adds CSRF only to unsafe requests", async () => {
     const requests: Array<Parameters<typeof fetch>[1]> = [];
     globalThis.fetch = fetchStub((init) => {
@@ -36,20 +47,20 @@ describe("API authentication adapter", () => {
     });
     setCSRFToken("csrf-value");
 
-    await api<{ ok: boolean }>("/api/example");
-    await api<{ ok: boolean }>("/api/example", {
+    await api<{ ok: boolean }>("/wrought/api/example");
+    await api<{ ok: boolean }>("/wrought/api/example", {
       method: "POST",
       ...jsonBody({ value: true }),
     });
 
     expect(requests).toHaveLength(2);
     expect(requests[0]?.credentials).toBe("same-origin");
-    expect(new Headers(requests[0]?.headers).has("X-GEZERAH-CSRF")).toBe(false);
+    expect(new Headers(requests[0]?.headers).has("X-WROUGHT-CSRF")).toBe(false);
     expect(requests[1]?.credentials).toBe("same-origin");
-    expect(new Headers(requests[1]?.headers).get("X-GEZERAH-CSRF")).toBe(
+    expect(new Headers(requests[1]?.headers).get("X-WROUGHT-CSRF")).toBe(
       "csrf-value",
     );
-    expect(new Headers(requests[1]?.headers).has("X-GEZERAH-User-ID")).toBe(
+    expect(new Headers(requests[1]?.headers).has("X-WROUGHT-User-ID")).toBe(
       false,
     );
   });
@@ -78,17 +89,17 @@ describe("API authentication adapter", () => {
 
     let error: unknown;
     try {
-      await api("/api/protected", { method: "POST" });
+      await api("/wrought/api/protected", { method: "POST" });
     } catch (reason) {
       error = reason;
     }
-    await api("/api/another-command", { method: "POST" });
+    await api("/wrought/api/another-command", { method: "POST" });
     unsubscribe();
 
     expect(error).toBeInstanceOf(ApiError);
     expect((error as ApiError).status).toBe(401);
     expect(authenticationRequiredCount).toBe(1);
-    expect(new Headers(requests[1]?.headers).has("X-GEZERAH-CSRF")).toBe(false);
+    expect(new Headers(requests[1]?.headers).has("X-WROUGHT-CSRF")).toBe(false);
   });
 
   test("a late 401 from an old session cannot clear a newer session", async () => {
@@ -105,7 +116,7 @@ describe("API authentication adapter", () => {
       { preconnect: originalFetch.preconnect },
     );
     setCSRFToken("old-session-csrf");
-    const staleRequest = api("/api/stale", { method: "POST" }).catch(
+    const staleRequest = api("/wrought/api/stale", { method: "POST" }).catch(
       (reason: unknown) => reason,
     );
     await Promise.resolve();
@@ -129,11 +140,11 @@ describe("API authentication adapter", () => {
       currentRequest = init;
       return Response.json({ ok: true });
     });
-    await api("/api/current", { method: "POST" });
+    await api("/wrought/api/current", { method: "POST" });
     unsubscribe();
 
     expect(authenticationRequiredCount).toBe(0);
-    expect(new Headers(currentRequest?.headers).get("X-GEZERAH-CSRF")).toBe(
+    expect(new Headers(currentRequest?.headers).get("X-WROUGHT-CSRF")).toBe(
       "new-session-csrf",
     );
   });
@@ -177,24 +188,24 @@ describe("API authentication adapter", () => {
     setCSRFToken("stale-session-csrf", "user-one");
 
     expect(
-      await api<{ ok: boolean }>("/api/worlds", {
+      await api<{ ok: boolean }>("/wrought/api/worlds", {
         method: "POST",
         ...jsonBody({ name: "The retried world" }),
       }),
     ).toEqual({ ok: true });
 
     expect(requests.map(({ input }) => input)).toEqual([
-      "/api/worlds",
-      "/api/me",
-      "/api/worlds",
+      "/wrought/api/worlds",
+      "/wrought/api/me",
+      "/wrought/api/worlds",
     ]);
-    expect(new Headers(requests[0]?.init?.headers).get("X-GEZERAH-CSRF")).toBe(
+    expect(new Headers(requests[0]?.init?.headers).get("X-WROUGHT-CSRF")).toBe(
       "stale-session-csrf",
     );
-    expect(new Headers(requests[1]?.init?.headers).has("X-GEZERAH-CSRF")).toBe(
+    expect(new Headers(requests[1]?.init?.headers).has("X-WROUGHT-CSRF")).toBe(
       false,
     );
-    expect(new Headers(requests[2]?.init?.headers).get("X-GEZERAH-CSRF")).toBe(
+    expect(new Headers(requests[2]?.init?.headers).get("X-WROUGHT-CSRF")).toBe(
       "rotated-session-csrf",
     );
   });
@@ -234,7 +245,7 @@ describe("API authentication adapter", () => {
 
     let error: unknown;
     try {
-      await api("/api/worlds", {
+      await api("/wrought/api/worlds", {
         method: "POST",
         ...jsonBody({ name: "Must not be replayed" }),
       });

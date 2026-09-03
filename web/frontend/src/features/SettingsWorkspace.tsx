@@ -9,7 +9,7 @@ import {
 } from "../api/client";
 import type { World } from "../api/types";
 import { confirmDiscardDraft, useDraft } from "../hooks/useDraft";
-import type { Navigate } from "../worldRoutes";
+import { buildLibraryURL, type Navigate } from "../worldRoutes";
 import { SettingsView } from "./SettingsView";
 
 export function SettingsWorkspace({
@@ -80,7 +80,7 @@ export function SettingsWorkspace({
         ...jsonBody({ expected_revision: world.revision }),
       });
       draft.accept(draft.draft);
-      navigate("/build");
+      navigate(buildLibraryURL());
     } catch (reason) {
       setError(
         reason instanceof ApiError

@@ -33,7 +33,7 @@ const DEFAULT_SENSITIVE_KEYS = [
   "sessionTokenHash",
   "setCookie",
   "token",
-  "xGezerahCsrf",
+  "xWroughtCsrf",
 ] as const;
 
 function normalizedKeys(options: RedactionOptions): Set<string> {
@@ -93,7 +93,7 @@ export function sanitizeURL(raw: string): string {
 export function sanitizeText(raw: string): string {
   return raw
     .replace(
-      /\b(authorization|cookie|set-cookie|x-gezerah-csrf)\s*:\s*[^\r\n]+/gi,
+      /\b(authorization|cookie|set-cookie|x-wrought-csrf)\s*:\s*[^\r\n]+/gi,
       `$1: ${REDACTED}`,
     )
     .replace(

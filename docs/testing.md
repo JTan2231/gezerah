@@ -56,7 +56,7 @@ additional expectations below when ChatGPT behavior is in scope:
 
 | Changed boundary | Focused iteration | External acceptance expectation |
 | ---------------- | ----------------- | ------------------------------- |
-| ChatGPT web-launch URL, attached-page request, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
+| Canonical Wrought base path, ChatGPT web-launch URL, absolute attached-page request, starter instructions, delegated-start copy, or Start site-tool support/readiness | Frontend tests plus `./ci.sh e2e` | Run the ChatGPT acceptance scenario against the exact candidate before describing the change as accepted or promoting it as the public delegated-start entry. |
 | Start or Play site-tool registration, name, schema, description, command adapter, navigation, refresh, or recovery behavior | Site-tool registration and page-integration tests, the Agent-facilitator command contract as applicable, then `./ci.sh` | Run the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
 | Agent-facilitator command authority, attribution, concurrency, idempotency, or persistence with no ChatGPT-visible behavior change | Focused backend/contract coverage, then `./ci.sh` | Not required unless the public ChatGPT interaction or acceptance oracle changed. |
 | World prose-guide transport, Play-handbook topic/content, or ChatGPT-visible Problem, Consequence, state, privacy, attention, decision, voice, or failure guidance | Focused frontend/contract coverage, then `./ci.sh` | Run all three turns of the ChatGPT acceptance scenario before an acceptance claim or public promotion. |
@@ -65,6 +65,13 @@ additional expectations below when ChatGPT behavior is in scope:
 An unperformed or blocked acceptance run does not make automated validation
 fail, but it must be reported as such and cannot support a claim that the
 candidate's ChatGPT experience passed acceptance.
+
+The Wrought rename, canonical `https://joeytan.dev/wrought` attachment URL,
+and combined-host deployment change this boundary. No new dated three-turn
+ChatGPT acceptance record has been supplied for that candidate, so
+the rebranded launch is currently **not claimed as ChatGPT accepted**. Automated
+CI, site-tool integration, and deployed smoke may validate the implementation
+without changing that statement.
 
 ## Isolated worktree behavior
 
@@ -81,12 +88,12 @@ On first invocation, `ci.sh`:
 
 This design validates unsaved/untracked source changes while keeping dependency
 installs and generated frontend assets out of the active checkout. Ignored
-files are not copied, so tests must not depend on local `.gezerah`, `node_modules`,
+files are not copied, so tests must not depend on local `.wrought`, `node_modules`,
 `web/static` output, or test artifacts.
 
 Bun downloads, Go build and module data, pinned tool binaries, and Node compile
-caches live under the ignored `.gezerah/cache/ci` directory by default, or under
-`GEZERAH_CI_CACHE_DIR` when configured. The detached worktree still owns
+caches live under the ignored `.wrought/cache/ci` directory by default, or under
+`WROUGHT_CI_CACHE_DIR` when configured. The detached worktree still owns
 dependency installations, build output, analyzer result caches, and runtime
 state; only path-independent caches survive between invocations. An explicit
 `PLAYWRIGHT_BROWSERS_PATH` is preserved, and otherwise the normal user browser
@@ -122,7 +129,7 @@ build does not repeat the TypeScript check performed in the validation group.
 5. `go test` over application packages;
 6. govulncheck 1.6.0 over production and test reachability;
 7. shell syntax checking for `ci.sh`, `deploy.sh`, `run.sh`, and `reset-db.sh`;
-8. trimmed `cmd/gezerah` binary build;
+8. trimmed `cmd/wrought` binary build;
 9. optional application-startup/migration smoke test.
 
 The validator downloads the official golangci-lint 2.12.2 archive into the
@@ -149,7 +156,7 @@ continuation after a full SSE event batch, cancellation while waiting, rolling
 write-deadline set/clear behavior, a real stream surviving the ordinary server
 write timeout, and request-context propagation from the process root.
 
-The smoke test runs only when `GEZERAH_TEST_DATABASE_URL` is set. It starts the
+The smoke test runs only when `WROUGHT_TEST_DATABASE_URL` is set. It starts the
 built binary against that exact database, waits for the listening log, and
 stops it. The database must be explicitly disposable because startup installs
 the schema.
@@ -176,44 +183,73 @@ PostgreSQL admin database.
 ### Deployed smoke
 
 The operator-initiated deployment path adds a narrow check of the actual hosted
-system after the broader local suite:
+system after the broader local suite. It has two explicit release stages:
 
 ```sh
+./deploy.sh deploy --pre-dns
 ./deploy.sh verify
 ```
 
+`deploy --pre-dns` is the generated-provider, HTTP-only stage. It deploys the
+release, selects the exact generated Railway `*.up.railway.app` hostname, and
+runs the HTTPS requests below without launching a browser. The CLI forces the
+browser result to skipped because the generated host is not the configured
+authentication origin. `--pre-dns` is not valid with `verify`.
+
+Normal `deploy` and `verify` are post-cutover stages. They require exactly
+`https://joeytan.dev/wrought`, exactly one custom domain (`joeytan.dev`), and
+one generated Railway provider hostname aligned with the current service name;
+unexpected custom domains fail the allowlist gate. They run the browser probe
+unless `--no-browser` is explicit.
+
 Both successful deploy mode and verify mode require the selected Railway web and
 PostgreSQL services and database volume to be healthy and the active web
-manifest to use `/api/health`, one replica, and more than ten seconds of
-draining. Database health includes Railway's non-migrating flag, the pinned
-volume name, `READY` state, at least 5 GB, and the standard
+manifest to use `/wrought/api/health`, a 30-second health-check timeout, one
+replica, and more than ten seconds of draining. Database health includes
+Railway's non-migrating flag, the pinned volume name, `READY` state, at least 5
+GB, and the standard
 `/var/lib/postgresql/data` mount. They refuse to attest while another web
-rollout is unresolved. HTTP checks then require HTTPS with no redirects, `ok:true` health JSON, the
-Gezerah app shell at `/`, the same shell at a direct SPA route, and every
-same-origin JavaScript and stylesheet discovered from the returned HTML.
+rollout is unresolved. HTTP checks then require HTTPS with no redirects; the
+Joey Tan static shell at `/` and `/index.html`; the vendored Annals redirect,
+Plaid OAuth page, and `llms.txt` with deterministic content types; denial of
+directory listings; the exact vendored bytes of
+`/.well-known/apple-app-site-association`; `ok:true` health JSON at
+`/wrought/api/health`; the Wrought app shell at `/wrought`; the same shell at a
+direct `/wrought/play/...` SPA route; and every same-origin
+`/wrought/assets/**` JavaScript and stylesheet discovered from the Wrought
+HTML.
 
 Unless `--no-browser` is explicit, a headless Playwright check loads the hosted
-homepage, validates its title and delegated-start heading, and verifies that the
-sole public ChatGPT launch targets `https://chatgpt.com/` with its starter prompt
-and exact `/play/new` attachment request. It then opens that Start-page
+Wrought Home at `https://joeytan.dev/wrought`,
+validates its title and delegated-start heading, and verifies that the sole
+candidate ChatGPT launch targets `https://chatgpt.com/` with its starter prompt and
+the candidate's exact absolute `/wrought/play/new` attachment URL. It then opens
+that Start-page
 authentication boundary directly and submits an intentionally unknown
 randomized username. It requires the expected 401 and generic credential error
 and fails on page exceptions, console warnings/errors, same-origin request
 failures, or unexpected same-origin 4xx/5xx responses. The probe creates no
 account or other durable application fixture. Chrome's generic console noise is
-tolerated only when accounted for by the expected anonymous `GET /api/me` and
-invalid-signin `POST /api/auth/signin` 401 responses; those UI and response
+tolerated only when accounted for by the expected anonymous `GET /wrought/api/me` and
+invalid-signin `POST /wrought/api/auth/signin` 401 responses; those UI and response
 boundaries are asserted directly. This proves the launch URL construction, not
-that ChatGPT web honored the attachment request or exposed Site tools.
+that ChatGPT web honored the attachment request or exposed Site tools. Because
+the credentials are deliberately invalid, it also proves only the canonical
+origin and anonymous login-error boundary. It does not issue a session and is
+not evidence for `__Host-wrought_session` creation, flags, path, or scope.
 
 This smoke test deliberately does not replay the 141-scenario suite against the
 hosted database. `./ci.sh` owns broad, deterministic product behavior against a
 disposable database; deployed smoke owns the narrower Railway build, service,
-public TLS/proxy, deployed-origin, asset, and database-read-path boundary.
-Passing runs write an allowlisted, secret-free record with private file
-permissions. Deploy mode reserves `.gezerah/deployments/<deployment-id>.json`; verify
-mode writes a distinct `<deployment-id>.verify.<run-id>.json` record so it cannot
-replace deploy provenance.
+public TLS/proxy, combined-root, deployed-origin, asset, and database-read-path
+boundary.
+Passing runs write an allowlisted, secret-free record with `schemaVersion: 2`
+and private file permissions. `releaseStage` distinguishes `pre-dns` from
+`post-cutover`, and the recorded manifest includes
+`healthcheckTimeout: 30`. Deploy mode reserves
+`.wrought/deployments/<deployment-id>.json`; verify mode writes a distinct
+`<deployment-id>.verify.<run-id>.json` record so it cannot replace deploy
+provenance.
 
 ### ChatGPT acceptance
 
@@ -228,8 +264,9 @@ start and narrative presentation.
 The run must identify one exact clean source artifact or deployed candidate and
 use:
 
-- its production frontend and Go artifact at one exact HTTPS public origin;
-- an isolated synthetic Gezerah account and disposable data boundary;
+- its production frontend and Go artifact at one exact HTTPS browser origin,
+  with a canonical Wrought application base below `/wrought`;
+- an isolated synthetic Wrought account and disposable data boundary;
 - a fresh or deliberately cleared ChatGPT web conversation with site-tool
   support;
 - the top-level attached browser tab, not an iframe; and
@@ -239,17 +276,22 @@ use:
 A disposable local candidate may be built from the exact source, run on
 `127.0.0.1:8080` against a uniquely named PostgreSQL database, and exposed with
 an official checksum-verified `cloudflared tunnel --no-autoupdate --url
-http://127.0.0.1:8080`. Set `GEZERAH_PUBLIC_ORIGIN` to the resulting HTTPS
-origin, treat it as public while alive, and require `/api/health` through that
-origin to return `ok:true`. Do not expose the normal `./run.sh` Vite/backend pair
-or reuse development or hosted data.
+http://127.0.0.1:8080`. Set `WROUGHT_PUBLIC_ORIGIN` to the resulting HTTPS
+origin, treat it as public while alive, and require `/wrought/api/health`
+through that origin to return `ok:true`. The candidate Home is
+`<origin>/wrought`; the origin value itself never contains `/wrought`. Do not
+expose the normal `./run.sh` Vite/backend pair or reuse development or hosted
+data.
 
 #### Stable scenario
 
 The acceptance participant performs only these actions:
 
-1. Open the candidate's Home page and choose **Open in ChatGPT**.
-2. Sign in to Gezerah in the attached browser tab if required.
+1. Open the candidate's Wrought Home page at `<origin>/wrought` and choose
+   **Open in ChatGPT**. For the canonical deployed candidate this is
+   `https://joeytan.dev/wrought`, and the requested attached page must be
+   `https://joeytan.dev/wrought/play/new`.
+2. Sign in to Wrought in the attached browser tab if required.
 3. Send the prefilled starter prompt with its final
    `My play preference: surprise me.` line unchanged. A run may separately
    exercise a replacement preference, but the normative case requires no setup
@@ -264,7 +306,7 @@ browser operation:
 1. use the ready Start surface to call `inspect_world_templates`, choose from the
    complete three-template catalog, and call `copy_world_template`;
 2. continue in the same conversation while the same attached tab navigates to
-   `/play/{world_id}` and the Play surface becomes ready;
+   `/wrought/play/{world_id}` and the Play surface becomes ready;
 3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again,
    read the relevant `read_play_handbook` topics, and `present_problem`;
 4. for each of the three participant responses, record it with `submit_action`,
@@ -275,16 +317,19 @@ browser operation:
 
 A run passes only when all of the following are observed:
 
-- the Home launch navigates to `chatgpt.com`, and the exact Start page is
-  attached in one conversation;
-- authentication is the participant's only manual Gezerah operation;
+- the Home launch navigates to `chatgpt.com`, and the exact absolute Start page
+  for the candidate's `/wrought/play/new` route is attached in one conversation;
+- authentication is the participant's only manual Wrought operation;
 - site-tool support and readiness are established on both Start and Play pages;
 - ChatGPT makes zero browser-control requests and asks zero setup questions
   after the prefilled play preference is sent;
 - Start-to-Play navigation happens in the same attached browser tab;
-- the first Problem establishes concrete, innocuous details filtered through
-  visible Character information without private thoughts, hidden facts,
-  invented privileged Mechanics, or exhaustive suggested Actions;
+- the first Problem opens with a short expositional statement saying who the
+  selected Character is and what they are currently doing, without repeating
+  that introduction in later Problems, then establishes concrete, innocuous
+  details filtered through visible Character information without private
+  thoughts, hidden facts, invented privileged Mechanics, or exhaustive
+  suggested Actions;
 - the copied template's current prose guide is recognizable across Problems and
   Consequences through diction, rhythm, narrative distance, imagery, and the
   handling of in-world language, without being quoted or mentioned as an
@@ -337,11 +382,11 @@ word list as a substitute for literary consistency.
 
 If `chatgpt.com` opens but does not honor the attachment request or expose the
 required Site-tool support, record the run as blocked at that boundary. Do not
-substitute the desktop app or a participant-operated Gezerah flow for the web
+substitute the desktop app or a participant-operated Wrought flow for the web
 acceptance candidate.
 
 Any assistant-authored request to click, navigate, copy, select, take control,
-or otherwise operate Gezerah is a failure. A platform-owned authentication or
+or otherwise operate Wrought is a failure. A platform-owned authentication or
 safety control is not an assistant-authored browser-control request. Classify a
 run as blocked rather than failed only when the acceptance environment or
 external ChatGPT availability prevents the scenario from reaching the behavior
@@ -408,7 +453,11 @@ PostgreSQL integration fixture. They cover:
 
 - configuration precedence and log levels;
 - strict JSON and the error envelope;
-- static-file/SPA routing and panic recovery;
+- exact `/wrought` static/SPA routing, root-site extensionless `.html`
+  aliases, deterministic HTML/JavaScript/CSS/Markdown/text MIME types,
+  query-preserving directory redirects without directory listings, and panic
+  recovery; the root-site tests also prove that `CNAME` and `.nojekyll` are not
+  served;
 - API Mechanic values and exact numeric transport;
 - interaction mappings and generated IDs;
 - archived-mechanic and dependency guards;
@@ -454,7 +503,8 @@ API adapter, and backend-independent view rendering:
   and reset behavior;
 - password minimum-length behavior;
 - invite/world route parsing, URL encoding, default sections, selected mechanic
-  round trips and unknown-route rejection;
+  round trips, fixed `/wrought` prefixing, and rejection of unprefixed or
+  lookalike routes;
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown;
@@ -552,7 +602,7 @@ claim lifecycle-journey evidence.
 
 `test/specs/integrations/delegated-start.site-tools.spec.ts` is the automated
 site-tool page integration. It installs a controlled browser WebMCP harness,
-starts from authenticated `/play/new`, invokes the complete Start surface,
+starts from authenticated `/wrought/play/new`, invokes the complete Start surface,
 requires same-tab navigation, invokes the Play
 inspect/claim/inspect/read-handbook/present/submit/resolve sequence, presents the
 next Problem, reloads, and checks durable agreement. It also proves that no
@@ -572,11 +622,11 @@ When invoked through `./ci.sh e2e`, Playwright global setup:
 1. creates `test/artifacts` and removes stale runtime metadata;
 2. validates the prebuilt binary supplied by the root validator; that binary
    already embeds the production frontend from the same invocation;
-3. creates a unique database named `gezerah_e2e_<timestamp>_<random>`;
+3. creates a unique database named `wrought_e2e_<timestamp>_<random>`;
 4. selects a free loopback port;
 5. starts the application with debug logging and the disposable URL as its
    exact public origin;
-6. waits up to 10 seconds for `/api/health`;
+6. waits up to 10 seconds for `/wrought/api/health`;
 7. writes the base URL and disposable database URL to ignored runtime metadata,
    created with mode `0600`.
 
@@ -599,9 +649,9 @@ scenario/journey runtime, and must not be used by the UI-authentic spine.
 
 Database URL precedence is:
 
-1. `GEZERAH_TEST_DATABASE_URL`;
-2. `GEZERAH_E2E_ADMIN_DATABASE_URL`;
-3. `GEZERAH_DATABASE_URL`;
+1. `WROUGHT_TEST_DATABASE_URL`;
+2. `WROUGHT_E2E_ADMIN_DATABASE_URL`;
+3. `WROUGHT_DATABASE_URL`;
 4. `postgres://localhost:5432/postgres?sslmode=disable`.
 
 The harness rewrites the selected URL's database path to `/postgres` for admin
@@ -615,7 +665,7 @@ The E2E launcher tries, in order:
 2. common system Chrome/Chromium locations for the platform;
 3. `bunx playwright install chromium`.
 
-The Playwright config reads `GEZERAH_E2E_BROWSER_EXECUTABLE`, but the custom launcher
+The Playwright config reads `WROUGHT_E2E_BROWSER_EXECUTABLE`, but the custom launcher
 performs the discovery sequence before starting Playwright. A discovered system
 browser replaces the configured value; if no bundled or system browser exists,
 the launcher installs Chromium before it can proceed. The variable is therefore
@@ -653,7 +703,7 @@ Playwright result as `agent-facilitator-command-database-trace` as well as
 written at the path above.
 
 Deployment verification records are separate from test artifacts. They live at
-`.gezerah/deployments/`, are ignored by Git, and contain only allowlisted
+`.wrought/deployments/`, are ignored by Git, and contain only allowlisted
 project/service IDs and names, whether CI passed/was skipped/was not run,
 deployment state, manifest and database-volume facts, public URL, check
 measurements, and timestamps. Deploy records identify the clean commit
@@ -675,7 +725,7 @@ sidecar:
 ```
 
 Passing required runs do not record trace or video. Set
-`GEZERAH_E2E_DIAGNOSTICS=1` on a direct diagnostic run to retain both on failure;
+`WROUGHT_E2E_DIAGNOSTICS=1` on a direct diagnostic run to retain both on failure;
 the root performance-gated target deliberately keeps them off.
 
 ## Fast local iteration
@@ -737,7 +787,7 @@ applicable.
 
 Exercise an empty database through E2E. The migration-history test accepts only
 prefixes of the full `001`–current chain, and focused SQL contracts assert the
-current schema behavior. Set `GEZERAH_TEST_DATABASE_URL` only to a database that
+current schema behavior. Set `WROUGHT_TEST_DATABASE_URL` only to a database that
 can be destroyed or modified without consequence.
 
 ## Current gaps
@@ -749,4 +799,6 @@ can be destroyed or modified without consequence.
 - no accessibility audit such as axe;
 - no Firefox, WebKit, mobile, or retry project;
 - no load, proxy/multi-replica, long-duration SSE soak, fault-injection, or
-  backup/restore tests.
+  backup/restore tests;
+- no exhaustive byte-for-byte test of every file in the vendored personal-site
+  snapshot; deployed smoke verifies the home shell and association file only.

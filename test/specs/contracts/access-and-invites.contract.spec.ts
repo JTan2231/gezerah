@@ -55,25 +55,31 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
   );
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Private World ${unique}` },
     owner.id,
   );
 
   expect(
     (
-      await getJSON<WorldResponse[]>(request, `${baseURL}/api/worlds`, owner.id)
+      await getJSON<WorldResponse[]>(
+        request,
+        `${baseURL}/wrought/api/worlds`,
+        owner.id,
+      )
     ).map((item) => item.id),
   ).toEqual([world.id]);
   expect(
     await getJSON<WorldResponse[]>(
       request,
-      `${baseURL}/api/worlds`,
+      `${baseURL}/wrought/api/worlds`,
       outsider.id,
     ),
   ).toEqual([]);
   await expectAPIError(
-    await actorRequest(outsider.id).get(`${baseURL}/api/worlds/${world.id}`),
+    await actorRequest(outsider.id).get(
+      `${baseURL}/wrought/api/worlds/${world.id}`,
+    ),
     403,
     "world_forbidden",
   );
@@ -92,8 +98,8 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     owner.id,
     "editor",
   );
-  expect(playerInvite.join_path).toMatch(/^\/play\/invite\//);
-  expect(editorInvite.join_path).toMatch(/^\/build\/invite\//);
+  expect(playerInvite.join_path).toMatch(/^\/wrought\/play\/invite\//);
+  expect(editorInvite.join_path).toMatch(/^\/wrought\/build\/invite\//);
   const playerToken = required(
     playerInvite.join_path?.split("/").at(-1),
     "player invite token",
@@ -105,7 +111,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
 
   const listedInvites = await getJSON<InviteResponse[]>(
     request,
-    `${baseURL}/api/worlds/${world.id}/invites`,
+    `${baseURL}/wrought/api/worlds/${world.id}/invites`,
     owner.id,
   );
   expect(listedInvites).toHaveLength(2);
@@ -119,18 +125,18 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
     world_name: string;
     role: string;
     invited_by_display_name: string;
-  }>(request, `${baseURL}/api/world-invites/${playerToken}`, player.id);
+  }>(request, `${baseURL}/wrought/api/world-invites/${playerToken}`, player.id);
   expect(preview).toMatchObject({ world_name: world.name, role: "player" });
 
   const joinedPlayer = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/world-invites/${playerToken}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${playerToken}/redeem`,
     undefined,
     player.id,
   );
   const joinedEditor = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/world-invites/${editorToken}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${editorToken}/redeem`,
     undefined,
     editor.id,
   );
@@ -149,7 +155,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
 
   await expectAPIError(
     await actorRequest(player.id).post(
-      `${baseURL}/api/worlds/${world.id}/invites`,
+      `${baseURL}/wrought/api/worlds/${world.id}/invites`,
       {
         data: { role: "player", expires_in_days: 7 },
         headers: actorMutationHeaders(player.id),
@@ -161,12 +167,12 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
 
   const ownerBeforeDenial = await getJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}`,
     owner.id,
   );
   await expectAPIError(
     await actorRequest(editor.id).post(
-      `${baseURL}/api/worlds/${world.id}/archive`,
+      `${baseURL}/wrought/api/worlds/${world.id}/archive`,
       {
         data: { expected_revision: ownerBeforeDenial.revision },
         headers: actorMutationHeaders(editor.id),
@@ -178,7 +184,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
   expect(
     await getJSON<WorldResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}`,
+      `${baseURL}/wrought/api/worlds/${world.id}`,
       owner.id,
     ),
   ).toMatchObject({
@@ -189,20 +195,20 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
 
   await postJSON<InviteResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/invites/${playerInvite.id}/revoke`,
+    `${baseURL}/wrought/api/worlds/${world.id}/invites/${playerInvite.id}/revoke`,
     undefined,
     owner.id,
   );
   await expectAPIError(
     await actorRequest(outsider.id).get(
-      `${baseURL}/api/world-invites/${playerToken}`,
+      `${baseURL}/wrought/api/world-invites/${playerToken}`,
     ),
     404,
     "invite_not_found",
   );
   await expectAPIError(
     await actorRequest(outsider.id).post(
-      `${baseURL}/api/world-invites/${playerToken}/redeem`,
+      `${baseURL}/wrought/api/world-invites/${playerToken}/redeem`,
       { headers: actorMutationHeaders(outsider.id) },
     ),
     404,
@@ -210,7 +216,7 @@ test("contract: invitation secrecy, admission, authorization, and revocation", a
   );
   await expectAPIError(
     await actorRequest(outsider.id).get(
-      `${baseURL}/api/world-invites/not-a-real-token`,
+      `${baseURL}/wrought/api/world-invites/not-a-real-token`,
     ),
     404,
     "invite_not_found",
@@ -234,7 +240,7 @@ async function createInvite(
 ): Promise<InviteResponse> {
   return postJSON<InviteResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/invites`,
+    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     ownerID,
   );

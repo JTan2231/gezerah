@@ -1,11 +1,15 @@
 # Operations
 
-> **Current state (2026-08-31):** Gezerah is deployed on Railway at
-> <https://gezerah.com>, backed by a
-> managed PostgreSQL service that was created fresh for this target. Railway
-> names the environment `production`; that provider name is not a declaration
-> of public-production readiness. This runbook governs the active preview, while
-> the separate public-release gate remains closed.
+> **Cutover state (2026-09-02):** Wrought's intended canonical application URL
+> is <https://joeytan.dev/wrought>. The DNS and Railway rename/cutover have not
+> yet been verified: `joeytan.dev` still serves GitHub Pages and `/wrought`
+> returns 404, while the active Railway release still has its pre-rename names,
+> domains, manifest, and `/api/health` path. The post-cutover target below uses
+> one Railway web service for the whole host, with the personal-site snapshot at
+> root paths and Wrought at the exact `/wrought` mount. Do not describe that
+> target as live until the verification steps in this runbook pass. Railway's
+> environment name `production` is not a declaration of public-production
+> readiness; the separate public-release gate remains closed.
 
 In this runbook, **deploy** means changing the active Railway preview through the
 operator-initiated `deploy.sh` path. Publishing the repository's source does not
@@ -14,14 +18,16 @@ production.
 
 ## Deployable artifact
 
-Gezerah deploys as one statically built Go application plus PostgreSQL. The
-browser assets are compiled by Vite into `web/static` and embedded in the Go
-binary. That binary:
+Wrought deploys as one statically built Go application plus PostgreSQL. The
+browser assets are compiled by Vite into `web/static`; the personal site is a
+tracked snapshot under `web/site`. Both are embedded in the Go binary. That
+binary:
 
 - connects to PostgreSQL;
 - applies all pending migrations before listening;
-- serves API/SSE routes;
-- serves the embedded SPA and assets;
+- serves Wrought API/SSE routes below `/wrought/api`;
+- serves the embedded Wrought SPA below `/wrought` and the personal-site
+  snapshot at the remaining root paths;
 - logs structured JSON to stdout;
 - attempts bounded HTTP shutdown on termination signals.
 
@@ -32,27 +38,28 @@ cd web/frontend
 bun install --frozen-lockfile
 bun run build
 cd ../..
-CGO_ENABLED=0 go build -trimpath -o out ./cmd/gezerah
+CGO_ENABLED=0 go build -trimpath -o out ./cmd/wrought
 ```
 
-Building Go before Vite embeds only the tracked placeholder and produces a
-binary whose SPA routes return 503.
+Building Go before Vite embeds only the tracked Wrought placeholder and
+produces a binary whose Wrought SPA routes return 503. The tracked personal-site
+snapshot is independent of that generated output.
 
 ## Runtime configuration
 
 | Variable                  | Default/precedence                 | Operational use                                                                                       |
 | ------------------------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `GEZERAH_ADDR`            | Preferred; `:8080` default         | Bind address.                                                                                         |
-| `PORT`                    | Fallback when `GEZERAH_ADDR` unset | Hosting-provider port.                                                                                |
-| `GEZERAH_DATABASE_URL`    | Preferred                          | PostgreSQL URL.                                                                                       |
+| `WROUGHT_ADDR`            | Preferred; `:8080` default         | Bind address.                                                                                         |
+| `PORT`                    | Fallback when `WROUGHT_ADDR` unset | Hosting-provider port.                                                                                |
+| `WROUGHT_DATABASE_URL`    | Preferred                          | PostgreSQL URL.                                                                                       |
 | `DATABASE_URL`            | Fallback                           | Hosting-provider database URL.                                                                        |
-| `GEZERAH_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
-| `GEZERAH_PUBLIC_ORIGIN`   | Request origin                     | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
+| `WROUGHT_LOG_LEVEL`       | `info`                             | `debug`, `info`, `warn`/`warning`, `error`.                                                           |
+| `WROUGHT_PUBLIC_ORIGIN`   | Request origin                     | Exact browser origin for unsafe/auth requests; HTTP is loopback-only and other origins require HTTPS. |
 | `OPENAI_API_KEY`          | Empty                              | Enables Terra and Luna calls through the OpenAI Responses API.                                        |
-| `GEZERAH_OPENAI_BASE_URL` | Official OpenAI API                | Optional Responses API base URL override.                                                             |
+| `WROUGHT_OPENAI_BASE_URL` | Official OpenAI API                | Optional Responses API base URL override.                                                             |
 
 If neither database variable is set, the final fallback is
-`postgres://localhost:5432/gezerah?sslmode=disable`. This is intended for local
+`postgres://localhost:5432/wrought?sslmode=disable`. This is intended for local
 development; a deployed process with no database variable would try that local
 address rather than fail configuration parsing. Unknown log-level values also
 silently select `info`.
@@ -61,12 +68,15 @@ The binary's default bind address `:8080` listens on all interfaces, but an
 unset public origin permits HTTP authentication only when both the request host
 and network peer are loopback. `./run.sh` instead binds its Vite-facing backend
 to `127.0.0.1:8080` and supplies
-`GEZERAH_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
+`WROUGHT_PUBLIC_ORIGIN=http://127.0.0.1:5173` unless the variable is already set.
 Configuration rejects a non-loopback HTTP public origin and also rejects a
-wildcard listener paired with a loopback HTTP origin. For every deployment,
-set `GEZERAH_PUBLIC_ORIGIN` to the exact external HTTPS origin (scheme and authority, with no
-path/query/fragment); this is required when a reverse proxy changes the request
-host and ensures the `Secure` `__Host-gezerah_session` cookie is issued.
+wildcard listener paired with a loopback HTTP origin. For the canonical
+deployment, set `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`. This value is the
+exact external HTTPS origin—scheme and authority only, with no path, query, or
+fragment. The public application URL is separately fixed at
+`https://joeytan.dev/wrought`. This distinction is required when a reverse
+proxy changes the request host and ensures the `Secure`
+`__Host-wrought_session` cookie is issued.
 
 Treat database URLs and `OPENAI_API_KEY` as secrets. The application does not
 read secret files or rotate credentials. Supply them through the deployment
@@ -85,9 +95,9 @@ Startup is fail-fast:
 2. create/ping database pool;
 3. take migration advisory lock and apply pending migrations;
 4. construct routes/static filesystem;
-5. bind and log `Gezerah listening`.
+5. bind and log `Wrought listening`.
 
-`GET /api/health` performs a fresh database ping with a two-second deadline:
+`GET /wrought/api/health` performs a fresh database ping with a two-second deadline:
 
 - `200` with `ok` and a timestamp when reachable;
 - `503 database_unavailable` otherwise.
@@ -150,28 +160,152 @@ At minimum, alert on restart loops, health failures, elevated 5xx/409 rates,
 database connection saturation, database storage, and migration duration. Be
 careful not to add private notes or player action text to telemetry.
 
+## Combined-host topology and cutover
+
+Railway custom domains bind a hostname, not a URL path. Directing
+`joeytan.dev` to Railway therefore directs the whole host, not only
+`/wrought`. The web service preserves the existing personal site by embedding a
+reviewed snapshot copied from `/Users/joey/ts/jtan2231.github.io` at revision
+`d0a73a4` into `web/site/`.
+
+The combined server owns these route families:
+
+| Public path                                                                               | Content                                       |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------- |
+| `/`, `/index`, `/index.html`                                                              | Personal-site home page.                      |
+| `/.well-known/apple-app-site-association`                                                 | Apple app-site association JSON.              |
+| `/annals/`, `/annals/index`, `/annals/index.html`, `/annals/main.js`, `/annals/style.css` | Annals static application.                    |
+| `/bio-prompt.md`                                                                          | Personal-site source document.                |
+| `/llms.txt`                                                                               | Root LLM index.                               |
+| `/llms/*.md`                                                                              | Vendored LLM-readable documents listed below. |
+| `/plaid/oauth`, `/plaid/oauth.html`                                                       | Plaid OAuth return page.                      |
+| `/privacy-policy`, `/privacy-policy.html`                                                 | Personal-site privacy policy.                 |
+| `/wrought` and `/wrought/**`                                                              | Wrought SPA, assets, and `/wrought/api/**`.   |
+
+The tracked `/llms` documents are exactly:
+
+- `/llms/github-jtan2231.md`;
+- `/llms/joeytan-dev-annals.md`;
+- `/llms/joeytan-dev-bio-prompt.md`;
+- `/llms/joeytan-dev-home.md`;
+- `/llms/linkedin-joseph-tan.md`;
+- `/llms/stet.md`;
+- `/llms/substack-ai-prompting-as-policy-drafting.md`;
+- `/llms/substack-designing-a-prompt.md`; and
+- `/llms/substack-legibility.md`.
+
+The product prefix is exact. `/wrought` and `/wrought/` are Wrought Home;
+unprefixed `/play` or `/build` and lookalikes such as `/wroughtly` are not
+Wrought routes. Unknown personal-site files return 404 rather than falling back
+to the product SPA. A root-site request whose exact path is absent may resolve
+to the corresponding tracked `.html` file without redirecting; this provides
+the extensionless aliases listed above. The server assigns deterministic MIME
+types to HTML, JavaScript, CSS, Markdown, and text files, while the Apple
+association route is explicitly JSON.
+
+Requests for a tracked directory without its trailing slash receive a
+deterministic `301` to the slash form and preserve the raw query string. A
+directory with no `index.html` then returns 404 instead of exposing a directory
+listing. `CNAME` and `.nojekyll` are GitHub Pages source-host controls: they are
+intentionally neither vendored under `web/site/` nor served by the combined
+binary.
+
+The root site and Wrought share the browser origin `https://joeytan.dev`.
+Path prefixes do not isolate cookies or JavaScript authority: every root-site
+script is trusted code relative to an authenticated Wrought session. Review
+snapshot changes as product-security changes and see
+[Security](security.md#combined-host-origin) before adding scripts, dynamic
+handlers, third-party content, or user-authored HTML anywhere on the host.
+
+The pre-cutover observation recorded on 2026-09-02 is the rollback baseline:
+
+- `joeytan.dev` has GitHub Pages IPv4 records
+  `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, and
+  `185.199.111.153`;
+- its IPv6 records are `2606:50c0:8000::153`,
+  `2606:50c0:8001::153`, `2606:50c0:8002::153`, and
+  `2606:50c0:8003::153`;
+- it has no CNAME answer and retains a GitHub ownership TXT record;
+- HTTPS `/` returns the GitHub Pages site, while `/wrought` returns 404; and
+- Railway now has `WROUGHT_DATABASE_URL` set byte-for-byte equal to the
+  pre-rename application reference, selecting `/scryer`, and
+  `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev`. They were applied without
+  triggering a deployment. Its generic `DATABASE_URL` still selects a
+  different `/railway` database and must not supersede the Wrought-specific
+  value.
+
+Re-resolve and re-record the authoritative DNS immediately before changing it;
+the values above are evidence for this observation, not permission to overwrite
+a later owner change.
+
+Use this order for the one-time host cutover:
+
+1. Record the current GitHub Pages DNS records, Railway variables, active
+   deployment, and database target so each can be restored exactly.
+2. Copy the existing application database reference to
+   `WROUGHT_DATABASE_URL` before deleting any pre-rename variable. Confirm its
+   database pathname remains `/scryer`; do not silently fall back to the
+   Railway service's separate `/railway` database. Set
+   `WROUGHT_PUBLIC_ORIGIN=https://joeytan.dev` at the same time. This safety
+   step was completed without a deployment on 2026-09-02; reverify both values
+   immediately before cutover.
+3. Run `./deploy.sh deploy --pre-dns`. This selects Railway's one generated
+   provider hostname automatically and performs the complete combined-root and
+   Wrought HTTP smoke over HTTPS, including `/wrought/api/health` and built
+   assets. It intentionally omits the browser authentication probe because
+   mutations remain bound to the configured canonical origin.
+4. Add `joeytan.dev` as the Railway web service's custom domain and apply the
+   exact DNS target and ownership records Railway provides. Do not point DNS at
+   a path or assume Railway will preserve GitHub Pages content.
+5. Wait for DNS and certificate readiness, then run `./deploy.sh verify` to
+   verify the same root and Wrought bytes/routes through
+   `https://joeytan.dev`, the exact domain allowlist, and the browser
+   origin/login boundary. Verify secure-cookie issuance and attributes
+   separately with the explicit canary procedure below; the invalid-signin
+   smoke does not issue a session.
+6. Only after those checks pass, remove obsolete branded variables and any
+   provider domain that is intentionally being retired. Preserve the generated
+   domain if it remains part of deployment diagnostics.
+
+To roll back the host cutover, restore the recorded GitHub Pages DNS records,
+then verify the personal-site root and association file from GitHub Pages.
+Redeploy the prior Railway commit and restore its recorded variables if the
+Wrought service must also be rolled back. Because the old host served Wrought
+elsewhere, this combined rollback can make the canonical `/wrought` URL
+temporarily unavailable; communicate that explicitly. Database migrations are
+forward-only, so use the database recovery choices in
+[Backup, restore, and rollback](#backup-restore-and-rollback) when schema or
+data changed.
+
 ## Railway deployment
 
-The active Railway project is `Gezerah`, with environment `production` and
-these existing resources:
+The intended post-cutover Railway target uses project `Wrought`
+(`0bc0c39c-c630-4898-b4af-d7f0ebe459db`) and environment `production`
+(`9f15ee7b-a2b6-4fbb-b6dc-966739a8bc08`) with these resources:
 
-- `gezerah-web`, one public web replica at <https://gezerah.com>, with
-  <https://gezerah-web-production.up.railway.app> as its provider domain;
-- `Postgres`, one managed PostgreSQL replica;
+- `wrought-web` (`73261ce4-d382-41a5-a7ac-64dd71c536ab`), one public web
+  replica with the `joeytan.dev` custom domain and a provider-generated domain;
+- `Postgres` (`beb083b4-4ca6-4b3d-b2df-c429e9746f44`), one managed PostgreSQL
+  replica;
 - `postgres-volume`, a 5 GB persistent database volume.
+
+Railway reports domains at host granularity; the canonical Wrought URL appends
+the fixed path and is `https://joeytan.dev/wrought`. Discover and verify the
+current generated hostname from Railway rather than deriving it from a service
+display name.
 
 The checked-in deployment definition is:
 
 - `railpack.json` selects the Go provider and pins Bun 1.1.42 plus Node
   22.12.0;
-- `railway.toml` performs frozen frontend install/build, then a `CGO_ENABLED=0`
+- `railway.toml` performs a frozen frontend install/build, then a `CGO_ENABLED=0`
   trimmed Go build to `out`;
 - start command is `./out`;
-- health path is `/api/health` with a 30-second timeout;
+- health path is `/wrought/api/health` with a 30-second timeout;
 - configured replica count is one;
 - deployment draining is configured for 15 seconds.
 
-### Scripted release and verification
+### Staged release and verification
 
 `deploy.sh` is an operator-initiated release orchestrator. It requires Bun, Git,
 an authenticated Railway CLI, a checkout linked to the intended project, and
@@ -179,12 +313,35 @@ the project/environment/services/domain/variables to exist already. It does not
 create or reconfigure a Railway project, service, database, volume, domain, or
 variable.
 
-Deploy the current committed revision with the full validation gate and hosted
-checks:
+Before changing DNS for the initial combined-host cutover, deploy the current
+committed revision with the generated-provider, HTTP-only stage:
 
 ```sh
-./deploy.sh
+./deploy.sh deploy --pre-dns
 ```
+
+Here “HTTP-only” means HTTPS requests without a browser run. This stage selects
+the Railway domain set's one generated `*.up.railway.app` hostname and verifies
+the root-site and Wrought HTTP surfaces there. It does not require the canonical
+custom domain to be active, does not run the invalid-signin browser probe, and
+records `releaseStage: "pre-dns"`. `--pre-dns` is valid only with `deploy`; it
+cannot be combined with `verify`.
+
+After DNS and the Railway certificate are ready, normal verify and deploy
+commands use the post-cutover stage:
+
+```sh
+./deploy.sh deploy
+./deploy.sh verify
+```
+
+They require `WROUGHT_DEPLOY_URL` to resolve exactly to
+`https://joeytan.dev/wrought`, require the web service to expose only the
+`joeytan.dev` custom domain plus one generated Railway provider hostname
+aligned with the current service name, and reject leftover custom domains.
+They run the canonical HTTP smoke and, unless `--no-browser` is explicit, the
+browser origin/login-boundary probe. `--no-browser` does not relax the exact
+URL or domain-allowlist gates.
 
 Deploy mode:
 
@@ -200,48 +357,55 @@ Deploy mode:
    release happens to be latest, and prints build/runtime diagnostics on failure;
 6. waits until that deployment is the healthy web release, both services have
    their configured replica running, and the PostgreSQL volume is ready;
-7. verifies the deployed manifest, public HTTPS responses, and real-browser
-   journey described in [Testing](testing.md#deployed-smoke);
+7. chooses the generated-provider or canonical public URL from the declared
+   release stage, verifies the manifest and public HTTPS responses, and runs
+   the real-browser origin/login probe only for the post-cutover stage unless
+   explicitly disabled, as described in [Testing](testing.md#deployed-smoke);
 8. re-reads Railway service state and refuses evidence if the active deployment,
    public URL, replica health, or database-volume health changed during smoke,
    or if another rollout is unresolved;
-9. writes passing, allowlisted evidence to
-   `.gezerah/deployments/<deployment-id>.json` and prints its path.
+9. writes passing, allowlisted schema-v2 evidence, including the explicit
+   `releaseStage` and the manifest's required 30-second health-check timeout, to
+   `.wrought/deployments/<deployment-id>.json` and prints its path.
 
-Inspect the active release without uploading source or running CI with:
-
-```sh
-./deploy.sh verify
-```
-
-Verify records the local checkout only as local context, not as the identity of
-the already-running release. Each passing run writes a distinct
+Verify mode inspects the active release without uploading source or running CI.
+It records the local checkout only as local context, not as the identity of the
+already-running release. Each passing run writes a distinct
 `<deployment-id>.verify.<run-id>.json` record, preserving the original deploy
 record.
 
-Both modes run the HTTP and browser checks by default. `--no-browser` is an
-explicit escape hatch for either mode. Deploy mode alone accepts `--skip-ci`,
-which still requires clean committed source but omits the normal correctness
-gate. Use `./deploy.sh --help` for the accepted forms.
+Every new record sets `schemaVersion: 2`. Its `releaseStage` is
+`pre-dns` or `post-cutover`; the record also retains the allowlisted project,
+service, deployment, URL, HTTP/browser result, and manifest facts, including
+`healthcheckTimeout: 30`. A pre-DNS record has a skipped browser result. A
+post-cutover browser pass proves the canonical origin and anonymous
+login-boundary behavior only: the randomized invalid signin returns 401 and
+does not create a session or prove secure-cookie issuance or attributes.
+
+Post-cutover deploy and verify run the HTTP and browser checks by default.
+`--pre-dns` always disables the browser check; `--no-browser` is an explicit
+post-cutover escape hatch. Deploy mode alone accepts `--skip-ci`, which still
+requires clean committed source but omits the normal correctness gate. Use
+`./deploy.sh --help` for the accepted forms.
 
 The default target identifies the linked Railway project, environment, web
-service, and database service by the display names `Gezerah`, `production`,
-`gezerah-web`, and `Postgres`, then carries their discovered IDs through the
-release. Set `GEZERAH_DEPLOY_PROJECT`, `GEZERAH_DEPLOY_ENVIRONMENT`,
-`GEZERAH_DEPLOY_WEB_SERVICE`, and `GEZERAH_DEPLOY_DATABASE_SERVICE` for an
+service, and database service by the display names `Wrought`, `production`,
+`wrought-web`, and `Postgres`, then carries their discovered IDs through the
+release. Set `WROUGHT_DEPLOY_PROJECT`, `WROUGHT_DEPLOY_ENVIRONMENT`,
+`WROUGHT_DEPLOY_WEB_SERVICE`, and `WROUGHT_DEPLOY_DATABASE_SERVICE` for an
 alternate existing target. The optional matching
-`GEZERAH_DEPLOY_PROJECT_ID`, `GEZERAH_DEPLOY_ENVIRONMENT_ID`,
-`GEZERAH_DEPLOY_WEB_SERVICE_ID`, and
-`GEZERAH_DEPLOY_DATABASE_SERVICE_ID` add immutable identity pins; they have no
-checked-in target-specific defaults. `GEZERAH_DEPLOY_DATABASE_VOLUME` pins the
+`WROUGHT_DEPLOY_PROJECT_ID`, `WROUGHT_DEPLOY_ENVIRONMENT_ID`,
+`WROUGHT_DEPLOY_WEB_SERVICE_ID`, and
+`WROUGHT_DEPLOY_DATABASE_SERVICE_ID` add immutable identity pins; they have no
+checked-in target-specific defaults. `WROUGHT_DEPLOY_DATABASE_VOLUME` pins the
 database service's volume name. The database check also requires no volume
 migration, exactly one ready volume of at least 5 GB mounted at
 `/var/lib/postgresql/data`.
-`GEZERAH_DEPLOY_URL` defaults to <https://gezerah.com> and can assert another
-credential-free exact HTTPS origin, but it must
-be one of the domains Railway reports for the selected web service; it cannot
-redirect evidence to another host.
-`GEZERAH_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
+`WROUGHT_DEPLOY_URL` defaults to <https://joeytan.dev/wrought>. It must be a
+credential-free HTTPS URL with exactly the `/wrought` path. Post-cutover
+verification additionally requires that exact canonical value; pre-DNS deploy
+uses the selected service's generated provider hostname instead.
+`WROUGHT_DEPLOY_TIMEOUT_SECONDS` changes the ten-minute exact-deployment polling
 timeout and accepts 30 through 3600 seconds. Overrides select already-existing
 resources; they do not bootstrap them.
 
@@ -253,13 +417,14 @@ manual rollback. Evidence is written only after all selected checks pass.
 Adding a Railway PostgreSQL service does not by itself inject its variables into
 the application service. Define a reference variable such as
 `DATABASE_URL=${{Postgres.DATABASE_URL}}`, using the actual database service
-name, or set `GEZERAH_DATABASE_URL` to an equivalent reference. Without it, the
+name, or set `WROUGHT_DATABASE_URL` to an equivalent reference. Without it, the
 application falls back to local PostgreSQL and startup fails.
 
-The custom domain uses an apex `ALIAS` in Squarespace DNS plus Railway's
-ownership-verification `TXT` record. `GEZERAH_PUBLIC_ORIGIN` must remain exactly
-`https://gezerah.com`. Squarespace requires DNSSEC to stay disabled while
-the apex `ALIAS` is in use.
+The `joeytan.dev` custom domain must use the exact DNS target and ownership
+records shown by Railway for that domain. Preserve a copy of the prior GitHub
+Pages DNS records for rollback. `WROUGHT_PUBLIC_ORIGIN` must remain exactly
+`https://joeytan.dev`; it is not the canonical application URL and must not
+include `/wrought`.
 
 The checked-in 15-second Railway drain exceeds the application's ten-second
 shutdown deadline. The deployment script verifies that the active manifest
@@ -284,16 +449,17 @@ preparing for broader public use:
    application/schema ordering.
 4. Define and rehearse backup/restore and cutback when the target will hold any
    durable data; confirm Bun/Go versions and that Vite builds before Go.
-5. Set the PostgreSQL reference, exact HTTPS `GEZERAH_PUBLIC_ORIGIN`, expected log
+5. Set the PostgreSQL reference, exact HTTPS `WROUGHT_PUBLIC_ORIGIN`, expected log
    level, TLS/proxy policy, and secret access boundaries.
 6. Verify the checked-in 15-second termination/draining setting is active and
    remains greater than the ten-second application shutdown deadline, then
    deploy one instance and inspect migration, startup, request, and shutdown
    logs.
-7. Beyond the script's health/deep-link/invalid-signin smoke, verify signup,
-   successful signin, `/api/me`, logout revocation, and representative
+7. Beyond the script's personal-site root, association file,
+   health/deep-link/asset/invalid-signin smoke, verify signup,
+   successful signin, `/wrought/api/me`, logout revocation, and representative
    authorized API reads against an explicitly managed canary account.
-8. In a real HTTPS browser, verify `__Host-gezerah_session` is `Secure`, `HttpOnly`,
+8. In a real HTTPS browser, verify `__Host-wrought_session` is `Secure`, `HttpOnly`,
    `SameSite=Lax`, path `/`, and has no `Domain`; verify wrong-origin and
    missing-CSRF mutations fail.
 9. Keep an SSE connection open beyond 130 seconds; verify prompt session
@@ -312,7 +478,7 @@ A hosting platform must provide:
 
 - a Linux or macOS Go binary environment;
 - PostgreSQL with `pgcrypto` and migration privileges;
-- one HTTP port from `GEZERAH_ADDR` or `PORT`;
+- one HTTP port from `WROUGHT_ADDR` or `PORT`;
 - TLS termination/reverse proxy if exposed;
 - persistent database backups;
 - signal delivery and a termination grace period longer than the application's
@@ -436,7 +602,7 @@ pipeline, rebuild Vite, then rebuild/redeploy Go.
 ### SPA route works but an asset is 404
 
 Confirm the requested hashed asset exists in the Vite build embedded in the
-same binary. `/assets/*` intentionally does not fall back to `index.html`.
+same binary. `/wrought/assets/*` intentionally does not fall back to `index.html`.
 
 ### Elevated revision conflicts
 

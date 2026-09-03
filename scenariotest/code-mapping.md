@@ -172,10 +172,10 @@ Root `./ci.sh e2e` validates frontend and backend code, installs test
 dependencies, builds the frontend and Go binary once, runs scenario
 architecture verification, and then starts the browser suite with the verified
 binary. `test/src/appServer.ts` builds only during a direct test-project run
-when `GEZERAH_E2E_APP_BINARY` is absent.
+when `WROUGHT_E2E_APP_BINARY` is absent.
 
 Default CI captures screenshots on failure. Trace and video are disabled unless
-`GEZERAH_E2E_DIAGNOSTICS=1` is explicitly enabled.
+`WROUGHT_E2E_DIAGNOSTICS=1` is explicitly enabled.
 
 The scenario evidence set is:
 

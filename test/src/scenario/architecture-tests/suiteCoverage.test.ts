@@ -192,7 +192,7 @@ describe("whole-suite scenario coverage", () => {
     );
     assert.equal(
       recordFor(goTrace!, {
-        goTestEvents: [{ ...goEvents[0]!, packageName: "gezerah/wrong" }],
+        goTestEvents: [{ ...goEvents[0]!, packageName: "wrought/wrong" }],
       }).result,
       "not-run",
     );

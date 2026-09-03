@@ -19,7 +19,9 @@ export function WorldTemplateLibrary({
   onLogoutAll: () => Promise<void>;
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
-  const templates = useCollection<WorldTemplate>("/api/world-templates");
+  const templates = useCollection<WorldTemplate>(
+    "/wrought/api/world-templates",
+  );
   const siteTools = useWorldTemplateStartTools(navigate);
   const invalidCatalog =
     !templates.loading &&

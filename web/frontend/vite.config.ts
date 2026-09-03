@@ -3,14 +3,14 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
-  base: "/",
+  base: "/wrought/",
   build: {
     outDir: "../static",
     emptyOutDir: true,
   },
   server: {
     proxy: {
-      "/api": "http://localhost:8080",
+      "/wrought/api": "http://localhost:8080",
     },
   },
 });

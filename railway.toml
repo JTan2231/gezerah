@@ -1,10 +1,10 @@
 [build]
 builder = "RAILPACK"
-buildCommand = "cd web/frontend && bun install --frozen-lockfile && bun run build && cd ../.. && CGO_ENABLED=0 go build -trimpath -o out ./cmd/gezerah"
+buildCommand = "cd web/frontend && bun install --frozen-lockfile && bun run build && cd ../.. && CGO_ENABLED=0 go build -trimpath -o out ./cmd/wrought"
 
 [deploy]
 startCommand = "./out"
-healthcheckPath = "/api/health"
+healthcheckPath = "/wrought/api/health"
 healthcheckTimeout = 30
 numReplicas = 1
 drainingSeconds = 15

@@ -45,12 +45,12 @@ export async function startAppServer(options: {
       detached: process.platform !== "win32",
       env: {
         ...process.env,
-        GEZERAH_ADDR: `127.0.0.1:${port}`,
-        GEZERAH_DATABASE_URL: database.url,
-        GEZERAH_LOG_LEVEL: "debug",
-        GEZERAH_PUBLIC_ORIGIN: baseURL,
+        WROUGHT_ADDR: `127.0.0.1:${port}`,
+        WROUGHT_DATABASE_URL: database.url,
+        WROUGHT_LOG_LEVEL: "debug",
+        WROUGHT_PUBLIC_ORIGIN: baseURL,
         OPENAI_API_KEY: "e2e-model-key",
-        GEZERAH_OPENAI_BASE_URL: openAIStubServer.baseURL,
+        WROUGHT_OPENAI_BASE_URL: openAIStubServer.baseURL,
       },
       stdio: ["ignore", "pipe", "pipe"],
     });
@@ -135,8 +135,8 @@ async function prepareApplication(options: {
   });
   reportTiming("fallback frontend build", frontendStartedAt);
 
-  const buildDir = await mkdtemp(path.join(os.tmpdir(), "gezerah-e2e-bin-"));
-  const binaryPath = path.join(buildDir, "gezerah");
+  const buildDir = await mkdtemp(path.join(os.tmpdir(), "wrought-e2e-bin-"));
+  const binaryPath = path.join(buildDir, "wrought");
   try {
     process.stdout.write(
       "\n==> E2E: building application (direct-run fallback)\n",
@@ -144,7 +144,7 @@ async function prepareApplication(options: {
     const backendStartedAt = Date.now();
     await runCommand(
       "go",
-      ["build", "-trimpath", "-o", binaryPath, "./cmd/gezerah"],
+      ["build", "-trimpath", "-o", binaryPath, "./cmd/wrought"],
       {
         cwd: options.repoRoot,
       },
@@ -172,7 +172,7 @@ async function waitForHealth(
       );
     }
     try {
-      const response = await fetch(`${baseURL}/api/health`);
+      const response = await fetch(`${baseURL}/wrought/api/health`);
       if (response.ok) return;
     } catch {
       // Startup and migrations are still in progress.

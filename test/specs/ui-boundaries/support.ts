@@ -102,7 +102,7 @@ export async function createWorld(
 ): Promise<World> {
   return postJSON<World>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name, ...(proseGuide === undefined ? {} : { prose_guide: proseGuide }) },
     ownerID,
   );
@@ -117,7 +117,7 @@ export async function createInvite(
 ): Promise<Invite> {
   return postJSON<Invite>(
     request,
-    `${baseURL}/api/worlds/${worldID}/invites`,
+    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 1 },
     authorID,
   );
@@ -135,7 +135,7 @@ export async function joinWorld(
   const token = required(invite.join_path.split("/").at(-1), "invite token");
   return postJSON<WorldMember>(
     request,
-    `${baseURL}/api/world-invites/${token}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
     undefined,
     userID,
   );
@@ -156,7 +156,7 @@ export async function putCharacterFields(
 ): Promise<CharacterFieldSet> {
   return putJSON<CharacterFieldSet>(
     request,
-    `${baseURL}/api/worlds/${worldID}/character-fields`,
+    `${baseURL}/wrought/api/worlds/${worldID}/character-fields`,
     { expected_revision: expectedRevision, fields },
     ownerID,
   );
@@ -172,7 +172,7 @@ export async function createEntity(
 ): Promise<Entity> {
   return postJSON<Entity>(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities`,
+    `${baseURL}/wrought/api/worlds/${worldID}/entities`,
     {
       display_name: displayName,
       controller_world_membership_ids: controllerMembershipIDs,
@@ -192,7 +192,7 @@ export async function replaceControllers(
 ): Promise<void> {
   await putJSON(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/controllers`,
+    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/controllers`,
     {
       expected_roster_revision: expectedRosterRevision,
       controller_world_membership_ids: controllerMembershipIDs,
@@ -210,7 +210,7 @@ export async function readProfile(
 ): Promise<EntityProfile> {
   return getJSON<EntityProfile>(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
     actorID,
   );
 }
@@ -226,7 +226,7 @@ export async function putProfile(
 ): Promise<EntityProfile> {
   return putJSON<EntityProfile>(
     request,
-    `${baseURL}/api/worlds/${worldID}/entities/${entityID}/profile`,
+    `${baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/profile`,
     {
       expected_revision: profile.revision,
       expected_character_field_set_revision:
@@ -247,7 +247,7 @@ export async function createInputMechanic(
 ): Promise<MechanicMutation> {
   return postJSON<MechanicMutation>(
     request,
-    `${baseURL}/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
     {
       kind: "capacity",
       mode: "score",
@@ -274,7 +274,7 @@ export async function createDerivedMechanic(
 ): Promise<MechanicMutation> {
   return postJSON<MechanicMutation>(
     request,
-    `${baseURL}/api/worlds/${worldID}/mechanics`,
+    `${baseURL}/wrought/api/worlds/${worldID}/mechanics`,
     {
       kind: "capacity",
       mode: "score",
@@ -303,7 +303,7 @@ export async function createOpenInteraction(
 ): Promise<Interaction> {
   return postJSON<Interaction>(
     request,
-    `${baseURL}/api/worlds/${worldID}/interactions`,
+    `${baseURL}/wrought/api/worlds/${worldID}/interactions`,
     {
       present: true,
       prompt,
@@ -325,7 +325,7 @@ export async function postAction(
 ): Promise<InteractionAction> {
   return postJSON<InteractionAction>(
     request,
-    `${baseURL}/api/worlds/${worldID}/interactions/${interaction.id}/actions`,
+    `${baseURL}/wrought/api/worlds/${worldID}/interactions/${interaction.id}/actions`,
     {
       text,
       expected_revision: interaction.revision,
@@ -343,7 +343,11 @@ export async function readWorld(
   worldID: string,
   actorID: string,
 ): Promise<World> {
-  return getJSON<World>(request, `${baseURL}/api/worlds/${worldID}`, actorID);
+  return getJSON<World>(
+    request,
+    `${baseURL}/wrought/api/worlds/${worldID}`,
+    actorID,
+  );
 }
 
 export async function getJSON<T>(

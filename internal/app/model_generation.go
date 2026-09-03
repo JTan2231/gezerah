@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	openaiapi "github.com/JTan2231/gezerah/internal/openai"
-	"github.com/JTan2231/gezerah/internal/rules"
+	openaiapi "github.com/JTan2231/wrought/internal/openai"
+	"github.com/JTan2231/wrought/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )

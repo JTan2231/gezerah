@@ -53,7 +53,7 @@ jobs:
 
       - name: Run repository validation
         env:
-          GEZERAH_E2E_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
+          WROUGHT_E2E_ADMIN_DATABASE_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres?sslmode=disable
         run: ./ci.sh
 
   secrets:

@@ -2,8 +2,8 @@
 set -eu
 
 repo_root="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-state_dir="${GEZERAH_RUN_STATE_DIR:-$repo_root/.gezerah/run}"
-log_dir="${GEZERAH_RUN_LOG_DIR:-$repo_root/.gezerah/log}"
+state_dir="${WROUGHT_RUN_STATE_DIR:-$repo_root/.wrought/run}"
+log_dir="${WROUGHT_RUN_LOG_DIR:-$repo_root/.wrought/log}"
 
 usage() {
 	cat <<'EOF'
@@ -70,10 +70,10 @@ process_alive() {
 probe_service() {
 	case "$1" in
 	backend)
-		curl -fsS --max-time 1 http://127.0.0.1:8080/api/health >/dev/null 2>&1
+		curl -fsS --max-time 1 http://127.0.0.1:8080/wrought/api/health >/dev/null 2>&1
 		;;
 	frontend)
-		curl -fsS --max-time 1 http://127.0.0.1:5173/ >/dev/null 2>&1
+		curl -fsS --max-time 1 http://127.0.0.1:5173/wrought >/dev/null 2>&1
 		;;
 	esac
 }
@@ -81,10 +81,10 @@ probe_service() {
 display_url() {
 	case "$1" in
 	backend)
-		printf 'http://localhost:8080\n'
+		printf 'http://localhost:8080/wrought\n'
 		;;
 	frontend)
-		printf 'http://127.0.0.1:5173\n'
+		printf 'http://127.0.0.1:5173/wrought\n'
 		;;
 	esac
 }
@@ -146,29 +146,29 @@ start_backend() {
 		return 0
 	fi
 
-	backend_addr="${GEZERAH_ADDR:-127.0.0.1:8080}"
-	backend_public_origin="${GEZERAH_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
+	backend_addr="${WROUGHT_ADDR:-127.0.0.1:8080}"
+	backend_public_origin="${WROUGHT_PUBLIC_ORIGIN:-http://127.0.0.1:5173}"
 	case "$backend_addr" in
 	localhost:8080 | 127.0.0.1:8080)
 		;;
 	*)
-		printf 'GEZERAH_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
+		printf 'WROUGHT_ADDR=%s does not match the Vite proxy target http://localhost:8080\n' "$backend_addr" >&2
 		return 1
 		;;
 	esac
 
 	backend_dir="$state_dir/backend"
-	backend_bin="$backend_dir/gezerah"
+	backend_bin="$backend_dir/wrought"
 	backend_log="$(log_path backend)"
 	mkdir -p "$backend_dir"
 
 	printf 'Building backend\n'
-	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/gezerah)
+	(cd "$repo_root" && go build -o "$backend_bin" ./cmd/wrought)
 	printf '\n==> backend start %s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >>"$backend_log"
 	(
 		cd "$repo_root"
-		GEZERAH_ADDR="$backend_addr" \
-			GEZERAH_PUBLIC_ORIGIN="$backend_public_origin" \
+		WROUGHT_ADDR="$backend_addr" \
+			WROUGHT_PUBLIC_ORIGIN="$backend_public_origin" \
 			nohup "$backend_bin" >>"$backend_log" 2>&1 </dev/null &
 		printf '%s\n' "$!" >"$(pid_path backend)"
 	)

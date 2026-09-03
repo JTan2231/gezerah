@@ -51,7 +51,7 @@ export function useWorldTemplateStartTools(
       modelContext,
       tools,
       controller.signal,
-      "Reinspect the current Start page and retry with the complete World catalog. Do not ask the participant to operate Gezerah.",
+      "Reinspect the current Start page and retry with the complete World catalog. Do not ask the participant to operate Wrought.",
     ).then((result) => {
       const completed = completeSiteToolRegistration(
         controller,
@@ -77,7 +77,7 @@ export function createWorldTemplateStartTools(
     {
       name: "inspect_world_templates",
       description:
-        "Read Gezerah's complete ready-made World catalog, including how each World's scenes are written. Use the player's single stated play preference—setting, Character, tone, or difficult choices—to recommend the closest match without asking setup questions or asking the participant to operate Gezerah.",
+        "Read Wrought's complete ready-made World catalog, including how each World's scenes are written. Use the player's single stated play preference—setting, Character, tone, or difficult choices—to recommend the closest match without asking setup questions or asking the participant to operate Wrought.",
       inputSchema: {
         type: "object",
         properties: {},
@@ -92,7 +92,7 @@ export function createWorldTemplateStartTools(
         return {
           world_templates: worldTemplates,
           next_step:
-            "Compare the settings, Characters, descriptions, and prose guides against the player's single stated play preference. Recommend the best match, then copy that World. Do not ask another setup question or ask the participant to operate Gezerah.",
+            "Compare the settings, Characters, descriptions, and prose guides against the player's single stated play preference. Recommend the best match, then copy that World. Do not ask another setup question or ask the participant to operate Wrought.",
         };
       },
     },
@@ -126,7 +126,7 @@ export function createWorldTemplateStartTools(
           destinationWorldIDs.set(templateID, destinationWorldID);
         }
         const world = await api<World>(
-          `/api/world-templates/${encodeURIComponent(templateID)}/clone`,
+          `/wrought/api/world-templates/${encodeURIComponent(templateID)}/clone`,
           {
             method: "POST",
             signal: requestSignal,
@@ -157,9 +157,12 @@ export function createWorldTemplateStartTools(
 async function loadCompleteCatalog(
   signal: AbortSignal,
 ): Promise<WorldTemplate[]> {
-  const worldTemplates = await api<WorldTemplate[]>("/api/world-templates", {
-    signal,
-  });
+  const worldTemplates = await api<WorldTemplate[]>(
+    "/wrought/api/world-templates",
+    {
+      signal,
+    },
+  );
   if (worldTemplates.length !== 3)
     throw new SiteToolUsageError(
       "The complete set of three ready-made Worlds is not available.",

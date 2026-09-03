@@ -160,7 +160,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Agent Contract ${unique}` },
     owner.id,
   );
@@ -183,7 +183,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const mechanic = await postJSON<MechanicMutationResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/mechanics`,
+    `${baseURL}/wrought/api/worlds/${world.id}/mechanics`,
     {
       kind: "capacity",
       mode: "pool",
@@ -201,20 +201,20 @@ test("Agent-facilitator command contract: current-player authority is used witho
   );
   const preset = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     { display_name: `Mira Quill ${unique}` },
     owner.id,
   );
   const otherPreset = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     { display_name: `Orin Vale ${unique}` },
     owner.id,
   );
 
   const agentWorld = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
     { source: "agent", expected_revision: world.revision },
     owner.id,
   );
@@ -240,14 +240,14 @@ test("Agent-facilitator command contract: current-player authority is used witho
     expect(
       await getJSON<EntityResponse[]>(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities`,
+        `${baseURL}/wrought/api/worlds/${world.id}/entities`,
         player.id,
       ),
     ).toEqual([]);
     await expectAPIError(
       await getAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/sheet`,
+        `${baseURL}/wrought/api/worlds/${world.id}/entities/${preset.id}/sheet`,
         player.id,
       ),
       403,
@@ -256,7 +256,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
     await expectAPIError(
       await getAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/interactions`,
+        `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
         player.id,
       ),
       403,
@@ -265,7 +265,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
     const available = await getJSON<AvailableEntitiesResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/available-entities`,
+      `${baseURL}/wrought/api/worlds/${world.id}/available-entities`,
       player.id,
     );
     expect(available.roster_revision).toBe(agentWorld.roster_revision);
@@ -279,7 +279,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
     await expectAPIError(
       await getAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/available-entities`,
+        `${baseURL}/wrought/api/worlds/${world.id}/available-entities`,
         outsider.id,
       ),
       403,
@@ -288,7 +288,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
     await expectAPIError(
       await postAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
+        `${baseURL}/wrought/api/worlds/${world.id}/entities/${preset.id}/claim`,
         { expected_roster_revision: agentWorld.roster_revision },
         spectator.id,
       ),
@@ -299,12 +299,12 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const claimWorld = await getJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}`,
     player.id,
   );
   const claim = await postJSON<EntityClaimResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities/${preset.id}/claim`,
     { expected_roster_revision: claimWorld.roster_revision },
     player.id,
   );
@@ -317,7 +317,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
   expect(
     await getJSON<WorldResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}`,
+      `${baseURL}/wrought/api/worlds/${world.id}`,
       player.id,
     ),
   ).toMatchObject({
@@ -328,7 +328,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
   expect(
     await getJSON<EntitySheetResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/sheet`,
+      `${baseURL}/wrought/api/worlds/${world.id}/entities/${preset.id}/sheet`,
       player.id,
     ),
   ).toMatchObject({
@@ -359,7 +359,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/entities/${preset.id}/claim`,
+      `${baseURL}/wrought/api/worlds/${world.id}/entities/${preset.id}/claim`,
       { expected_roster_revision: claimWorld.roster_revision },
       owner.id,
     ),
@@ -371,7 +371,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
     await expectAPIError(
       await postAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/terra/continue`,
+        `${baseURL}/wrought/api/worlds/${world.id}/terra/continue`,
         undefined,
         player.id,
       ),
@@ -381,7 +381,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
     await expectAPIError(
       await postAs(
         request,
-        `${baseURL}/api/worlds/${world.id}/agent/continue`,
+        `${baseURL}/wrought/api/worlds/${world.id}/agent/continue`,
         { prompt: `The lantern wakes beneath the lake ${unique}.` },
         spectator.id,
       ),
@@ -392,7 +392,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const interaction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/agent/continue`,
+    `${baseURL}/wrought/api/worlds/${world.id}/agent/continue`,
     {
       title: `The light below ${unique}`,
       prompt: `The drowned lantern answers with a knock ${unique}. What do you do?`,
@@ -430,7 +430,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
   await expectAPIError(
     await putAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/facilitator`,
+      `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
       {
         source: "human",
         membership_id: world.membership_id,
@@ -444,7 +444,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const action = await postJSON<InteractionActionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/actions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/actions`,
     {
       text: `Mira shields the flame and answers the knock ${unique}.`,
       acting_entity_id: preset.id,
@@ -476,13 +476,13 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const readyToResolve = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}`,
     player.id,
   );
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/terra/decide`,
+      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/terra/decide`,
       {
         expected_revision: readyToResolve.revision,
         expected_rules_revision: mechanic.revision,
@@ -515,7 +515,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
   };
   const resolved = await postJSON<AgentResolutionResult>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
     resolutionRequest,
     player.id,
   );
@@ -589,7 +589,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const replay = await postJSON<AgentResolutionResult>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/agent/resolve`,
     resolutionRequest,
     player.id,
   );
@@ -613,7 +613,7 @@ test("Agent-facilitator command contract: current-player authority is used witho
 
   const durable = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${interaction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}`,
     player.id,
   );
   expect(durable).toMatchObject({
@@ -646,7 +646,7 @@ async function joinWorld(
 ): Promise<WorldResponse> {
   const invite = await postJSON<InviteResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/invites`,
+    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     inviterID,
   );
@@ -656,7 +656,7 @@ async function joinWorld(
   }
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/world-invites/${token}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
     undefined,
     joiningActorID,
   );

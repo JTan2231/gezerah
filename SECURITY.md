@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Gezerah does not yet publish versioned releases. Security fixes are made only
+Wrought does not yet publish versioned releases. Security fixes are made only
 on the latest commit of the default branch.
 
 | Version                 | Supported |
@@ -13,6 +13,12 @@ on the latest commit of the default branch.
 The hosted instance is a conditional preview, not a supported
 public-production service. See [deployment readiness](docs/deployment-readiness/README.md)
 for its current boundaries.
+
+The intended canonical application URL is <https://joeytan.dev/wrought>, with
+browser origin `https://joeytan.dev`. The combined-host cutover is not yet
+verified. Security reports may cover either the `/wrought` application or the
+vendored personal-site code at other same-origin paths because root-site scripts
+share the authenticated browser trust boundary.
 
 ## Report a vulnerability privately
 

@@ -124,15 +124,27 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       openAuthenticated(
         ownerPage,
         baseURL,
-        `/build/${world.id}/character-fields`,
+        `/wrought/build/${world.id}/character-fields`,
         owner,
       ),
-      openAuthenticated(playerOnePage, baseURL, `/play/${world.id}`, playerOne),
-      openAuthenticated(playerTwoPage, baseURL, `/play/${world.id}`, playerTwo),
+      openAuthenticated(
+        playerOnePage,
+        baseURL,
+        `/wrought/play/${world.id}`,
+        playerOne,
+      ),
+      openAuthenticated(
+        playerTwoPage,
+        baseURL,
+        `/wrought/play/${world.id}`,
+        playerTwo,
+      ),
     ]);
 
     await test.step("NAV-005/keyboard-semantic-core and GLO-010", async () => {
-      await ownerPage.goto(`${baseURL}/build/${world.id}/character-fields`);
+      await ownerPage.goto(
+        `${baseURL}/wrought/build/${world.id}/character-fields`,
+      );
       await expect(ownerPage.locator(".skip-link")).toBeAttached();
       await expect(
         ownerPage.getByRole("heading", { name: "Character fields" }),
@@ -164,7 +176,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
 
     const emptyFields = await getJSON<CharacterFieldSet>(
       request,
-      `${baseURL}/api/worlds/${world.id}/character-fields`,
+      `${baseURL}/wrought/api/worlds/${world.id}/character-fields`,
       owner.id,
     );
     const authoredFields = await putCharacterFields(
@@ -198,8 +210,8 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       ],
     );
     await Promise.all([
-      ownerPage.goto(`${baseURL}/build/${world.id}/character-fields`),
-      playerOnePage.goto(`${baseURL}/play/${world.id}`),
+      ownerPage.goto(`${baseURL}/wrought/build/${world.id}/character-fields`),
+      playerOnePage.goto(`${baseURL}/wrought/play/${world.id}`),
     ]);
 
     await test.step("CHF-003/reorder-preserves-field-identity", async () => {
@@ -215,7 +227,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         ownerPage.getByText("Published", { exact: true }),
       ).toBeVisible();
 
-      await playerOnePage.goto(`${baseURL}/play/${world.id}`);
+      await playerOnePage.goto(`${baseURL}/wrought/play/${world.id}`);
       await playerOnePage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
@@ -256,7 +268,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
 
     await test.step("NAV-008 and NAV-V03/transient-resource-retry", async () => {
       await selectBuildSection(ownerPage, "settings");
-      const characterFieldsURL = `${baseURL}/api/worlds/${world.id}/character-fields`;
+      const characterFieldsURL = `${baseURL}/wrought/api/worlds/${world.id}/character-fields`;
       let failed = false;
       await ownerPage.route(characterFieldsURL, async (route) => {
         if (!failed) {
@@ -289,10 +301,10 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
     await test.step("NAV-006/obsolete-resource-response", async () => {
       const entities = await getJSON<Entity[]>(
         request,
-        `${baseURL}/api/worlds/${world.id}/entities`,
+        `${baseURL}/wrought/api/worlds/${world.id}/entities`,
         owner.id,
       );
-      const entitiesURL = `${baseURL}/api/worlds/${world.id}/entities`;
+      const entitiesURL = `${baseURL}/wrought/api/worlds/${world.id}/entities`;
       let releaseRoute: (() => void) | undefined;
       let observeRoute: ((route: Route) => void) | undefined;
       const intercepted = new Promise<Route>((resolve) => {
@@ -341,7 +353,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
     );
 
     await test.step("RST-006/shared-and-multiple-control", async () => {
-      await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
+      await ownerPage.goto(`${baseURL}/wrought/build/${world.id}/roster`);
       await ownerPage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
@@ -350,7 +362,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await ownerPage.getByRole("button", { name: "Save controllers" }).click();
       await expect(ownerPage.getByRole("dialog")).toHaveCount(0);
 
-      await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
+      await ownerPage.goto(`${baseURL}/wrought/build/${world.id}/roster`);
       await ownerPage
         .getByRole("button", { name: new RegExp(labels.solo) })
         .click();
@@ -358,7 +370,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await ownerPage.getByRole("checkbox", { name: labels.playerOne }).check();
       await ownerPage.getByRole("button", { name: "Save controllers" }).click();
 
-      await playerOnePage.goto(`${baseURL}/play/${world.id}`);
+      await playerOnePage.goto(`${baseURL}/wrought/play/${world.id}`);
       await expect(
         playerOnePage.getByText("Setup required").first(),
       ).toBeVisible();
@@ -379,7 +391,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         }),
       ).toBeVisible();
 
-      await playerTwoPage.goto(`${baseURL}/play/${world.id}`);
+      await playerTwoPage.goto(`${baseURL}/wrought/play/${world.id}`);
       await playerTwoPage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
@@ -398,7 +410,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
     });
 
     await test.step("RST-007/remove-control-revokes-authority", async () => {
-      await ownerPage.goto(`${baseURL}/build/${world.id}/roster`);
+      await ownerPage.goto(`${baseURL}/wrought/build/${world.id}/roster`);
       await ownerPage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
@@ -408,7 +420,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         .uncheck();
       await ownerPage.getByRole("button", { name: "Save controllers" }).click();
 
-      await playerOnePage.goto(`${baseURL}/play/${world.id}`);
+      await playerOnePage.goto(`${baseURL}/wrought/play/${world.id}`);
       await playerOnePage
         .getByRole("button", { name: new RegExp(labels.shared) })
         .click();
@@ -436,7 +448,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
       await openAuthenticated(
         visitorPage,
         baseURL,
-        `/play/invite/${visitorToken}`,
+        `/wrought/play/invite/${visitorToken}`,
         visitor,
       );
       await visitorPage
@@ -505,7 +517,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
     });
 
     await test.step("PLY-007/cancel-unfinished-and-release-archive", async () => {
-      await ownerPage.goto(`${baseURL}/play/${world.id}`);
+      await ownerPage.goto(`${baseURL}/wrought/play/${world.id}`);
       await expect(
         ownerPage.getByText(`A boundary problem ${unique}`),
       ).toBeVisible();
@@ -515,7 +527,7 @@ test("UI boundaries: authored profiles, shared control, live actions, and access
         ownerPage.getByText(`A boundary problem ${unique}`),
       ).toBeVisible();
 
-      await ownerPage.goto(`${baseURL}/build/${world.id}/settings`);
+      await ownerPage.goto(`${baseURL}/wrought/build/${world.id}/settings`);
       acceptNextDialog(ownerPage);
       await ownerPage.getByRole("button", { name: "Archive world" }).click();
       await expect(

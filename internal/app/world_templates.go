@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 	"github.com/jackc/pgx/v5"
 	"gopkg.in/yaml.v3"
 )
@@ -476,7 +476,7 @@ func (s *Server) handleCloneWorldTemplate(w http.ResponseWriter, r *http.Request
 	status := http.StatusOK
 	if created {
 		status = http.StatusCreated
-		w.Header().Set("Location", "/api/worlds/"+request.ID)
+		w.Header().Set("Location", publicProductPath("/api/worlds/"+request.ID))
 	}
 	writeJSON(w, status, item)
 }

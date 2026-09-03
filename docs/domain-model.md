@@ -2,7 +2,7 @@
 
 ## Model overview
 
-Gezerah separates world membership, user-authored mechanics, fictional
+Wrought separates world membership, user-authored mechanics, fictional
 entities, and improvised live play. Nothing in the mechanical vocabulary is
 globally special: every mechanic name and entity is created by a user inside a
 World. Problems exist only as live Interactions created during Play.

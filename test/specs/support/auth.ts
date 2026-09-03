@@ -45,7 +45,7 @@ export async function signupActor(
     extraHTTPHeaders: { Origin: originOf(baseURL) },
   });
   try {
-    const response = await bootstrap.post("/api/auth/signup", {
+    const response = await bootstrap.post("/wrought/api/auth/signup", {
       data: { username, display_name: displayName, password },
     });
     const auth = await expectAuthResponse(response, "signup");
@@ -75,7 +75,7 @@ export async function signinActor(
     extraHTTPHeaders: { Origin: originOf(baseURL) },
   });
   try {
-    const response = await bootstrap.post("/api/auth/signin", {
+    const response = await bootstrap.post("/wrought/api/auth/signin", {
       data: { username, password },
     });
     const auth = await expectAuthResponse(response, "signin");
@@ -100,7 +100,7 @@ export function actorRequest(actorID: string): APIRequestContext {
 }
 
 export function actorMutationHeaders(actorID: string): Record<string, string> {
-  return { "X-GEZERAH-CSRF": actorByID(actorID).csrfToken };
+  return { "X-WROUGHT-CSRF": actorByID(actorID).csrfToken };
 }
 
 export async function actorCookieHeader(actorID: string): Promise<string> {
@@ -120,7 +120,7 @@ export async function actorSessionCookie(actorID: string): Promise<
 > {
   const state = await actorByID(actorID).api.storageState();
   const cookie = state.cookies.find(({ name }) =>
-    ["gezerah_session", "__Host-gezerah_session"].includes(name),
+    ["wrought_session", "__Host-wrought_session"].includes(name),
   );
   if (cookie === undefined) {
     throw new Error(`authenticated actor ${actorID} has no session cookie`);
@@ -237,7 +237,7 @@ async function authenticatedContext(
     storageState,
     extraHTTPHeaders: {
       Origin: originOf(baseURL),
-      "X-GEZERAH-CSRF": csrfToken,
+      "X-WROUGHT-CSRF": csrfToken,
     },
   });
 }

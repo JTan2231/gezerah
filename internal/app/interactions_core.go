@@ -284,7 +284,7 @@ func (s *Server) handleCreateInteraction(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/api/worlds/%s/interactions/%s", worldID, interactionID))
+	w.Header().Set("Location", publicProductPath(fmt.Sprintf("/api/worlds/%s/interactions/%s", worldID, interactionID)))
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -774,9 +774,9 @@ func (s *Server) handleCreateInteractionAction(w http.ResponseWriter, r *http.Re
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf(
+	w.Header().Set("Location", publicProductPath(fmt.Sprintf(
 		"/api/worlds/%s/interactions/%s/actions/%s", worldID, interactionID, actionID,
-	))
+	)))
 	writeJSON(w, http.StatusCreated, item)
 }
 

@@ -3,7 +3,7 @@ package app
 import (
 	"testing"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 )
 
 func TestConsequenceOwnedStatusesWithSameNameRemainDistinct(t *testing.T) {

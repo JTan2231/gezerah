@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -145,7 +145,7 @@ func (s *Server) handleCreateWorldEntity(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", "/api/worlds/"+member.WorldID+"/entities/"+entityID)
+	w.Header().Set("Location", publicProductPath("/api/worlds/"+member.WorldID+"/entities/"+entityID))
 	writeJSON(w, http.StatusCreated, item)
 }
 

@@ -2,7 +2,7 @@ import type { AuthenticatedSession, User, World } from "../api/types";
 import { toErrorNotice } from "../api/client";
 import { formatRelativeDate, humanize } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { playWorldURL, type Navigate } from "../worldRoutes";
+import { homeURL, playWorldURL, type Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import { PlayLibraryView } from "./PlayLibraryView";
 
@@ -19,7 +19,7 @@ export function PlayLibrary({
   onLogoutAll: () => Promise<void>;
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
-  const worlds = useCollection<World>("/api/worlds");
+  const worlds = useCollection<World>("/wrought/api/worlds");
 
   return (
     <PlayLibraryView
@@ -55,7 +55,7 @@ export function PlayLibrary({
           onSessionChanged={onSessionChanged}
         />
       }
-      onReturnHome={() => navigate("/")}
+      onReturnHome={() => navigate(homeURL())}
       onOpenWorld={(worldID) => navigate(playWorldURL(worldID))}
       onRetry={worlds.reload}
     />

@@ -91,7 +91,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Facilitator Contract ${unique}` },
     owner.id,
   );
@@ -120,7 +120,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   const character = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     {
       display_name: `Owner Character ${unique}`,
       controller_world_membership_ids: [world.membership_id],
@@ -131,7 +131,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const delegated = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
     {
       source: "human",
       membership_id: delegateWorld.membership_id,
@@ -152,7 +152,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   expect(
     await getJSON<WorldResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}`,
+      `${baseURL}/wrought/api/worlds/${world.id}`,
       delegate.id,
     ),
   ).toMatchObject({
@@ -184,7 +184,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const humanInteraction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
     {
       present: true,
       prompt: `The delegated facilitator asks the owner to act ${unique}.`,
@@ -201,7 +201,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   });
   const ownerAction = await postJSON<InteractionActionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}/actions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${humanInteraction.id}/actions`,
     {
       text: `The owner acts as a ready current player ${unique}.`,
       acting_entity_id: character.id,
@@ -217,7 +217,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   await expectAPIError(
     await putAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/facilitator`,
+      `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
       {
         source: "human",
         membership_id: world.membership_id,
@@ -230,19 +230,19 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   const currentHumanInteraction = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${humanInteraction.id}`,
     delegate.id,
   );
   await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${humanInteraction.id}/cancel`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${humanInteraction.id}/cancel`,
     { expected_revision: currentHumanInteraction.revision },
     delegate.id,
   );
 
   const terraWorld = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
     { source: "terra", expected_revision: delegated.revision },
     owner.id,
   );
@@ -274,7 +274,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const terraInteraction = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/terra/continue`,
+    `${baseURL}/wrought/api/worlds/${world.id}/terra/continue`,
     undefined,
     owner.id,
   );
@@ -285,7 +285,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   });
   const terraAction = await postJSON<InteractionActionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/actions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${terraInteraction.id}/actions`,
     {
       text: `${TERRA_MODEL_FAILURE_MARKER} The owner braces the crossing.`,
       acting_entity_id: character.id,
@@ -295,13 +295,13 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   const terraReadyToDecide = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
     owner.id,
   );
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}/terra/decide`,
+      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${terraInteraction.id}/terra/decide`,
       {
         expected_revision: terraReadyToDecide.revision,
         expected_rules_revision: terraWorld.rules_revision,
@@ -314,7 +314,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   );
   const terraAdjudicating = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
     owner.id,
   );
   expect(terraAdjudicating).toMatchObject({
@@ -344,7 +344,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
       await expectAPIError(
         await putAs(
           request,
-          `${baseURL}/api/worlds/${world.id}/facilitator`,
+          `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
           {
             source: "human",
             membership_id: denied.membershipID,
@@ -360,7 +360,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
 
   const recovered = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
     {
       source: "human",
       membership_id: world.membership_id,
@@ -377,7 +377,7 @@ test("contract: facilitator assignment changes play authority without rewriting 
   });
   const recoveredInteraction = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${terraInteraction.id}`,
     owner.id,
   );
   expect(recoveredInteraction).toMatchObject({
@@ -420,7 +420,7 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   const player = await signupActor(baseURL, `Skip Player ${unique}`);
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Terra Skip Contract ${unique}` },
     owner.id,
   );
@@ -434,7 +434,7 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   );
   const character = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     {
       display_name: `Skip Character ${unique}`,
       controller_world_membership_ids: [playerWorld.membership_id],
@@ -444,7 +444,7 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
 
   const draft = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
     {
       prompt: `Unpresented draft ${unique}`,
       private_notes: `Private draft notes ${unique}`,
@@ -456,14 +456,14 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   );
   await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}/cancel`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${draft.id}/cancel`,
     { expected_revision: draft.revision },
     owner.id,
   );
   await expectAPIError(
     await getAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${draft.id}`,
+      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${draft.id}`,
       player.id,
     ),
     404,
@@ -472,19 +472,19 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
 
   const terraWorld = await putJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/facilitator`,
+    `${baseURL}/wrought/api/worlds/${world.id}/facilitator`,
     { source: "terra", expected_revision: world.revision },
     owner.id,
   );
   const open = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/terra/continue`,
+    `${baseURL}/wrought/api/worlds/${world.id}/terra/continue`,
     undefined,
     player.id,
   );
   const cancelledOpen = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${open.id}/cancel`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/cancel`,
     { expected_revision: open.revision },
     player.id,
   );
@@ -497,7 +497,7 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   expect(
     await getJSON<InteractionResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${open.id}`,
+      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}`,
       player.id,
     ),
   ).toMatchObject({
@@ -508,13 +508,13 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
 
   const next = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/terra/continue`,
+    `${baseURL}/wrought/api/worlds/${world.id}/terra/continue`,
     undefined,
     player.id,
   );
   await postJSON<InteractionActionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/actions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${next.id}/actions`,
     {
       text: `${TERRA_MODEL_FAILURE_MARKER} The player waits for Terra.`,
       acting_entity_id: character.id,
@@ -524,13 +524,13 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   );
   const readyToDecide = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${next.id}`,
     player.id,
   );
   await expectAPIError(
     await postAs(
       request,
-      `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/terra/decide`,
+      `${baseURL}/wrought/api/worlds/${world.id}/interactions/${next.id}/terra/decide`,
       {
         expected_revision: readyToDecide.revision,
         expected_rules_revision: terraWorld.rules_revision,
@@ -543,13 +543,13 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
   );
   const adjudicating = await getJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${next.id}`,
     player.id,
   );
   expect(adjudicating.status).toBe("adjudicating");
   const cancelledAdjudicating = await postJSON<InteractionResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions/${next.id}/cancel`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions/${next.id}/cancel`,
     { expected_revision: adjudicating.revision },
     player.id,
   );
@@ -562,7 +562,7 @@ test("contract: a ready current player can skip open and adjudicating Terra prob
 
   const history = await getJSON<InteractionResponse[]>(
     request,
-    `${baseURL}/api/worlds/${world.id}/interactions`,
+    `${baseURL}/wrought/api/worlds/${world.id}/interactions`,
     player.id,
   );
   expect(history.map((item) => item.id)).not.toContain(draft.id);
@@ -584,7 +584,7 @@ async function joinWorld(
 ): Promise<WorldResponse> {
   const invite = await postJSON<InviteResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/invites`,
+    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
     { role, expires_in_days: 7 },
     inviterID,
   );
@@ -594,7 +594,7 @@ async function joinWorld(
   }
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/world-invites/${token}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
     undefined,
     joiningActorID,
   );
@@ -611,7 +611,7 @@ async function expectMemberRoles(
 ): Promise<void> {
   const members = await getJSON<WorldMemberResponse[]>(
     request,
-    `${baseURL}/api/worlds/${worldID}/members`,
+    `${baseURL}/wrought/api/worlds/${worldID}/members`,
     actorID,
   );
   for (const item of expected) {

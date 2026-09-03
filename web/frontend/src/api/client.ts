@@ -63,7 +63,7 @@ async function requestAPI<T>(
   headers.set("Accept", "application/json");
   if (init.body !== undefined) headers.set("Content-Type", "application/json");
   if (csrfToken !== "" && isUnsafeMethod(init.method))
-    headers.set("X-GEZERAH-CSRF", csrfToken);
+    headers.set("X-WROUGHT-CSRF", csrfToken);
 
   let response: Response;
   try {
@@ -140,7 +140,7 @@ async function refreshCSRFToken(
     return true;
   }
   const session = await requestAPI<unknown>(
-    "/api/me",
+    "/wrought/api/me",
     signal === undefined ? {} : { signal },
     false,
   );
@@ -186,12 +186,12 @@ export function jsonBody(value: unknown): Pick<RequestInit, "body"> {
 }
 
 export function worldPath(worldId: string, resource = ""): string {
-  const base = `/api/worlds/${encodeURIComponent(worldId)}`;
+  const base = `/wrought/api/worlds/${encodeURIComponent(worldId)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 
 export function worldInvitePath(token: string, resource = ""): string {
-  const base = `/api/world-invites/${encodeURIComponent(token)}`;
+  const base = `/wrought/api/world-invites/${encodeURIComponent(token)}`;
   return resource === "" ? base : `${base}/${resource}`;
 }
 

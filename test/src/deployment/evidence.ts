@@ -11,8 +11,9 @@ import type {
 import type { BrowserCheck, HTTPCheck } from "./smoke";
 
 export interface DeploymentEvidence {
-  schemaVersion: 1;
+  schemaVersion: 2;
   mode: "deploy" | "verify";
+  releaseStage: "pre-dns" | "post-cutover";
   ci: "passed" | "skipped" | "not-run";
   project: { id: string; name: string };
   environment: { id: string; name: string };
@@ -24,6 +25,7 @@ export interface DeploymentEvidence {
     status: string;
     createdAt: string;
     healthcheckPath: string;
+    healthcheckTimeout: number;
     replicas: number;
     drainingSeconds: number;
   };
@@ -59,6 +61,7 @@ interface ServiceEvidence {
 
 export function buildEvidence(options: {
   mode: "deploy" | "verify";
+  releaseStage: "pre-dns" | "post-cutover";
   ci: "passed" | "skipped" | "not-run";
   project: RailwayProject;
   environment: RailwayEnvironment;
@@ -75,14 +78,16 @@ export function buildEvidence(options: {
   const manifest = options.deployment.manifest;
   if (
     manifest?.healthcheckPath === undefined ||
+    manifest.healthcheckTimeout === undefined ||
     manifest.numReplicas === undefined ||
     manifest.drainingSeconds === undefined
   ) {
     throw new Error("deployment evidence requires a complete service manifest");
   }
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     mode: options.mode,
+    releaseStage: options.releaseStage,
     ci: options.ci,
     project: { id: options.project.id, name: options.project.name },
     environment: {
@@ -99,6 +104,7 @@ export function buildEvidence(options: {
       status: options.deployment.status,
       createdAt: options.deployment.createdAt,
       healthcheckPath: manifest.healthcheckPath,
+      healthcheckTimeout: manifest.healthcheckTimeout,
       replicas: manifest.numReplicas,
       drainingSeconds: manifest.drainingSeconds,
     },
@@ -125,7 +131,7 @@ export async function writeEvidence(
   if (!isUUID(evidence.deployment.id)) {
     throw new Error("refusing to write evidence for an invalid deployment ID");
   }
-  const directory = path.join(repoRoot, ".gezerah", "deployments");
+  const directory = path.join(repoRoot, ".wrought", "deployments");
   const filename =
     evidence.mode === "deploy"
       ? `${evidence.deployment.id}.json`

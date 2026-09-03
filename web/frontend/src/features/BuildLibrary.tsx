@@ -4,7 +4,12 @@ import { api, ApiError, jsonBody, toErrorNotice } from "../api/client";
 import type { AuthenticatedSession, User, World } from "../api/types";
 import { formatRelativeDate } from "../domain/display";
 import { useCollection } from "../hooks/useCollection";
-import { buildWorldURL, type Navigate } from "../worldRoutes";
+import {
+  buildLibraryURL,
+  buildWorldURL,
+  homeURL,
+  type Navigate,
+} from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import {
   BuildLibraryView,
@@ -26,9 +31,9 @@ export function BuildLibrary({
   onLogoutAll: () => Promise<void>;
   onSessionChanged: (session: AuthenticatedSession) => void;
 }) {
-  const worlds = useCollection<World>("/api/worlds");
+  const worlds = useCollection<World>("/wrought/api/worlds");
   const [creating, setCreating] = useState(false);
-  const worldStart = useChatGPTWorldStart("/build", "build");
+  const worldStart = useChatGPTWorldStart(buildLibraryURL(), "build");
   const editableWorlds = worlds.items.flatMap<BuildLibraryWorld>((world) => {
     if (world.role !== "owner" && world.role !== "editor") return [];
     return [
@@ -60,7 +65,7 @@ export function BuildLibrary({
         issue: worlds.error === null ? null : toErrorNotice(worlds.error),
       }}
       actions={{
-        returnHome: () => navigate("/"),
+        returnHome: () => navigate(homeURL()),
         createWorld: () => setCreating(true),
         openWorld: (worldID) => navigate(buildWorldURL(worldID, "capacities")),
         retry: worlds.reload,
@@ -111,7 +116,7 @@ function CreateWorldController({
     setSaving(true);
     setError(null);
     try {
-      const world = await api<World>("/api/worlds", {
+      const world = await api<World>("/wrought/api/worlds", {
         method: "POST",
         ...jsonBody({
           name: name.trim(),
