@@ -12,9 +12,11 @@ import { buildEvidence, writeEvidence } from "./evidence";
 import {
   assertDeploymentManifest,
   assertNoActiveDeployment,
+  assertPostCutoverDomains,
   assertPublicURLExposed,
   databaseHealthy,
   findDeployment,
+  railwayProviderPublicURL,
   RailwayClient,
   selectTarget,
   serviceHealthy,
@@ -109,6 +111,12 @@ async function runDeployment(
     expectedDatabaseId: configuration.expectedDatabaseId,
     expectedDatabase: configuration.expectedDatabase,
   });
+  const preflightPublicURL = deploymentPublicURL(
+    options.releaseStage,
+    configuration.publicURL,
+    target.web,
+    environment,
+  );
 
   let deployment: RailwayDeployment;
   if (options.mode === "deploy") {
@@ -229,12 +237,30 @@ async function runDeployment(
     assertDeploymentManifest(deployment);
   }
 
-  const publicURL = boundPublicURL(
+  const smokeProject = await railway.project(signal);
+  const smokeEnvironment = exactEnvironment(
+    smokeProject,
+    target.project.id,
+    target.project.name,
+    target.environment.id,
+    target.environment.name,
+  );
+  const publicURL = deploymentPublicURL(
+    options.releaseStage,
     configuration.publicURL,
     target.web,
-    environment,
+    smokeEnvironment,
   );
-  stage("Public HTTPS smoke");
+  if (publicURL !== preflightPublicURL) {
+    throw new Error(
+      `Railway public URL changed between preflight and smoke verification; expected ${preflightPublicURL}, found ${publicURL}`,
+    );
+  }
+  stage(
+    options.releaseStage === "pre-dns"
+      ? "Generated provider HTTPS smoke"
+      : "Canonical public HTTPS smoke",
+  );
   const http = await verifyHTTP(publicURL, { signal });
   for (const check of http) {
     process.stdout.write(
@@ -252,6 +278,10 @@ async function runDeployment(
     });
     process.stdout.write(
       `  ${browser.title ?? "browser"} ${browser.finalPath ?? ""}; auth probe passed\n`,
+    );
+  } else if (options.releaseStage === "pre-dns") {
+    process.stdout.write(
+      "Browser auth smoke omitted for pre-DNS provider verification.\n",
     );
   } else {
     process.stdout.write("Browser smoke skipped by explicit request.\n");
@@ -296,7 +326,8 @@ async function runDeployment(
       `Railway release changed or became unhealthy during smoke verification; expected deployment ${deployment.id}, found ${finalTarget.web.deploymentId}`,
     );
   }
-  const finalPublicURL = boundPublicURL(
+  const finalPublicURL = deploymentPublicURL(
+    options.releaseStage,
     configuration.publicURL,
     finalTarget.web,
     finalEnvironment,
@@ -312,6 +343,7 @@ async function runDeployment(
   const completedAt = new Date().toISOString();
   const evidence = buildEvidence({
     mode: options.mode,
+    releaseStage: options.releaseStage,
     ci:
       options.mode === "verify"
         ? "not-run"
@@ -336,20 +368,20 @@ async function runDeployment(
 
 function readConfiguration(env: NodeJS.ProcessEnv): DeploymentConfiguration {
   return {
-    expectedProjectId: env.GEZERAH_DEPLOY_PROJECT_ID,
-    expectedProject: env.GEZERAH_DEPLOY_PROJECT ?? "Gezerah",
-    expectedEnvironmentId: env.GEZERAH_DEPLOY_ENVIRONMENT_ID,
-    expectedEnvironment: env.GEZERAH_DEPLOY_ENVIRONMENT ?? "production",
-    expectedWebId: env.GEZERAH_DEPLOY_WEB_SERVICE_ID,
-    expectedWeb: env.GEZERAH_DEPLOY_WEB_SERVICE ?? "gezerah-web",
-    expectedDatabaseId: env.GEZERAH_DEPLOY_DATABASE_SERVICE_ID,
-    expectedDatabase: env.GEZERAH_DEPLOY_DATABASE_SERVICE ?? "Postgres",
+    expectedProjectId: env.WROUGHT_DEPLOY_PROJECT_ID,
+    expectedProject: env.WROUGHT_DEPLOY_PROJECT ?? "Wrought",
+    expectedEnvironmentId: env.WROUGHT_DEPLOY_ENVIRONMENT_ID,
+    expectedEnvironment: env.WROUGHT_DEPLOY_ENVIRONMENT ?? "production",
+    expectedWebId: env.WROUGHT_DEPLOY_WEB_SERVICE_ID,
+    expectedWeb: env.WROUGHT_DEPLOY_WEB_SERVICE ?? "wrought-web",
+    expectedDatabaseId: env.WROUGHT_DEPLOY_DATABASE_SERVICE_ID,
+    expectedDatabase: env.WROUGHT_DEPLOY_DATABASE_SERVICE ?? "Postgres",
     expectedDatabaseVolume:
-      env.GEZERAH_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
+      env.WROUGHT_DEPLOY_DATABASE_VOLUME ?? "postgres-volume",
     publicURL: normalizePublicURL(
-      env.GEZERAH_DEPLOY_URL ?? "https://gezerah.com",
+      env.WROUGHT_DEPLOY_URL ?? "https://joeytan.dev/wrought",
     ),
-    timeoutMs: readTimeout(env.GEZERAH_DEPLOY_TIMEOUT_SECONDS),
+    timeoutMs: readTimeout(env.WROUGHT_DEPLOY_TIMEOUT_SECONDS),
   };
 }
 
@@ -358,7 +390,7 @@ function readTimeout(value: string | undefined): number {
   const seconds = Number(value);
   if (!Number.isInteger(seconds) || seconds < 30 || seconds > 3_600) {
     throw new UsageError(
-      "GEZERAH_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
+      "WROUGHT_DEPLOY_TIMEOUT_SECONDS must be an integer from 30 through 3600",
     );
   }
   return seconds * 1_000;
@@ -409,7 +441,7 @@ async function uploadCommittedSource(options: {
   signal: AbortSignal;
 }): Promise<UploadedDeployment> {
   const temporaryRoot = await mkdtemp(
-    path.join(os.tmpdir(), "gezerah-deploy-source-"),
+    path.join(os.tmpdir(), "wrought-deploy-source-"),
   );
   const checkout = path.join(temporaryRoot, "source");
   let worktreeAdded = false;
@@ -482,23 +514,22 @@ function exactEnvironment(
   return environment;
 }
 
-function requiredPublicURL(service: RailwayService): string {
-  if (service.url === undefined) {
-    throw new Error(
-      `Railway service ${service.name} does not expose a public URL`,
-    );
-  }
-  return service.url;
-}
-
-function boundPublicURL(
+function deploymentPublicURL(
+  releaseStage: "pre-dns" | "post-cutover",
   configuredURL: string,
   service: RailwayService,
   environment: RailwayEnvironment,
 ): string {
-  const discoveredURL = normalizePublicURL(requiredPublicURL(service));
-  assertPublicURLExposed(environment, service, discoveredURL);
+  if (releaseStage === "pre-dns") {
+    return railwayProviderPublicURL(environment, service);
+  }
+  if (configuredURL !== "https://joeytan.dev/wrought") {
+    throw new Error(
+      `post-cutover verification requires https://joeytan.dev/wrought, found ${configuredURL}`,
+    );
+  }
   assertPublicURLExposed(environment, service, configuredURL);
+  assertPostCutoverDomains(environment, service);
   return configuredURL;
 }
 

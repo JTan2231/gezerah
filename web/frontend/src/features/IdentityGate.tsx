@@ -49,7 +49,9 @@ export function IdentityGate({
     setError(null);
     try {
       const session = await api<AuthenticatedSession>(
-        mode === "signup" ? "/api/auth/signup" : "/api/auth/signin",
+        mode === "signup"
+          ? "/wrought/api/auth/signup"
+          : "/wrought/api/auth/signin",
         {
           method: "POST",
           ...jsonBody(

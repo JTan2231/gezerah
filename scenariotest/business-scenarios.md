@@ -10,12 +10,13 @@ behavior drivers, outcome contracts, and validators execute. The
 [code-mapping reference](code-mapping.md) maps every scenario family and scenario ID
 below to the product code and existing tests that implement or protect it.
 
-This catalog follows the current Gezerah workflows and domain model. All
+This catalog follows the current Wrought workflows and domain model. All
 world, mechanic, field, entity, problem, and status names used by a test are
 run-local, user-authored examples. They are never built-in vocabulary, entity
 classes, privileged keys, or seeded definitions.
 
-Project terminology comes from the registered Semantics repository `gezerah`,
+Project terminology comes from the registered Semantics repository identified
+by the root participation marker,
 discovered through `semantics.repository.explore`. The behavior baseline for
 this catalog is the current [workflow guide](../docs/workflows.md), [domain model](../docs/domain-model.md),
 [frontend guide](../docs/frontend.md), [security boundary](../docs/security.md),
@@ -50,7 +51,7 @@ looked right” from “the system committed the right facts.” A validator mus
 never seed, modify, retry with altered data, or repair journey state through a
 back channel.
 
-Gezerah uses username/password accounts and revocable server sessions.
+Wrought uses username/password accounts and revocable server sessions.
 Anonymous visitors may load the authentication boundary and static shell, but
 product data and actions require a valid session before world authorization is
 evaluated. Passwords, session tokens, and CSRF tokens are never scenario
@@ -59,7 +60,7 @@ evidence.
 ## 2. Scenario notation
 
 Product terms in this catalog have the meanings established by the registered
-Semantics repository `gezerah`. This section defines only scenario-test actors,
+Semantics repository. This section defines only scenario-test actors,
 identifiers, priorities, evidence scopes, and tags; code, tests, and product
 documents remain authoritative for actual behavior.
 

@@ -1,0 +1,24 @@
+# Joey Tan
+
+> Software engineer and writer focused on legibility, prompting, and feedback loops.
+
+This file points to Joey Tan's public writing, projects, and profiles.
+
+## Home
+- [Home](llms/joeytan-dev-home.md): Short profile with links to writing and projects. Original: [joeytan.dev](https://joeytan.dev/).
+- [Annals](llms/joeytan-dev-annals.md): Activity recap web app (redirects to hosted app). Original: [joeytan.dev/annals](https://joeytan.dev/annals/).
+
+## Writing
+- [Designing a Prompt](llms/substack-designing-a-prompt.md): Prompts as world-building and shared context. Original: [Substack](https://legibility.substack.com/p/designing-a-prompt).
+- [Legibility](llms/substack-legibility.md): Why ideas fail to land and how to diagnose it. Original: [Substack](https://legibility.substack.com/p/legibility).
+- [AI Prompting as Policy Drafting](llms/substack-ai-prompting-as-policy-drafting.md): Prompting as governance for fast-moving systems. Original: [Substack](https://legibility.substack.com/p/ai-prompting-as-policy-drafting).
+
+## Projects
+- [Stet](llms/stet.md): Feedback workspace for writers focused on structure and clarity. Original: [stet.ink](https://stet.ink).
+
+## Profiles
+- [GitHub](llms/github-jtan2231.md): Code, repos, and activity. Original: [github.com/JTan2231](https://github.com/JTan2231).
+
+## Optional
+- [LinkedIn](llms/linkedin-joseph-tan.md): Professional profile (sign-in gated). Original: [linkedin.com](https://www.linkedin.com/in/joseph-tan-478aa5186/).
+- [Bio prompt](llms/joeytan-dev-bio-prompt.md): Internal prompt used to generate biographical summaries. Original: [joeytan.dev/bio-prompt.md](https://joeytan.dev/bio-prompt.md).

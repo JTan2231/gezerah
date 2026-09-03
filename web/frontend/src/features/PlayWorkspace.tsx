@@ -2,7 +2,7 @@ import { toErrorNotice, worldPath } from "../api/client";
 import type { AuthenticatedSession, User, World } from "../api/types";
 import { humanize } from "../domain/display";
 import { useResource } from "../hooks/useResource";
-import type { Navigate } from "../worldRoutes";
+import { homeURL, playLibraryURL, type Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import {
   PlayWorkspaceFailureView,
@@ -35,7 +35,7 @@ export function PlayWorkspace({
       <PlayWorkspaceFailureView
         error={toErrorNotice(resource.error)}
         onRetry={resource.reload}
-        onBack={() => navigate("/play")}
+        onBack={() => navigate(playLibraryURL())}
       />
     );
   if (world === null) return null;
@@ -58,8 +58,8 @@ export function PlayWorkspace({
           onSessionChanged={onSessionChanged}
         />
       }
-      onHome={() => navigate("/")}
-      onWorldLibrary={() => navigate("/play")}
+      onHome={() => navigate(homeURL())}
+      onWorldLibrary={() => navigate(playLibraryURL())}
     >
       <WorldPlay world={world} user={user} onWorldChanged={resource.reload} />
     </PlayWorkspaceView>

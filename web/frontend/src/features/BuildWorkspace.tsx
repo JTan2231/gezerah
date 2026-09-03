@@ -2,7 +2,12 @@ import type { AuthenticatedSession, User, World } from "../api/types";
 import { toErrorNotice, worldPath } from "../api/client";
 import { confirmDiscardDraft } from "../hooks/useDraft";
 import { useResource } from "../hooks/useResource";
-import { buildWorldURL, playWorldURL } from "../worldRoutes";
+import {
+  buildLibraryURL,
+  buildWorldURL,
+  homeURL,
+  playWorldURL,
+} from "../worldRoutes";
 import type { BuildSection, Navigate } from "../worldRoutes";
 import { AccountControls } from "./AccountControls";
 import {
@@ -65,7 +70,7 @@ export function BuildWorkspace({
       <BuildWorkspaceFailureView
         error={toErrorNotice(resource.error)}
         onRetry={resource.reload}
-        onBack={() => navigate("/build")}
+        onBack={() => navigate(buildLibraryURL())}
       />
     );
   if (world === null) return null;
@@ -73,7 +78,7 @@ export function BuildWorkspace({
   if (!canEdit)
     return (
       <BuildAccessDeniedView
-        onBack={() => navigate("/build")}
+        onBack={() => navigate(buildLibraryURL())}
         onOpenPlay={() => navigate(playWorldURL(world.id))}
       />
     );
@@ -92,8 +97,8 @@ export function BuildWorkspace({
         user: { displayName: user.display_name, username: user.username },
       }}
       actions={{
-        openHome: () => guardedNavigate("/"),
-        openWorldLibrary: () => guardedNavigate("/build"),
+        openHome: () => guardedNavigate(homeURL()),
+        openWorldLibrary: () => guardedNavigate(buildLibraryURL()),
         selectSection: (next) => go(next),
       }}
       desktopAccountControls={

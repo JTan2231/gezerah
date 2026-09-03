@@ -13,7 +13,7 @@ export function HomeChoiceView({
     <main className="home-choice">
       <header>
         <Brand />
-        <h1>Play Gezerah with ChatGPT</h1>
+        <h1>Play Wrought with ChatGPT</h1>
       </header>
       <ChatGPTWorldStartView {...worldStart} />
     </main>

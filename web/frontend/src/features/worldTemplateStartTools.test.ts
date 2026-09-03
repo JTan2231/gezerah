@@ -82,7 +82,7 @@ describe("delegated Start tools", () => {
             ? (JSON.parse(init.body) as unknown)
             : undefined;
         requests.push({ path, body });
-        if (path === "/api/world-templates")
+        if (path === "/wrought/api/world-templates")
           return Promise.resolve(Response.json(templates));
         return Promise.resolve(
           Response.json({
@@ -141,8 +141,8 @@ describe("delegated Start tools", () => {
     expect(first.next_step).toContain("choose and claim");
     expect(first.next_step).toContain("Never invent or submit an Action");
     expect(navigations).toEqual([
-      ["/play/world-copy", { replace: true }],
-      ["/play/world-copy", { replace: true }],
+      ["/wrought/play/world-copy", { replace: true }],
+      ["/wrought/play/world-copy", { replace: true }],
     ]);
   });
 });

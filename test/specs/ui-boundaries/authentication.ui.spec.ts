@@ -16,14 +16,14 @@ test("UI authentication: signin, password changes, and logout use server session
   const newPassword = "new-pass";
 
   await test.step("IDN-005 signin resumes the protected destination and survives reload", async () => {
-    await page.goto(`${baseURL}/build`);
+    await page.goto(`${baseURL}/wrought/build`);
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/build");
+    expect(new URL(page.url()).pathname).toBe("/wrought/build");
     await signInThroughGate(page, actor.username, actor.password);
     await expect(
       page.getByRole("heading", { name: "Worlds", exact: true }),
     ).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/build");
+    expect(new URL(page.url()).pathname).toBe("/wrought/build");
     await page.reload();
     await expect(
       page.getByRole("heading", { name: "Worlds", exact: true }),
@@ -38,10 +38,10 @@ test("UI authentication: signin, password changes, and logout use server session
       .getByRole("button", { name: "Sign out everywhere", exact: true })
       .click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/build");
-    expect((await actor.api.get("/api/me")).status()).toBe(401);
+    expect(new URL(page.url()).pathname).toBe("/wrought/build");
+    expect((await actor.api.get("/wrought/api/me")).status()).toBe(401);
     expect(
-      (await page.context().request.get(`${baseURL}/api/me`)).status(),
+      (await page.context().request.get(`${baseURL}/wrought/api/me`)).status(),
     ).toBe(401);
   });
 
@@ -95,8 +95,8 @@ test("UI authentication: signin, password changes, and logout use server session
   await test.step("IDN-006 logout revokes the session and preserves the protected route", async () => {
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    expect(new URL(page.url()).pathname).toBe("/build");
-    const me = await page.context().request.get(`${baseURL}/api/me`);
+    expect(new URL(page.url()).pathname).toBe("/wrought/build");
+    const me = await page.context().request.get(`${baseURL}/wrought/api/me`);
     expect(me.status()).toBe(401);
     await page.reload();
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();

@@ -7,6 +7,7 @@ describe("deployment CLI", () => {
   test("defaults to a validated deployment with browser verification", () => {
     assert.deepEqual(parseArguments([]), {
       mode: "deploy",
+      releaseStage: "post-cutover",
       skipCI: false,
       browser: true,
       help: false,
@@ -16,14 +17,23 @@ describe("deployment CLI", () => {
   test("supports verification and explicit deployment escape hatches", () => {
     assert.deepEqual(parseArguments(["verify", "--no-browser"]), {
       mode: "verify",
+      releaseStage: "post-cutover",
       skipCI: false,
       browser: false,
       help: false,
     });
     assert.deepEqual(parseArguments(["deploy", "--skip-ci"]), {
       mode: "deploy",
+      releaseStage: "post-cutover",
       skipCI: true,
       browser: true,
+      help: false,
+    });
+    assert.deepEqual(parseArguments(["deploy", "--pre-dns"]), {
+      mode: "deploy",
+      releaseStage: "pre-dns",
+      skipCI: false,
+      browser: false,
       help: false,
     });
   });
@@ -31,6 +41,7 @@ describe("deployment CLI", () => {
   test("rejects ambiguous and meaningless options", () => {
     assert.throws(() => parseArguments(["deploy", "verify"]), UsageError);
     assert.throws(() => parseArguments(["verify", "--skip-ci"]), UsageError);
+    assert.throws(() => parseArguments(["verify", "--pre-dns"]), UsageError);
     assert.throws(() => parseArguments(["--unknown"]), UsageError);
   });
 });

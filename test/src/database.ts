@@ -10,11 +10,11 @@ export interface DisposableDatabase {
 
 export async function createDisposableDatabase(): Promise<DisposableDatabase> {
   const baseURL =
-    process.env.GEZERAH_TEST_DATABASE_URL ??
-    process.env.GEZERAH_E2E_ADMIN_DATABASE_URL ??
-    process.env.GEZERAH_DATABASE_URL ??
+    process.env.WROUGHT_TEST_DATABASE_URL ??
+    process.env.WROUGHT_E2E_ADMIN_DATABASE_URL ??
+    process.env.WROUGHT_DATABASE_URL ??
     "postgres://localhost:5432/postgres?sslmode=disable";
-  const databaseName = `gezerah_e2e_${Date.now()}_${randomBytes(4).toString("hex")}`;
+  const databaseName = `wrought_e2e_${Date.now()}_${randomBytes(4).toString("hex")}`;
   const databaseURL = databaseURLWithName(baseURL, databaseName);
   const adminURL = databaseURLWithName(baseURL, "postgres");
   const quotedName = quoteIdentifier(databaseName);

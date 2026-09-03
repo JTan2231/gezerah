@@ -16,13 +16,13 @@ test("makes ChatGPT on the web the sole public interface", () => {
         copyStatus: "idle",
         onCopyPrompt: noop,
         promptFallback: false,
-        manualHref: "/play/new",
+        manualHref: "/wrought/play/new",
         onStartManually: noop,
       }}
     />,
   );
 
-  expect(html).toContain("Play Gezerah with ChatGPT");
+  expect(html).toContain("Play Wrought with ChatGPT");
   expect(html).toContain("Start playing with ChatGPT");
   expect(html).toContain("three complete World templates");
   expect(html).toContain("Open in ChatGPT");

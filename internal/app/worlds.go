@@ -130,7 +130,7 @@ func (s *Server) handleCreateWorld(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", "/api/worlds/"+worldID)
+	w.Header().Set("Location", publicProductPath("/api/worlds/"+worldID))
 	writeJSON(w, http.StatusCreated, item)
 }
 
@@ -718,12 +718,12 @@ func (s *Server) handleCreateWorldInvite(w http.ResponseWriter, r *http.Request)
 		handleAppError(w, err)
 		return
 	}
-	joinPath := "/play/invite/" + token
+	joinPath := publicProductPath("/play/invite/" + token)
 	if request.Role == "editor" {
-		joinPath = "/build/invite/" + token
+		joinPath = publicProductPath("/build/invite/" + token)
 	}
 	item.JoinPath = &joinPath
-	w.Header().Set("Location", fmt.Sprintf("/api/worlds/%s/invites/%s", member.WorldID, item.ID))
+	w.Header().Set("Location", publicProductPath(fmt.Sprintf("/api/worlds/%s/invites/%s", member.WorldID, item.ID)))
 	writeJSON(w, http.StatusCreated, item)
 }
 

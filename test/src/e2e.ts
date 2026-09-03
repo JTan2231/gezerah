@@ -11,7 +11,7 @@ async function main(): Promise<void> {
     ...process.env,
     ...(browser === undefined
       ? {}
-      : { GEZERAH_E2E_BROWSER_EXECUTABLE: browser }),
+      : { WROUGHT_E2E_BROWSER_EXECUTABLE: browser }),
   };
   await timed("Playwright execution", async () => {
     await runCommand("bunx", ["playwright", "test"], { cwd: testRoot, env });
@@ -19,7 +19,7 @@ async function main(): Promise<void> {
   const inventory = await timed("coverage inventory", async () =>
     finalizeSuiteCoverage({
       requireComplete:
-        process.env.GEZERAH_E2E_REQUIRE_COMPLETE_COVERAGE === "1",
+        process.env.WROUGHT_E2E_REQUIRE_COMPLETE_COVERAGE === "1",
     }),
   );
   process.stdout.write(

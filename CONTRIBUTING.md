@@ -1,19 +1,18 @@
-# Contributing to Gezerah
+# Contributing to Wrought
 
-Thank you for helping improve Gezerah. Please read the
+Thank you for helping improve Wrought. Please read the
 [Code of Conduct](CODE_OF_CONDUCT.md) before participating. Ordinary support
 and bug-reporting guidance is in [SUPPORT.md](SUPPORT.md); suspected security
 issues must follow [SECURITY.md](SECURITY.md).
 
 ## Before changing code
 
-Use the installed `semantics.repository.explore` contract and query the
-registered Semantics repository `gezerah`, then read the relevant document
-under [`docs/`](docs/README.md):
+Use the installed `semantics.repository.explore` contract to read the
+registered Semantics repository identified by the root participation marker,
+then read the relevant document under [`docs/`](docs/README.md):
 
 ```sh
 /Users/joey/.local/bin/chancery show semantics.repository.explore
-/Users/joey/.local/bin/semantics repository show gezerah
 ```
 
 The repository defines project terminology; code, tests, and product documents

@@ -26,9 +26,9 @@ describe("scenario evidence", () => {
       csrf_token: "csrf secret",
       session_token_hash: "session digest",
       headers: {
-        Cookie: "gezerah_session=session-secret",
-        "Set-Cookie": "gezerah_session=session-secret; HttpOnly",
-        "X-GEZERAH-CSRF": "csrf secret",
+        Cookie: "wrought_session=session-secret",
+        "Set-Cookie": "wrought_session=session-secret; HttpOnly",
+        "X-WROUGHT-CSRF": "csrf secret",
       },
       nested: {
         value: secret("private prose"),
@@ -52,7 +52,7 @@ describe("scenario evidence", () => {
       headers: {
         Cookie: REDACTED,
         "Set-Cookie": REDACTED,
-        "X-GEZERAH-CSRF": REDACTED,
+        "X-WROUGHT-CSRF": REDACTED,
       },
       nested: {
         value: REDACTED,
@@ -66,21 +66,21 @@ describe("scenario evidence", () => {
     });
     assert.deepEqual(
       [
-        "/play/invite/play-bearer",
-        "/build/invite/build-bearer",
-        "/api/world-invites/api-bearer/redeem",
+        "/wrought/play/invite/play-bearer",
+        "/wrought/build/invite/build-bearer",
+        "/wrought/api/world-invites/api-bearer/redeem",
       ].map(sanitizeURL),
       [
-        `/play/invite/${REDACTED}`,
-        `/build/invite/${REDACTED}`,
-        `/api/world-invites/${REDACTED}/redeem`,
+        `/wrought/play/invite/${REDACTED}`,
+        `/wrought/build/invite/${REDACTED}`,
+        `/wrought/api/world-invites/${REDACTED}/redeem`,
       ],
     );
     assert.equal(
       sanitizeText(
-        "Cookie: gezerah_session=secret\nSet-Cookie: gezerah_session=secret\nX-GEZERAH-CSRF: secret\npassword=secret\ncurrent_password=old-secret\nnew_password=new-secret\ncurrentPassword=old-camel-secret\nnewPassword=new-camel-secret",
+        "Cookie: wrought_session=secret\nSet-Cookie: wrought_session=secret\nX-WROUGHT-CSRF: secret\npassword=secret\ncurrent_password=old-secret\nnew_password=new-secret\ncurrentPassword=old-camel-secret\nnewPassword=new-camel-secret",
       ),
-      `Cookie: ${REDACTED}\nSet-Cookie: ${REDACTED}\nX-GEZERAH-CSRF: ${REDACTED}\npassword=${REDACTED}\ncurrent_password=${REDACTED}\nnew_password=${REDACTED}\ncurrentPassword=${REDACTED}\nnewPassword=${REDACTED}`,
+      `Cookie: ${REDACTED}\nSet-Cookie: ${REDACTED}\nX-WROUGHT-CSRF: ${REDACTED}\npassword=${REDACTED}\ncurrent_password=${REDACTED}\nnew_password=${REDACTED}\ncurrentPassword=${REDACTED}\nnewPassword=${REDACTED}`,
     );
   });
 
@@ -105,12 +105,12 @@ describe("scenario evidence", () => {
       phase: "harness",
       result: "failed",
       details: new Error(
-        "POST /api/world-invites/error-bearer/redeem?token=query-bearer failed",
+        "POST /wrought/api/world-invites/error-bearer/redeem?token=query-bearer failed",
       ),
     });
     assert.deepEqual(failure.entries()[0]?.details, {
       name: "Error",
-      message: `POST /api/world-invites/${REDACTED}/redeem?token=${encodeURIComponent(
+      message: `POST /wrought/api/world-invites/${REDACTED}/redeem?token=${encodeURIComponent(
         REDACTED,
       )} failed`,
     });

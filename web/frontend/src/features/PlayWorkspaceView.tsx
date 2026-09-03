@@ -35,7 +35,7 @@ export function PlayWorkspaceView({
       </a>
       <header className="play-app-bar">
         {agentMode ? (
-          <span className="play-brand-button" aria-label="Gezerah">
+          <span className="play-brand-button" aria-label="Wrought">
             <Brand compact />
           </span>
         ) : (

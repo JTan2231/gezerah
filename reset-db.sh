@@ -2,7 +2,7 @@
 set -eu
 
 repo_root="$(CDPATH= cd "$(dirname "$0")" && pwd)"
-database_url="${GEZERAH_DATABASE_URL:-${DATABASE_URL:-postgres://localhost:5432/gezerah?sslmode=disable}}"
+database_url="${WROUGHT_DATABASE_URL:-${DATABASE_URL:-postgres://localhost:5432/wrought?sslmode=disable}}"
 assume_yes=0
 
 usage() {
@@ -79,9 +79,9 @@ case "$database_name" in
 	;;
 esac
 
-is_gezerah_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
-if [ "$is_gezerah_database" != "t" ]; then
-	printf 'Refusing to reset database "%s": the Gezerah migration ledger is absent.\n' \
+is_wrought_database="$(psql_scalar "select to_regclass('public.schema_migrations') is not null")"
+if [ "$is_wrought_database" != "t" ]; then
+	printf 'Refusing to reset database "%s": the Wrought migration ledger is absent.\n' \
 		"$database_name" >&2
 	exit 1
 fi
@@ -102,7 +102,7 @@ if [ "$assume_yes" -ne 1 ]; then
 	fi
 fi
 
-state_dir="${GEZERAH_RUN_STATE_DIR:-$repo_root/.gezerah/run}"
+state_dir="${WROUGHT_RUN_STATE_DIR:-$repo_root/.wrought/run}"
 backend_was_running=0
 backend_stopped=0
 backend_pid=""
@@ -141,7 +141,7 @@ trap handle_signal HUP INT TERM
 "$repo_root/run.sh" stop backend
 backend_stopped=1
 
-if curl -fsS --max-time 1 http://127.0.0.1:8080/api/health >/dev/null 2>&1; then
+if curl -fsS --max-time 1 http://127.0.0.1:8080/wrought/api/health >/dev/null 2>&1; then
 	printf 'Refusing to reset while an unmanaged backend is reachable on port 8080; stop it and retry.\n' >&2
 	exit 1
 fi

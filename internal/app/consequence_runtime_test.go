@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 )
 
 func TestConsequenceTargetEligibilityRejectsIncompleteCharactersAtRuntimePaths(t *testing.T) {

@@ -5,22 +5,22 @@ import (
 	"testing"
 )
 
-func TestLoadConfigPrefersGEZERAHVariables(t *testing.T) {
-	t.Setenv("GEZERAH_ADDR", ":9090")
+func TestLoadConfigPrefersWROUGHTVariables(t *testing.T) {
+	t.Setenv("WROUGHT_ADDR", ":9090")
 	t.Setenv("PORT", "7070")
-	t.Setenv("GEZERAH_DATABASE_URL", "postgres://gezerah-primary")
+	t.Setenv("WROUGHT_DATABASE_URL", "postgres://wrought-primary")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
-	t.Setenv("GEZERAH_PUBLIC_ORIGIN", " https://app.example ")
+	t.Setenv("WROUGHT_PUBLIC_ORIGIN", " https://app.example ")
 	t.Setenv("OPENAI_API_KEY", " test-key ")
-	t.Setenv("GEZERAH_OPENAI_BASE_URL", " http://models.example/v1 ")
-	t.Setenv("GEZERAH_LOG_LEVEL", "warning")
+	t.Setenv("WROUGHT_OPENAI_BASE_URL", " http://models.example/v1 ")
+	t.Setenv("WROUGHT_LOG_LEVEL", "warning")
 
 	config := LoadConfig()
 	if config.Addr != ":9090" {
 		t.Fatalf("Addr = %q, want :9090", config.Addr)
 	}
-	if config.DatabaseURL != "postgres://gezerah-primary" {
-		t.Fatalf("DatabaseURL = %q, want GEZERAH_DATABASE_URL", config.DatabaseURL)
+	if config.DatabaseURL != "postgres://wrought-primary" {
+		t.Fatalf("DatabaseURL = %q, want WROUGHT_DATABASE_URL", config.DatabaseURL)
 	}
 	if config.PublicOrigin != "https://app.example" {
 		t.Fatalf("PublicOrigin = %q, want configured origin", config.PublicOrigin)
@@ -37,12 +37,12 @@ func TestLoadConfigPrefersGEZERAHVariables(t *testing.T) {
 }
 
 func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
-	t.Setenv("GEZERAH_ADDR", "")
+	t.Setenv("WROUGHT_ADDR", "")
 	t.Setenv("PORT", "7070")
-	t.Setenv("GEZERAH_DATABASE_URL", "")
+	t.Setenv("WROUGHT_DATABASE_URL", "")
 	t.Setenv("DATABASE_URL", "postgres://hosting-fallback")
-	t.Setenv("GEZERAH_LOG_LEVEL", "not-a-level")
-	t.Setenv("GEZERAH_PUBLIC_ORIGIN", "")
+	t.Setenv("WROUGHT_LOG_LEVEL", "not-a-level")
+	t.Setenv("WROUGHT_PUBLIC_ORIGIN", "")
 
 	config := LoadConfig()
 	if config.Addr != ":7070" {
@@ -61,7 +61,7 @@ func TestLoadConfigUsesHostingAndLocalFallbacks(t *testing.T) {
 	if config.Addr != ":8080" {
 		t.Fatalf("default Addr = %q, want :8080", config.Addr)
 	}
-	if config.DatabaseURL != "postgres://localhost:5432/gezerah?sslmode=disable" {
+	if config.DatabaseURL != "postgres://localhost:5432/wrought?sslmode=disable" {
 		t.Fatalf("default DatabaseURL = %q", config.DatabaseURL)
 	}
 }

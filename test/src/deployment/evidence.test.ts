@@ -36,12 +36,14 @@ describe("deployment evidence", () => {
     }
     const verification = fixture("verify");
     assert.equal(verification.ci, "not-run");
+    assert.equal(verification.releaseStage, "post-cutover");
+    assert.equal(verification.deployment.healthcheckTimeout, 30);
     assert.equal("uploadedCommit" in verification, false);
   });
 
   test("writes an atomic private record beneath the ignored state directory", async () => {
     const temporaryRoot = await mkdtemp(
-      path.join(os.tmpdir(), "gezerah-deploy-test-"),
+      path.join(os.tmpdir(), "wrought-deploy-test-"),
     );
     try {
       const evidence = fixture();
@@ -50,7 +52,7 @@ describe("deployment evidence", () => {
         destination,
         path.join(
           temporaryRoot,
-          ".gezerah",
+          ".wrought",
           "deployments",
           `${deploymentID}.json`,
         ),
@@ -89,7 +91,7 @@ describe("deployment evidence", () => {
 function fixture(mode: "deploy" | "verify" = "deploy") {
   const project: RailwayProject = {
     id: projectID,
-    name: "Gezerah",
+    name: "Wrought",
     environments: [],
   };
   const environment: RailwayEnvironment = {
@@ -99,9 +101,9 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   };
   const web = service({
     id: webServiceID,
-    name: "gezerah-web",
+    name: "wrought-web",
     deploymentId: deploymentID,
-    url: "https://gezerah.com",
+    url: "https://joeytan.dev",
   });
   const database = service({
     id: databaseServiceID,
@@ -121,7 +123,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     status: "SUCCESS",
     createdAt: "2026-08-08T06:34:01.761Z",
     manifest: {
-      healthcheckPath: "/api/health",
+      healthcheckPath: "/wrought/api/health",
       healthcheckTimeout: 30,
       numReplicas: 1,
       drainingSeconds: 15,
@@ -129,6 +131,7 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
   };
   return buildEvidence({
     mode,
+    releaseStage: "post-cutover",
     ci: mode === "deploy" ? "passed" : "not-run",
     project,
     environment,
@@ -136,11 +139,11 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     database,
     deployment,
     localCommit: "a".repeat(40),
-    publicURL: "https://gezerah.com",
+    publicURL: "https://joeytan.dev/wrought",
     http: [
       {
         name: "health",
-        url: "https://gezerah.com/api/health",
+        url: "https://joeytan.dev/wrought/api/health",
         status: 200,
         contentType: "application/json",
         bytes: 57,
@@ -149,8 +152,8 @@ function fixture(mode: "deploy" | "verify" = "deploy") {
     ],
     browser: {
       skipped: false,
-      title: "Gezerah",
-      finalPath: "/play",
+      title: "Wrought",
+      finalPath: "/wrought/play",
       authProbe: true,
       failureCount: 0,
       durationMs: 900,

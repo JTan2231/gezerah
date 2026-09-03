@@ -40,7 +40,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
 
   await test.step("NAV-002/unknown-route", async () => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await page.goto(`${baseURL}/this-route-does-not-exist`);
+    await page.goto(`${baseURL}/wrought/this-route-does-not-exist`);
     await expect(
       page.getByRole("heading", { name: "Page not found" }),
     ).toBeVisible();
@@ -60,7 +60,7 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(
-      page.getByRole("heading", { name: "Play Gezerah with ChatGPT" }),
+      page.getByRole("heading", { name: "Play Wrought with ChatGPT" }),
     ).toBeVisible();
     await page.keyboard.press("Tab");
     await expect(
@@ -82,13 +82,13 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     const player = await signupActor(baseURL, playerName);
     const world = await postJSON<WorldResponse>(
       request,
-      `${baseURL}/api/worlds`,
+      `${baseURL}/wrought/api/worlds`,
       { name: `Boundary World ${unique}` },
       owner.id,
     );
     const invite = await postJSON<InviteResponse>(
       request,
-      `${baseURL}/api/worlds/${world.id}/invites`,
+      `${baseURL}/wrought/api/worlds/${world.id}/invites`,
       { role: "player", expires_in_days: 1 },
       owner.id,
     );
@@ -96,13 +96,13 @@ test("focused entry, narrow-layout, keyboard, and access boundaries stay deliber
     expect(token).toBeTruthy();
     await postJSON(
       request,
-      `${baseURL}/api/world-invites/${token}/redeem`,
+      `${baseURL}/wrought/api/world-invites/${token}/redeem`,
       {},
       player.id,
     );
 
     await authenticateBrowserContext(page.context(), player);
-    await page.goto(`${baseURL}/build/${world.id}/capacities`);
+    await page.goto(`${baseURL}/wrought/build/${world.id}/capacities`);
     await expect(page.getByRole("alert")).toContainText(
       "Build access is not available",
     );

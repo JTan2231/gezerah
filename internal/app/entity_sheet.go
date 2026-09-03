@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 )
 
 // loadedStatusInstanceSet is the immutable status-instance view consumed by one

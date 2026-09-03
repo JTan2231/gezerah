@@ -1,11 +1,12 @@
 # ChatGPT play through WebMCP
 
-The public ChatGPT launch navigates the person's ordinary web browser to
+The candidate ChatGPT launch navigates the person's ordinary web browser to
 `chatgpt.com` with a prefilled starter prompt and a request to attach the exact
-`/play/new` Start site-tool page. It does not invoke the ChatGPT desktop app or
-a desktop custom scheme. On a supported ChatGPT surface, delegated start uses
-that page and the later `/play/{world_id}` Play site-tool page to choose and copy
-a ready-made World, claim a Character, and begin Play. ChatGPT is the
+`https://joeytan.dev/wrought/play/new` Start site-tool page. It does not invoke
+the ChatGPT desktop app or a desktop custom scheme. On a supported ChatGPT
+surface, delegated start uses that page and the later
+`https://joeytan.dev/wrought/play/{world_id}` Play site-tool page to choose and
+copy a ready-made World, claim a Character, and begin Play. ChatGPT is the
 Facilitator, while the signed-in person remains a current player.
 
 The attached pages remain the canonical application surfaces. They display the
@@ -13,16 +14,16 @@ available authored choices, current Problem, current-player Action, Resolution
 history, Entity sheets, and logical state. ChatGPT changes durable state only
 through their site tools, which reuse the existing same-origin API. Chat is the
 lived scene, not a second state store: it presents the same public Consequence
-and next-Problem prose that Gezerah persists while the exact record remains in
-Gezerah.
+and next-Problem prose that Wrought persists while the exact record remains in
+Wrought.
 
 This integration uses the browser's imperative WebMCP API. It is not a remote
 MCP server and does not add a second authentication system.
 
 ## Delegated-start contract
 
-Delegated start is intentionally smaller than general Gezerah onboarding. Its
-first public version covers only the three release-bundled World templates and
+Delegated start is intentionally smaller than general Wrought onboarding. Its
+first candidate version covers only the three release-bundled World templates and
 their complete, ready-made Characters.
 
 The person may state a play preference about setting, Character, tone, or
@@ -38,13 +39,14 @@ starter prompt. Its final line, `My play preference: surprise me.`, is the sole
 setup input: the person may send it unchanged or replace that preference. The
 instructions require ChatGPT to preserve the person's agency over later
 in-fiction Actions. Home encodes `surface=work`, the prompt, and the absolute
-`/play/new` URL as ordinary `https://chatgpt.com/` query parameters; those
-parameters request the conversation and attachment but do not prove support.
+`https://joeytan.dev/wrought/play/new` URL as ordinary `https://chatgpt.com/`
+query parameters; those parameters request the conversation and attachment but
+do not prove support.
 
 After authentication, ChatGPT must use the ready Start and Play site tools for
 application operations. It must never make a browser-control request. In
 particular, it must not ask the person to click a template, copy a World, choose
-a Character in Gezerah, navigate between Gezerah pages, name a site tool, or
+a Character in Wrought, navigate between Wrought pages, name a site tool, or
 take control of the attached browser tab. If state changes or a command fails,
 ChatGPT inspects current state and retries only when safe. If site-tool readiness
 cannot be established, it reports that delegated start is unavailable without
@@ -56,15 +58,16 @@ assistant.
 
 Custom Build guidance, saved-World discovery, invitation and multiplayer
 onboarding, and completion of an incomplete Character profile remain ordinary
-implemented Gezerah capabilities. They are outside the first public delegated-
+implemented Wrought capabilities. They are outside the first candidate delegated-
 start entry and must not be presented as if ChatGPT can complete them through
 the Start site-tool surface.
 
 ## Authentication and trust boundary
 
-- A successful supported ChatGPT launch attaches the exact `/play/new` page. If
-  the attached browser profile is signed out, the person signs in to Gezerah in
-  that tab. An existing Safari or Chrome login is not assumed to carry over.
+- A successful supported ChatGPT launch attaches the exact
+  `https://joeytan.dev/wrought/play/new` page. If the attached browser profile
+  is signed out, the person signs in to Wrought in that tab. An existing Safari
+  or Chrome login is not assumed to carry over.
 - Site tools call the existing same-origin API client. The host-only HttpOnly
   session cookie, exact-origin check, session-derived CSRF token, World
   authorization, optimistic revisions, idempotency, and input validation remain
@@ -78,6 +81,13 @@ the Start site-tool surface.
 - No cross-origin API allowance, JavaScript-readable session credential, OAuth
   connection to ChatGPT, iframe exception, or server-side OpenAI key is needed.
 
+The canonical application base is `https://joeytan.dev/wrought`; the browser
+security origin is only `https://joeytan.dev`. The personal site at the other
+paths on that host is same-origin trusted code, not an isolation boundary.
+Because the HTTPS `__Host-wrought_session` cookie must use path `/`, root-site
+requests receive it and root-site JavaScript can call `/wrought/api` with the
+signed-in account's authority. See [Security](security.md#combined-host-origin).
+
 The `agent` Facilitator is a non-membership source, like Terra, but it never
 calls an OpenAI model from the server. It lets the same authenticated membership
 retain current play role `player` and records agent-authored Interactions,
@@ -88,16 +98,17 @@ unavailable when ChatGPT is Facilitator.
 ## Delegated start and Play
 
 1. From Home, the person chooses **Open in ChatGPT**. The ordinary browser
-   navigates to `chatgpt.com` with the starter prompt and exact `/play/new`
-   attachment request. A successful supported launch opens one conversation
-   with that page in a top-level attached browser tab.
+   navigates to `chatgpt.com` with the starter prompt and exact
+   `https://joeytan.dev/wrought/play/new` attachment request. A successful
+   supported launch opens one conversation with that page in a top-level
+   attached browser tab.
 2. The person signs in there if necessary. After authentication and successful
    registration of both Start tools, the Start site-tool surface becomes ready.
 3. ChatGPT inspects all three equal ready-made templates, applies the person's
    play preference to their settings, Characters, descriptions, and prose
    guides or makes a reasonable choice, and copies that template. The
    command navigates the same attached browser tab to the new ordinary
-   `/play/{world_id}` page.
+   `/wrought/play/{world_id}` page.
 4. When the Play site-tool surface becomes ready, ChatGPT inspects Play, chooses
    an available Character using the same preference, and claims it. Template
    profiles are complete, so a successful claim makes the current player ready.
@@ -124,7 +135,7 @@ ChatGPT tells the scene, not what is true or what the player decides.
 
 The separate **Start a World with ChatGPT** material in the Build library remains
 general-purpose guidance for a custom World. It is not delegated start and is
-not the public ChatGPT Play entry.
+not the candidate ChatGPT Play entry.
 
 ## Site-tool pages and surfaces
 
@@ -144,7 +155,7 @@ attached browser tab.
 
 ### Start site-tool page
 
-The authenticated `/play/new` page exposes exactly the two delegated-start
+The authenticated `/wrought/play/new` page exposes exactly the two delegated-start
 commands:
 
 - `inspect_world_templates` returns the complete three-template catalog with the
@@ -153,14 +164,14 @@ commands:
   three templates.
 - `copy_world_template` accepts one inspected `template_id`, creates an
   independent agent-facilitated World with a stable client destination UUID for
-  safe retry, and navigates the same attached tab to `/play/{world_id}`.
+  safe retry, and navigates the same attached tab to `/wrought/play/{world_id}`.
 
 These commands do not expose custom Build, saved Worlds, invitations, multiplayer
 setup, or arbitrary World authoring.
 
 ### Play site-tool page
 
-An active `/play/{world_id}` page registers the six-command Play surface only
+An active `/wrought/play/{world_id}` page registers the six-command Play surface only
 when the World
 uses the `agent` Facilitator and the signed-in membership is a current player.
 The membership's Play status and command-specific state still authorize each
@@ -218,7 +229,7 @@ The public Consequence prose passed to `resolve_problem` is the prose ChatGPT
 presents after the commit. After refreshing Play, the persisted next Problem is
 the next movement of the same scene. ChatGPT does not generate a second summary
 of Applications and effective changes, or an unpersisted narrative bridge
-between the Consequence and Problem. Gezerah retains the exact Action,
+between the Consequence and Problem. Wrought retains the exact Action,
 Consequence, Effects, Resolution receipt, Entity sheets, and history for audit
 and direct inspection.
 
@@ -316,11 +327,15 @@ the change-trigger matrix. A passing run is required before a changed ChatGPT
 entry or site-tool experience is described as accepted or promoted as the
 public delegated-start path.
 
+No new dated three-turn acceptance record has been supplied for the Wrought
+rename and `https://joeytan.dev/wrought/play/new` attachment. This documentation
+therefore does **not** claim that the rebranded candidate is ChatGPT accepted.
+
 Acceptance covers the complete boundary:
 
 - the Home launch navigates to `chatgpt.com`, and one conversation opens with
-  the exact `/play/new` page attached;
-- authentication is the only ordinary manual Gezerah operation;
+  the exact `https://joeytan.dev/wrought/play/new` page attached;
+- authentication is the only ordinary manual Wrought operation;
 - the Start surface becomes ready and ChatGPT inspects and copies one template;
 - the same attached tab navigates to Play, where ChatGPT inspects, claims,
   re-inspects, and presents the first Problem;

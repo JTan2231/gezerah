@@ -245,7 +245,7 @@ export function useAgentPlayTools({
       modelContext,
       tools,
       controller.signal,
-      "Reinspect the current Play state and retry with current World and Entity-sheet data. Do not ask the participant to operate Gezerah.",
+      "Reinspect the current Play state and retry with current World and Entity-sheet data. Do not ask the participant to operate Wrought.",
     ).then((result) => {
       const completed = completeSiteToolRegistration(
         controller,
@@ -273,7 +273,7 @@ export function createAgentPlayTools(
     {
       name: "read_play_handbook",
       description:
-        "Read the Gezerah Play handbook before facilitating, or revisit one topic whenever you are unsure what should happen next. Follow it when presenting scenes or recovering from failures; reading it does not change Play.",
+        "Read the Wrought Play handbook before facilitating, or revisit one topic whenever you are unsure what should happen next. Follow it when presenting scenes or recovering from failures; reading it does not change Play.",
       inputSchema: {
         type: "object",
         properties: {
@@ -345,7 +345,7 @@ export function createAgentPlayTools(
               available_entities: available.entities,
               roster_revision: available.roster_revision,
               next_step:
-                "Use the player's single stated play preference to choose and claim the best-fitting available Character. Do not ask another setup question or ask the participant to operate Gezerah.",
+                "Use the player's single stated play preference to choose and claim the best-fitting available Character. Do not ask another setup question or ask the participant to operate Wrought.",
             });
           }
           const controlledEntities = entities.filter((entity) =>
@@ -381,7 +381,7 @@ export function createAgentPlayTools(
               };
             }),
             next_step:
-              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Gezerah.",
+              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Wrought.",
           });
         }
 
@@ -498,7 +498,7 @@ export function createAgentPlayTools(
             play_status: result.play_status,
             roster_revision: result.roster_revision,
             next_step:
-              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Gezerah.",
+              "Explain that delegated Play is unavailable for this Character. Do not ask the participant to operate Wrought.",
           });
         return toolResult({
           claimed_character: entity,

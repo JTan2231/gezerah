@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/JTan2231/gezerah/internal/app"
-	"github.com/JTan2231/gezerah/internal/migrations"
+	"github.com/JTan2231/wrought/internal/app"
+	"github.com/JTan2231/wrought/internal/migrations"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -23,7 +23,7 @@ func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: config.LogLevel})))
 
 	if err := run(config); err != nil {
-		slog.Error("Gezerah stopped", "error", err)
+		slog.Error("Wrought stopped", "error", err)
 		os.Exit(1)
 	}
 }
@@ -63,7 +63,7 @@ func run(config app.Config) error {
 
 	serveErrors := make(chan error, 1)
 	go func() {
-		slog.Info("Gezerah listening", "address", listener.Addr().String())
+		slog.Info("Wrought listening", "address", listener.Addr().String())
 		serveErrors <- httpServer.Serve(listener)
 	}()
 

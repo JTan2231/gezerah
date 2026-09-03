@@ -2,9 +2,13 @@
 
 ## Scope
 
-The same-origin API is rooted at `/api`; the React application is its primary
-client. There is no version prefix, so coordinated client/server changes land
-together. Every authored and live resource is scoped through a world URL.
+The public same-origin API is rooted at `/wrought/api` below the fixed Wrought
+application base `/wrought`; for example, health is
+`https://joeytan.dev/wrought/api/health`. The security origin remains
+`https://joeytan.dev`, because an origin contains no path. The React application
+is the primary client. There is no version prefix, so coordinated client/server
+changes land together. Every authored and live resource is scoped through a
+World URL.
 
 Except for health, signup, and signin, every API endpoint requires an active
 server session. World resources additionally apply server-side membership-role,
@@ -50,15 +54,20 @@ sets an opaque HttpOnly session cookie:
 }
 ```
 
-The cookie is `gezerah_session` only for loopback HTTP development and
-`__Host-gezerah_session` for an HTTPS public origin. Non-loopback configured origins
+The cookie is `wrought_session` only for loopback HTTP development and
+`__Host-wrought_session` for an HTTPS public origin. Non-loopback configured origins
 must use HTTPS. The cookie is `HttpOnly`, `SameSite=Lax`, and scoped to `/`.
-Clients must send the returned token as `X-GEZERAH-CSRF` on authenticated methods
+Clients must send the returned token as `X-WROUGHT-CSRF` on authenticated methods
 other than GET, HEAD, and OPTIONS. Those requests must also have an `Origin`
-matching `GEZERAH_PUBLIC_ORIGIN`, or the request's own origin when that setting is
+matching `WROUGHT_PUBLIC_ORIGIN`, or the request's own origin when that setting is
 empty. An unset origin permits plain HTTP authentication only when both the
 request host and network peer are loopback. The token is session-bound and
 changes when the password is changed.
+
+The `__Host-` contract requires `Path=/`, so the secure cookie is host-wide,
+not isolated to `/wrought`. Root-site code on `joeytan.dev` is same-origin and
+inside the browser trust boundary even though the Wrought API itself is mounted
+under a path. See [Security](security.md#combined-host-origin).
 
 The server stores only a SHA-256 digest of the random session token. Passwords
 are stored as Argon2id hashes. Command bodies and headers never select the
@@ -148,13 +157,13 @@ Path placeholders are UUIDs unless noted otherwise.
 
 | Method and path             | Authority     | Request/response                                                                                                                  |
 | --------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /api/health`           | Public        | `{"ok":true,"timestamp":"..."}` after a database ping.                                                                            |
-| `POST /api/auth/signup`     | Public+origin | `{username,display_name,password}`; creates the first session and returns the authentication response.                            |
-| `POST /api/auth/signin`     | Public+origin | `{username,password}`; returns the same generic error for unknown usernames and wrong passwords.                                  |
-| `GET /api/me`               | Session       | Returns the current authentication response so the browser can restore its in-memory CSRF token.                                  |
-| `POST /api/auth/logout`     | Session+CSRF  | Revokes the current session and clears both possible cookie names; `204`.                                                         |
-| `POST /api/auth/logout-all` | Session+CSRF  | Revokes all sessions belonging to the current account; `204`.                                                                     |
-| `PUT /api/me/password`      | Session+CSRF  | `{current_password,new_password}`; revokes every old session, creates a replacement, and returns the new authentication response. |
+| `GET /wrought/api/health`           | Public        | `{"ok":true,"timestamp":"..."}` after a database ping.                                                                            |
+| `POST /wrought/api/auth/signup`     | Public+origin | `{username,display_name,password}`; creates the first session and returns the authentication response.                            |
+| `POST /wrought/api/auth/signin`     | Public+origin | `{username,password}`; returns the same generic error for unknown usernames and wrong passwords.                                  |
+| `GET /wrought/api/me`               | Session       | Returns the current authentication response so the browser can restore its in-memory CSRF token.                                  |
+| `POST /wrought/api/auth/logout`     | Session+CSRF  | Revokes the current session and clears both possible cookie names; `204`.                                                         |
+| `POST /wrought/api/auth/logout-all` | Session+CSRF  | Revokes all sessions belonging to the current account; `204`.                                                                     |
+| `PUT /wrought/api/me/password`      | Session+CSRF  | `{current_password,new_password}`; revokes every old session, creates a replacement, and returns the new authentication response. |
 
 Usernames contain 3–64 ASCII characters, begin with a letter or number, and
 otherwise accept letters, numbers, `.`, `_`, and `-`. Uniqueness is
@@ -168,15 +177,15 @@ An incorrect current password on the change endpoint is a field-specific
 
 | Method and path                                | Authority                                      | Request/response                                                                 |
 | ---------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| `GET /api/worlds`                              | Authenticated user                             | Active memberships only; membership-role/count/activity and derived play fields. |
-| `POST /api/worlds`                             | Authenticated user                             | Name, optional description, and optional prose guide; creates World, owner membership, character-field/mechanic-graph roots, and event. |
-| `GET /api/world-templates`                     | Authenticated user                             | The three embedded starting templates as `id`, `version`, name, card description, setting, prose guide, and Character count. |
-| `POST /api/world-templates/{template_id}/clone` | Authenticated user                            | `{id}` with a client-generated destination World UUID; atomically creates and returns an ordinary agent-facilitated World. |
-| `GET /api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
-| `PATCH /api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, nullable prose guide, and `expected_revision`.       |
-| `PUT /api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
-| `POST /api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
-| `GET /api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
+| `GET /wrought/api/worlds`                              | Authenticated user                             | Active memberships only; membership-role/count/activity and derived play fields. |
+| `POST /wrought/api/worlds`                             | Authenticated user                             | Name, optional description, and optional prose guide; creates World, owner membership, character-field/mechanic-graph roots, and event. |
+| `GET /wrought/api/world-templates`                     | Authenticated user                             | The three embedded starting templates as `id`, `version`, name, card description, setting, prose guide, and Character count. |
+| `POST /wrought/api/world-templates/{template_id}/clone` | Authenticated user                            | `{id}` with a client-generated destination World UUID; atomically creates and returns an ordinary agent-facilitated World. |
+| `GET /wrought/api/worlds/{world_id}`                   | Active world member                            | World summary for the current member.                                            |
+| `PATCH /wrought/api/worlds/{world_id}`                 | Owner/editor, active world                     | Name, nullable description, nullable prose guide, and `expected_revision`.       |
+| `PUT /wrought/api/worlds/{world_id}/facilitator`       | Owner/editor or current human facilitator      | Replaces the human/Terra/agent assignment against `expected_revision`.           |
+| `POST /wrought/api/worlds/{world_id}/archive`          | Owner                                          | `expected_revision`; rejects unfinished interactions.                            |
+| `GET /wrought/api/worlds/{world_id}/members`           | Active world member                            | Memberships, controls, revisions, readiness, and current play roles.             |
 
 World creation is transactional and returns membership role `owner`; that owner
 is also the initial human facilitator. The contextual `role` field remains one of
@@ -210,7 +219,7 @@ uncontrolled and ready to claim, and no Interaction or other live history is
 created.
 
 The caller-generated destination `id` is also the retry key. First success
-returns `201` and `Location: /api/worlds/{id}`. An equivalent retry by the same
+returns `201` and `Location: /wrought/api/worlds/{id}`. An equivalent retry by the same
 owner returns the existing World with `200`; a reused ID whose World does not
 match the selected template returns `409 idempotency_conflict`. Existing copies
 do not change when an embedded template version changes.
@@ -245,11 +254,11 @@ is not supplied to Luna's mechanical compilation.
 
 | Method and path                                                  | Authority                  | Notes                                                                        |
 | ---------------------------------------------------------------- | -------------------------- | ---------------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.                     |
-| `POST /api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision.              |
-| `GET /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                                       |
-| `PUT /api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision.              |
-| `POST /api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency or active Status-instance reference remains. |
+| `GET /wrought/api/worlds/{world_id}/mechanics?kind=capacity\|capability` | Active world member        | `{revision,mechanics}` with active/archived definitions.                     |
+| `POST /wrought/api/worlds/{world_id}/mechanics`                          | Owner/editor, active world | Creates input/derived mechanic against expected rules revision.              |
+| `GET /wrought/api/worlds/{world_id}/mechanics/{mechanic_id}`             | Active world member        | `{revision,mechanic}`.                                                       |
+| `PUT /wrought/api/worlds/{world_id}/mechanics/{mechanic_id}`             | Owner/editor, active world | Replaces definition/expression against expected rules revision.              |
+| `POST /wrought/api/worlds/{world_id}/mechanics/{mechanic_id}/archive`    | Owner/editor, active world | Archives if no active derived dependency or active Status-instance reference remains. |
 
 Capacity `score`/`pool` and capability `rating` are numeric; capability
 `binary` is Boolean. Each is either an `input` with an authored default and
@@ -266,20 +275,20 @@ restored through the product API.
 
 | Method and path                                               | Authority                         | Notes                                                               |
 | ------------------------------------------------------------- | --------------------------------- | ------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered character fields plus character-field-set revision; visibility-filtered. |
-| `PUT /api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces the active character-field set.                 |
-| `GET /api/worlds/{world_id}/entities`                         | Active world member               | Roster with Entity sheets and Character completion.                 |
-| `POST /api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates an Entity, logical-state root, and status-set root; optional Controller memberships. |
-| `GET /api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.  |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Terminally archives the entity; the record remains readable.        |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/sheet`       | Active world member               | Generated logical, effective, evaluation, and active-Status-instance view. |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/logical-state` | Owner/editor, active world      | Complete logical input values plus logical-state and rules revisions. |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_roster_revision`. |
-| `GET /api/worlds/{world_id}/available-entities`             | Waiting player in agent world     | Narrow unclaimed preset projection plus current `roster_revision`.       |
-| `POST /api/worlds/{world_id}/entities/{entity_id}/claim`      | Waiting player in agent world     | Atomically claims one uncontrolled active entity using `expected_roster_revision`. |
-| `GET /api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
-| `PUT /api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and character-field-set revisions. |
+| `GET /wrought/api/worlds/{world_id}/character-fields`                 | Active world member               | Ordered character fields plus character-field-set revision; visibility-filtered. |
+| `PUT /wrought/api/worlds/{world_id}/character-fields`                 | Owner/editor, active world        | Atomically replaces the active character-field set.                 |
+| `GET /wrought/api/worlds/{world_id}/entities`                         | Active world member               | Roster with Entity sheets and Character completion.                 |
+| `POST /wrought/api/worlds/{world_id}/entities`                        | Owner/editor, active world        | Creates an Entity, logical-state root, and status-set root; optional Controller memberships. |
+| `GET /wrought/api/worlds/{world_id}/entities/{entity_id}`             | Active world member               | One world entity.                                                   |
+| `PUT /wrought/api/worlds/{world_id}/entities/{entity_id}`             | Owner/editor, active world        | Replaces display name/archive flag fields accepted by the command.  |
+| `POST /wrought/api/worlds/{world_id}/entities/{entity_id}/archive`    | Owner/editor, active world        | Terminally archives the entity; the record remains readable.        |
+| `GET /wrought/api/worlds/{world_id}/entities/{entity_id}/sheet`       | Active world member               | Generated logical, effective, evaluation, and active-Status-instance view. |
+| `PUT /wrought/api/worlds/{world_id}/entities/{entity_id}/logical-state` | Owner/editor, active world      | Complete logical input values plus logical-state and rules revisions. |
+| `PUT /wrought/api/worlds/{world_id}/entities/{entity_id}/controllers` | Owner/editor, active world        | Complete active non-spectator controller set using `expected_roster_revision`. |
+| `GET /wrought/api/worlds/{world_id}/available-entities`             | Waiting player in agent world     | Narrow unclaimed preset projection plus current `roster_revision`.       |
+| `POST /wrought/api/worlds/{world_id}/entities/{entity_id}/claim`      | Waiting player in agent world     | Atomically claims one uncontrolled active entity using `expected_roster_revision`. |
+| `GET /wrought/api/worlds/{world_id}/entities/{entity_id}/profile`     | Active world member               | Fields/values filtered by visibility and control.                   |
+| `PUT /wrought/api/worlds/{world_id}/entities/{entity_id}/profile`     | Owner/editor or active controller | Complete non-empty values using profile and character-field-set revisions. |
 
 Until ready, a player's Entity collection, Entity-detail, and sheet reads are
 restricted to controlled entities. Profile reads are filtered separately: a
@@ -295,11 +304,11 @@ restore operation.
 
 | Method and path                                          | Authority                  | Notes                                                                       |
 | -------------------------------------------------------- | -------------------------- | --------------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
-| `POST /api/worlds/{world_id}/invites`                    | Owner/editor, active world | Membership role and 1–90 expiry days; response alone includes area-scoped `join_path`. |
-| `POST /api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
-| `GET /api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.       |
-| `POST /api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.               |
+| `GET /wrought/api/worlds/{world_id}/invites`                     | Owner/editor, active world | Metadata only; never returns existing raw tokens.                           |
+| `POST /wrought/api/worlds/{world_id}/invites`                    | Owner/editor, active world | Membership role and 1–90 expiry days; response alone includes `/wrought/play/invite/{token}` or `/wrought/build/invite/{token}` as its area-scoped `join_path`. |
+| `POST /wrought/api/worlds/{world_id}/invites/{invite_id}/revoke` | Owner/editor, active world | Idempotently revokes.                                                       |
+| `GET /wrought/api/world-invites/{opaque_token}`                  | Authenticated user         | Preview when active, unexpired, not revoked, and its world is active.       |
+| `POST /wrought/api/world-invites/{opaque_token}/redeem`          | Authenticated user + CSRF  | Creates/reactivates one matching world membership atomically.               |
 
 Tokens contain 256 random bits encoded as unpadded URL-safe base64. Only their
 SHA-256 digest is stored. Redemption counts once per invite/user. An already
@@ -310,28 +319,28 @@ cannot silently escalate or downgrade it.
 
 | Method and path                                                                          | Authority                    | Notes                                                                  |
 | ---------------------------------------------------------------------------------------- | ---------------------------- | ---------------------------------------------------------------------- |
-| `GET /api/worlds/{world_id}/interactions`                                                | Play-ready world member      | Visibility-filtered feed.                                              |
-| `POST /api/worlds/{world_id}/interactions`                                               | Current human facilitator    | Creates draft or creates/presents with `present:true`.                 |
-| `GET /api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member    | One interaction; private data omitted for non-facilitators.            |
-| `PUT /api/worlds/{world_id}/interactions/{interaction_id}`                               | Current human facilitator    | Replaces editable draft using expected revision.                       |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Current human facilitator    | `draft → open`.                                                        |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Current human facilitator    | `open → adjudicating`.                                                 |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Current human facilitator or ready current player with Terra | Human: any unfinished state; Terra: open/adjudicating → cancelled. |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible current player      | Creates an action/pass; optional ready controlled acting entity.       |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning current player        | Withdraws submitted action using action revision.                      |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Current human facilitator    | Advisory Consequence; no idempotency key required.                     |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Current human facilitator    | Atomic state, immutable Resolution receipt, lifecycle, and World event. |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Current human facilitator    | Luna compilation and advisory preview for the human's supplied prose. |
-| `POST /api/worlds/{world_id}/terra/continue`                                            | Ready current player         | Terra creates and presents the next Interaction; empty body.          |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`                | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
-| `POST /api/worlds/{world_id}/agent/continue`                                            | Ready current player         | Creates and presents an agent-supplied Problem; no server model call.  |
-| `POST /api/worlds/{world_id}/interactions/{interaction_id}/agent/resolve`               | Ready current player         | Applies an agent-supplied Consequence through the ordinary Resolution-receipt path. |
+| `GET /wrought/api/worlds/{world_id}/interactions`                                                | Play-ready world member      | Visibility-filtered feed.                                              |
+| `POST /wrought/api/worlds/{world_id}/interactions`                                               | Current human facilitator    | Creates draft or creates/presents with `present:true`.                 |
+| `GET /wrought/api/worlds/{world_id}/interactions/{interaction_id}`                               | Visible play-ready member    | One interaction; private data omitted for non-facilitators.            |
+| `PUT /wrought/api/worlds/{world_id}/interactions/{interaction_id}`                               | Current human facilitator    | Replaces editable draft using expected revision.                       |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/present`                      | Current human facilitator    | `draft → open`.                                                        |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/adjudicate`                   | Current human facilitator    | `open → adjudicating`.                                                 |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/cancel`                       | Current human facilitator or ready current player with Terra | Human: any unfinished state; Terra: open/adjudicating → cancelled. |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/actions`                      | Eligible current player      | Creates an action/pass; optional ready controlled acting entity.       |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/actions/{action_id}/withdraw` | Owning current player        | Withdraws submitted action using action revision.                      |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/preview`                      | Current human facilitator    | Advisory Consequence; no idempotency key required.                     |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/resolve`                      | Current human facilitator    | Atomic state, immutable Resolution receipt, lifecycle, and World event. |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`          | Current human facilitator    | Luna compilation and advisory preview for the human's supplied prose. |
+| `POST /wrought/api/worlds/{world_id}/terra/continue`                                            | Ready current player         | Terra creates and presents the next Interaction; empty body.          |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`                | Ready current player         | Terra adjudicates, compiles, previews, and resolves autonomously.      |
+| `POST /wrought/api/worlds/{world_id}/agent/continue`                                            | Ready current player         | Creates and presents an agent-supplied Problem; no server model call.  |
+| `POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/agent/resolve`               | Ready current player         | Applies an agent-supplied Consequence through the ordinary Resolution-receipt path. |
 
 ### World events (SSE)
 
 | Method and path                     | Authority               | Request                                        |
 | ----------------------------------- | ----------------------- | ---------------------------------------------- |
-| `GET /api/worlds/{world_id}/events` | Play-ready world member | `?after=<non-negative ID>` or `Last-Event-ID`. |
+| `GET /wrought/api/worlds/{world_id}/events` | Play-ready world member | `?after=<non-negative ID>` or `Last-Event-ID`. |
 
 The stream sends `retry: 1500`, keep-alive comments, and compact events:
 
@@ -647,7 +656,7 @@ no resolution. A cancelled draft remains visible only to the human facilitator.
 ### Human Consequence compilation and autonomous Terra
 
 A current human facilitator may compile their own prose through
-`POST /api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`:
+`POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/compile-consequence`:
 
 ```json
 {
@@ -664,7 +673,7 @@ preview. It is read-only; the human decides whether to send those values to
 
 Terra exposes lifecycle commands instead of model-output preparation commands.
 With Terra currently assigned, a ready current player sends an empty request
-to `POST /api/worlds/{world_id}/terra/continue`. There must be no draft, open,
+to `POST /wrought/api/worlds/{world_id}/terra/continue`. There must be no draft, open,
 or adjudicating interaction. The server generates the prompt, then atomically
 creates and presents one interaction, returning it with `201 Created` and a `Location`
 header. Its audience is every ready active membership, its responders are all
@@ -682,7 +691,7 @@ Each eligible responder submits an Action before Terra decides. Passing uses
 the ordinary Action endpoint with `text:"I pass."` and no acting Entity; it is
 not a separate resource or command. When all responders have acted or passed,
 any ready current player calls
-`POST /api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`:
+`POST /wrought/api/worlds/{world_id}/interactions/{interaction_id}/terra/decide`:
 
 ```json
 {

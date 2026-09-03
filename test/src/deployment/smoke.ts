@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { chromium, type BrowserContext } from "@playwright/test";
 
@@ -55,12 +55,16 @@ export function normalizePublicURL(value: string): string {
   if (parsed.username !== "" || parsed.password !== "") {
     throw new Error("deployment URL must not contain credentials");
   }
-  if (parsed.pathname !== "/" || parsed.search !== "" || parsed.hash !== "") {
+  if (
+    (parsed.pathname !== "/wrought" && parsed.pathname !== "/wrought/") ||
+    parsed.search !== "" ||
+    parsed.hash !== ""
+  ) {
     throw new Error(
-      "deployment URL must contain only an HTTPS scheme and authority",
+      'deployment URL must use the canonical "/wrought" application path',
     );
   }
-  return parsed.origin;
+  return `${parsed.origin}/wrought`;
 }
 
 export function extractAssetURLs(
@@ -136,9 +140,108 @@ export async function verifyHTTP(
   };
   const checks: HTTPCheck[] = [];
 
+  const siteRoot = await requestText(
+    "site homepage",
+    new URL("/", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(siteRoot, "text/html");
+  if (!/<title>Joey Tan - Software Engineer<\/title>/i.test(siteRoot.body)) {
+    throw new Error("site homepage did not return the Joey Tan static shell");
+  }
+  checks.push(toCheck(siteRoot));
+
+  const siteIndex = await requestText(
+    "site index",
+    new URL("/index.html", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(siteIndex, "text/html");
+  if (!/<title>Joey Tan - Software Engineer<\/title>/i.test(siteIndex.body)) {
+    throw new Error("site index did not return the Joey Tan static shell");
+  }
+  checks.push(toCheck(siteIndex));
+
+  const annalsIndex = await requestText(
+    "annals index",
+    new URL("/annals/index.html", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(annalsIndex, "text/html");
+  if (
+    !/<title>Redirecting\.\.\.<\/title>/i.test(annalsIndex.body) ||
+    !annalsIndex.body.includes("annals-web-production.up.railway.app")
+  ) {
+    throw new Error("annals index did not return the vendored redirect shell");
+  }
+  checks.push(toCheck(annalsIndex));
+
+  const plaidOAuth = await requestText(
+    "Plaid OAuth page",
+    new URL("/plaid/oauth.html", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(plaidOAuth, "text/html");
+  checks.push(toCheck(plaidOAuth));
+
+  const llms = await requestText(
+    "LLM index",
+    new URL("/llms.txt", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(llms, "text/plain");
+  if (!llms.body.startsWith("# Joey Tan")) {
+    throw new Error("LLM index did not return the vendored text index");
+  }
+  checks.push(toCheck(llms));
+
+  for (const directoryPath of ["/llms/", "/plaid/", "/.well-known/"]) {
+    const directory = await requestTextWithStatus(
+      `directory denial ${directoryPath}`,
+      new URL(directoryPath, normalized),
+      httpNotFound,
+      fetchImpl,
+      retryOptions,
+      now,
+    );
+    requireNoDirectoryListing(directory);
+    checks.push(toCheck(directory));
+  }
+
+  const association = await requestText(
+    "Apple app-site association",
+    new URL("/.well-known/apple-app-site-association", normalized),
+    fetchImpl,
+    retryOptions,
+    now,
+  );
+  requireContentType(association, "application/json");
+  const associationHash = createHash("sha256")
+    .update(association.body, "utf8")
+    .digest("hex");
+  if (
+    associationHash !==
+    "789b60b536c7bf1cd98a9ac37e8a89fb78691a06a525fea67c1a8ece41cb7b96"
+  ) {
+    throw new Error(
+      "Apple app-site association did not match the vendored source",
+    );
+  }
+  checks.push(toCheck(association));
+
   const health = await requestText(
     "health",
-    new URL("/api/health", normalized),
+    new URL(`${normalized}/api/health`),
     fetchImpl,
     retryOptions,
     now,
@@ -161,8 +264,8 @@ export async function verifyHTTP(
   checks.push(toCheck(health));
 
   const root = await requestText(
-    "homepage",
-    new URL("/", normalized),
+    "Wrought homepage",
+    new URL(normalized),
     fetchImpl,
     retryOptions,
     now,
@@ -172,7 +275,7 @@ export async function verifyHTTP(
 
   const deepLink = await requestText(
     "SPA deep link",
-    new URL("/play/deployment-smoke", normalized),
+    new URL(`${normalized}/play/deployment-smoke`),
     fetchImpl,
     retryOptions,
     now,
@@ -215,6 +318,7 @@ export async function verifyBrowser(
   options: { executablePath?: string; signal?: AbortSignal } = {},
 ): Promise<BrowserCheck> {
   const normalized = normalizePublicURL(baseURL);
+  const publicOrigin = new URL(normalized).origin;
   const startedAt = Date.now();
   throwIfAborted(options.signal);
   const browser = await chromium.launch({
@@ -250,14 +354,14 @@ export async function verifyBrowser(
       failures.push({ kind: "console", detail: message.text() });
     });
     page.on("requestfailed", (request) => {
-      if (new URL(request.url()).origin !== normalized) return;
+      if (new URL(request.url()).origin !== publicOrigin) return;
       failures.push({
         kind: "request",
         detail: `${request.method()} ${safePath(request.url())}`,
       });
     });
     page.on("response", (response) => {
-      if (new URL(response.url()).origin !== normalized) return;
+      if (new URL(response.url()).origin !== publicOrigin) return;
       if (response.status() < 400) return;
       const method = response.request().method();
       const path = safePath(response.url());
@@ -280,13 +384,13 @@ export async function verifyBrowser(
       );
     }
     const title = await page.title();
-    if (title !== "Gezerah") {
+    if (title !== "Wrought") {
       throw new Error(
-        `browser title was ${JSON.stringify(title)}, expected "Gezerah"`,
+        `browser title was ${JSON.stringify(title)}, expected "Wrought"`,
       );
     }
     await page
-      .getByRole("heading", { name: "Play Gezerah with ChatGPT" })
+      .getByRole("heading", { name: "Play Wrought with ChatGPT" })
       .waitFor({ state: "visible" });
     const launchHref = await page
       .getByRole("link", { name: "Open in ChatGPT" })
@@ -302,7 +406,7 @@ export async function verifyBrowser(
       launchURL.searchParams.get("browserUrl") !== `${normalized}/play/new` ||
       launchPrompt === null ||
       !launchPrompt.includes(`${normalized}/play/new`) ||
-      !launchPrompt.includes("read and apply Gezerah's Play handbook") ||
+      !launchPrompt.includes("read and apply Wrought's Play handbook") ||
       !launchPrompt.includes("My play preference: surprise me.")
     ) {
       throw new Error(
@@ -325,7 +429,7 @@ export async function verifyBrowser(
       page.waitForResponse(
         (candidate) =>
           candidate.request().method() === "POST" &&
-          new URL(candidate.url()).pathname === "/api/auth/signin",
+          new URL(candidate.url()).pathname === "/wrought/api/auth/signin",
       ),
       form.getByRole("button", { name: "Sign in", exact: true }).click(),
     ]);
@@ -388,6 +492,20 @@ async function requestText(
   retryOptions: RetryOptions,
   now: () => number,
 ): Promise<TextResponse> {
+  return requestTextWithStatus(name, url, httpOK, fetchImpl, retryOptions, now);
+}
+
+const httpOK = 200;
+const httpNotFound = 404;
+
+async function requestTextWithStatus(
+  name: string,
+  url: URL,
+  expectedStatus: number,
+  fetchImpl: FetchImplementation,
+  retryOptions: RetryOptions,
+  now: () => number,
+): Promise<TextResponse> {
   return retry(
     async () => {
       const startedAt = now();
@@ -406,9 +524,11 @@ async function requestText(
           `${name} returned retryable HTTP ${response.status}`,
         );
       }
-      if (response.status !== 200) {
+      if (response.status !== expectedStatus) {
         await response.body?.cancel().catch(() => undefined);
-        throw new Error(`${name} returned HTTP ${response.status}`);
+        throw new Error(
+          `${name} returned HTTP ${response.status}, expected ${expectedStatus}`,
+        );
       }
       const finalURL = new URL(response.url || url);
       if (finalURL.protocol !== "https:" || finalURL.origin !== url.origin) {
@@ -463,8 +583,14 @@ async function fetchWithTimeout(
 
 function requireHTMLShell(response: TextResponse): void {
   requireContentType(response, "text/html");
-  if (!/<title>Gezerah<\/title>/i.test(response.body)) {
-    throw new Error(`${response.name} did not return the Gezerah app shell`);
+  if (!/<title>Wrought<\/title>/i.test(response.body)) {
+    throw new Error(`${response.name} did not return the Wrought app shell`);
+  }
+}
+
+function requireNoDirectoryListing(response: TextResponse): void {
+  if (/<title>\s*Index of |Directory listing for/i.test(response.body)) {
+    throw new Error(`${response.name} exposed a directory listing`);
   }
 }
 
@@ -538,8 +664,8 @@ function safePath(value: string): string {
 
 function expectedAnonymous401(method: string, path: string): boolean {
   return (
-    (method === "GET" && path === "/api/me") ||
-    (method === "POST" && path === "/api/auth/signin")
+    (method === "GET" && path === "/wrought/api/me") ||
+    (method === "POST" && path === "/wrought/api/auth/signin")
   );
 }
 

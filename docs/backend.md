@@ -6,10 +6,11 @@ The backend is a Go 1.25.14 application with three direct runtime dependencies:
 `github.com/jackc/pgx/v5`, `golang.org/x/crypto` for Argon2id, and
 `gopkg.in/yaml.v3` for strict embedded-template front matter. It uses the standard-library HTTP server and
 method-aware `http.ServeMux`, `log/slog` for structured logs, and `embed.FS` for
-the PostgreSQL schema, production frontend, and three Markdown World templates.
+the PostgreSQL schema, production frontend, vendored personal-site snapshot,
+and three Markdown World templates.
 
 One process owns connection pooling, startup migrations, JSON/SSE routes,
-embedded SPA serving, and signal-driven shutdown. There is no ORM, worker,
+the `/wrought` SPA, root-site static serving, and signal-driven shutdown. There is no ORM, worker,
 cache, message broker, code generator, or dependency-injection framework.
 Narrative generation and compilation use an optional outbound OpenAI Responses
 API client; the server can start without its API key, but those calls are then
@@ -17,7 +18,7 @@ unavailable.
 
 ## Startup and shutdown
 
-`cmd/gezerah/main.go`:
+`cmd/wrought/main.go`:
 
 1. loads environment configuration;
 2. installs a JSON `slog` handler;
@@ -45,7 +46,7 @@ stalled write ends it, and clients reconnect with their last world-event cursor.
 
 ## Package map
 
-### `cmd/gezerah`
+### `cmd/wrought`
 
 Executable and process lifecycle only.
 
@@ -130,27 +131,41 @@ surfaces provider failures/refusals without exposing the API key.
 
 ### `web`
 
-`web/static.go` embeds `web/static`. A tracked placeholder lets backend-only
-checkouts compile before a frontend build.
+`web/static.go` embeds both `web/static` and `web/site`. A tracked placeholder
+lets backend-only checkouts compile before a frontend build. `web/site` is the
+reviewed snapshot of `/Users/joey/ts/jtan2231.github.io` revision `d0a73a4` that
+owns non-Wrought root paths. The source repository's `CNAME` and `.nojekyll`
+are platform controls, not site content, and are intentionally neither vendored
+nor served.
 
 ## HTTP server construction
 
-`NewServerWithStaticFS` is the test seam. It constructs a private API mux, a
-file server over the provided filesystem, current world route registrations,
-and explicit JSON not-found handlers for `/api` and `/api/`.
+`NewServerWithStaticFS` is the Wrought-asset test seam. It constructs the
+private API mux, a file server over the supplied application filesystem, the
+embedded root-site file server, current World route registrations, and
+internal JSON not-found handlers for `/api` and `/api/`.
 
 ```text
 request logger
 └── panic recovery
     └── browser security headers
-        └── API/static dispatch
-        ├── /api and /api/* → API mux
-        └── GET everything else → static/SPA handler
+        └── outer host dispatch
+            ├── exact /wrought mount → strip mount
+            │   ├── /api and /api/* → API mux
+            │   └── other GET → Wrought static/SPA handler
+            └── everything else → vendored root-site file server
 ```
 
 API bodies are capped at 1 MiB. Recovery logs panic and stack; API panics return
 the JSON `500 internal_error` envelope. Request summaries record method, path,
 status, bytes, and duration.
+
+Frame denial, MIME sniffing protection, referrer policy, permissions policy,
+and HTTPS HSTS are applied outside the host dispatch and therefore cover root
+site and Wrought responses. The Wrought Content Security Policy is applied only
+inside the exact product mount; it does not constrain JavaScript executing from
+a different same-origin root page. See
+[Security](security.md#combined-host-origin).
 
 When `OPENAI_API_KEY` is non-empty, production server construction installs the
 Terra and Luna model provider. Without it, normal routes still start and
@@ -158,16 +173,26 @@ model-backed commands return `503 model_unavailable`.
 
 ### Static/SPA behavior
 
-For non-API GET requests:
+For non-API GET requests inside the exact `/wrought` mount:
 
 1. normalize the path;
 2. serve an existing non-directory file;
-3. let missing `/assets/*` return normal not found;
+3. let missing public `/wrought/assets/*` return normal not found;
 4. otherwise serve `index.html` for client routing;
 5. return 503 when the embedded build has no `index.html`.
 
 Assets are embedded at Go compile time; rebuilding Vite alone cannot change an
-already-built production binary.
+already-built production binary. `/wroughtly`, unprefixed product-looking
+paths, and unknown root-site files do not enter this fallback.
+
+The root-site handler serves tracked files only. If an exact file is absent, it
+tries the same path with `.html`, so `/index`, `/annals/index`, `/plaid/oauth`,
+and `/privacy-policy` are non-redirecting aliases for their tracked `.html`
+files. It assigns explicit MIME types for HTML, JavaScript, CSS, Markdown, and
+plain text; the Apple association route is explicitly JSON. A tracked directory
+without a trailing slash receives a deterministic `301` to the slash form with
+the raw query string preserved. The slash form requires an `index.html`; if
+none exists, it returns 404 instead of rendering a directory listing.
 
 ## Request and response handling
 
@@ -487,7 +512,7 @@ by resolution.
 Every product handler except health, signup, and signin requires an active
 opaque-cookie session. Route registration wraps protected handlers
 deny-by-default; unsafe requests additionally require an exact same-origin
-`Origin` and the session-bound `X-GEZERAH-CSRF` token. Caller-supplied identity
+`Origin` and the session-bound `X-WROUGHT-CSRF` token. Caller-supplied identity
 headers are ignored. World handlers load an active membership for the session user.
 Owner/editor helpers grant durable configuration authority. A separate helper
 checks whether that exact membership is the currently designated human

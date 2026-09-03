@@ -46,7 +46,7 @@ function makeModule(ledger: MutationLedger, state: { value: string }) {
       async perform({ ui }, input) {
         state.value = input.name;
         ui.writes.push(input.name);
-        ledger.recordBrowserRequest("POST", "/api/worlds");
+        ledger.recordBrowserRequest("POST", "/wrought/api/worlds");
       },
     },
     contracts: {
@@ -151,7 +151,7 @@ describe("journey runtime", () => {
       actorId: "owner",
       behaviorId: "fixture.create",
       method: "POST",
-      sanitizedURL: "/api/worlds",
+      sanitizedURL: "/wrought/api/worlds",
       phase: "frontend-driver",
     });
   });
@@ -266,20 +266,20 @@ describe("mutation epochs", () => {
       "player",
       "JRN-003/improvised-round-resolved",
       "POST",
-      "/api/worlds/[world]/interactions",
+      "/wrought/api/worlds/[world]/interactions",
     );
     ledger.recordObservedBrowserRequest(
       "spectator",
       undefined,
       "DELETE",
-      "/api/worlds/[world]",
+      "/wrought/api/worlds/[world]",
     );
     assert.deepEqual(ledger.mutations()[0], {
       sequence: 1,
       actorId: "player",
       behaviorId: "JRN-003/improvised-round-resolved",
       method: "POST",
-      sanitizedURL: "/api/worlds/[world]/interactions",
+      sanitizedURL: "/wrought/api/worlds/[world]/interactions",
       phase: "frontend-driver",
     });
     assert.throws(() => ledger.assertClean(), /outside a named behavior/);

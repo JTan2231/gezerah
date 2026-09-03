@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/JTan2231/gezerah/internal/rules"
+	"github.com/JTan2231/wrought/internal/rules"
 
 	"github.com/jackc/pgx/v5"
 )
@@ -74,7 +74,7 @@ func (s *Server) handleCreateWorldMechanic(w http.ResponseWriter, r *http.Reques
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/api/worlds/%s/mechanics/%s", member.WorldID, result.Mechanic.ID))
+	w.Header().Set("Location", publicProductPath(fmt.Sprintf("/api/worlds/%s/mechanics/%s", member.WorldID, result.Mechanic.ID)))
 	writeJSON(w, http.StatusCreated, result)
 }
 

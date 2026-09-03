@@ -7,7 +7,7 @@ import type {
 
 export function createChatGPTWorldStartPrompt(buildURL: string): string {
   return [
-    `Help me start a new World in Gezerah at ${buildURL}.`,
+    `Help me start a new World in Wrought at ${buildURL}.`,
     "Ask me a few short questions about the premise, tone, my Character, and the kinds of difficult choices I enjoy.",
     "Then guide me through the shortest setup in Build, one step at a time. I will sign in and make each change myself.",
     "When my World and Character are ready, guide me into Play, help me choose ChatGPT as Facilitator, and begin.",
@@ -16,11 +16,11 @@ export function createChatGPTWorldStartPrompt(buildURL: string): string {
 
 export function createChatGPTTemplateStartPrompt(templateURL: string): string {
   return [
-    `Help me start playing Gezerah using the attached page at ${templateURL}.`,
+    `Help me start playing Wrought using the attached page at ${templateURL}.`,
     "If the page requires authentication, wait while I sign in, then continue autonomously.",
-    "Treat the final line of this prompt as my only setup input. Do not ask setup questions, ask me to take control of the browser, or ask me to click, navigate, copy, paste, select, or edit anything in Gezerah.",
+    "Treat the final line of this prompt as my only setup input. Do not ask setup questions, ask me to take control of the browser, or ask me to click, navigate, copy, paste, select, or edit anything in Wrought.",
     "Use the page's site tools to inspect the three ready-made Worlds, recommend and copy the best match, choose and claim the best-fitting available Character, and present the first Problem.",
-    "Once in Play, read and apply Gezerah's Play handbook, then begin directly with the first Problem. In that first Problem only, open with a short expositional statement that tells me who my Character is and what they are currently doing. Make the chosen World apparent through the scene rather than reporting your selections or setup. Preserve my agency over my Character's Actions: never invent or submit an Action until I tell you what I do. Keep lasting game state in Gezerah.",
+    "Once in Play, read and apply Wrought's Play handbook, then begin directly with the first Problem. In that first Problem only, open with a short expositional statement that tells me who my Character is and what they are currently doing. Make the chosen World apparent through the scene rather than reporting your selections or setup. Preserve my agency over my Character's Actions: never invent or submit an Action until I tell you what I do. Keep lasting game state in Wrought.",
     "My play preference: surprise me.",
   ].join(" ");
 }

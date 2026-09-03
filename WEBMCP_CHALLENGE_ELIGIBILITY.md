@@ -1,14 +1,19 @@
 # WebMCP Challenge eligibility: before and during the submission period
 
-This is the judge-facing record of what already existed in Gezerah before the
+This is the judge-facing record of what already existed in the product now
+named Wrought before the
 WebMCP Challenge and what was added during the challenge submission period. It
 also explains why this repository has two historical roots and how to inspect
 the preserved development history.
 
 > [!IMPORTANT]
-> Gezerah is a pre-existing product. The work in the **before** section is not
+> Wrought is a pre-existing product. The work in the **before** section is not
 > presented as challenge work. Judges should evaluate only the WebMCP extension
 > added after the submission period opened, beginning with commit `aaa1d89`.
+
+The immutable commit IDs and tree hashes below retain the dated repository
+history. GitHub links use the repository's current Wrought path; renaming the
+repository does not change those objects or their chronology.
 
 ## Rule this record addresses
 
@@ -31,12 +36,12 @@ The eligibility boundary is one parent-child edge:
 
 | Snapshot                    | Commit and original commit time                                                                                                                                | Meaning                                                                                                                                                                                        |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Last pre-period product     | [`07e00ebc9f4e82368c13437a950b39985abd8135`](https://github.com/JTan2231/gezerah/commit/07e00ebc9f4e82368c13437a950b39985abd8135), `2026-08-10T23:22:54-05:00` | Tip of [`archive/pre-webmcp-baseline`](https://github.com/JTan2231/gezerah/tree/archive/pre-webmcp-baseline): a 36-commit product history with 247 tracked files and no WebMCP implementation. |
-| First WebMCP implementation | [`aaa1d89000207ddd8e9678586601bce7facb3563`](https://github.com/JTan2231/gezerah/commit/aaa1d89000207ddd8e9678586601bce7facb3563), `2026-08-29T14:45:38-05:00` | Direct child of `07e00eb`; adds the first ChatGPT/WebMCP implementation during the submission period.                                                                                          |
+| Last pre-period product     | [`07e00ebc9f4e82368c13437a950b39985abd8135`](https://github.com/JTan2231/wrought/commit/07e00ebc9f4e82368c13437a950b39985abd8135), `2026-08-10T23:22:54-05:00` | Tip of [`archive/pre-webmcp-baseline`](https://github.com/JTan2231/wrought/tree/archive/pre-webmcp-baseline): a 36-commit product history with 247 tracked files and no WebMCP implementation. |
+| First WebMCP implementation | [`aaa1d89000207ddd8e9678586601bce7facb3563`](https://github.com/JTan2231/wrought/commit/aaa1d89000207ddd8e9678586601bce7facb3563), `2026-08-29T14:45:38-05:00` | Direct child of `07e00eb`; adds the first ChatGPT/WebMCP implementation during the submission period.                                                                                          |
 
 Review the bounded change directly:
 
-- [GitHub comparison: `07e00eb...aaa1d89`](https://github.com/JTan2231/gezerah/compare/07e00ebc9f4e82368c13437a950b39985abd8135...aaa1d89000207ddd8e9678586601bce7facb3563)
+- [GitHub comparison: `07e00eb...aaa1d89`](https://github.com/JTan2231/wrought/compare/07e00ebc9f4e82368c13437a950b39985abd8135...aaa1d89000207ddd8e9678586601bce7facb3563)
 - `git diff --stat origin/archive/pre-webmcp-baseline aaa1d89000207ddd8e9678586601bce7facb3563`
 - `git diff origin/archive/pre-webmcp-baseline aaa1d89000207ddd8e9678586601bce7facb3563`
 
@@ -111,11 +116,11 @@ separately inspectable.
 ## Why the Git history has two roots
 
 Development originally took place in the 42-commit graph archived at
-[`archive/pre-open-source-history`](https://github.com/JTan2231/gezerah/tree/archive/pre-open-source-history).
-Its final commit is:
+[`archive/pre-open-source-history`](https://github.com/JTan2231/wrought/tree/archive/pre-open-source-history).
+Its final open-source preparation snapshot is:
 
 ```text
-1b66b63015d7c2dde262f138e3aeb3e3b00cf5c8  Prepare Gezerah for open source
+commit 1b66b63015d7c2dde262f138e3aeb3e3b00cf5c8
 tree a04464bff2feee056318873e2fa66b5c9fb517bb
 ```
 
@@ -152,9 +157,10 @@ unmodified historical evidence and therefore retain their original author
 metadata plus non-secret deployment identifiers and a public test link that
 the open-source preparation commit later removed.
 
-The project used the working names **Worldwright**, **dnd**, and **Scryer**
-before being named **Gezerah**. The archived commits and Railway records show
-those renames in one continuous repository and deployment lineage.
+The project used the working names **Worldwright**, **dnd**, and **Scryer**, then
+an earlier public name, before becoming **Wrought**. The archived commits and
+Railway records show those renames in one continuous repository and deployment
+lineage.
 
 ## Corroborating Railway timestamps
 

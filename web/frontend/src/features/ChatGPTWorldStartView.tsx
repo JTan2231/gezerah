@@ -42,7 +42,7 @@ export function ChatGPTWorldStartView({
           definition:
             "Choose one of three complete World templates, then play as one of its Characters.",
           description:
-            "Open ChatGPT, sign in on the attached Gezerah page, optionally replace the prefilled play preference, then send the prompt. ChatGPT will recommend a World and Character, make your copy, and begin Play.",
+            "Open ChatGPT, sign in on the attached Wrought page, optionally replace the prefilled play preference, then send the prompt. ChatGPT will recommend a World and Character, make your copy, and begin Play.",
           manualLabel: "Choose a World yourself",
           actionLabel: "Open in ChatGPT",
         }

@@ -38,7 +38,7 @@ export function WorldTemplateLibraryView({
   return (
     <div className="library-page play-library-page world-template-library-page">
       <header className="library-topbar">
-        <span className="library-brand-button" aria-label="Gezerah">
+        <span className="library-brand-button" aria-label="Wrought">
           <Brand compact />
         </span>
         <div className="account-menu">

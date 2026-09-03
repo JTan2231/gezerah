@@ -910,7 +910,7 @@ async function createFixture(
   );
   const world = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Matrix World ${unique}` },
     owner.id,
   );
@@ -923,7 +923,7 @@ async function createFixture(
   );
   const primaryEntity = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     {
       display_name: `Primary Courier ${unique}`,
       controller_world_membership_ids: [joinedPlayer.membership_id],
@@ -932,26 +932,26 @@ async function createFixture(
   );
   const otherEntity = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${world.id}/entities`,
     { display_name: `Other Courier ${unique}` },
     owner.id,
   );
   const playerWorld = await getJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds/${world.id}`,
+    `${baseURL}/wrought/api/worlds/${world.id}`,
     player.id,
   );
   expect(playerWorld.play_status).toBe("ready");
 
   const foreignWorld = await postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/worlds`,
+    `${baseURL}/wrought/api/worlds`,
     { name: `Foreign Matrix World ${unique}` },
     foreignOwner.id,
   );
   const foreignEntity = await postJSON<EntityResponse>(
     request,
-    `${baseURL}/api/worlds/${foreignWorld.id}/entities`,
+    `${baseURL}/wrought/api/worlds/${foreignWorld.id}/entities`,
     { display_name: `Foreign Courier ${unique}` },
     foreignOwner.id,
   );
@@ -987,7 +987,7 @@ async function redeemPlayer(
 ): Promise<WorldResponse> {
   const invite = await postJSON<InviteResponse>(
     request,
-    `${baseURL}/api/worlds/${worldID}/invites`,
+    `${baseURL}/wrought/api/worlds/${worldID}/invites`,
     { role: "player", expires_in_days: 7 },
     ownerID,
   );
@@ -997,7 +997,7 @@ async function redeemPlayer(
   );
   return postJSON<WorldResponse>(
     request,
-    `${baseURL}/api/world-invites/${token}/redeem`,
+    `${baseURL}/wrought/api/world-invites/${token}/redeem`,
     undefined,
     playerID,
   );
@@ -1010,7 +1010,7 @@ async function createOpenInteraction(
 ): Promise<InteractionResponse> {
   const interaction = await postJSON<InteractionResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${fixture.world.id}/interactions`,
+    `${fixture.baseURL}/wrought/api/worlds/${fixture.world.id}/interactions`,
     {
       present: true,
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
@@ -1049,7 +1049,7 @@ async function createOneStatusInstance(
 ): Promise<string> {
   const open = await postJSON<InteractionResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${world.id}/interactions`,
+    `${fixture.baseURL}/wrought/api/worlds/${world.id}/interactions`,
     {
       present: true,
       prompt: `${label} ${randomUUID().slice(0, 8)}`,
@@ -1060,7 +1060,7 @@ async function createOneStatusInstance(
   );
   const interaction = await postJSON<InteractionResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
+    `${fixture.baseURL}/wrought/api/worlds/${world.id}/interactions/${open.id}/adjudicate`,
     { expected_revision: open.revision },
     actorID,
   );
@@ -1068,7 +1068,7 @@ async function createOneStatusInstance(
   const effectID = randomUUID();
   const result = await postJSON<InteractionResolutionResult>(
     request,
-    `${fixture.baseURL}/api/worlds/${world.id}/interactions/${interaction.id}/resolve`,
+    `${fixture.baseURL}/wrought/api/worlds/${world.id}/interactions/${interaction.id}/resolve`,
     {
       expected_revision: interaction.revision,
       expected_rules_revision: world.rules_revision,
@@ -1170,7 +1170,7 @@ async function readInteraction(
 ): Promise<InteractionResponse> {
   return getJSON<InteractionResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${fixture.world.id}/interactions/${interactionID}`,
+    `${fixture.baseURL}/wrought/api/worlds/${fixture.world.id}/interactions/${interactionID}`,
     fixture.owner.id,
   );
 }
@@ -1184,7 +1184,7 @@ async function readSheet(
 ): Promise<EntitySheetResponse> {
   return getJSON<EntitySheetResponse>(
     request,
-    `${fixture.baseURL}/api/worlds/${worldID}/entities/${entityID}/sheet`,
+    `${fixture.baseURL}/wrought/api/worlds/${worldID}/entities/${entityID}/sheet`,
     userID,
   );
 }
@@ -1194,7 +1194,7 @@ function interactionURL(
   interactionID: string,
   suffix: string,
 ): string {
-  return `${fixture.baseURL}/api/worlds/${fixture.world.id}/interactions/${interactionID}/${suffix}`;
+  return `${fixture.baseURL}/wrought/api/worlds/${fixture.world.id}/interactions/${interactionID}/${suffix}`;
 }
 
 async function latestEventCursor(
@@ -1212,7 +1212,7 @@ async function readAvailableEvents(
 ): Promise<WorldEvent[]> {
   const controller = new AbortController();
   const response = await fetch(
-    `${fixture.baseURL}/api/worlds/${worldID}/events?after=${after}`,
+    `${fixture.baseURL}/wrought/api/worlds/${worldID}/events?after=${after}`,
     {
       headers: { Cookie: await actorCookieHeader(fixture.owner.id) },
       signal: controller.signal,

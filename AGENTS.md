@@ -16,7 +16,7 @@ stable ChatGPT acceptance scenario has a passing dated record.
 `./run.sh` controls local development. With no arguments it starts the Go API
 and Vite frontend in the background and exits. Use `./run.sh status`,
 `./run.sh restart backend|frontend|all`, `./run.sh stop`, `./run.sh logs`, and
-`./run.sh tail`. Runtime state and logs live under ignored `.gezerah/`; stop managed
+`./run.sh tail`. Runtime state and logs live under ignored `.wrought/`; stop managed
 services when debugging is complete.
 
 Do not add built-in entity classes, privileged configured keys, canonical JSON
@@ -27,7 +27,7 @@ world-authored or problem-authored terms engine-level meaning.
 
 We do not have active users. Please do not consider them in your design considerations.
 
-The registered Semantics repository for project `gezerah` is authoritative for
+The registered Semantics repository identified by the stable marker above is authoritative for
 maintained platform and product terminology and its semantic history. Before
 answering questions about the product or architecture, use Chancery contract
 `semantics.repository.explore` to query it. Do not read or edit Semantics state

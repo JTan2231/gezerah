@@ -77,7 +77,7 @@ func (s *Server) handleContinueTerra(w http.ResponseWriter, r *http.Request) {
 		handleAppError(w, err)
 		return
 	}
-	w.Header().Set("Location", fmt.Sprintf("/api/worlds/%s/interactions/%s", worldID, interactionID))
+	w.Header().Set("Location", publicProductPath(fmt.Sprintf("/api/worlds/%s/interactions/%s", worldID, interactionID)))
 	writeJSON(w, http.StatusCreated, item)
 }
 

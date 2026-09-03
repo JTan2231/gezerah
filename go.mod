@@ -1,4 +1,4 @@
-module github.com/JTan2231/gezerah
+module github.com/JTan2231/wrought
 
 go 1.25.14
 
