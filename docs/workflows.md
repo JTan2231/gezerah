@@ -22,13 +22,15 @@
    Play state. Every bundled template profile is complete. ChatGPT reads the
    static platform Play handbook for its authority, Play-loop, presentation,
    privacy, and recovery contract.
-5. ChatGPT improvises and presents the first Problem from the World description,
-   prose guide, Mechanics, profiles, and logical state. It begins the response
-   with an unpersisted diagnostic block headed by the Character, followed by
-   subordinate Mechanics, Statuses, and `Initial state` Changes rows. The person
-   responds with an in-fiction Action in chat; ChatGPT records and resolves it,
-   refreshes Play, and begins the next response with current effective state and
-   the exact changes from that Resolution before presenting the next Problem.
+5. Immediately before writing, saving, and presenting the first Problem,
+   ChatGPT calls the no-input `read_gameplay_readout` tool. It copies the
+   returned complete Character Markdown verbatim, then presents the persisted
+   Problem written from the World description, prose guide, Mechanics, profiles,
+   and logical state. The person responds with an in-fiction Action in chat;
+   ChatGPT records and resolves it, refreshes Play, calls the readout tool again,
+   saves the next Problem, and copies a non-empty exact delta before the
+   persisted Consequence and next Problem. An empty result adds nothing to the
+   response.
 
 After sign-in, ChatGPT performs these application operations through site tools
 and never makes a browser-control request. If the person says to choose, asks for
@@ -36,18 +38,20 @@ a surprise, or supplies no preference, ChatGPT does not require a setup
 questionnaire.
 
 During Play, chat is the lived scene and Wrought is the exact durable record.
-After Character claim, every successful scene response starts with the fixed
-operative-state hierarchy defined in [ChatGPT play through
-WebMCP](webmcp.md#operative-state-preamble): `State — Character`, then
-`Mechanics`, `Statuses`, and `Changes`. Mechanic entries use `Label: value`;
-Statuses use names and counts or `None`; Changes use exact `Label: before →
-after`, `+Status`, and `−Status` entries, `Initial state` on the first Problem,
-or `None` after a no-op Resolution. ChatGPT then presents the persisted public
-Consequence followed by the persisted next Problem without a workflow
-acknowledgement, additional Resolution summary, or unpersisted bridge. The
-diagnostic block is not persisted or included in narrative word and beat counts,
-and it does not replace causal, observable state in the unchanged narrative. A
-failed mutation is reported operationally and is never fictionalized.
+The [gameplay readout](webmcp.md#gameplay-readout) is formatted entirely by its
+dedicated read-only tool. The initial result contains the Character heading, one
+`**Label:** value` bullet per Mechanic, the current `Statuses` bullet, and a
+divider. Later results contain only `**Label:** before → after` bullets for
+changed effective Mechanics and individual `**Status:** +Name` or
+`**Status:** −Name` bullets. A no-op, cancellation, or Resolution with no
+relevant controlled-Character change returns an empty string, so ChatGPT adds
+no heading or divider. ChatGPT never changes or reconstructs the tool's text.
+It then presents the persisted public Consequence followed by the persisted
+next Problem without a workflow acknowledgement, additional Resolution summary,
+or unpersisted bridge. The readout is not persisted or included in narrative
+word and beat counts, and causal, observable state remains in the unchanged
+narrative. A failed mutation is reported operationally and is never
+fictionalized.
 
 This candidate delegated-start path covers only the bundled ready-made World
 templates and complete Characters. Custom Build, saved-World discovery,

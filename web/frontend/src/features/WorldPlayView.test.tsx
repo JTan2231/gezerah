@@ -218,6 +218,7 @@ describe("WorldPlayView", () => {
               registeredToolNames: [
                 "read_play_handbook",
                 "inspect_play",
+                "read_gameplay_readout",
                 "claim_entity",
                 "present_problem",
                 "submit_action",

@@ -317,12 +317,11 @@ export async function verifyBrowser(
       launchPrompt === null ||
       !launchPrompt.includes(`${normalized}/play/new`) ||
       !launchPrompt.includes("read and apply Wrought's Play handbook") ||
-      !launchPrompt.includes("prefix every successful gameplay response") ||
-      !launchPrompt.includes("State — Character") ||
-      !launchPrompt.includes("Mechanics:") ||
-      !launchPrompt.includes("Statuses:") ||
-      !launchPrompt.includes("Changes:") ||
-      !launchPrompt.includes("Label: value") ||
+      !launchPrompt.includes("call read_gameplay_readout once") ||
+      !launchPrompt.includes("copy its complete result verbatim") ||
+      !launchPrompt.includes("copy a non-empty result verbatim") ||
+      !launchPrompt.includes("add nothing if it is empty") ||
+      !launchPrompt.includes("already includes its divider") ||
       !launchPrompt.includes("My play preference: surprise me.")
     ) {
       throw new Error(

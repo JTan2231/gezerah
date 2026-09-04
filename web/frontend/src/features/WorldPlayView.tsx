@@ -479,7 +479,7 @@ function agentSiteToolStatus(
     case "ready":
       return "Play site-tool surface is ready. ChatGPT can inspect and continue Play.";
     case "failed":
-      return `Play site-tool surface failed: ${siteTools.registeredToolNames.length} of 6 registrations succeeded before teardown; complete surface not ready.`;
+      return `Play site-tool surface failed: ${siteTools.registeredToolNames.length} of 7 registrations succeeded before teardown; complete surface not ready.`;
   }
 }
 

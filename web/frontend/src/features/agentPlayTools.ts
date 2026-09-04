@@ -63,8 +63,8 @@ const compactProblemNarrationGuidance =
 const compactConsequenceNarrationGuidance =
   "Keep the Consequence compact enough that it and the following Problem form a combined public passage of about 100 to 140 words total, not 100 to 140 words for each saved part. Let each saved part use only the share it needs. Lead with the Action's immediate outcome, include only causal details that matter now, and use at most one concise sentence for changed state when stating it directly is clearest. Do not both dramatize and restate the same change.";
 
-const responsePreambleGuidance =
-  "Prefix every successful public gameplay passage with response_preamble from the latest Play inspection, copied exactly and followed by a blank line. It is neutral operative state, not part of the saved Problem or Consequence, not a second narrative summary, and not part of the prose word or beat target. Use it once before a combined Consequence and following Problem; do not add prose, IDs, revisions, or workflow commentary to it.";
+const gameplayReadoutGuidance =
+  "Immediately before the first Problem after Character claim, and exactly once after each successfully committed Consequence and refreshed Play inspection, call read_gameplay_readout. If it returns non-empty text, copy that text verbatim as the first content in the public response; it already includes the separating divider. Never edit, reformat, summarize, reconstruct, or add to the readout. If it returns an empty string, add no readout or divider. The readout is not part of the saved Problem or Consequence and does not count toward the prose word or beat target.";
 
 const mechanicValueSchema = {
   oneOf: [
@@ -314,7 +314,7 @@ export function createAgentPlayTools(
     {
       name: "inspect_play",
       description:
-        "Read the current World and all Play context visible to the signed-in current player: Play status, prose guide, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. For ready Play, response_preamble is a complete, display-ready diagnostic block built from current effective values and Statuses, plus the latest finalized Interaction's committed changes. Copy it exactly before the next successful public gameplay passage. The prose guide shapes how public Problems and Consequences are written, not what is true. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
+        "Read the current World and all Play context visible to the signed-in current player: Play status, prose guide, available Entities, World roster, visible profile prose, Entity sheets, active Problem, Actions, and recent history. Do this before any Play change and whenever the state may have changed. The prose guide shapes how public Problems and Consequences are written, not what is true. Profile prose and sheets are cues for what a Character notices; they never give NPCs or other Characters access to unexpressed private thoughts.",
       inputSchema: emptyInputSchema,
       annotations: { readOnlyHint: true },
       execute: async (input, options) => {
@@ -448,14 +448,83 @@ export function createAgentPlayTools(
           })),
           active_interaction: activeInteraction,
           recent_history: recentHistory,
-          response_preamble: buildResponsePreamble(
-            activeEntities,
-            viewer?.controlled_entity_ids ?? [],
-            activeMechanics,
+          next_step: nextPlayStep(
+            world,
+            viewer,
+            activeInteraction,
             recentHistory[0],
           ),
-          next_step: nextPlayStep(world, viewer, activeInteraction),
         });
+      },
+    },
+    {
+      name: "read_gameplay_readout",
+      description:
+        "Return the exact display-ready Markdown readout for the signed-in current player's controlled Characters. Call this no-input read-only tool only at two times: immediately before presenting the first Problem after Character claim, and exactly once after each successfully committed Consequence and refreshed Play inspection before presenting that Consequence with the next Problem. The first result contains the complete current readout. Later results contain only effective-value and Status changes from the newest finalized Interaction. The raw string already includes its final --- divider. Copy every non-empty result verbatim as the first content of that public response, then add the unchanged saved narrative below it. Never edit, reformat, summarize, reconstruct, or add to the returned text. An empty string means no controlled-Character state changed: output no readout and no divider.",
+      inputSchema: emptyInputSchema,
+      annotations: { readOnlyHint: true },
+      execute: async (input, options) => {
+        const requestSignal = toolSignal(signal, options?.signal);
+        requireObject(input);
+        const world = await api<World>(worldPath(worldId), {
+          signal: requestSignal,
+        });
+        if (
+          world.status !== "active" ||
+          world.facilitator.source !== "agent" ||
+          world.current_play_role !== "player" ||
+          world.play_status !== "ready"
+        )
+          throw new SiteToolUsageError(
+            "The gameplay readout is available only for ready current-player Play.",
+          );
+        const [members, entities, mechanics, interactions] = await Promise.all([
+          api<WorldMember[]>(worldPath(worldId, "members"), {
+            signal: requestSignal,
+          }),
+          api<WorldEntity[]>(worldPath(worldId, "entities"), {
+            signal: requestSignal,
+          }),
+          api<WorldMechanicCollection>(worldPath(worldId, "mechanics"), {
+            signal: requestSignal,
+          }),
+          api<Interaction[]>(worldPath(worldId, "interactions"), {
+            signal: requestSignal,
+          }),
+        ]);
+        const viewer = members.find(
+          (membership) => membership.id === world.membership_id,
+        );
+        if (viewer === undefined)
+          throw new SiteToolUsageError(
+            "The current player membership is unavailable.",
+          );
+        const activeEntities = entities.filter((entity) => !entity.archived);
+        const controlledEntityIDs = new Set(viewer.controlled_entity_ids);
+        if (
+          !activeEntities.some((entity) => controlledEntityIDs.has(entity.id))
+        )
+          throw new SiteToolUsageError(
+            "The current player has no active controlled Character.",
+          );
+        const latestFinalizedInteraction = interactions.find(
+          (interaction) =>
+            interaction.status === "resolved" ||
+            interaction.status === "cancelled",
+        );
+        if (
+          latestFinalizedInteraction?.status === "resolved" &&
+          latestFinalizedInteraction.resolution === undefined
+        )
+          throw new SiteToolUsageError(
+            "The latest committed Resolution is unavailable.",
+          );
+        return buildGameplayReadout(
+          activeEntities,
+          viewer.controlled_entity_ids,
+          mechanics.mechanics,
+          latestFinalizedInteraction,
+        );
       },
     },
     {
@@ -517,13 +586,13 @@ export function createAgentPlayTools(
           play_status: result.play_status,
           roster_revision: result.roster_revision,
           next_step:
-            "Refresh your view of Play, then present the first Problem without asking another setup question.",
+            "Refresh your view of Play, then call read_gameplay_readout exactly once immediately before presenting the first Problem. Copy its complete raw result verbatim before the unchanged Problem narrative without asking another setup question.",
         });
       },
     },
     {
       name: "present_problem",
-      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same narrative text you present in chat as the scene, unchanged after the separate diagnostic preamble. ${responsePreambleGuidance} Present the prompt without describing the save or adding another summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactProblemNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the next fictional Problem for ready World memberships. First inspect the current Play state, and use this only while the World has no unfinished Problem. The public prompt is the same narrative text you present in chat as the scene, unchanged after any separate gameplay readout. ${gameplayReadoutGuidance} Present the prompt without describing the save or adding another summary. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactProblemNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -554,7 +623,7 @@ export function createAgentPlayTools(
         return toolResult({
           presented_interaction: interaction,
           next_step:
-            "Prefix the response with response_preamble from the latest Play inspection exactly as provided, followed by a blank line. Then present presented_interaction.prompt unchanged as the scene, without saying it was saved or adding another summary, and invite the current player to describe what their Character does.",
+            "If read_gameplay_readout returned non-empty text for this response, copy that text verbatim first; otherwise add nothing before the narrative. Then present presented_interaction.prompt unchanged as the scene, without saying it was saved or adding another summary, and invite the current player to describe what their Character does.",
         });
       },
     },
@@ -612,7 +681,7 @@ export function createAgentPlayTools(
     },
     {
       name: "resolve_problem",
-      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same narrative text you present in chat, unchanged after the separate diagnostic preamble. ${responsePreambleGuidance} Present the narrative without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactConsequenceNarrationGuidance}`,
+      description: `As ChatGPT Facilitator, write and save the current open or adjudicating Problem's public Consequence and optional mechanical Effects. First inspect the current Play state and account for every submitted Action. The public narrative is the same narrative text you present in chat, unchanged after any separate gameplay readout. ${gameplayReadoutGuidance} Present the narrative without an approval recap, list of Effects, report about the operation, or invented story bridge. Show decisions and changed state through what happens. An empty effects array is valid. ${proseGuideNarrationGuidance} ${characterAttunedNarrationGuidance} ${compactConsequenceNarrationGuidance}`,
       inputSchema: {
         type: "object",
         properties: {
@@ -694,7 +763,7 @@ export function createAgentPlayTools(
         return toolResult({
           resolution: result,
           next_step:
-            "Read Play again so response_preamble contains the refreshed current state and this committed Resolution's exact changes, then save the next compact Problem. Prefix the combined response with that response_preamble exactly once, followed by a blank line; then present resolution.narrative unchanged as the Consequence and let the next saved prompt flow from it as one continuous scene. Do not add an approval recap, list of Effects, or report about the operation. Keep the narrative portion of the combined ordinary single-player passage about 100 to 140 words across 5 to 7 short prose beats.",
+            "Read Play again, then call read_gameplay_readout exactly once so it returns only this committed Consequence's controlled-Character changes, and save the next compact Problem. If the readout is non-empty, copy it verbatim as the first content of the combined response; if it is empty, add nothing. Then present resolution.narrative unchanged as the Consequence and let the next saved prompt flow from it as one continuous scene. Do not add an approval recap, list of Effects, or report about the operation. Keep the narrative portion of the combined ordinary single-player passage about 100 to 140 words across 5 to 7 short prose beats.",
         });
       },
     },
@@ -791,10 +860,13 @@ function nextPlayStep(
   world: World,
   viewer: WorldMember | undefined,
   interaction: Interaction | undefined,
+  latestFinalizedInteraction: Interaction | undefined,
 ): string {
   if (world.status === "archived") return "This world is read-only.";
   if (interaction === undefined)
-    return "Write and save the next Problem, then prefix the response with response_preamble and present its public prompt unchanged as the scene.";
+    return latestFinalizedInteraction === undefined
+      ? "Call read_gameplay_readout immediately before writing and saving the first Problem. Copy its complete result verbatim before presenting the public prompt unchanged as the scene."
+      : "Call read_gameplay_readout exactly once now, then write and save the next Problem. Copy a non-empty result verbatim before the persisted Consequence and public prompt, or add nothing if it is empty.";
   if (interaction.status === "adjudicating")
     return "Refresh your view of Play and the Entity sheets, then retry the pending Resolution.";
   if (interaction.status !== "open")
@@ -809,57 +881,106 @@ function nextPlayStep(
     interaction.eligible_responder_membership_ids.includes(viewer.id) &&
     !submittedMembershipIDs.has(viewer.id)
   )
-    return "Prefix the response with response_preamble, continue from the saved Problem as the scene, and ask what the current player's Character does, then record only their explicit Action.";
+    return "Continue from the saved Problem as the scene and ask what the current player's Character does, then record only their explicit Action.";
   const allRespondersActed =
     interaction.eligible_responder_membership_ids.every((membershipID) =>
       submittedMembershipIDs.has(membershipID),
     );
   return allRespondersActed
-    ? "Resolve the Problem, refresh Play, then prefix the response with the refreshed response_preamble before its saved public Consequence."
-    : "Prefix the response with response_preamble and continue the scene without workflow commentary while waiting for the remaining responders.";
+    ? "Resolve the Problem, refresh Play, then call read_gameplay_readout exactly once before presenting its saved public Consequence."
+    : "Continue the scene without workflow commentary while waiting for the remaining responders.";
 }
 
-function buildResponsePreamble(
+function buildGameplayReadout(
   entities: WorldEntity[],
   controlledEntityIDs: string[],
   mechanics: WorldMechanic[],
   latestFinalizedInteraction: Interaction | undefined,
 ): string {
   const controlledIDs = new Set(controlledEntityIDs);
-  return entities
-    .filter((entity) => controlledIDs.has(entity.id))
-    .map((entity) =>
-      [
-        `**State — ${diagnosticText(entity.display_name)}**`,
-        "",
-        `- **Mechanics:** ${mechanicSummary(entity.sheet, mechanics)}`,
-        `- **Statuses:** ${statusSummary(entity.sheet)}`,
-        `- **Changes:** ${changeSummary(
-          entity.id,
-          mechanics,
-          latestFinalizedInteraction,
-        )}`,
-      ].join("\n"),
-    )
-    .join("\n\n");
-}
-
-function mechanicSummary(
-  sheet: EntitySheet,
-  mechanics: WorldMechanic[],
-): string {
-  const entries = mechanics.flatMap((mechanic) => {
-    const value = sheet.effective_values[mechanic.id];
-    return value === undefined
+  const controlledEntities = entities.filter((entity) =>
+    controlledIDs.has(entity.id),
+  );
+  const blocks = controlledEntities.flatMap((entity) => {
+    const lines =
+      latestFinalizedInteraction === undefined
+        ? initialReadoutLines(entity.sheet, mechanics)
+        : deltaReadoutLines(entity.id, mechanics, latestFinalizedInteraction);
+    return lines.length === 0
       ? []
       : [
-          `${diagnosticText(mechanic.name)}: ${formatMechanicValue(
-            value,
-            mechanic,
-          )}`,
+          [`**${diagnosticText(entity.display_name)}**`, "", ...lines].join(
+            "\n",
+          ),
         ];
   });
-  return entries.length === 0 ? "None" : entries.join(" · ");
+  return blocks.length === 0 ? "" : `${blocks.join("\n\n")}\n\n---\n\n`;
+}
+
+function initialReadoutLines(
+  sheet: EntitySheet,
+  mechanics: WorldMechanic[],
+): string[] {
+  const mechanicLines = mechanics
+    .filter((mechanic) => !mechanic.archived)
+    .map((mechanic) => {
+      const value = sheet.effective_values[mechanic.id];
+      if (value === undefined)
+        throw new SiteToolUsageError(
+          "A current effective Mechanic value is unavailable.",
+        );
+      return `- **${diagnosticText(mechanic.name)}:** ${formatMechanicValue(
+        value,
+        mechanic,
+      )}`;
+    });
+  return [...mechanicLines, `- **Statuses:** ${statusSummary(sheet)}`];
+}
+
+function deltaReadoutLines(
+  entityID: string,
+  mechanics: WorldMechanic[],
+  latestFinalizedInteraction: Interaction,
+): string[] {
+  if (
+    latestFinalizedInteraction.status !== "resolved" ||
+    latestFinalizedInteraction.resolution === undefined
+  )
+    return [];
+
+  const mechanicsByID = new Map(
+    mechanics.map((mechanic) => [mechanic.id, mechanic]),
+  );
+  const lines = latestFinalizedInteraction.resolution.effective_changes
+    .filter((change) => change.entity_id === entityID)
+    .map((change) => {
+      const mechanic = mechanicsByID.get(change.mechanic_id);
+      if (mechanic === undefined)
+        throw new SiteToolUsageError(
+          "A changed Mechanic is unavailable from the current World.",
+        );
+      return `- **${diagnosticText(mechanic.name)}:** ${formatMechanicValue(
+        change.before,
+        mechanic,
+      )} → ${formatMechanicValue(change.after, mechanic)}`;
+    });
+  for (const application of latestFinalizedInteraction.resolution
+    .applications) {
+    if (application.entity_id !== entityID || !application.changed) continue;
+    if (
+      application.type === "apply-status" &&
+      !application.active_before &&
+      application.active_after
+    )
+      lines.push(`- **Status:** +${diagnosticText(application.status_name)}`);
+    if (
+      application.type === "remove-status" &&
+      application.active_before &&
+      !application.active_after
+    )
+      lines.push(`- **Status:** −${diagnosticText(application.status_name)}`);
+  }
+  return lines;
 }
 
 function statusSummary(sheet: EntitySheet): string {
@@ -873,70 +994,6 @@ function statusSummary(sheet: EntitySheet): string {
         `${diagnosticText(name)}${count === 1 ? "" : ` ×${count}`}`,
     )
     .join(" · ");
-}
-
-function changeSummary(
-  entityID: string,
-  mechanics: WorldMechanic[],
-  latestFinalizedInteraction: Interaction | undefined,
-): string {
-  if (latestFinalizedInteraction === undefined) return "Initial state";
-  if (
-    latestFinalizedInteraction.status !== "resolved" ||
-    latestFinalizedInteraction.resolution === undefined
-  )
-    return "None";
-
-  const changes = latestFinalizedInteraction.resolution.effective_changes;
-  const entries = mechanics.flatMap((mechanic) => {
-    const change = changes.find(
-      (candidate) =>
-        candidate.entity_id === entityID &&
-        candidate.mechanic_id === mechanic.id,
-    );
-    return change === undefined
-      ? []
-      : [
-          `${diagnosticText(mechanic.name)}: ${formatMechanicValue(
-            change.before,
-            mechanic,
-          )} → ${formatMechanicValue(change.after, mechanic)}`,
-        ];
-  });
-
-  const statusChanges = new Map<
-    string,
-    { prefix: "+" | "−"; name: string; count: number }
-  >();
-  for (const application of latestFinalizedInteraction.resolution
-    .applications) {
-    if (application.entity_id !== entityID || !application.changed) continue;
-    const prefix =
-      application.type === "apply-status" &&
-      !application.active_before &&
-      application.active_after
-        ? "+"
-        : application.type === "remove-status" &&
-            application.active_before &&
-            !application.active_after
-          ? "−"
-          : undefined;
-    if (prefix === undefined || !("status_name" in application)) continue;
-    const key = `${prefix}\u0000${application.status_name}`;
-    const existing = statusChanges.get(key);
-    statusChanges.set(key, {
-      prefix,
-      name: application.status_name,
-      count: (existing?.count ?? 0) + 1,
-    });
-  }
-  entries.push(
-    ...[...statusChanges.values()].map(
-      ({ prefix, name, count }) =>
-        `${prefix}${diagnosticText(name)}${count === 1 ? "" : ` ×${count}`}`,
-    ),
-  );
-  return entries.length === 0 ? "None" : entries.join(" · ");
 }
 
 function formatMechanicValue(
@@ -954,5 +1011,5 @@ function diagnosticText(value: string): string {
   return value
     .trim()
     .replace(/\s+/g, " ")
-    .replace(/[\\`*_[\]<>]/g, "\\$&");
+    .replace(/[\\`*_[\]<>&~]/g, "\\$&");
 }

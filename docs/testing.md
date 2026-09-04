@@ -305,23 +305,39 @@ browser operation:
 2. continue in the same conversation while the same attached tab navigates to
    `/play/{world_id}` and the Play surface becomes ready;
 3. call `inspect_play`, choose and `claim_entity`, call `inspect_play` again,
-   read the relevant `read_play_handbook` topics, `present_problem`, and begin
-   that first scene response with current effective state and `Initial state`;
+   read the relevant `read_play_handbook` topics, call the no-input
+   `read_gameplay_readout`, then call `present_problem` and copy the raw Markdown
+   string verbatim immediately before the first Problem;
 4. for each of the three participant responses, record it with `submit_action`,
-   resolve it with `resolve_problem`, refresh Play, and begin the next response
-   with current effective state and the exact committed changes before
-   presenting the next Problem.
+   resolve it with `resolve_problem`, refresh Play, call
+   `read_gameplay_readout`, save the next Problem, copy a non-empty raw result
+   verbatim, and then present the persisted Consequence and next Problem. If the
+   result is empty, add no diagnostic text, Character heading, or divider.
 
 #### Pass and failure criteria
 
-The required operative-state preamble has this hierarchy:
+The initial gameplay readout has this exact shape, with one Mechanic per bullet:
 
 ```markdown
-**State — CHARACTER**
+**CHARACTER**
 
-- **Mechanics:** LABEL: VALUE · LABEL: VALUE
+- **MECHANIC LABEL:** VALUE
+- **MECHANIC LABEL:** VALUE
 - **Statuses:** STATUS · STATUS ×COUNT
-- **Changes:** LABEL: BEFORE → AFTER · +STATUS · −STATUS
+
+---
+```
+
+A later non-empty delta has this exact shape:
+
+```markdown
+**CHARACTER**
+
+- **MECHANIC LABEL:** BEFORE → AFTER
+- **Status:** +STATUS
+- **Status:** −STATUS
+
+---
 ```
 
 A run passes only when all of the following are observed:
@@ -333,20 +349,33 @@ A run passes only when all of the following are observed:
 - ChatGPT makes zero browser-control requests and asks zero setup questions
   after the prefilled play preference is sent;
 - Start-to-Play navigation happens in the same attached browser tab;
-- every successful in-Play scene response after Character claim begins with the
-  required preamble, the `State` heading names the selected Character, and one
-  blank line separates the preamble from the persisted narrative;
-- each `Mechanics` row lists every active Mechanic from the authoritative
-  refreshed Entity sheet as `Label: current-effective-value`; each `Statuses`
-  row lists all current active Status names, collapses same-name instances as
-  `Name ×count`, and says `None` when there are none;
-- the first Problem's `Changes` row says `Initial state`; every later row agrees
-  exactly with the just-committed Resolution's effective changes and Status
-  applications or removals, uses `Label: before → after`, `+Name`, and `−Name`,
-  and says `None` when that Resolution made no such change;
-- the preamble remains neutral diagnostic information: it contains no prose,
-  invented category or value, control-plane detail, or predicted result, and it
-  is neither persisted nor counted toward narrative word or beat targets;
+- exactly once immediately before saving and presenting the first Problem,
+  ChatGPT calls `read_gameplay_readout` and copies its returned Markdown
+  verbatim: the heading
+  is the selected Character, every active Mechanic from the authoritative
+  refreshed Entity sheet has its own `**Label:** current-effective-value`
+  bullet, the one `Statuses` bullet contains all current active names joined by
+  ` · ` with same-name counts where appropriate or `None`, and `---` ends the
+  readout;
+- exactly once immediately after each committed Consequence and refreshed Play
+  inspection, ChatGPT calls the readout tool and copies any returned Markdown
+  verbatim; a non-empty result contains only the controlled Character's exact
+  changed effective Mechanics as one
+  `**Label:** before → after` bullet each and exact Status additions or removals
+  as one `**Status:** +Name` or `**Status:** −Name` bullet each, followed by the
+  divider, with no delta aggregation, no `Changes` section, and no unchanged
+  state; Status bullets retain committed application/removal order, and each
+  changed controlled Character retains its own bold heading;
+- cancellation, a no-op Resolution, or a Resolution with no relevant
+  controlled-Character change yields the empty string and therefore no visible
+  readout at all, including no Character heading or divider;
+- the readout remains neutral diagnostic information: ChatGPT does not alter,
+  reconstruct, supplement, or repeat the tool's exact Markdown, and that text
+  contains no narrative prose, invented category or value, control-plane
+  detail, or predicted result and is neither persisted nor counted toward
+  narrative word or beat targets; every non-empty raw result ends with exactly
+  `---\n\n`, so the unchanged saved narrative follows without ChatGPT adding
+  separator formatting;
 - the first Problem opens with a short expositional statement saying who the
   selected Character is and what they are currently doing, without repeating
   that introduction in later Problems, then establishes concrete, innocuous
@@ -361,9 +390,9 @@ A run passes only when all of the following are observed:
   display, document, or other in-world source when the guide calls for that
   distinction; the narrator otherwise uses the guide's ordinary human register
   rather than turning facilitation rules or application concepts into labels;
-- excluding the operative-state preamble, the first Problem uses up to about
-  180 presented narrative words across five to seven short narrative beats when
-  the opening needs them, and fewer when it does not; each whole
+- excluding any gameplay readout, the first Problem uses up to about 180
+  presented narrative words across five to seven short narrative beats when the
+  opening needs them, and fewer when it does not; each whole
   Consequence-plus-next-Problem narrative passage normally contains 100–140
   presented words across five to seven beats, with the range applying once to
   the combined passage rather than separately to each saved part;
@@ -386,11 +415,12 @@ A run passes only when all of the following are observed:
 - each public Problem prompt and Consequence narrative presented in chat agrees
   with the persisted public prose, and each committed Consequence flows into the
   persisted next Problem without an additional Effect, Application, or
-  effective-change summary and without an unpersisted narrative bridge; the
-  diagnostic preamble is the only material added around that persisted prose;
+  effective-change summary and without an unpersisted narrative bridge; a
+  non-empty verbatim gameplay readout is the only material added before that
+  persisted prose;
 - durable changes remain embodied in observable conditions, access, treatment,
-  pressure, injury, equipment, or similarly meaningful prose; the diagnostic
-  preamble does not replace, paraphrase, or otherwise change that narrative;
+  pressure, injury, equipment, or similarly meaningful prose; the gameplay
+  readout does not replace, paraphrase, or otherwise change that narrative;
 - ordinary scene prose exposes no site-tool names, registration/readiness,
   revisions, idempotency, Interaction lifecycle, or other control-plane state;
 - a mutation failure, if one occurs, is reported as an operational failure and
@@ -423,13 +453,15 @@ acceptance-environment kind, ChatGPT surface, stated play preference, result
 (`passed`, `failed`, or `blocked`), browser-control-request count, and cleanup
 result. For every step reached, it records the World and Character, participant
 Actions and persisted submitted Actions, public Consequences and following
-Problems, each response's exact operative-state preamble, whether its current
-values and changes agree with the refreshed Entity sheet and just-committed
-Resolution, each narrative passage's presented word and beat counts excluding
-the preamble, any cadence exception rationale, and whether the transcript was
-reviewed for presentation and control-plane leakage. It also records the
-conversation count, setup-question count, and any platform-owned confirmation
-count separately. A failed or blocked record must state the observed reason.
+Problems, each `read_gameplay_readout` raw result and its visible verbatim copy
+or correct empty-result omission, whether initial values agree with the
+refreshed Entity sheet and later deltas agree with the just-committed Resolution,
+each narrative passage's presented word and beat counts excluding readout text,
+any cadence exception rationale, and whether the transcript was reviewed for
+presentation and control-plane leakage. It also records the conversation count,
+setup-question count, readout-call count and placement, and any platform-owned
+confirmation count separately. A failed or blocked record must state the
+observed reason.
 
 Do not publish the transcript or record the password, session cookie, CSRF token,
 database URL, invitation secret, or transient tunnel URL. An external handbook
@@ -533,11 +565,11 @@ API adapter, and backend-independent view rendering:
 - ChatGPT web-launch URL and starter-instruction construction, including the
   sole play-preference input and prohibition on browser-control requests; and
 - World-settings prose-guide editing and clearing; and
-- Start and six-command Play site-tool registration outcomes, schemas, prose-guide
-  transport and bounded authority, static
-  Play-handbook topics, operative-state preamble and presentation contract, API
-  adaptation, idempotent retry state, route replacement, and recoverable errors
-  through a controlled `document.modelContext`.
+- Start and seven-command Play site-tool registration outcomes, schemas,
+  prose-guide transport and bounded authority, static Play-handbook topics,
+  exact gameplay-readout formatting and presentation contract, API adaptation,
+  idempotent retry state, route replacement, and recoverable errors through a
+  controlled `document.modelContext`.
 
 Backend-independent `*View.tsx` components also have fixture-driven rendering
 tests. They use `react-dom/server`'s `renderToStaticMarkup`, which is already
@@ -625,12 +657,13 @@ claim lifecycle-journey evidence.
 `test/specs/integrations/delegated-start.site-tools.spec.ts` is the automated
 site-tool page integration. It installs a controlled browser WebMCP harness,
 starts from authenticated `/play/new`, invokes the complete Start surface,
-requires same-tab navigation, invokes the Play
-inspect/claim/inspect/read-handbook/present/submit/resolve sequence, presents the
-next Problem, reloads, and checks durable agreement. It also proves that no
-trusted setup controls were clicked. It does not invoke ChatGPT, exercise the
-separate authentication boundary, evaluate three turns of model presentation,
-or supply a ChatGPT acceptance record.
+requires same-tab navigation, invokes the Play inspection, claim, handbook,
+Problem, readout, Action, and Resolution sequence, verifies the exact initial,
+delta, and empty raw Markdown readout results, presents the next Problem,
+reloads, and checks durable agreement. It also proves that no trusted setup
+controls were clicked. It does not invoke ChatGPT, exercise the separate
+authentication boundary, evaluate three turns of model presentation, or supply
+a ChatGPT acceptance record.
 
 The dependency-free runtime under `test/src/scenario/` owns the 141-ID/five-tier
 registry, required named cases, behavior/outcome contracts, checkpoint and

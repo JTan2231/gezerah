@@ -74,7 +74,6 @@ interface PlayInspection {
   }>;
   active_interaction?: Interaction;
   recent_history?: Interaction[];
-  response_preamble?: string;
   next_step: string;
 }
 
@@ -178,6 +177,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   await waitForSiteTools(page, [
     "read_play_handbook",
     "inspect_play",
+    "read_gameplay_readout",
     "claim_entity",
     "present_problem",
     "submit_action",
@@ -213,14 +213,18 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     { topic: "state-and-effects" },
   );
   expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
-    /State — Character/i,
+    /read_gameplay_readout returns final Markdown/i,
   );
   expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
-    /Mechanics:.+Statuses:.+Changes:/i,
+    /bold Character name.+one bullet per current effective Mechanic/i,
   );
   expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(/Label: value/i);
   expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
-    /Initial state.+None.+before → after.+\+Status\/−Status/i,
+    /Label: before → after.+Status: \+Name.+Status: −Name/i,
+  );
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(/empty string/i);
+  expect(stateHandbook.handbook.sections[0]?.guidance).toMatch(
+    /byte-for-byte/i,
   );
 
   const waiting = await invokeSiteTool<PlayInspection>(
@@ -263,22 +267,32 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     ({ id }) => id === selectedCharacter!.id,
   );
   expect(controlledCharacter).toBeDefined();
-  expect(ready.response_preamble).toContain(
-    `**State — ${controlledCharacter!.name}**\n\n- **Mechanics:**`,
+  const initialReadout = await invokeSiteTool<string>(
+    page,
+    "read_gameplay_readout",
+    {},
   );
-  for (const mechanic of ready.mechanics ?? []) {
+  const expectedMechanicLines = (ready.mechanics ?? []).map((mechanic) => {
     const value = controlledCharacter!.sheet.effective_values[mechanic.id];
     expect(value).toBeDefined();
     const rendered =
       value!.kind === "number" ? value!.value : String(value!.value);
-    expect(ready.response_preamble).toContain(
-      `${mechanic.name}: ${rendered}${mechanic.unit ? ` ${mechanic.unit}` : ""}`,
-    );
-  }
-  expect(ready.response_preamble).toContain("- **Statuses:** None");
-  expect(
-    ready.response_preamble?.endsWith("- **Changes:** Initial state"),
-  ).toBe(true);
+    return `- **${mechanic.name}:** ${rendered}${
+      mechanic.unit ? ` ${mechanic.unit}` : ""
+    }`;
+  });
+  expect(initialReadout).toBe(
+    [
+      `**${controlledCharacter!.name}**`,
+      "",
+      ...expectedMechanicLines,
+      "- **Statuses:** None",
+      "",
+      "---",
+      "",
+      "",
+    ].join("\n"),
+  );
 
   const firstProblem = {
     title: `The delayed sentence ${run}`,
@@ -294,7 +308,9 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     prompt: firstProblem.prompt,
     status: "open",
   });
-  expect(presented.next_step).toMatch(/response_preamble.+exactly/i);
+  expect(presented.next_step).toMatch(
+    /read_gameplay_readout.+non-empty.+verbatim/i,
+  );
   expect(presented.next_step).toMatch(/prompt unchanged as the scene/i);
   expect(presented.next_step).not.toMatch(/problem (?:created|presented)/i);
   await expect(page.getByText(firstProblem.prompt)).toBeVisible();
@@ -339,7 +355,8 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   expect(resolved.resolution.applications).toEqual([]);
   expect(resolved.resolution.effective_changes).toEqual([]);
   expect(resolved.next_step).toMatch(/Read Play again/i);
-  expect(resolved.next_step).toMatch(/response_preamble.+exact changes/i);
+  expect(resolved.next_step).toMatch(/read_gameplay_readout exactly once/i);
+  expect(resolved.next_step).toMatch(/non-empty.+verbatim.+empty.+nothing/i);
   expect(resolved.next_step).toMatch(/narrative unchanged as the Consequence/i);
   expect(resolved.next_step).toMatch(
     /without an approval recap|report about the operation/i,
@@ -350,13 +367,16 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
     "inspect_play",
     {},
   );
-  expect(refreshed.response_preamble).toContain(
-    `**State — ${controlledCharacter!.name}**\n\n- **Mechanics:**`,
+  expect(refreshed.recent_history?.[0]).toMatchObject({
+    id: presented.presented_interaction.id,
+    status: "resolved",
+  });
+  const unchangedReadout = await invokeSiteTool<string>(
+    page,
+    "read_gameplay_readout",
+    {},
   );
-  expect(refreshed.response_preamble).toContain("- **Statuses:** None");
-  expect(refreshed.response_preamble?.endsWith("- **Changes:** None")).toBe(
-    true,
-  );
+  expect(unchangedReadout).toBe("");
 
   const secondProblem = {
     title: `The corrected clock ${run}`,
@@ -377,7 +397,7 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
   expect(controlClicksBeforeReload).toEqual([]);
 
   await page.reload();
-  await waitForSiteTools(page, ["inspect_play"]);
+  await waitForSiteTools(page, ["inspect_play", "read_gameplay_readout"]);
   const durable = await invokeSiteTool<PlayInspection>(
     page,
     "inspect_play",
@@ -401,6 +421,9 @@ test("browser/page integration: delegated-start site-tool surfaces continue thro
         status: "resolved",
       }),
     ]),
+  );
+  expect(await invokeSiteTool<string>(page, "read_gameplay_readout", {})).toBe(
+    "",
   );
   await expect(page.getByText(secondProblem.prompt)).toBeVisible();
   expect(await trustedControlClicks(page)).toEqual([]);

@@ -13,11 +13,11 @@ The attached pages remain the canonical application surfaces. They display the
 available authored choices, current Problem, current-player Action, Resolution
 history, Entity sheets, and logical state. ChatGPT changes durable state only
 through their site tools, which reuse the existing same-origin API. Chat is the
-lived scene, not a second state store: after Character claim, each successful
-in-Play scene response begins with a small unpersisted operative-state preamble
-drawn from authoritative Wrought state, then presents the same public
-Consequence and next-Problem prose that Wrought persists while the exact record
-remains in Wrought.
+lived scene, not a second state store: after Character claim, ChatGPT obtains
+the applicable operative prefix from the dedicated read-only
+`read_gameplay_readout` tool, copies any returned Markdown verbatim, and then
+presents the same public Consequence and next-Problem prose that Wrought
+persists while the exact record remains in Wrought.
 
 This integration uses the browser's imperative WebMCP API. It is not a remote
 MCP server and does not add a second authentication system.
@@ -114,17 +114,21 @@ unavailable when ChatGPT is Facilitator.
    an available Character using the same preference, and claims it. Template
    profiles are complete, so a successful claim makes the current player ready.
    ChatGPT reads the static Play-handbook topics it needs before facilitating.
-5. ChatGPT inspects the newly ready Play state and presents the first improvised
-   Problem from the World description, prose guide, Mechanics, profiles, and
-   logical state. That first Problem alone opens with a short expositional
-   statement saying who the selected Character is and what they are currently
-   doing; later Problems do not repeat that introduction. The response begins
-   with the operative-state preamble and labels its Changes row `Initial state`.
+5. ChatGPT inspects the newly ready Play state, calls
+   `read_gameplay_readout`, then writes and saves the first improvised Problem
+   from the World description, prose guide, Mechanics, profiles, and logical
+   state. That first Problem alone opens with a short expositional statement
+   saying who the selected Character is and what they are currently doing;
+   later Problems do not repeat that introduction. ChatGPT copies the tool's
+   complete initial Character readout verbatim before the persisted Problem
+   prose.
 6. The person describes an in-fiction Action in chat. ChatGPT records the
    Action, resolves the Problem with public narrative and optional valid
-   Effects, refreshes Play, and begins the response with current effective state
-   plus the exact changes from that committed Resolution before presenting the
-   persisted Consequence and next Problem.
+   Effects, refreshes Play, calls `read_gameplay_readout`, and saves the next
+   Problem. It copies a non-empty returned delta verbatim before presenting the
+   persisted Consequence and next Problem. When the readout is empty, the
+   persisted narrative begins the response with no diagnostic header or
+   divider.
 
 The attached page refreshes its authoritative state after each mutation.
 Closing its tab or navigating away removes its site tools; reopening the
@@ -175,7 +179,7 @@ setup, or arbitrary World authoring.
 
 ### Play site-tool page
 
-An active `/play/{world_id}` page registers the six-command Play surface only
+An active `/play/{world_id}` page registers the seven-command Play surface only
 when the World
 uses the `agent` Facilitator and the signed-in membership is a current player.
 The membership's Play status and command-specific state still authorize each
@@ -183,9 +187,14 @@ command independently, so registration never bypasses the server gates:
 
 - `inspect_play` returns the current-player-visible World, including its prose
   guide, World mechanic graph, roster, profiles, Entity sheets, active Problem,
-  Actions, and recent Resolutions. For ready Play it also returns the complete
-  display-ready `response_preamble`, projected from those authoritative values
-  and the latest finalized Interaction.
+  Actions, and recent Resolutions.
+- `read_gameplay_readout` is a no-input, read-only presentation command for a
+  ready current player. It returns the raw final Markdown string itself: the
+  complete initial Character readout when no Interaction has finalized, the
+  newest resolved Interaction's exact controlled-Character delta, or an empty
+  string after cancellation, a no-op Resolution, or a Resolution with no
+  relevant controlled-Character change. Repeat reads of unchanged state are
+  deterministic.
 - `read_play_handbook` returns the static platform facilitation contract. It
   accepts `all` or one of `role-and-authority`, `play-loop`,
   `state-and-effects`, `narrative-presentation`, `fiction-and-privacy`, and
@@ -197,13 +206,14 @@ command independently, so registration never bypasses the server gates:
 - `submit_action` records the signed-in current player's Action against the
   active Problem, using an Entity controlled by that membership.
 - `resolve_problem` begins agent adjudication and applies a Consequence with
-  optional concrete Effects under revision and idempotency protection. Its
-  successful result exposes the just-committed effective-value and Status
-  lifecycle changes needed for the diagnostic Changes row.
+  optional concrete Effects under revision and idempotency protection.
 
 Tool handlers reuse the frontend API adapter and refresh the authoritative page
-state after mutations. Results are concise structured data for ChatGPT; the
-backend response and refreshed UI remain the source of truth.
+state after mutations. `read_gameplay_readout` projects only from that
+authoritative state and immutable Resolution facts; it does not mutate Play.
+It returns the raw Markdown string; other tool results are concise structured
+data for ChatGPT. The backend response and refreshed UI remain the source of
+truth.
 
 Tool discovery provides the handbook's topic index; `read_play_handbook` is the
 corresponding detailed read. The platform handbook owns general facilitation
@@ -215,50 +225,75 @@ retain short local reminders at the point where an omission would be costly.
 
 ### Narrative presentation contract
 
-ChatGPT presents Play as meaningful continuous prose. Every successful in-Play
-scene response after Character claim begins with the diagnostic preamble below;
-the preamble is separate from the narrative. A person's decision remains
-apparent through what their Character attempts and the world's causal response,
-not through a repeated approval or an `Action submitted` announcement. State
-also remains apparent in the narrative through changed conditions, access,
-treatment, pressure, injury, equipment, and other observable consequences. If
-the person asks for an exact Mechanic, Status, value, or other information their
+ChatGPT presents Play as meaningful continuous prose. At the required points
+after Character claim it calls `read_gameplay_readout`. A non-empty result is a
+separate diagnostic prefix before the narrative; an empty result contributes
+nothing to the response. A person's decision remains apparent through what
+their Character attempts and the world's causal response, not through a
+repeated approval or an `Action submitted` announcement. State also remains
+apparent in the narrative through changed conditions, access, treatment,
+pressure, injury, equipment, and other observable consequences. If the person
+asks for an exact Mechanic, Status, value, or other information their
 current-player view may reveal, ChatGPT answers directly and exactly.
 
-#### Operative-state preamble
+#### Gameplay readout
 
-The preamble uses a fixed hierarchy and neutral labels, with no explanatory or
-colorful prose:
+The dedicated tool, rather than ChatGPT, formats the complete Markdown prefix.
+ChatGPT calls it only immediately before saving and presenting the first Problem
+and after each committed Consequence and refreshed Play inspection. For the
+first gameplay response it returns the Character heading, one bullet per active
+Mechanic at its current effective value, the current Statuses line, and the
+divider:
 
 ```markdown
-**State — Aria**
+**Aria**
 
-- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2
+- **Resolve:** 4
+- **Vigilance:** true
+- **Supply:** 2
 - **Statuses:** Shaken ×2
-- **Changes:** Resolve: 6 → 4 · +Shaken · −Inspired
+
+---
 ```
 
-`State` names the controlled Character. `Mechanics` lists every active Mechanic
-and its current effective value from the authoritative refreshed Entity sheet;
-each Mechanic uses `Label: value` so labels and values remain visually distinct.
-If the membership controls more than one Character, each gets a complete block.
-`Statuses` lists every active Status name, collapses same-name instances as
-`Name ×count`, and says `None` when there are no active Statuses. The first
-Problem says `Changes: Initial state`. Every later scene response derives
-`Changes` only from the just-committed Resolution: effective changes use
-`Label: before → after`, Status applications use `+Name`, and Status removals use
-`−Name`. It says `None` when that Resolution changed no effective value and
-applied or removed no Status.
+The initial `Statuses` bullet joins distinct names with ` · `, collapses
+same-name instances as `Name ×count`, and says `None` when there are no active
+Statuses. Mechanic and Status values come from the authoritative refreshed
+Entity sheet. With multiple controlled Characters, the tool repeats the heading
+and its bullets for each and emits one final divider. The readout introduces no
+built-in Mechanic or Status vocabulary.
 
-The preamble is followed by a blank line and then the persisted narrative. It is
-an unpersisted diagnostic projection, not a second durable state store or part
-of the Problem or Consequence prose, and it introduces no built-in Mechanic or
-Status vocabulary. The addition changes only this prefix; the persisted
-narrative beneath it follows the existing presentation contract unchanged.
-ChatGPT does not infer values or changes from the narrative, predict an
-uncommitted Effect, or present cached values as current. A failed mutation
-receives the operational failure treatment below rather than a speculative
-preamble.
+After each committed Consequence, the tool returns only changed effective
+Mechanics and Status additions or removals beneath the Character heading:
+
+```markdown
+**Aria**
+
+- **Resolve:** 6 → 4
+- **Status:** +Shaken
+- **Status:** −Inspired
+
+---
+```
+
+Each effective change uses one `**Label:** before → after` bullet. Each Status
+application or removal uses its own `**Status:** +Name` or `**Status:** −Name`
+bullet in committed order, without aggregation. When more than one controlled
+Character changed, each Character retains its own bold heading. There is no
+`Changes` heading or summary, and unchanged Mechanics and current Status
+inventory do not appear in a later delta. If the committed Resolution produced
+no relevant effective-value or Status change for any controlled Character, the
+tool returns an empty string: ChatGPT shows no readout, including no Character
+heading or divider. A cancelled Interaction likewise yields no readout.
+
+ChatGPT copies a non-empty tool result verbatim. It does not reformat, reorder,
+summarize, supplement, or reconstruct the Markdown, infer changes from the
+narrative, predict an uncommitted Effect, or present cached values as current.
+Every non-empty raw result ends with `---\n\n`; the returned divider and blank
+line are the boundary after which the persisted narrative follows unchanged.
+The readout is unpersisted diagnostic presentation, not a second durable state
+store or part of the Problem or Consequence prose. A failed mutation receives
+the operational failure treatment below rather than a speculative readout.
 
 The latest inspected prose guide shapes each public Problem and Consequence
 throughout the passage, including word choice, sentence rhythm, narrative
@@ -271,12 +306,12 @@ persisted history.
 
 The public Consequence prose passed to `resolve_problem` is the prose ChatGPT
 presents after the commit. After refreshing Play, the persisted next Problem is
-the next movement of the same scene. The required `Changes` row is the only
-added mechanical summary, and it projects exact effective changes and Status
-Applications or removals from that committed Resolution. ChatGPT does not
-generate an additional summary or an unpersisted narrative bridge between the
-Consequence and Problem. Wrought retains the exact Action, Consequence, Effects,
-Resolution receipt, Entity sheets, and history for audit and direct inspection.
+the next movement of the same scene. A non-empty verbatim result from
+`read_gameplay_readout` is the only mechanical material added before that
+persisted passage. ChatGPT does not generate an additional summary or an
+unpersisted narrative bridge between the Consequence and Problem. Wrought
+retains the exact Action, Consequence, Effects, Resolution receipt, Entity
+sheets, and history for audit and direct inspection.
 
 Ordinary scene passages use a compact cadence. The first Problem uses up to
 about 180 words across five to seven short narrative beats when the opening
@@ -286,19 +321,18 @@ beats. That combined target applies once to the Consequence-plus-Problem
 passage, not separately to each saved part; each uses only the share it needs. A
 beat is a movement of action or perception, not a required line break. ChatGPT
 writes to the target before saving and never pads, truncates, or paraphrases
-persisted prose afterward. Preamble labels and values are outside these
-narrative word and beat counts.
+persisted prose afterward. Gameplay-readout text is outside these narrative word
+and beat counts.
 
 Compression comes from selection rather than flattening the prose guide.
 ChatGPT leads with the immediate situation or causal outcome, keeps only details
 that establish the result, meaningful changed state, new pressure, and the
-responders' opening, and avoids inventorying unchanged context in the narrative
-even though the preamble lists the complete current mechanical state. When one
-brief sentence can orient the responders to changed state, one is enough;
-ChatGPT does not both dramatize and restate the same change. A Problem ends at
-one decision point: a direct question that leaves every eligible responder free
-to act or a clear cliffhanger. If examples help, ChatGPT offers at most three
-compact, non-exhaustive possibilities in one sentence.
+responders' opening, and avoids inventorying unchanged context in the narrative.
+When one brief sentence can orient the responders to changed state, one is
+enough; ChatGPT does not both dramatize and restate the same change. A Problem
+ends at one decision point: a direct question that leaves every eligible
+responder free to act or a clear cliffhanger. If examples help, ChatGPT offers
+at most three compact, non-exhaustive possibilities in one sentence.
 
 These are presentation targets rather than server validation, storage limits,
 or quotas. ChatGPT uses fewer words when the scene is already clear and only the
@@ -385,15 +419,16 @@ Acceptance covers the complete boundary:
 - authentication is the only ordinary manual Wrought operation;
 - the Start surface becomes ready and ChatGPT inspects and copies one template;
 - the same attached tab navigates to Play, where ChatGPT inspects, claims,
-  re-inspects, and presents the first Problem;
+  re-inspects, reads the complete initial `read_gameplay_readout` Markdown, then
+  saves and presents the first Problem with that readout copied verbatim before
+  it;
 - ChatGPT makes no browser-control request and asks for no redundant setup
   decision;
 - three natural-language Actions are submitted and resolved; the first Problem
   and every Consequence-plus-next-Problem passage use the ordinary compact
-  cadence outside the preamble, and every successful scene response after
-  Character claim begins with the required current-state and exact-change
-  hierarchy before presenting its persisted prose continuously without workflow
-  chatter or any additional receipt-shaped summary;
+  cadence outside the gameplay readout, and after every committed Consequence
+  ChatGPT copies the exact non-empty delta Markdown before the unchanged
+  persisted prose or adds nothing when the tool returns an empty string;
 - the copied World's prose guide remains recognizable across the three turns,
   including its distinction between narrator language and attributed in-world
   language, without being exposed as instructions; and

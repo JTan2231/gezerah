@@ -47,7 +47,7 @@ describe("ChatGPT play tools", () => {
     ).toBe(false);
   });
 
-  test("registers the six Play site tools with abortable registrations", async () => {
+  test("registers the seven Play site tools with abortable registrations", async () => {
     const controller = new AbortController();
     const registrations: Array<{
       tool: ModelContextTool;
@@ -69,6 +69,7 @@ describe("ChatGPT play tools", () => {
     expect(registrations.map(({ tool }) => tool.name)).toEqual([
       "read_play_handbook",
       "inspect_play",
+      "read_gameplay_readout",
       "claim_entity",
       "present_problem",
       "submit_action",
@@ -83,6 +84,9 @@ describe("ChatGPT play tools", () => {
     const inspectDescription = registrations.find(
       ({ tool }) => tool.name === "inspect_play",
     )?.tool.description;
+    const readoutTool = registrations.find(
+      ({ tool }) => tool.name === "read_gameplay_readout",
+    )?.tool;
     const presentDescription = registrations.find(
       ({ tool }) => tool.name === "present_problem",
     )?.tool.description;
@@ -96,9 +100,29 @@ describe("ChatGPT play tools", () => {
     expect(inspectDescription).toContain("prose guide");
     expect(inspectDescription).toContain("not what is true");
     expect(inspectDescription).toContain("unexpressed private thoughts");
+    expect(inspectDescription).not.toContain("response_preamble");
     expect(handbookTool?.annotations?.readOnlyHint).toBe(true);
     expect(handbookTool?.description).toContain("presenting scenes");
     expect(handbookTool?.description).toContain("recovering from failures");
+    expect(readoutTool?.annotations?.readOnlyHint).toBe(true);
+    expect(readoutTool?.inputSchema).toEqual({
+      type: "object",
+      properties: {},
+      additionalProperties: false,
+    });
+    expect(readoutTool?.description).toContain("no-input read-only tool");
+    expect(readoutTool?.description).toContain(
+      "immediately before presenting the first Problem",
+    );
+    expect(readoutTool?.description).toContain(
+      "after each successfully committed Consequence",
+    );
+    expect(readoutTool?.description).toContain(
+      "Copy every non-empty result verbatim",
+    );
+    expect(readoutTool?.description).toContain(
+      "An empty string means no controlled-Character state changed",
+    );
     expect(presentDescription).toContain("concrete environmental details");
     expect(presentDescription).toContain("effective Mechanics");
     expect(presentDescription).toContain("Details need not be clues");
@@ -109,18 +133,20 @@ describe("ChatGPT play tools", () => {
     expect(presentDescription).toContain("cannot change established facts");
     expect(presentDescription).toContain("Never quote it");
     expect(presentDescription).toContain("same narrative text you present");
-    expect(presentDescription).toContain("response_preamble");
-    expect(presentDescription).toContain("copied exactly");
+    expect(presentDescription).toContain("read_gameplay_readout");
+    expect(presentDescription).toContain("copy that text verbatim");
     expect(presentDescription).toContain("not part of the saved Problem");
-    expect(presentDescription).toContain("not part of the prose word or beat");
+    expect(presentDescription).toContain(
+      "does not count toward the prose word or beat target",
+    );
     expect(presentDescription).not.toContain("receipt");
     expect(presentDescription).toMatch(/up to about 180 words/i);
     expect(presentDescription).toMatch(/combined public passage.+100 to 140/i);
     expect(resolveDescription).toContain("Show decisions and changed state");
     expect(resolveDescription).toContain("report about the operation");
-    expect(resolveDescription).toContain("response_preamble");
-    expect(resolveDescription).toContain("exactly");
-    expect(resolveDescription).toContain("once before a combined Consequence");
+    expect(resolveDescription).toContain("read_gameplay_readout");
+    expect(resolveDescription).toContain("copy that text verbatim");
+    expect(resolveDescription).toContain("If it returns an empty string");
     expect(resolveDescription).toContain("Follow the prose guide");
     expect(resolveDescription).toContain("unexpressed thoughts");
     expect(resolveDescription).toMatch(/100 to 140 words total/i);
@@ -164,17 +190,24 @@ describe("ChatGPT play tools", () => {
     const stateGuidance = complete.handbook.sections.find(
       ({ topic }) => topic === "state-and-effects",
     )?.guidance;
-    expect(stateGuidance).toContain("State — Character");
-    expect(stateGuidance).toContain("Mechanics:");
-    expect(stateGuidance).toContain("Statuses:");
-    expect(stateGuidance).toContain("Changes:");
+    expect(stateGuidance).toContain(
+      "read_gameplay_readout returns final Markdown",
+    );
+    expect(stateGuidance).toContain("bold Character name");
+    expect(stateGuidance).toContain(
+      "one bullet per current effective Mechanic",
+    );
     expect(stateGuidance).toContain("Label: value");
-    expect(stateGuidance).toContain("current effective values");
-    expect(stateGuidance).toContain("Initial state");
-    expect(stateGuidance).toContain("None");
-    expect(stateGuidance).toContain("before → after");
-    expect(stateGuidance).toContain("+Status/−Status");
-    expect(stateGuidance).toContain("Never add IDs, revisions, private data");
+    expect(stateGuidance).toContain("current Statuses");
+    expect(stateGuidance).toContain("only exact controlled-Character");
+    expect(stateGuidance).toContain("Label: before → after");
+    expect(stateGuidance).toContain("Status: +Name");
+    expect(stateGuidance).toContain("Status: −Name");
+    expect(stateGuidance).toContain("empty string");
+    expect(stateGuidance).toContain("byte-for-byte");
+    expect(stateGuidance).toContain(
+      "never emit a header or divider for an empty result",
+    );
     expect(stateGuidance).toContain("not saved fiction");
     expect(narrativeGuidance).toContain(
       "Follow the inspected World's prose guide",
@@ -186,7 +219,7 @@ describe("ChatGPT play tools", () => {
     expect(narrativeGuidance).toMatch(/5 to 7 short prose beats/i);
     expect(narrativeGuidance).toMatch(/combined passage, not each saved part/i);
     expect(narrativeGuidance).toContain(
-      "diagnostic preamble does not count toward either target",
+      "readout does not count toward either target",
     );
     expect(narrativeGuidance).toMatch(
       /at most one concise sentence on changed state/i,
@@ -408,10 +441,12 @@ describe("ChatGPT play tools", () => {
     expect(payload.members[0]?.current_play_role).toBe("player");
     expect(payload.active_interaction.id).toBe("interaction-1");
     expect(payload.active_interaction.context_entity_ids).toEqual(["ash"]);
+    expect(payload).not.toHaveProperty("response_preamble");
   });
 
-  test("builds the hierarchical response preamble from effective state and the latest committed changes", async () => {
+  test("returns exact deterministic initial, delta, and empty gameplay readouts", async () => {
     let interactions: unknown[] = [];
+    let useMarkdownSensitiveNames = false;
     globalThis.fetch = Object.assign(
       (input: Parameters<typeof fetch>[0]) => {
         const requestURL =
@@ -454,7 +489,9 @@ describe("ChatGPT play tools", () => {
             Response.json([
               {
                 id: "aria",
-                display_name: "Aria",
+                display_name: useMarkdownSensitiveNames
+                  ? "Aria &copy; ~~Scout~~"
+                  : "Aria",
                 archived: false,
                 character_status: "ready",
                 sheet: {
@@ -469,8 +506,18 @@ describe("ChatGPT play tools", () => {
                     hidden: { kind: "number", value: "99" },
                   },
                   active_status_instances: [
-                    { id: "shaken-1", name: "Shaken" },
-                    { id: "shaken-2", name: "Shaken" },
+                    {
+                      id: "shaken-1",
+                      name: useMarkdownSensitiveNames
+                        ? "Shaken &copy; ~~hard~~"
+                        : "Shaken",
+                    },
+                    {
+                      id: "shaken-2",
+                      name: useMarkdownSensitiveNames
+                        ? "Shaken &copy; ~~hard~~"
+                        : "Shaken",
+                    },
                   ],
                 },
               },
@@ -498,18 +545,21 @@ describe("ChatGPT play tools", () => {
       },
       { preconnect: originalFetch.preconnect },
     );
-    const inspect = createAgentPlayTools(
+    let changedCount = 0;
+    const readout = createAgentPlayTools(
       "world-1",
-      () => undefined,
+      () => {
+        changedCount += 1;
+      },
       new AbortController().signal,
-    ).find((tool) => tool.name === "inspect_play");
+    ).find((tool) => tool.name === "read_gameplay_readout");
+    expect(readout).toBeDefined();
 
-    const initial = (await inspect?.execute({})) as {
-      response_preamble: string;
-    };
-    expect(initial.response_preamble).toBe(
-      "**State — Aria**\n\n- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2\n- **Statuses:** Shaken ×2\n- **Changes:** Initial state",
+    const initial = (await readout!.execute({})) as string;
+    expect(initial).toBe(
+      "**Aria**\n\n- **Resolve:** 4\n- **Vigilance:** true\n- **Supply:** 2\n- **Statuses:** Shaken ×2\n\n---\n\n",
     );
+    expect(await readout!.execute({})).toBe(initial);
 
     interactions = [
       {
@@ -518,10 +568,7 @@ describe("ChatGPT play tools", () => {
         resolution: { applications: [], effective_changes: [] },
       },
     ];
-    const unchanged = (await inspect?.execute({})) as {
-      response_preamble: string;
-    };
-    expect(unchanged.response_preamble).toEndWith("- **Changes:** None");
+    expect(await readout!.execute({})).toBe("");
 
     interactions = [
       {
@@ -557,14 +604,70 @@ describe("ChatGPT play tools", () => {
         },
       },
     ];
-    const changed = (await inspect?.execute({})) as {
-      response_preamble: string;
-    };
-    expect(changed.response_preamble).toBe(
-      "**State — Aria**\n\n- **Mechanics:** Resolve: 4 · Vigilance: true · Supply: 2\n- **Statuses:** Shaken ×2\n- **Changes:** Resolve: 6 → 4 · +Shaken · −Inspired",
+    const changed = (await readout!.execute({})) as string;
+    expect(changed).toBe(
+      "**Aria**\n\n- **Resolve:** 6 → 4\n- **Status:** +Shaken\n- **Status:** −Inspired\n\n---\n\n",
     );
-    expect(changed.response_preamble).not.toContain("Hidden");
-    expect(changed.response_preamble).not.toContain("99");
+    expect(await readout!.execute({})).toBe(changed);
+    expect(changed).not.toContain("Vigilance");
+    expect(changed).not.toContain("Supply");
+    expect(changed).not.toContain("Statuses");
+    expect(changed).not.toContain("Hidden");
+    expect(changed).not.toContain("99");
+
+    interactions = [
+      { id: "open-3", status: "open" },
+      {
+        id: "resolution-2",
+        status: "resolved",
+        resolution: {
+          effective_changes: [
+            {
+              entity_id: "aria",
+              mechanic_id: "resolve",
+              before: { kind: "number", value: "6" },
+              after: { kind: "number", value: "4" },
+            },
+          ],
+          applications: [],
+        },
+      },
+    ];
+    expect(await readout!.execute({})).toBe(
+      "**Aria**\n\n- **Resolve:** 6 → 4\n\n---\n\n",
+    );
+
+    interactions = [
+      { id: "cancelled-3", status: "cancelled" },
+      interactions[1],
+    ];
+    expect(await readout!.execute({})).toBe("");
+
+    interactions = [
+      {
+        id: "resolution-4",
+        status: "resolved",
+        resolution: {
+          effective_changes: [
+            {
+              entity_id: "uncontrolled",
+              mechanic_id: "resolve",
+              before: { kind: "number", value: "2" },
+              after: { kind: "number", value: "1" },
+            },
+          ],
+          applications: [],
+        },
+      },
+    ];
+    expect(await readout!.execute({})).toBe("");
+
+    interactions = [];
+    useMarkdownSensitiveNames = true;
+    expect(await readout!.execute({})).toBe(
+      "**Aria \\&copy; \\~\\~Scout\\~\\~**\n\n- **Resolve:** 4\n- **Vigilance:** true\n- **Supply:** 2\n- **Statuses:** Shaken \\&copy; \\~\\~hard\\~\\~ ×2\n\n---\n\n",
+    );
+    expect(changedCount).toBe(0);
   });
 
   test("claims an available Entity against the world roster revision", async () => {
@@ -670,7 +773,11 @@ describe("ChatGPT play tools", () => {
     expect(payload.presented_interaction.id).toBe("interaction-1");
     expect(payload.presented_interaction.context_entity_ids).toEqual(["ash"]);
     expect(payload.next_step).toContain(
-      "response_preamble from the latest Play inspection exactly as provided",
+      "If read_gameplay_readout returned non-empty text",
+    );
+    expect(payload.next_step).toContain("copy that text verbatim first");
+    expect(payload.next_step).toContain(
+      "otherwise add nothing before the narrative",
     );
     expect(payload.next_step).toContain(
       "presented_interaction.prompt unchanged as the scene",
@@ -737,7 +844,7 @@ describe("ChatGPT play tools", () => {
     expect(payload.next_step).toContain("Do not announce Action submission");
   });
 
-  test("preserves the saved Consequence while directing a refreshed exact-change preamble", async () => {
+  test("preserves the saved Consequence while directing a refreshed gameplay readout", async () => {
     let submittedBody: unknown;
     globalThis.fetch = Object.assign(
       (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -800,14 +907,22 @@ describe("ChatGPT play tools", () => {
       narrative: "The gate gives, one hinge at a time.",
       effects: [],
     });
-    expect(JSON.stringify(submittedBody)).not.toContain("State —");
+    expect(JSON.stringify(submittedBody)).not.toContain(
+      "read_gameplay_readout",
+    );
+    expect(JSON.stringify(submittedBody)).not.toContain("---");
     expect(payload.resolution.narrative).toBe(
       "The gate gives, one hinge at a time.",
     );
     expect(payload.resolution.effective_changes).toEqual([]);
     expect(payload.next_step).toContain("Read Play again");
-    expect(payload.next_step).toContain("response_preamble");
-    expect(payload.next_step).toContain("exact changes");
+    expect(payload.next_step).toContain(
+      "call read_gameplay_readout exactly once",
+    );
+    expect(payload.next_step).toContain(
+      "If the readout is non-empty, copy it verbatim",
+    );
+    expect(payload.next_step).toContain("if it is empty, add nothing");
     expect(payload.next_step).toContain("resolution.narrative unchanged");
     expect(payload.next_step).toContain("narrative portion");
   });
