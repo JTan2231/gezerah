@@ -562,8 +562,9 @@ API adapter, and backend-independent view rendering:
 - same-origin cookie requests, unsafe-method CSRF injection, removal of the
   caller-supplied UUID identity header, stale-CSRF recovery, session-safe mutation replay, and
   current-versus-superseded 401 authentication teardown;
-- ChatGPT web-launch URL and starter-instruction construction, including the
-  sole play-preference input and prohibition on browser-control requests; and
+- ChatGPT web-launch URL and paragraph-separated starter-instruction
+  construction, including the standalone final sole play-preference input and
+  prohibition on browser-control requests; and
 - World-settings prose-guide editing and clearing; and
 - Start and seven-command Play site-tool registration outcomes, schemas,
   prose-guide transport and bounded authority, static Play-handbook topics,

@@ -8,10 +8,10 @@
    `https://wrought.joeytan.dev/play/new` Start site-tool page. It does not
    invoke the desktop app. On a supported ChatGPT surface, one conversation
    opens with that page in a top-level attached browser tab.
-2. Sign in there if necessary. Send the prefilled starter prompt, leaving its
-   final `My play preference: surprise me.` line unchanged or replacing that
-   preference with ordinary language. Authentication is the only ordinary
-   manual Wrought operation.
+2. Sign in there if necessary. Send the paragraph-separated prefilled starter
+   prompt, leaving its standalone final `My play preference: surprise me.` line
+   unchanged or replacing that preference with ordinary language.
+   Authentication is the only ordinary manual Wrought operation.
 3. Once the Start site-tool surface is ready, ChatGPT inspects the three equal
    starting templates, including their prose guides, applies a setting,
    Character, tone, or other play preference or makes a reasonable choice, and

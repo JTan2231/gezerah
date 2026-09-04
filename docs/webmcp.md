@@ -37,8 +37,9 @@ ChatGPT records and resolves it unless the person explicitly delegates that
 fictional decision too.
 
 The launch supplies the complete delegated-start instructions as a prefilled
-starter prompt. Its final line, `My play preference: surprise me.`, is the sole
-setup input: the person may send it unchanged or replace that preference. The
+starter prompt. Its instruction blocks are separated by blank lines, and its
+standalone final line, `My play preference: surprise me.`, is the sole setup
+input: the person may send it unchanged or replace that preference. The
 instructions require ChatGPT to preserve the person's agency over later
 in-fiction Actions. Home encodes `surface=work`, the prompt, and the absolute
 `https://wrought.joeytan.dev/play/new` URL as ordinary `https://chatgpt.com/`

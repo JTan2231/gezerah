@@ -71,6 +71,7 @@ describe("ChatGPTWorldStartView", () => {
     expect(html).toContain("https://wrought.joeytan.dev/play/new");
     expect(html).toContain("Keep lasting game state in Wrought");
     expect(html).toContain("My play preference: surprise me.");
+    expect(prompt).toMatch(/\n\nMy play preference: surprise me\.$/);
     expect(html).toContain("never invent or submit an Action");
     expect(html).toContain("read and apply Wrought&#x27;s Play handbook");
     expect(html).toContain("call read_gameplay_readout once");
